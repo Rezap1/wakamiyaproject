@@ -33,7 +33,8 @@ class UserController extends Controller
     public function create()
     {
         $roles = $this->roleService->getAllRoles();
-        return view('users.create', compact('roles'));
+        $nextUserId = $this->userService->getNextUserId();
+        return view('users.create', compact('roles', 'nextUserId'));
     }
 
     public function store(StoreUserRequest $request)
@@ -65,7 +66,7 @@ class UserController extends Controller
                 $newUser
             );
 
-            return redirect()->route('users.index')->with('success', 'User created successfully.');
+            return redirect()->route('users.index')->with('success', 'Data pengguna berhasil ditambahkan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menyimpan data ke Spreadsheet: ' . $e->getMessage()])->withInput();
         }
@@ -119,7 +120,7 @@ class UserController extends Controller
                 $data
             );
 
-            return redirect()->route('users.index')->with('success', 'User updated successfully.');
+            return redirect()->route('users.index')->with('success', 'Data pengguna berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal mengupdate data di Spreadsheet: ' . $e->getMessage()])->withInput();
         }

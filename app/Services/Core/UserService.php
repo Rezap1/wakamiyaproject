@@ -23,6 +23,11 @@ class UserService
     {
         return $this->userRepository->findById($id);
     }
+
+    public function getNextUserId()
+    {
+        return $this->userRepository->generateNewId('USR', 6);
+    }
     
     public function getUserByEmail($email)
     {

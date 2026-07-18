@@ -25,7 +25,7 @@
             <div class="relative z-10 flex flex-col items-center md:items-start">
                 <!-- Logo -->
                 <div class="bg-white p-4 rounded-full shadow-xl mb-8 inline-block">
-                    <img src="{{ asset('img/logo.png') }}" alt="Logo Wakamiya" class="w-24 h-24 object-contain" onerror="this.src='https://ui-avatars.com/api/?name=W&background=0097b2&color=fff&rounded=true&bold=true'">
+                    <img src="{{ asset('img/logo.png.jpeg') }}" alt="Logo Wakamiya" class="w-24 h-24 object-contain" onerror="this.src='https://ui-avatars.com/api/?name=W&background=0097b2&color=fff&rounded=true&bold=true'">
                 </div>
                 
                 <h1 class="text-4xl font-extrabold tracking-tight mb-3 drop-shadow-md">LPK WAKAMIYA</h1>

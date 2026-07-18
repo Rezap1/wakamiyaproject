@@ -14,7 +14,15 @@ use App\Http\Controllers\Core\BatchController;
 use App\Http\Controllers\Core\ClassController;
 use App\Http\Controllers\Core\StudentController;
 use App\Http\Controllers\Core\CompanyController;
+use App\Http\Controllers\Core\ModuleController;
 use App\Http\Controllers\Core\PermissionController;
+use App\Http\Controllers\Core\JobOrderController;
+use App\Http\Controllers\Core\InterviewController;
+use App\Http\Controllers\Core\MatchingController;
+use App\Http\Controllers\Core\ApplicationController;
+use App\Http\Controllers\Core\DocumentController;
+use App\Http\Controllers\Core\CoeController;
+use App\Http\Controllers\Core\VisaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -145,6 +153,94 @@ Route::middleware('auth')->group(function () {
         Route::get('/{id}/edit', [CompanyController::class, 'edit'])->name('edit');
         Route::put('/{id}', [CompanyController::class, 'update'])->name('update');
         Route::delete('/{id}', [CompanyController::class, 'destroy'])->name('destroy');
+    });
+
+    // Job Order Management
+    Route::prefix('job-orders')->name('job-orders.')->group(function () {
+        Route::get('/', [JobOrderController::class, 'index'])->name('index');
+        Route::get('/create', [JobOrderController::class, 'create'])->name('create');
+        Route::post('/', [JobOrderController::class, 'store'])->name('store');
+        Route::get('/{id}', [JobOrderController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [JobOrderController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [JobOrderController::class, 'update'])->name('update');
+        Route::delete('/{id}', [JobOrderController::class, 'destroy'])->name('destroy');
+    });
+
+    // Interview Management
+    Route::prefix('interviews')->name('interviews.')->group(function () {
+        Route::get('/', [InterviewController::class, 'index'])->name('index');
+        Route::get('/create', [InterviewController::class, 'create'])->name('create');
+        Route::post('/', [InterviewController::class, 'store'])->name('store');
+        Route::get('/{id}', [InterviewController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [InterviewController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [InterviewController::class, 'update'])->name('update');
+        Route::delete('/{id}', [InterviewController::class, 'destroy'])->name('destroy');
+    });
+
+    // Matching Management
+    Route::prefix('matchings')->name('matchings.')->group(function () {
+        Route::get('/', [MatchingController::class, 'index'])->name('index');
+        Route::get('/create', [MatchingController::class, 'create'])->name('create');
+        Route::post('/', [MatchingController::class, 'store'])->name('store');
+        Route::get('/{id}', [MatchingController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [MatchingController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [MatchingController::class, 'update'])->name('update');
+        Route::delete('/{id}', [MatchingController::class, 'destroy'])->name('destroy');
+    });
+
+    // Application Management
+    Route::prefix('applications')->name('applications.')->group(function () {
+        Route::get('/', [ApplicationController::class, 'index'])->name('index');
+        Route::get('/create', [ApplicationController::class, 'create'])->name('create');
+        Route::post('/', [ApplicationController::class, 'store'])->name('store');
+        Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [ApplicationController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [ApplicationController::class, 'update'])->name('update');
+        Route::delete('/{id}', [ApplicationController::class, 'destroy'])->name('destroy');
+    });
+
+    // Document Management
+    Route::prefix('documents')->name('documents.')->group(function () {
+        Route::get('/', [DocumentController::class, 'index'])->name('index');
+        Route::get('/create', [DocumentController::class, 'create'])->name('create');
+        Route::post('/', [DocumentController::class, 'store'])->name('store');
+        Route::get('/{id}', [DocumentController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [DocumentController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [DocumentController::class, 'update'])->name('update');
+        Route::delete('/{id}', [DocumentController::class, 'destroy'])->name('destroy');
+    });
+
+    // COE Management
+    Route::prefix('coes')->name('coes.')->group(function () {
+        Route::get('/', [CoeController::class, 'index'])->name('index');
+        Route::get('/create', [CoeController::class, 'create'])->name('create');
+        Route::post('/', [CoeController::class, 'store'])->name('store');
+        Route::get('/{id}', [CoeController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [CoeController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [CoeController::class, 'update'])->name('update');
+        Route::delete('/{id}', [CoeController::class, 'destroy'])->name('destroy');
+    });
+
+    // Visa Management
+    Route::prefix('visas')->name('visas.')->group(function () {
+        Route::get('/', [VisaController::class, 'index'])->name('index');
+        Route::get('/create', [VisaController::class, 'create'])->name('create');
+        Route::post('/', [VisaController::class, 'store'])->name('store');
+        Route::get('/{id}', [VisaController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [VisaController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [VisaController::class, 'update'])->name('update');
+        Route::delete('/{id}', [VisaController::class, 'destroy'])->name('destroy');
+    });
+
+    // Module Management
+    Route::prefix('modules')->name('modules.')->group(function () {
+        Route::get('/', [ModuleController::class, 'index'])->name('index');
+        Route::get('/create', [ModuleController::class, 'create'])->name('create');
+        Route::post('/', [ModuleController::class, 'store'])->name('store');
+        Route::get('/{id}', [ModuleController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [ModuleController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [ModuleController::class, 'update'])->name('update');
+        Route::delete('/{id}', [ModuleController::class, 'destroy'])->name('destroy');
     });
 
     // Permission Management

@@ -39,14 +39,14 @@ class AuthController extends Controller
                 Auth::id(), 
                 'LOGIN', 
                 'Auth', 
-                'User logged in successfully'
+                'Pengguna berhasil login'
             );
 
             return redirect()->intended(route('dashboard'));
         }
 
         return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
+            'email' => __('auth.failed'),
         ])->onlyInput('email');
     }
 
@@ -58,7 +58,7 @@ class AuthController extends Controller
                 Auth::id(), 
                 'LOGOUT', 
                 'Auth', 
-                'User logged out'
+                'Pengguna berhasil logout'
             );
         }
 

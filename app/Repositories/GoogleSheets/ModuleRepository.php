@@ -19,4 +19,25 @@ class ModuleRepository extends BaseSheetRepository implements ModuleRepositoryIn
         $modules = $this->fetchAll();
         return $modules->firstWhere($this->primaryKey, $id);
     }
+
+    public function findByCode(string $code)
+    {
+        $modules = $this->fetchAll();
+        return $modules->first(function ($module) use ($code) {
+            return strtolower($module['Module_Code'] ?? '') === strtolower($code);
+        });
+    }
+
+    public function findByName(string $name)
+    {
+        $modules = $this->fetchAll();
+        return $modules->first(function ($module) use ($name) {
+            return strtolower($module['Module_Name'] ?? '') === strtolower($name);
+        });
+    }
+
+    public function create(array $data)
+    {
+        return $this->append($data);
+    }
 }

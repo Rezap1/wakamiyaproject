@@ -20,6 +20,20 @@ class ActivityLogService
         return $this->activityLogRepository->fetchAll();
     }
 
+    public function log(string $module, string $action, string $description, $oldValue = null, $newValue = null, string $ipAddress = null, string $userAgent = null)
+    {
+        return $this->logAction(
+            auth()->user()->User_ID ?? 'SYSTEM',
+            $action,
+            $module,
+            $description,
+            $ipAddress,
+            $oldValue,
+            $newValue,
+            $userAgent
+        );
+    }
+
     public function logAction(string $userId, string $action, string $module, string $description, string $ipAddress = null, $oldValue = null, $newValue = null, string $userAgent = null)
     {
         try {

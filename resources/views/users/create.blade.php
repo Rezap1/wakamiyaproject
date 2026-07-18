@@ -15,6 +15,19 @@
     <form action="{{ route('users.store') }}" method="POST" class="p-8 space-y-7">
         @csrf
         
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-7 mb-7">
+            <div>
+                <label for="User_ID_Display" class="block text-sm font-bold text-gray-700 mb-2">ID Pengguna (Otomatis) <span class="text-green-500">*</span></label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <input type="text" id="User_ID_Display" value="{{ $nextUserId ?? 'Auto Generated' }}" disabled class="appearance-none block w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl shadow-sm text-base font-bold text-gray-500 bg-gray-100 cursor-not-allowed">
+                </div>
+                <p class="mt-1.5 text-xs text-gray-500">ID ini dibuat secara otomatis berurutan oleh sistem.</p>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-7">
             <div>
                 <label for="Username" class="block text-sm font-bold text-gray-700 mb-2">Username <span class="text-red-500">*</span></label>

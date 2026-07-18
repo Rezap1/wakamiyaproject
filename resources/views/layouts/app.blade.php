@@ -19,7 +19,7 @@
             <!-- Brand / Logo Area -->
             <div class="h-24 flex items-center justify-center border-b border-gray-100 px-6 bg-gray-50/50">
                 <div class="flex items-center gap-3">
-                    <img src="{{ asset('img/logo.png') }}" alt="Logo LPK Wakamiya" class="w-12 h-12 object-contain" onerror="this.src='https://ui-avatars.com/api/?name=W&background=0097b2&color=fff&rounded=true&bold=true'">
+                    <img src="{{ asset('img/logo.png.jpeg') }}" alt="Logo LPK Wakamiya" class="w-12 h-12 object-contain" onerror="this.src='https://ui-avatars.com/api/?name=W&background=0097b2&color=fff&rounded=true&bold=true'">
                     <div class="flex flex-col">
                         <span class="text-xl font-extrabold text-gray-900 tracking-tight">LPK WAKAMIYA</span>
                         <span class="text-[10px] font-semibold text-primary-600 uppercase tracking-widest">Management System</span>
@@ -85,33 +85,61 @@
                 <div class="px-4 mt-8 mb-2">
                     <button type="button" class="flex items-center justify-between w-full px-2 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors focus:outline-none" onclick="document.getElementById('menu-akademik').classList.toggle('hidden'); document.getElementById('icon-akademik').classList.toggle('rotate-180')">
                         <span>Modul Akademik & Penempatan</span>
-                        <svg id="icon-akademik" class="w-4 h-4 transition-transform duration-200 {{ request()->routeIs('students.*') ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg id="icon-akademik" class="w-4 h-4 transition-transform duration-200 {{ request()->routeIs('students.*', 'job-orders.*', 'interviews.*', 'matchings.*', 'applications.*', 'documents.*', 'coes.*', 'visas.*') ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
                 </div>
-                <nav id="menu-akademik" class="space-y-1 px-4 transition-all duration-300 overflow-hidden {{ request()->routeIs('students.*') ? '' : 'hidden' }}">
+                <nav id="menu-akademik" class="space-y-1 px-4 transition-all duration-300 overflow-hidden {{ request()->routeIs('students.*', 'job-orders.*', 'interviews.*', 'matchings.*', 'applications.*', 'documents.*', 'coes.*', 'visas.*') ? '' : 'hidden' }}">
                                         <a href="{{ route('students.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('students.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"></path></svg>
                         Data Induk Siswa
                     </a>
-                                        <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors opacity-70">
+                                        <a href="{{ route('job-orders.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('job-orders.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Penempatan Jepang
+                        Job Order (Lowongan)
+                    </a>
+                                        <a href="{{ route('interviews.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('interviews.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        Jadwal Interview
+                    </a>
+                    <a href="{{ route('matchings.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('matchings.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                        Matching Kandidat
+                    </a>
+                    <a href="{{ route('applications.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('applications.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Aplikasi Kerja
+                    </a>
+                    <a href="{{ route('documents.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('documents.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h2m4 0h2m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Dokumen Legal
+                    </a>
+                    <a href="{{ route('coes.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('coes.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                        Sertifikat COE
+                    </a>
+                    <a href="{{ route('visas.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('visas.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Manajemen Visa
                     </a>
                 </nav>
                 <div class="px-4 mt-8 mb-2">
                     <button type="button" class="flex items-center justify-between w-full px-2 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors focus:outline-none" onclick="document.getElementById('menu-sys').classList.toggle('hidden'); document.getElementById('icon-sys').classList.toggle('rotate-180')">
                         <span>Sistem & Konfigurasi</span>
-                        <svg id="icon-sys" class="w-4 h-4 transition-transform duration-200 {{ request()->routeIs('developer-panel.*', 'companies.*', 'permissions.*') ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg id="icon-sys" class="w-4 h-4 transition-transform duration-200 {{ request()->routeIs('developer-panel.*', 'companies.*', 'permissions.*', 'modules.*') ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
                 </div>
-                <nav id="menu-sys" class="space-y-1 px-4 transition-all duration-300 overflow-hidden {{ request()->routeIs('developer-panel.*', 'companies.*', 'permissions.*') ? '' : 'hidden' }}">
+                <nav id="menu-sys" class="space-y-1 px-4 transition-all duration-300 overflow-hidden {{ request()->routeIs('developer-panel.*', 'companies.*', 'permissions.*', 'modules.*') ? '' : 'hidden' }}">
                                         <a href="{{ route('companies.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('companies.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                         Data Perusahaan
                     </a>
-                                                            <a href="{{ route('permissions.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('permissions.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                                        <a href="{{ route('permissions.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('permissions.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                         Hak Akses (Permissions)
+                    </a>
+                                        <a href="{{ route('modules.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('modules.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                        Modul Aplikasi
                     </a>
                                         <a href="{{ route('developer-panel.index') }}" class="flex items-center px-4 py-3 text-sm font-medium rounded-xl {{ request()->routeIs('developer-panel.*') ? 'bg-primary-500 text-white shadow-md shadow-primary-500/30' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }} transition-all">
                         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>

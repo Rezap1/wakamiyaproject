@@ -36,6 +36,20 @@ use App\Interfaces\GoogleSheets\ModuleRepositoryInterface;
 use App\Repositories\GoogleSheets\ModuleRepository;
 use App\Interfaces\GoogleSheets\PermissionRepositoryInterface;
 use App\Repositories\GoogleSheets\PermissionRepository;
+use App\Interfaces\GoogleSheets\JobOrderRepositoryInterface;
+use App\Repositories\GoogleSheets\JobOrderRepository;
+use App\Interfaces\GoogleSheets\InterviewRepositoryInterface;
+use App\Repositories\GoogleSheets\InterviewRepository;
+use App\Interfaces\GoogleSheets\MatchingRepositoryInterface;
+use App\Repositories\GoogleSheets\MatchingRepository;
+use App\Interfaces\GoogleSheets\ApplicationRepositoryInterface;
+use App\Repositories\GoogleSheets\ApplicationRepository;
+use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
+use App\Repositories\GoogleSheets\DocumentRepository;
+use App\Interfaces\GoogleSheets\CoeRepositoryInterface;
+use App\Repositories\GoogleSheets\CoeRepository;
+use App\Interfaces\GoogleSheets\VisaRepositoryInterface;
+use App\Repositories\GoogleSheets\VisaRepository;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -58,6 +72,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(CompanyRepositoryInterface::class, CompanyRepository::class);
         $this->app->bind(ModuleRepositoryInterface::class, ModuleRepository::class);
         $this->app->bind(PermissionRepositoryInterface::class, PermissionRepository::class);
+        $this->app->bind(JobOrderRepositoryInterface::class, JobOrderRepository::class);
+        $this->app->bind(InterviewRepositoryInterface::class, InterviewRepository::class);
+        $this->app->bind(MatchingRepositoryInterface::class, MatchingRepository::class);
+        $this->app->bind(ApplicationRepositoryInterface::class, ApplicationRepository::class);
+        $this->app->bind(DocumentRepositoryInterface::class, DocumentRepository::class);
+        $this->app->bind(CoeRepositoryInterface::class, CoeRepository::class);
+        $this->app->bind(VisaRepositoryInterface::class, VisaRepository::class);
     }
 
     /**

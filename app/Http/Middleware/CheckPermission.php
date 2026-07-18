@@ -26,7 +26,7 @@ class CheckPermission
         $user = Auth::user();
         
         if (!$user || !isset($user->Role_ID)) {
-            abort(403, 'Unauthorized access.');
+            abort(403, 'Akses tidak sah.');
         }
 
         // Get Module ID by Code
