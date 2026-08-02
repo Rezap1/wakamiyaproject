@@ -14,28 +14,28 @@ class StoreTeacherRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Employee_ID' => [
+            'User_ID' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    // Check if Employee exists
-                    $employeeService = app(\App\Services\Core\EmployeeService::class);
-                    $employee = $employeeService->getEmployeeById($value);
-                    if (!$employee) {
-                        $fail('Data Pegawai tidak ditemukan.');
+                    $userService = app(\App\Services\Core\UserService::class);
+                    $user = $userService->getUserById($value);
+                    if (!$user) {
+                        $fail('Data User tidak ditemukan.');
                         return;
                     }
 
-                    // Check if Employee is active
-                    if (($employee['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                        $fail('Data Pegawai tidak aktif.');
+                    if (($user['Is_Active'] ?? 'TRUE') === 'FALSE') {
+                        $fail('Data User tidak aktif.');
                         return;
                     }
 
-                    // Check if Employee is already a Teacher
                     $teacherService = app(\App\Services\Core\TeacherService::class);
-                    if ($teacherService->getTeacherByEmployeeId($value)) {
-                        $fail('Pegawai ini sudah terdaftar sebagai Guru/Tenaga Pendidik.');
+                    // Check if user is already a teacher. Assuming we can check by User_ID.
+                    // Wait, we need a method to get teacher by User_ID.
+                    $allTeachers = collect($teacherService->getAllTeachers());
+                    if ($allTeachers->contains('User_ID', $value)) {
+                        $fail('User ini sudah terdaftar sebagai Guru/Tenaga Pendidik.');
                     }
                 }
             ],

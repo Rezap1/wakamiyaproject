@@ -14,29 +14,27 @@ class UpdateTeacherRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Employee_ID' => [
+            'User_ID' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    // Check if Employee exists
-                    $employeeService = app(\App\Services\Core\EmployeeService::class);
-                    $employee = $employeeService->getEmployeeById($value);
-                    if (!$employee) {
-                        $fail('Data Pegawai tidak ditemukan.');
+                    $userService = app(\App\Services\Core\UserService::class);
+                    $user = $userService->getUserById($value);
+                    if (!$user) {
+                        $fail('Data User tidak ditemukan.');
                         return;
                     }
 
-                    // Check if Employee is active
-                    if (($employee['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                        $fail('Data Pegawai tidak aktif.');
+                    if (($user['Is_Active'] ?? 'TRUE') === 'FALSE') {
+                        $fail('Data User tidak aktif.');
                         return;
                     }
 
-                    // Check if Employee is already a Teacher (excluding self)
                     $teacherService = app(\App\Services\Core\TeacherService::class);
-                    $existingTeacher = $teacherService->getTeacherByEmployeeId($value);
-                    if ($existingTeacher && $existingTeacher['Teacher_ID'] !== $this->route('id')) {
-                        $fail('Pegawai ini sudah terdaftar sebagai Guru/Tenaga Pendidik lainnya.');
+                    $allTeachers = collect($teacherService->getAllTeachers());
+                    $existing = $allTeachers->firstWhere('User_ID', $value);
+                    if ($existing && $existing['Teacher_ID'] !== $this->route('id')) {
+                        $fail('User ini sudah terdaftar sebagai Guru/Tenaga Pendidik lainnya.');
                     }
                 }
             ],

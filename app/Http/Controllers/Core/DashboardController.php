@@ -3,39 +3,42 @@
 namespace App\Http\Controllers\Core;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\Core\UserService;
+use App\Services\Dashboard\AdminDashboardService;
 
 class DashboardController extends Controller
 {
-    protected $userService;
+    protected $adminDashboardService;
 
-    public function __construct(UserService $userService)
+    public function __construct(AdminDashboardService $adminDashboardService)
     {
-        $this->userService = $userService;
+        $this->adminDashboardService = $adminDashboardService;
     }
 
     public function index()
     {
-        // Fetch real data from Google Sheets for Employees (Users)
-        $users = $this->userService->getAllUsers();
-        $activeEmployeesCount = collect($users)->where('status', 'Active')->count();
+        $user = auth()->user();
+        if ($user) {
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $role = $roleService->getRoleById($user->Role_ID);
+            $roleName = strtolower(trim($role['Role_Name'] ?? ''));
+            
+            $alias = 'administrator';
+            if (str_contains($roleName, 'hr')) $alias = 'hr';
+            elseif (str_contains($roleName, 'academic')) $alias = 'academic';
+            elseif (str_contains($roleName, 'marketing')) $alias = 'marketing';
+            elseif (str_contains($roleName, 'finance')) $alias = 'finance';
+            elseif (str_contains($roleName, 'director')) $alias = 'director';
+            elseif (str_contains($roleName, 'teacher')) $alias = 'teacher';
+            elseif (str_contains($roleName, 'student')) $alias = 'student';
+            elseif (str_contains($roleName, 'admin')) $alias = 'administrator';
 
-        // Dummy KPI Data for other modules (Will be dynamic once their modules are built)
-        $kpi = [
-            'total_students' => 150, // To be implemented in Student Module
-            'total_employees' => $activeEmployeesCount,
+            if ($alias !== 'administrator' && \Illuminate\Support\Facades\Route::has('dashboard.' . $alias)) {
+                return redirect()->route('dashboard.' . $alias);
+            }
+        }
 
-            'total_company' => 10,
-            'total_alumni' => 300,
-            'cash' => 500000000,
-            'bank' => 1500000000,
-            'profit' => 250000000,
-            'outstanding_payment' => 50000000,
-            'upcoming_departure' => 15,
-            'upcoming_interview' => 5,
-        ];
-
-        return view('dashboard.index', compact('kpi'));
+        // Cache handled inside AdminDashboardService (key: dashboard_admin, TTL: 300s)
+        $dashboardData = $this->adminDashboardService->getDashboardData();
+        return view('dashboard.index', $dashboardData);
     }
 }

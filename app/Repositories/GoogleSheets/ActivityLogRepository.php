@@ -9,9 +9,9 @@ class ActivityLogRepository extends BaseSheetRepository implements ActivityLogRe
     public function __construct()
     {
         parent::__construct();
-        $this->sheetName = 'AUDIT_LOG';
+        $this->sheetName = 'MASTER_AUDIT_LOG';
         $this->cacheKey = 'audit_log_sheet';
-        $this->primaryKey = 'Log_ID';
+        $this->primaryKey = 'Audit_ID';
     }
 
     public function create(array $data)

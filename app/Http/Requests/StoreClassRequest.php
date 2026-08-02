@@ -27,9 +27,36 @@ class StoreClassRequest extends FormRequest
                 }
             ],
             'Class_Name' => 'required|string|max:150',
-            'Program_ID' => 'required|string',
-            'Batch_ID' => 'required|string',
-            'Homeroom_Teacher_ID' => 'required|string',
+            'Program_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $programService = app(\App\Services\Core\ProgramService::class);
+                    if (!$programService->getProgramById($value)) {
+                        $fail('Program tidak ditemukan.');
+                    }
+                }
+            ],
+            'Batch_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $batchService = app(\App\Services\Core\BatchService::class);
+                    if (!$batchService->getBatchById($value)) {
+                        $fail('Batch tidak ditemukan.');
+                    }
+                }
+            ],
+            'Homeroom_Teacher_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $teacherService = app(\App\Services\Core\TeacherService::class);
+                    if (!$teacherService->getTeacherById($value)) {
+                        $fail('Guru tidak ditemukan.');
+                    }
+                }
+            ],
             'Capacity' => 'required|numeric|min:1',
             'Current_Student' => 'nullable|numeric|min:0|lte:Capacity',
             'Class_Status' => 'nullable|string|max:50',

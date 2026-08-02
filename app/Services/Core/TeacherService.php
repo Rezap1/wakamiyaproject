@@ -5,27 +5,62 @@ namespace App\Services\Core;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use Carbon\Carbon;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class TeacherService
 {
     protected $teacherRepository;
     protected $employeeRepository;
+    protected $userRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(TeacherRepositoryInterface $teacherRepository, EmployeeRepositoryInterface $employeeRepository)
-    {
+    public function __construct(
+        TeacherRepositoryInterface $teacherRepository, 
+        EmployeeRepositoryInterface $employeeRepository,
+        \App\Interfaces\GoogleSheets\UserRepositoryInterface $userRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->teacherRepository = $teacherRepository;
         $this->employeeRepository = $employeeRepository;
+        $this->userRepository = $userRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllTeachers()
     {
-        return $this->teacherRepository->fetchAll();
+        $teachers = $this->teacherRepository->fetchAll();
+        return $teachers->map(function ($teacher) {
+            $teacher['Completeness_Score'] = $this->calculateCompleteness($teacher);
+            return $teacher;
+        });
     }
 
     public function getTeacherById($id)
     {
-        return $this->teacherRepository->findById($id);
+        $teacher = $this->teacherRepository->findById($id);
+        if ($teacher) {
+            $teacher['Completeness_Score'] = $this->calculateCompleteness($teacher);
+        }
+        return $teacher;
+    }
+
+    protected function calculateCompleteness($teacher)
+    {
+        $fieldsToCheck = [
+            'User_ID', 'Employee_ID', 'Teacher_Code', 'Full_Name',
+            'Gender', 'Phone_Number', 'Email', 'Specialization', 
+            'Hire_Date', 'Teaching_Status'
+        ];
+        
+        $filledCount = 0;
+        foreach ($fieldsToCheck as $field) {
+            if (!empty($teacher[$field])) {
+                $filledCount++;
+            }
+        }
+        
+        return round(($filledCount / count($fieldsToCheck)) * 100);
     }
     
     public function getTeacherByEmployeeId($employeeId)
@@ -35,10 +70,17 @@ class TeacherService
 
     public function createTeacher(array $data)
     {
-        // Get Employee Details to ensure consistency
-        $employee = $this->employeeRepository->findById($data['Employee_ID']);
-        if (!$employee) {
-            throw new Exception("Employee tidak ditemukan.");
+        // Get User Details to ensure consistency
+        $user = $this->userRepository->findById($data['User_ID']);
+        if (!$user) {
+            throw new Exception("User tidak ditemukan.");
+        }
+
+        // Prevent Duplicate Teacher for same User
+        $allTeachers = $this->teacherRepository->fetchAll();
+        $existing = $allTeachers->firstWhere('User_ID', $data['User_ID']);
+        if ($existing) {
+            throw new Exception("User ini sudah terdaftar sebagai Teacher.");
         }
 
         $newId = $this->teacherRepository->generateNewId('TCH', 6);
@@ -47,12 +89,13 @@ class TeacherService
 
         $mappedData = [
             'Teacher_ID' => $newId,
-            'Employee_ID' => $data['Employee_ID'],
+            'User_ID' => $data['User_ID'],
+            'Employee_ID' => $user['Employee_ID'] ?? '', // Map Employee_ID if user is an employee
             'Teacher_Code' => $newTeacherCode,
-            'Full_Name' => $employee['Full_Name'], // Readonly from Employee
-            'Gender' => $employee['Gender'],       // Readonly from Employee
-            'Phone_Number' => $employee['Phone_Number'], // Readonly from Employee
-            'Email' => $employee['Email'],         // Readonly from Employee
+            'Full_Name' => $user['Full_Name'] ?? '', // Readonly from User
+            'Gender' => '',       // Legacy compatibility (no gender in User by default, or you can map if available)
+            'Phone_Number' => $user['Phone_Number'] ?? '', // Readonly from User
+            'Email' => $user['Email'] ?? '',         // Readonly from User
             'Specialization' => $data['Specialization'],
             'Hire_Date' => $data['Hire_Date'],
             'Teaching_Status' => $data['Teaching_Status'],
@@ -66,6 +109,17 @@ class TeacherService
 
         $this->teacherRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'TEACHER',
+            'CREATE',
+            'TEACHER',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -77,25 +131,24 @@ class TeacherService
             throw new Exception("Teacher tidak ditemukan.");
         }
 
-        // Even on update, we force consistency from the connected Employee
-        $employeeId = $data['Employee_ID'] ?? $teacher['Employee_ID'];
-        $employee = $this->employeeRepository->findById($employeeId);
-        if (!$employee) {
-            throw new Exception("Employee tidak ditemukan.");
+        // Even on update, we force consistency from the connected User
+        $userId = $data['User_ID'] ?? ($teacher['User_ID'] ?? '');
+        $user = $this->userRepository->findById($userId);
+        if (!$user) {
+            throw new Exception("User tidak ditemukan.");
         }
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
             'Updated_By' => auth()->id() ?? 'SYSTEM',
-            'Full_Name' => $employee['Full_Name'],
-            'Gender' => $employee['Gender'],
-            'Phone_Number' => $employee['Phone_Number'],
-            'Email' => $employee['Email'],
+            'Full_Name' => $user['Full_Name'] ?? '',
+            'Phone_Number' => $user['Phone_Number'] ?? '',
+            'Email' => $user['Email'] ?? '',
         ];
         
         // Map allowed fields that user can change
         $allowedFields = [
-            'Employee_ID', 'Specialization', 'Hire_Date', 'Teaching_Status', 'Is_Active', 'Notes'
+            'User_ID', 'Specialization', 'Hire_Date', 'Teaching_Status', 'Is_Active', 'Notes'
         ];
 
         foreach ($allowedFields as $field) {
@@ -103,12 +156,44 @@ class TeacherService
                 $mappedData[$field] = $data[$field];
             }
         }
+        
+        // Also update Employee_ID just in case User changed
+        if (isset($user['Employee_ID']) && !empty($user['Employee_ID'])) {
+            $mappedData['Employee_ID'] = $user['Employee_ID'];
+        }
 
-        return $this->teacherRepository->update($id, $mappedData);
+        $res = $this->teacherRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'TEACHER',
+            'UPDATE',
+            'TEACHER',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteTeacher($id)
     {
-        return $this->teacherRepository->softDelete($id);
+        // Add soft delete protection if necessary in the future
+        $res = $this->teacherRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'TEACHER',
+            'DELETE',
+            'TEACHER',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

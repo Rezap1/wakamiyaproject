@@ -14,6 +14,60 @@ use Illuminate\Support\Facades\Log;
 
 class BatchController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $batches = $this->batchService->getAllBatches();
+        $programs = $this->programService->getAllPrograms();
+
+        $batches = $batches->map(function ($batch) use ($programs) {
+            $program = $programs->firstWhere('Program_ID', $batch['Program_ID']);
+            $batch['Program_Name'] = $program ? $program['Program_Name'] : 'Tidak Ditemukan';
+            return $batch;
+        });
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $batches = \App\Helpers\CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $batches = $batches->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        if ($request->filled('program_id')) {
+            $programId = $request->input('program_id');
+            if ($programId !== 'all') {
+                $batches = $batches->where('Program_ID', $programId);
+            }
+        }
+        
+        return [
+            'moduleName' => 'Angkatan (Batch)',
+            'data' => collect(array_values($batches->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['Kode Angkatan', 'Nama Angkatan', 'Program', 'Status'],
+            'mapRow' => function($row) {
+
+                return [
+                    $row['Batch_Code'] ?? '-',
+                    $row['Batch_Name'] ?? '-',
+                    $row['Program_Name'] ?? '-',
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                ];
+                    },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$batches->count().'</td></tr>'
+        ];
+    }
+
     protected $batchService;
     protected $programService;
     protected $activityLogService;
@@ -28,7 +82,7 @@ class BatchController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-    public function index()
+    public function index(\Illuminate\Http\Request $request)
     {
         try {
             $batches = $this->batchService->getAllBatches();
@@ -42,13 +96,27 @@ class BatchController extends Controller
                 return $batch;
             });
 
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $batches = \App\Helpers\CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $batches = $batches->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+            
+            if ($request->filled('program_id')) {
+                $programId = $request->input('program_id');
+                if ($programId !== 'all') {
+                    $batches = $batches->where('Program_ID', $programId);
+                }
+            }
+
             // Pagination
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $perPage = 10;
-            $currentItems = $batches->slice(($currentPage - 1) * $perPage, $perPage)->all();
-            $batchesPaginated = new LengthAwarePaginator($currentItems, count($batches), $perPage, $currentPage, [
-                'path' => LengthAwarePaginator::resolveCurrentPath(),
-            ]);
+            $batchesPaginated = \App\Helpers\CollectionHelper::paginate($batches, 10)->withQueryString();
             
             // For filter
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
@@ -186,14 +254,14 @@ class BatchController extends Controller
                 Auth::id() ?? 'SYSTEM',
                 'DELETE',
                 'MASTER_BATCH',
-                "Menonaktifkan angkatan (Soft Delete): {$id}",
+                "Menonaktifkan angkatan (Hard Delete): {$id}",
                 request()->ip(),
                 $batch,
                 array_merge($batch, ['Is_Active' => 'FALSE']),
                 request()->userAgent()
             );
 
-            return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil dinonaktifkan.');
+            return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting batch: ' . $e->getMessage());
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat menghapus data angkatan.');

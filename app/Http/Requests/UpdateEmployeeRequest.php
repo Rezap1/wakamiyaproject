@@ -14,8 +14,7 @@ class UpdateEmployeeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Full_Name' => 'required|string|max:150',
-            'Gender' => 'required|in:Laki-laki,Perempuan',
+            'User_ID' => 'required|string',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
             'National_ID' => [
@@ -30,21 +29,6 @@ class UpdateEmployeeRequest extends FormRequest
                             if ($service->getEmployeeByNationalId($value)) {
                                 $fail('Nomor Identitas (KTP) sudah terdaftar.');
                             }
-                        }
-                    }
-                }
-            ],
-            'Phone_Number' => 'required|string|max:20',
-            'Email' => [
-                'required',
-                'email',
-                'max:100',
-                function ($attribute, $value, $fail) {
-                    $service = app(\App\Services\Core\EmployeeService::class);
-                    $employee = $service->getEmployeeById($this->route('id'));
-                    if ($employee && strtolower($employee['Email']) !== strtolower($value)) {
-                        if ($service->getEmployeeByEmail($value)) {
-                            $fail('Alamat Email sudah terdaftar.');
                         }
                     }
                 }

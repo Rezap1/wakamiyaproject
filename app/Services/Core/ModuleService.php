@@ -75,6 +75,6 @@ class ModuleService
 
     public function deleteModule($id)
     {
-        return $this->moduleRepository->softDelete($id);
+        return $this->moduleRepository->delete($id);
     }
 }

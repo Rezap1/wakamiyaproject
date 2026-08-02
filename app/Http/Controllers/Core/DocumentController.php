@@ -1,216 +1,100 @@
 <?php
-
 namespace App\Http\Controllers\Core;
 
 use App\Http\Controllers\Controller;
-use App\Services\Core\DocumentService;
-use App\Services\Core\ActivityLogService;
-use App\Http\Requests\StoreDocumentRequest;
-use App\Http\Requests\UpdateDocumentRequest;
-use App\Interfaces\GoogleSheets\ApplicationRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use App\Services\Document\DocumentService;
 
 class DocumentController extends Controller
 {
-    protected DocumentService $documentService;
-    protected ActivityLogService $activityLogService;
-    protected ApplicationRepositoryInterface $applicationRepository;
-    protected StudentRepositoryInterface $studentRepository;
+    use \App\Traits\Exportable;
 
-    public function __construct(
-        DocumentService $documentService, 
-        ActivityLogService $activityLogService,
-        ApplicationRepositoryInterface $applicationRepository,
-        StudentRepositoryInterface $studentRepository
-    ) {
-        $this->documentService = $documentService;
-        $this->activityLogService = $activityLogService;
-        $this->applicationRepository = $applicationRepository;
-        $this->studentRepository = $studentRepository;
+    protected $exportDateField = 'Generated_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $documents = $this->docService->getAll();
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
+            $documents = $documents->filter(function($item) use ($search) {
+                return str_contains(strtolower($item['Document_Name'] ?? ''), $search);
+            })->values();
+        }
+        
+        return [
+            'moduleName' => 'Dokumen (Document)',
+            'data' => collect(array_values($documents->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['ID Dokumen', 'Nama Dokumen', 'Kategori', 'Tipe', 'Status'],
+            'mapRow' => function($row) {
+
+                return [
+                    $row['Document_ID'] ?? '-',
+                    $row['Document_Name'] ?? '-',
+                    $row['Category'] ?? '-',
+                    $row['Type'] ?? '-',
+                    $row['Status'] ?? '-'
+                ];
+                    },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$documents->count().'</td></tr>'
+        ];
+    }
+
+    protected $docService;
+
+    public function __construct(DocumentService $docService)
+    {
+        $this->docService = $docService;
     }
 
     public function index()
     {
+        $documents = $this->docService->getAll();
+        return view('documents.index', compact('documents'));
+    }
+
+    public function create(\App\Repositories\GoogleSheets\StudentRepository $studentRepo)
+    {
+        $students = $studentRepo->fetchAll();
+        return view('documents.create', compact('students'));
+    }
+
+    public function store(\App\Http\Requests\StoreDocumentRequest $request)
+    {
         try {
-            $documents = $this->documentService->getAllDocuments();
-            $documents = collect($documents)->where('Is_Active', '!=', 'FALSE')->values()->all();
-
-            $applications = collect($this->applicationRepository->fetchAll())->where('Is_Active', '!=', 'FALSE')->values()->all();
-            $students = collect($this->studentRepository->fetchAll())->where('Is_Active', '!=', 'FALSE')->values()->all();
-
-            return view('documents.index', compact('documents', 'applications', 'students'));
+            $data = $request->except('_token');
+            $data['Generated_By'] = auth()->user()->email ?? 'System';
+            $this->docService->GenerateDocument($data);
+            return redirect()->route('documents.index')->with('success', 'Document generated successfully.');
         } catch (\Exception $e) {
-            Log::error('Error fetching documents: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data Document: ' . $e->getMessage());
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
         }
     }
 
-    public function create()
+    public function show($id)
     {
-        try {
-            $applications = collect($this->applicationRepository->fetchAll())
-                ->where('Is_Active', '!=', 'FALSE')
-                ->values()
-                ->all();
-                
-            $students = collect($this->studentRepository->fetchAll())
-                ->where('Is_Active', '!=', 'FALSE')
-                ->values()
-                ->all();
-
-            return view('documents.create', compact('applications', 'students'));
-        } catch (\Exception $e) {
-            Log::error('Error loading create document form: ' . $e->getMessage());
-            return redirect()->route('documents.index')->with('error', 'Terjadi kesalahan sistem.');
-        }
+        $document = $this->docService->getById($id);
+        return view('documents.show', compact('document'));
     }
 
-    public function store(StoreDocumentRequest $request)
+    public function edit($id, \App\Repositories\GoogleSheets\StudentRepository $studentRepo)
     {
-        try {
-            $data = $request->validated();
-            $currentUser = auth()->user()->Email ?? 'system';
-
-            // Auto verification check based on status
-            if ($data['Document_Status'] === 'VERIFIED') {
-                $data['Verified_By'] = $currentUser;
-                $data['Verification_Date'] = now()->toDateString();
-            }
-
-            $this->documentService->createDocument($data, $currentUser);
-
-            $this->activityLogService->log(
-                'DOCUMENT',
-                'CREATE',
-                "Menambahkan data dokumen baru.",
-                [],
-                $data,
-                request()->ip(),
-                request()->userAgent()
-            );
-
-            return redirect()->route('documents.index')->with('success', 'Data Dokumen berhasil ditambahkan.');
-        } catch (\Exception $e) {
-            Log::error('Error creating document: ' . $e->getMessage());
-            return back()->withInput()->with('error', 'Gagal menyimpan data Dokumen: ' . $e->getMessage());
-        }
+        $document = $this->docService->getById($id);
+        $students = $studentRepo->fetchAll();
+        return view('documents.edit', compact('document', 'students'));
     }
 
-    public function show(string $id)
+    public function update(\App\Http\Requests\UpdateDocumentRequest $request, $id)
     {
-        try {
-            $document = $this->documentService->getDocumentById($id);
-
-            if (!$document || ($document['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                return redirect()->route('documents.index')->with('error', 'Data Dokumen tidak ditemukan.');
-            }
-
-            $this->activityLogService->log(
-                'DOCUMENT',
-                'VIEW',
-                "Melihat detail dokumen: {$id}",
-                [],
-                [],
-                request()->ip(),
-                request()->userAgent()
-            );
-
-            return view('documents.show', compact('document'));
-        } catch (\Exception $e) {
-            Log::error('Error viewing document: ' . $e->getMessage());
-            return redirect()->route('documents.index')->with('error', 'Terjadi kesalahan sistem.');
-        }
+        // For documents, update is restricted, usually we archive or publish
+        return redirect()->route('documents.index');
     }
 
-    public function edit(string $id)
+    public function destroy($id)
     {
-        try {
-            $document = $this->documentService->getDocumentById($id);
-
-            if (!$document || ($document['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                return redirect()->route('documents.index')->with('error', 'Data Dokumen tidak ditemukan.');
-            }
-
-            $applications = collect($this->applicationRepository->fetchAll())
-                ->where('Is_Active', '!=', 'FALSE')
-                ->values()
-                ->all();
-                
-            $students = collect($this->studentRepository->fetchAll())
-                ->where('Is_Active', '!=', 'FALSE')
-                ->values()
-                ->all();
-
-            return view('documents.edit', compact('document', 'applications', 'students'));
-        } catch (\Exception $e) {
-            Log::error('Error loading edit document form: ' . $e->getMessage());
-            return redirect()->route('documents.index')->with('error', 'Terjadi kesalahan sistem.');
-        }
-    }
-
-    public function update(UpdateDocumentRequest $request, string $id)
-    {
-        try {
-            $oldData = $this->documentService->getDocumentById($id);
-            if (!$oldData) {
-                return redirect()->route('documents.index')->with('error', 'Data Dokumen tidak ditemukan.');
-            }
-
-            $data = $request->validated();
-            $currentUser = auth()->user()->Email ?? 'system';
-
-            // Verification logic update
-            if ($data['Document_Status'] === 'VERIFIED' && ($oldData['Document_Status'] ?? '') !== 'VERIFIED') {
-                $data['Verified_By'] = $currentUser;
-                $data['Verification_Date'] = now()->toDateString();
-            }
-
-            $this->documentService->updateDocument($id, $data, $currentUser);
-
-            $this->activityLogService->log(
-                'DOCUMENT',
-                'UPDATE',
-                "Memperbarui data dokumen: {$id}",
-                $oldData,
-                $data,
-                request()->ip(),
-                request()->userAgent()
-            );
-
-            return redirect()->route('documents.index')->with('success', 'Data Dokumen berhasil diperbarui.');
-        } catch (\Exception $e) {
-            Log::error('Error updating document: ' . $e->getMessage());
-            return back()->withInput()->with('error', 'Gagal memperbarui data: ' . $e->getMessage());
-        }
-    }
-
-    public function destroy(string $id)
-    {
-        try {
-            $document = $this->documentService->getDocumentById($id);
-            if (!$document) {
-                return redirect()->route('documents.index')->with('error', 'Data Dokumen tidak ditemukan.');
-            }
-
-            $currentUser = auth()->user()->Email ?? 'system';
-            $this->documentService->deleteDocument($id, $currentUser);
-
-            $this->activityLogService->log(
-                'DOCUMENT',
-                'DELETE',
-                "Menghapus data dokumen: {$id}",
-                $document,
-                ['Is_Active' => 'FALSE'],
-                request()->ip(),
-                request()->userAgent()
-            );
-
-            return redirect()->route('documents.index')->with('success', 'Data Dokumen berhasil dihapus.');
-        } catch (\Exception $e) {
-            Log::error('Error deleting document: ' . $e->getMessage());
-            return redirect()->route('documents.index')->with('error', 'Gagal menghapus data: ' . $e->getMessage());
-        }
+        $this->docService->ArchiveDocument($id);
+        return redirect()->route('documents.index')->with('success', 'Document archived.');
     }
 }

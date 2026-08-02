@@ -27,8 +27,7 @@ class UpdateStudentRequest extends FormRequest
                 }
             ],
             'Registration_Date' => 'required|date',
-            'Full_Name' => 'required|string|max:150',
-            'Gender' => 'required|in:Laki-laki,Perempuan',
+            'User_ID' => 'required|string',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
             'National_ID' => [
@@ -45,8 +44,7 @@ class UpdateStudentRequest extends FormRequest
                     }
                 }
             ],
-            'Phone_Number' => 'nullable|string|max:30',
-            'Email' => 'nullable|email|max:100',
+
             'Address' => 'nullable|string',
             'Education' => 'required|string|max:100',
             'Program_ID' => 'required|string',
@@ -65,10 +63,8 @@ class UpdateStudentRequest extends FormRequest
             'Program_ID.required' => 'Program wajib dipilih.',
             'Batch_ID.required' => 'Angkatan (Batch) wajib dipilih.',
             'Class_ID.required' => 'Kelas wajib dipilih.',
-            'Gender.required' => 'Jenis kelamin wajib dipilih.',
-            'Education.required' => 'Pendidikan terakhir wajib diisi.',
             'Registration_Date.required' => 'Tanggal registrasi wajib diisi.',
-            'Email.email' => 'Format email tidak valid.'
+            'User_ID.required' => 'Akun Pengguna (User) wajib dipilih.'
         ];
     }
 }

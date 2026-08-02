@@ -10,12 +10,82 @@ use App\Services\Core\ProgramService;
 use App\Services\Core\BatchService;
 use App\Services\Core\TeacherService;
 use App\Services\Core\ActivityLogService;
+use App\Helpers\SheetValue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 
 class ClassController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $classes = $this->classService->getAllClasses();
+        $programs = $this->programService->getAllPrograms();
+        $batches = $this->batchService->getAllBatches();
+        $teachers = $this->teacherService->getAllTeachers();
+
+        $classes = $classes->map(function ($cls) use ($programs, $batches, $teachers) {
+            $program = $programs->firstWhere('Program_ID', $cls['Program_ID']);
+            $batch = $batches->firstWhere('Batch_ID', $cls['Batch_ID']);
+            $teacher = $teachers->firstWhere('Teacher_ID', $cls['Homeroom_Teacher_ID']);
+
+            $cls['Program_Name'] = $program ? $program['Program_Name'] : '-';
+            $cls['Batch_Name'] = $batch ? $batch['Batch_Name'] : '-';
+            $cls['Teacher_Name'] = $teacher ? $teacher['Full_Name'] : '-';
+            return $cls;
+        });
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $classes = \App\Helpers\CollectionHelper::search($classes, $search, ['Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $classes = $classes->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        if ($request->filled('program_id')) {
+            $programId = $request->input('program_id');
+            if ($programId !== 'all') {
+                $classes = $classes->where('Program_ID', $programId);
+            }
+        }
+        if ($request->filled('batch_id')) {
+            $batchId = $request->input('batch_id');
+            if ($batchId !== 'all') {
+                $classes = $classes->where('Batch_ID', $batchId);
+            }
+        }
+        
+        return [
+            'moduleName' => 'Kelas (Class)',
+            'data' => collect(array_values($classes->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['Kode Kelas', 'Nama Kelas', 'Program', 'Angkatan', 'Wali Kelas', 'Ruangan', 'Status'],
+            'mapRow' => function($row) {
+
+                return [
+                    $row['Class_Code'] ?? '-',
+                    $row['Class_Name'] ?? '-',
+                    $row['Program_Name'] ?? '-',
+                    $row['Batch_Name'] ?? '-',
+                    $row['Teacher_Name'] ?? '-',
+                    $row['Room'] ?? '-',
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                ];
+                    },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$classes->count().'</td></tr>'
+        ];
+    }
+
     protected $classService;
     protected $programService;
     protected $batchService;
@@ -36,7 +106,7 @@ class ClassController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-    public function index()
+    public function index(\Illuminate\Http\Request $request)
     {
         try {
             $classes = $this->classService->getAllClasses();
@@ -57,13 +127,34 @@ class ClassController extends Controller
                 return $cls;
             });
 
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $classes = \App\Helpers\CollectionHelper::search($classes, $search, ['Class_ID', 'Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $classes = $classes->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+            
+            if ($request->filled('program_id')) {
+                $programId = $request->input('program_id');
+                if ($programId !== 'all') {
+                    $classes = $classes->where('Program_ID', $programId);
+                }
+            }
+            
+            if ($request->filled('batch_id')) {
+                $batchId = $request->input('batch_id');
+                if ($batchId !== 'all') {
+                    $classes = $classes->where('Batch_ID', $batchId);
+                }
+            }
+
             // Pagination
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $perPage = 10;
-            $currentItems = $classes->slice(($currentPage - 1) * $perPage, $perPage)->all();
-            $classesPaginated = new LengthAwarePaginator($currentItems, count($classes), $perPage, $currentPage, [
-                'path' => LengthAwarePaginator::resolveCurrentPath(),
-            ]);
+            $classesPaginated = \App\Helpers\CollectionHelper::paginate($classes, 10)->withQueryString();
             
             // For filter
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
@@ -221,17 +312,40 @@ class ClassController extends Controller
                 Auth::id() ?? 'SYSTEM',
                 'DELETE',
                 'MASTER_CLASS',
-                "Menonaktifkan kelas (Soft Delete): {$id}",
+                "Menonaktifkan kelas (Hard Delete): {$id}",
                 request()->ip(),
                 $class,
                 array_merge($class, ['Is_Active' => 'FALSE']),
                 request()->userAgent()
             );
 
-            return redirect()->route('classes.index')->with('success', 'Data kelas berhasil dinonaktifkan.');
+            return redirect()->route('classes.index')->with('success', 'Data kelas berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting class: ' . $e->getMessage());
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat menghapus data kelas.');
+        }
+    }
+
+    public function getStudents($id, \App\Services\Core\StudentService $studentService)
+    {
+        try {
+            $students = $studentService->getAllStudents();
+            $requestedClassId = SheetValue::id($id);
+            $classStudents = $students
+                ->filter(fn ($student) => SheetValue::isActive($student))
+                ->filter(fn ($student) => SheetValue::id($student['Class_ID'] ?? '') === $requestedClassId)
+                ->map(function ($student) {
+                    $student['Student_ID'] = trim((string) ($student['Student_ID'] ?? ''));
+                    $student['Full_Name'] = trim((string) ($student['Full_Name'] ?? $student['Student_ID'] ?? 'Siswa'));
+                    return $student;
+                })
+                ->values()
+                ->toArray();
+
+            return response()->json($classStudents);
+        } catch (\Exception $e) {
+            Log::error('Error fetching students by class: ' . $e->getMessage());
+            return response()->json(['error' => 'Internal Server Error'], 500);
         }
     }
 }

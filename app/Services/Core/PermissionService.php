@@ -124,6 +124,6 @@ class PermissionService
 
     public function deletePermission($id)
     {
-        return $this->permissionRepository->softDelete($id);
+        return $this->permissionRepository->delete($id);
     }
 }

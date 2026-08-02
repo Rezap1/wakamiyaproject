@@ -10,6 +10,7 @@ use App\Services\Core\ActivityLogService;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use Illuminate\Support\Facades\Auth;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class UserController extends Controller
 {
@@ -24,10 +25,30 @@ class UserController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $users = $this->userService->getAllUsers();
-        return view('users.index', compact('users'));
+        $roles = $this->roleService->getAllRoles();
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $users = \App\Helpers\CollectionHelper::search($users, $search, ['User_ID', 'Username', 'Full_Name', 'Email']);
+        }
+
+        if ($request->filled('role')) {
+            $users = $users->where('Role_ID', $request->input('role'));
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $users = $users->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+
+        $users = \App\Helpers\CollectionHelper::paginate($users, 15)->withQueryString();
+
+        return view('users.index', compact('users', 'roles'));
     }
 
     public function create()
@@ -147,9 +168,63 @@ class UserController extends Controller
                 ['Is_Active' => 'FALSE']
             );
 
-            return redirect()->route('users.index')->with('success', 'Pengguna berhasil dihapus (Soft Delete).');
+            return redirect()->route('users.index')->with('success', 'Pengguna berhasil dihapus (Hard Delete).');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $e->getMessage()]);
         }
+    }
+
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+    protected function getExportConfig(Request $request)
+    {
+        $users = $this->userService->getAllUsers();
+        $roles = $this->roleService->getAllRoles()->keyBy('Role_ID');
+        
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $users = \App\Helpers\CollectionHelper::search($users, $search, ['User_ID', 'Username', 'Full_Name', 'Email']);
+        }
+
+        if ($request->filled('role')) {
+            $users = $users->where('Role_ID', $request->input('role'));
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $users = $users->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+
+        $activeCount = $users->where('Is_Active', 'TRUE')->count();
+        $inactiveCount = $users->where('Is_Active', 'FALSE')->count();
+        $summary = "<tr><td>Total Users</td><td>: {$users->count()}</td><td width='20px'></td><td>Active Users</td><td>: {$activeCount}</td><td width='20px'></td><td>Inactive Users</td><td>: {$inactiveCount}</td></tr>";
+
+        $headers = ['User ID', 'Username', 'Email', 'Role', 'Status'];
+        $mapRow = function($user) use ($roles) {
+            $roleName = isset($roles[$user['Role_ID']]) ? $roles[$user['Role_ID']]['Role_Name'] : 'Unknown';
+            $isActive = ($user['Is_Active'] ?? 'FALSE') === 'TRUE' ? 'Active' : 'Inactive';
+            return [
+                $user['User_ID'] ?? '-',
+                $user['Username'] ?? '-',
+                $user['Email'] ?? '-',
+                $roleName,
+                $isActive
+            ];
+        };
+
+        return [
+            'moduleName' => 'USERS',
+            'data' => $users,
+            'pdfView' => 'users.pdf',
+            'headers' => $headers,
+            'mapRow' => $mapRow,
+            'isLandscape' => false,
+            'metadata' => ['roles' => $roles],
+            'summary' => $summary
+        ];
     }
 }

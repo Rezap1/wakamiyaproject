@@ -1,0 +1,390 @@
+
+--- Academic/AssessmentController.php ---
+$assessments = $this->assessmentService->getAll();
+
+--- Academic/AttendanceController.php ---
+$attendances = $this->attendanceService->getAll();
+        
+        // Load Classes for the filter dropdown
+        $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
+        $allClasses = $classRepo->fetchAll();
+        $classes = $allClasses->filter(function($c) {
+            $isActive = strtoupper(trim($c['Is_Active'] ?? ''));
+            return $isActive === 'TRUE' || $isActive === '';
+        })->values();
+
+        // Determine user role (kept for potential future use)
+        $user = auth()->user();
+        $userRole = 'UNKNOWN';
+        if ($user && isset($user->Role_ID)) {
+            try {
+                $roleService = app(\App\Services\Core\RoleService::class);
+                $role = $roleService->getRoleById($user->Role_ID);
+                $userRole = strtoupper(trim($role['Role_Name'] ?? 'UNKNOWN'));
+            } catch (\Exception $e) {}
+        }
+        
+        // Build classOptions for the view (show all active classes)
+        $classOptions = [];
+        foreach ($classes as $c) {
+            $cid = trim((string) ($c['Class_ID'] ?? ''));
+            if ($cid !== '') {
+                $classOptions[$cid] = ($c['Class_Name'] ?? $cid) . (!empty($c['Class_Code']) ? ' (' . $c['Class_Code'] . ')' : '');
+            }
+        }
+
+        // Load Students for name mapping
+        $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
+        
+        // Apply filters
+        $dateFilter = $request->input('date', date('Y-m-d'));
+        $classFilter = $request->input('class_id');
+        
+        $debug = [
+            'raw_count' => $attendances->count(),
+            'dateFilter' => $dateFilter,
+            'classFilter' => $classFilter,
+            'userRole' => $userRole,
+        ];
+        
+        if ($dateFilter) {
+            $attendances = $attendances->filter(function($a) use ($dateFilter) {
+                return ($a['Attendance_Date'] ?? '') === $dateFilter;
+            });
+            $debug['after_date_filter'] = $attendances->count();
+        }
+        
+        if ($classFilter) {
+            $attendances = $attendances->filter(function($a) use ($classFilter) {
+                $cId = $a['Class_ID'] ?? $a['Schedule_ID'] ?? '';
+                return $cId === $classFilter;
+            });
+            $debug['after_class_filter'] = $attendances->count();
+        }
+
+        \Log::info('Attendance Index Debug:', $debug);
+
+--- Academic/ScheduleController.php ---
+$schedules = $this->scheduleService->getAll();
+
+--- Academic/ScoreController.php ---
+$scores = $this->scoreService->getAll();
+
+--- Academic/SubjectController.php ---
+$subjects = $this->subjectService->getAll();
+
+--- Core/ActivityController.php ---
+$user = auth()->user();
+        $userId = $user->Employee_ID ?? $user->User_ID;
+        $roleData = $this->roleService->getRoleById($user->Role_ID);
+        $roleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
+
+        $filters = $request->only(['keyword', 'module']);
+        
+        $activities = $this->activityService->getActivities($roleName, $userId, $filters);
+        $kpis = $this->activityService->calculateKPIs($activities);
+        $groupedActivities = $this->activityService->groupActivities($activities);
+
+        // Extract unique modules for filter dropdown
+        $allActivities = $this->activityService->getActivities($roleName, $userId, []); // without text filters
+        $availableModules = $allActivities->pluck('Module')->unique()->filter()->sort()->values();
+
+--- Core/AuditLogController.php ---
+$logs = $this->auditService->activity()->take(100); // Take 100 for performance
+
+--- Core/BatchController.php ---
+try {
+            $batches = $this->batchService->getAllBatches();
+            $programs = $this->programService->getAllPrograms();
+
+            // Mapping Program Name to Batches for display
+            $batches = $batches->map(function ($batch) use ($programs) {
+                $program = $programs->firstWhere('Program_ID', $batch['Program_ID']);
+                $batch['Program_Name'] = $program ? $program['Program_Name'] : 'Program Tidak Ditemukan';
+                $batch['Program_Code'] = $program ? $program['Program_Code'] : '-';
+                return $batch;
+            });
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $batches = \App\Helpers\CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $batches = $batches->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+            
+            if ($request->filled('program_id')) {
+                $programId = $request->input('program_id');
+                if ($programId !== 'all') {
+                    $batches = $batches->where('Program_ID', $programId);
+                }
+            }
+
+            // Pagination
+            $batchesPaginated = \App\Helpers\CollectionHelper::paginate($batches, 10)->withQueryString();
+            
+            // For filter
+            $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
+
+--- Core/ClassController.php ---
+try {
+            $classes = $this->classService->getAllClasses();
+            $programs = $this->programService->getAllPrograms();
+            $batches = $this->batchService->getAllBatches();
+            $teachers = $this->teacherService->getAllTeachers();
+
+            // Mapping Names to Classes for display
+            $classes = $classes->map(function ($cls) use ($programs, $batches, $teachers) {
+                $program = $programs->firstWhere('Program_ID', $cls['Program_ID']);
+                $batch = $batches->firstWhere('Batch_ID', $cls['Batch_ID']);
+                $teacher = $teachers->firstWhere('Teacher_ID', $cls['Homeroom_Teacher_ID']);
+
+                $cls['Program_Name'] = $program ? $program['Program_Name'] : 'Program Tidak Ditemukan';
+                $cls['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Angkatan Tidak Ditemukan';
+                $cls['Teacher_Name'] = $teacher ? $teacher['Full_Name'] : 'Wali Kelas Tidak Ditemukan';
+                
+                return $cls;
+            });
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $classes = \App\Helpers\CollectionHelper::search($classes, $search, ['Class_ID', 'Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $classes = $classes->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+            
+            if ($request->filled('program_id')) {
+                $programId = $request->input('program_id');
+                if ($programId !== 'all') {
+                    $classes = $classes->where('Program_ID', $programId);
+                }
+            }
+            
+            if ($request->filled('batch_id')) {
+                $batchId = $request->input('batch_id');
+                if ($batchId !== 'all') {
+                    $classes = $classes->where('Batch_ID', $batchId);
+                }
+            }
+
+            // Pagination
+            $classesPaginated = \App\Helpers\CollectionHelper::paginate($classes, 10)->withQueryString();
+            
+            // For filter
+            $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
+            $activeBatches = $batches->where('Is_Active', 'TRUE')->values();
+
+--- Core/CompanyController.php ---
+try {
+            $companies = $this->companyService->getAllCompanies();
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $companies = \App\Helpers\CollectionHelper::search($companies, $search, ['Company_ID', 'Company_Code', 'Company_Name', 'Company_Email', 'Company_Phone']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $companies = $companies->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
+            // Pagination
+            $companiesPaginated = \App\Helpers\CollectionHelper::paginate($companies, 10)->withQueryString();
+
+--- Core/DocumentController.php ---
+$documents = $this->docService->getAll();
+
+--- Core/ModuleController.php ---
+try {
+            $modules = $this->moduleService->getAllModules();
+            
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $modules = \App\Helpers\CollectionHelper::search($modules, $search, ['Module_ID', 'Module_Code', 'Module_Name', 'Module_Group']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $modules = $modules->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
+            // Pagination
+            $modulesPaginated = \App\Helpers\CollectionHelper::paginate($modules, 10)->withQueryString();
+
+--- Core/NotificationController.php ---
+// Ideally fetch based on user role and id
+        $userEmail = Auth::user()->email ?? 'user@example.com';
+        $userRole = session('role') ?? 'GUEST';
+        
+        $notifications = $this->notificationService->getAll()
+            ->filter(function($n) use ($userEmail, $userRole) {
+                return (($n['User_ID'] ?? '') == $userEmail || ($n['Role'] ?? '') == $userRole) &&
+                       ($n['Status'] ?? '') !== 'Archived';
+            })->sortByDesc('Created_At');
+
+--- Core/ProgramController.php ---
+try {
+            $programs = $this->programService->getAllPrograms();
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $programs = \App\Helpers\CollectionHelper::search($programs, $search, ['Program_ID', 'Program_Code', 'Program_Name', 'Description']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $programs = $programs->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
+            // Pagination
+            $programsPaginated = \App\Helpers\CollectionHelper::paginate($programs, 10)->withQueryString();
+
+--- Core/StudentController.php ---
+try {
+            $students = $this->studentService->getAllStudents();
+            $programs = $this->programService->getAllPrograms();
+            $batches = $this->batchService->getAllBatches();
+            $classes = $this->classService->getAllClasses();
+
+            // Mapping Names to Students for display
+            $students = $students->map(function ($student) use ($programs, $batches, $classes) {
+                $program = $programs->firstWhere('Program_ID', $student['Program_ID']);
+                $batch = $batches->firstWhere('Batch_ID', $student['Batch_ID']);
+                $class = $classes->firstWhere('Class_ID', $student['Class_ID']);
+
+                $student['Program_Name'] = $program ? $program['Program_Name'] : 'Tidak Ditemukan';
+                $student['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Tidak Ditemukan';
+                $student['Class_Name'] = $class ? $class['Class_Name'] : 'Tidak Ditemukan';
+                
+                return $student;
+            });
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $students = \App\Helpers\CollectionHelper::search($students, $search, ['Student_ID', 'NIS', 'Full_Name', 'Email', 'Phone', 'Program_Name', 'Batch_Name', 'Class_Name']);
+            }
+
+            if ($request->filled('program')) {
+                $students = $students->where('Program_ID', $request->input('program'));
+            }
+
+            if ($request->filled('batch')) {
+                $students = $students->where('Batch_ID', $request->input('batch'));
+            }
+
+            if ($request->filled('class')) {
+                $students = $students->where('Class_ID', $request->input('class'));
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $students = $students->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
+            if ($request->filled('date_from')) {
+                $dateFrom = \Carbon\Carbon::parse($request->input('date_from'))->startOfDay();
+                $students = $students->filter(function($item) use ($dateFrom) {
+                    $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
+                    if (!$dateField) return false;
+                    return \Carbon\Carbon::parse($dateField)->startOfDay()->gte($dateFrom);
+                });
+            }
+
+            if ($request->filled('date_to')) {
+                $dateTo = \Carbon\Carbon::parse($request->input('date_to'))->endOfDay();
+                $students = $students->filter(function($item) use ($dateTo) {
+                    $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
+                    if (!$dateField) return false;
+                    return \Carbon\Carbon::parse($dateField)->endOfDay()->lte($dateTo);
+                });
+            }
+
+            // Pagination
+            $studentsPaginated = \App\Helpers\CollectionHelper::paginate($students, 10)->withQueryString();
+            
+            // For filter
+            $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
+            $activeBatches = $batches->where('Is_Active', 'TRUE')->values();
+            $activeClasses = $classes->where('Is_Active', 'TRUE')->values();
+
+--- Core/TeacherController.php ---
+try {
+            $teachers = $this->teacherService->getAllTeachers();
+            $employees = $this->employeeService->getAllEmployees();
+            $departments = $this->departmentService->getAllDepartments();
+            $positions = $this->positionService->getAllPositions();
+            
+            $users = $this->userService->getAllUsers();
+            
+            // Map names for display
+            $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
+                $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
+                
+                if ($user) {
+                    $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
+                    $teacher['Email'] = $user['Email'] ?? '-';
+                    $teacher['Phone_Number'] = $user['Phone_Number'] ?? '-';
+                    
+                    // Try to find Employee if User has Employee_ID, or just fallback
+                    $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
+                    $emp = $employees->firstWhere('Employee_ID', $empId);
+                } else {
+                    $emp = null;
+                }
+                
+                if ($emp) {
+                    $teacher['Employee_Number'] = $emp['Employee_Number'];
+                    
+                    $dept = $departments->firstWhere('Department_ID', $emp['Department_ID']);
+                    $pos = $positions->firstWhere('Position_ID', $emp['Position_ID']);
+                    
+                    $teacher['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
+                    $teacher['Position_Name'] = $pos ? $pos['Position_Name'] : 'Tidak Diketahui';
+                } else {
+                    $teacher['Employee_Number'] = '-';
+                    $teacher['Department_Name'] = '-';
+                    $teacher['Position_Name'] = '-';
+                }
+                
+                return $teacher;
+            });
+
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $teachers = \App\Helpers\CollectionHelper::search($teachers, $search, ['Teacher_ID', 'Employee_ID', 'NUPTK', 'Full_Name', 'Email', 'Phone_Number', 'Employee_Number', 'Department_Name', 'Position_Name']);
+            }
+
+            if ($request->filled('teaching')) {
+                $teaching = $request->input('teaching');
+                if ($teaching !== 'all') {
+                    $teachers = $teachers->where('Teaching_Status', $teaching);
+                }
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
+            // Pagination
+            $teachersPaginated = \App\Helpers\CollectionHelper::paginate($teachers, 10)->withQueryString();

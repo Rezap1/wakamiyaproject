@@ -1,0 +1,10 @@
+Data Mapping Discrepancies in index.blade.php files:
+
+- academic/assessments/index.blade.php expects keys: Category, Status, Assessment_ID, Name, Subject_ID, Class_ID, Program_ID, Max_Score, Exam_Date
+- academic/attendances/index.blade.php expects keys: Attendance_ID, Student_ID, Class_ID, Schedule_ID, Attendance_Date, Created_At, Status
+- academic/scores/index.blade.php expects keys: Score_Value, Student_ID, Score_ID
+- finance/invoices/index.blade.php expects keys: Status, Invoice_ID, student_name, Student_ID, class_name, batch_name, Category, Amount, Due_Date, Created_At
+- finance/payments/index.blade.php expects keys: Status, Payment_ID, Invoice_ID, Student_ID, Amount_Paid, Payment_Date
+- hr/payroll/index.blade.php expects keys: Status, Payroll_Number, Employee_ID, Payroll_Period, Net_Salary, Created_At, Payroll_ID
+- search/index.blade.php expects keys: url, title, desc
+- student/billing/index.blade.php expects keys: Invoice_ID, Category, Due_Date, Amount, Status

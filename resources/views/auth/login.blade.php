@@ -3,51 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Masuk - Sistem Manajemen WAKAMIYA V1.0</title>
+    <title>Masuk - WAKAMIYA MANAGEMENT SYSTEM v1.0</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
+        
+        .master-bg {
+            background-image: url('{{ asset('img/login-bg.jpg') }}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        
+        .bg-overlay {
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .glass-input-container {
+            position: relative;
+        }
+        
+        .glass-input {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            border-radius: 0.5rem;
+            width: 100%;
+            padding: 0.85rem 1rem 0.85rem 3.2rem;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        /* Fix Chrome Autofill turning inputs white */
+        .glass-input:-webkit-autofill,
+        .glass-input:-webkit-autofill:hover, 
+        .glass-input:-webkit-autofill:focus, 
+        .glass-input:-webkit-autofill:active {
+            transition: background-color 5000s ease-in-out 0s;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        
+        .glass-input:focus {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-color: #4fc3f7;
+            outline: none;
+            box-shadow: 0 0 0 1px #4fc3f7;
+        }
+        
+        .glass-input::placeholder {
+            color: #94a3b8;
+            font-weight: 400;
+        }
+        
+        .input-icon {
+            position: absolute;
+            left: 1.1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #f1f5f9;
+            width: 1.25rem;
+            height: 1.25rem;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .custom-checkbox {
+            appearance: none;
+            background-color: transparent;
+            margin: 0;
+            width: 1.1rem;
+            height: 1.1rem;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 4px;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .custom-checkbox::before {
+            content: "";
+            width: 0.6em;
+            height: 0.6em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            background-color: transparent;
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+        
+        .custom-checkbox:checked {
+            border-color: #4fc3f7;
+            background-color: transparent;
+        }
+        
+        .custom-checkbox:checked::before {
+            transform: scale(1);
+            background-color: #4fc3f7;
+            box-shadow: inset 1em 1em #4fc3f7;
+        }
+        
+        .login-btn {
+            background: linear-gradient(90deg, #0ea5e9 0%, #2563eb 100%);
+            color: white;
+            font-weight: 600;
+            border-radius: 0.4rem;
+            padding: 0.8rem;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .login-btn:hover {
+            opacity: 0.9;
+        }
+
+        .tracking-super-wide {
+            letter-spacing: 0.4em;
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6 selection:bg-primary-500 selection:text-white">
+<body class="min-h-screen relative flex flex-col justify-between selection:bg-[#4fc3f7] selection:text-slate-900 overflow-y-auto overflow-x-hidden text-white master-bg">
+    
+    <div class="absolute inset-0 bg-overlay z-0 pointer-events-none"></div>
 
-    <div class="max-w-5xl w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative">
-        <!-- Dekorasi Background Latar Belakang -->
-        <div class="absolute -top-32 -left-32 w-64 h-64 bg-primary-200 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob"></div>
-        <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-primary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-2000"></div>
-
-        <!-- Sisi Kiri: Branding & Logo -->
-        <div class="w-full md:w-1/2 bg-gradient-to-br from-primary-500 to-primary-800 text-white p-14 flex flex-col justify-center relative overflow-hidden text-center md:text-left">
-            <!-- Background Pattern -->
-            <div class="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent"></div>
-            
-            <div class="relative z-10 flex flex-col items-center md:items-start">
-                <!-- Logo -->
-                <div class="bg-white p-4 rounded-full shadow-xl mb-8 inline-block">
-                    <img src="{{ asset('img/logo.png.jpeg') }}" alt="Logo Wakamiya" class="w-24 h-24 object-contain" onerror="this.src='https://ui-avatars.com/api/?name=W&background=0097b2&color=fff&rounded=true&bold=true'">
-                </div>
-                
-                <h1 class="text-4xl font-extrabold tracking-tight mb-3 drop-shadow-md">LPK WAKAMIYA</h1>
-                <h2 class="text-lg font-semibold text-primary-100 uppercase tracking-widest mb-6">Management System V1.0</h2>
-                
-                <p class="text-primary-50 text-base leading-relaxed max-w-sm mt-4 hidden md:block opacity-90">
-                    Sistem informasi terintegrasi untuk pengelolaan Sumber Daya Manusia, Akademik, Keuangan, dan Penempatan ke Jepang secara profesional.
-                </p>
+    <!-- Top Widgets -->
+    <div class="relative z-10 w-full p-8 md:p-10 flex justify-between items-start">
+        <!-- Date Widget -->
+        <div class="glass-panel px-6 py-4 rounded-[1.25rem] flex items-center gap-4 border border-white/20 shadow-lg">
+            <svg class="w-8 h-8 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <div class="leading-tight">
+                <p id="live-date-main" class="text-base font-bold text-white tracking-wide"></p>
+                <p id="live-date-sub" class="text-sm text-gray-300"></p>
             </div>
         </div>
 
-        <!-- Sisi Kanan: Form Login -->
-        <div class="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center bg-white relative z-10">
-            <div class="mb-10 text-center md:text-left">
-                <h3 class="text-3xl font-extrabold text-gray-900 mb-2">Selamat Datang</h3>
-                <p class="text-gray-500 font-medium">Silakan masuk menggunakan akun Anda.</p>
+        <!-- Time Widget -->
+        <div class="glass-panel px-6 py-4 rounded-[1.25rem] flex items-center gap-4 border border-white/20 shadow-lg">
+            <svg class="w-8 h-8 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div class="leading-tight">
+                <p id="live-time" class="text-lg font-bold text-white tracking-widest"></p>
+                <p class="text-xs text-gray-300 tracking-widest mt-0.5">WIB</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Center Area -->
+    <div class="relative z-10 flex-1 flex flex-col items-center justify-center px-4 w-full h-full pb-8">
+        
+        <!-- Branding Header -->
+        <div class="text-center mb-5 flex flex-col items-center mt-[-40px]">
+            <div class="w-[140px] h-[140px] rounded-full border-[5px] border-[#4fc3f7] flex items-center justify-center mb-4 bg-white p-1 shadow-lg shadow-cyan-500/20">
+                <img src="{{ asset('img/logo.png.jpeg') }}" alt="WAKAMIYA" class="w-full h-full object-contain rounded-full" onerror="this.src='https://ui-avatars.com/api/?name=W&background=fff&color=000&rounded=true&bold=true'">
+            </div>
+            
+            <h1 class="text-6xl md:text-[5rem] leading-none font-bold tracking-widest text-white drop-shadow-lg mb-1">WAKAMIYA</h1>
+            <h2 class="text-sm md:text-lg text-[#4fc3f7] tracking-super-wide font-medium drop-shadow-md">MANAGEMENT SYSTEM</h2>
+            
+            <div class="flex items-center justify-center gap-4 mt-3 opacity-90">
+                <div class="h-[1px] w-[60px] bg-white/50"></div>
+                <span class="text-[13px] tracking-widest font-medium text-white">v 1.0</span>
+                <div class="h-[1px] w-[60px] bg-white/50"></div>
+            </div>
+        </div>
+
+        <!-- THE LOGIN BOX -->
+        <div class="w-full max-w-[480px] p-9 mt-2 rounded-[1.25rem] bg-[#0f172a]/70 backdrop-blur-xl border border-white/20 shadow-2xl">
+            
+            <div class="text-center mb-5">
+                <p class="text-[13px] font-medium text-white tracking-wide mb-0.5">ようこそ、システムへログインしてください</p>
+                <p class="text-[11.5px] text-gray-300 font-light">Selamat datang, silakan login ke sistem</p>
             </div>
 
             @if ($errors->any())
-                <div class="mb-6 p-4 rounded-xl bg-red-50 text-red-700 border border-red-200 text-sm flex items-start shadow-sm">
-                    <svg class="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <ul class="list-disc pl-4 space-y-1 font-medium">
+                <div class="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200 text-sm flex items-start">
+                    <svg class="w-5 h-5 mr-2 mt-0.5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <ul class="list-disc pl-4 space-y-1 font-medium text-[12px]">
                         @foreach ($errors->all() as $error)
                             <li>{{ $error }}</li>
                         @endforeach
@@ -55,52 +205,195 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('login') }}" class="space-y-6">
+            <form method="POST" action="{{ route('login') }}" class="space-y-4">
                 @csrf
-                <div>
-                    <label for="email" class="block text-sm font-bold text-gray-700 mb-2">Alamat Email</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path></svg>
-                        </div>
-                        <input id="email" name="email" type="email" autocomplete="email" required value="{{ old('email') }}" class="pl-11 appearance-none block w-full px-4 py-3.5 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base transition-colors bg-gray-50 hover:bg-white" placeholder="admin@wakamiya.co.id">
-                    </div>
+                
+                <div class="glass-input-container">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                    <input id="email" name="email" type="email" autocomplete="email" required value="{{ old('email') }}" class="glass-input" placeholder="Nama Pengguna">
                 </div>
 
-                <div>
-                    <label for="password" class="block text-sm font-bold text-gray-700 mb-2">Kata Sandi</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                        </div>
-                        <input id="password" name="password" type="password" autocomplete="current-password" required class="pl-11 appearance-none block w-full px-4 py-3.5 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base transition-colors bg-gray-50 hover:bg-white" placeholder="••••••••">
-                    </div>
+                <div class="glass-input-container">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required class="glass-input pr-10" placeholder="Kata Sandi">
+                    <button type="button" onclick="togglePassword()" class="absolute right-[0.9rem] top-1/2 -translate-y-1/2 text-gray-300 hover:text-white cursor-pointer transition-colors focus:outline-none">
+                        <svg id="eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                    </button>
                 </div>
 
-                <div class="flex items-center justify-between pt-2">
-                    <div class="flex items-center">
-                        <input id="remember-me" name="remember-me" type="checkbox" class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer">
-                        <label for="remember-me" class="ml-2 block text-sm font-medium text-gray-700 cursor-pointer">
+                <div class="flex items-center justify-between pt-1">
+                    <div class="flex items-center gap-2">
+                        <input id="remember-me" name="remember-me" type="checkbox" class="custom-checkbox">
+                        <label for="remember-me" class="block text-[12.5px] text-gray-200 cursor-pointer">
                             Ingat Saya
                         </label>
                     </div>
-
-                    <div class="text-sm">
-                        <a href="#" class="font-bold text-primary-600 hover:text-primary-800 transition-colors">
-                            Lupa sandi?
-                        </a>
-                    </div>
+                    <a href="#" class="text-[12.5px] text-[#4fc3f7] hover:text-blue-300 transition-colors">
+                        Lupa Kata Sandi?
+                    </a>
                 </div>
 
-                <div class="pt-4">
-                    <button type="submit" class="w-full flex justify-center items-center py-4 px-4 border border-transparent rounded-xl shadow-lg text-base font-bold text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all hover:-translate-y-1 hover:shadow-primary-500/30">
-                        Masuk ke Dasbor
-                        <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                    </button>
-                </div>
+                <button type="submit" class="login-btn mt-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H2.25" />
+                    </svg>
+                    MASUK
+                </button>
             </form>
+        </div>
+
+        <!-- Company Info Card -->
+        <div class="glass-panel w-full max-w-[480px] px-6 py-3.5 mt-3 rounded-[0.8rem] flex items-center justify-center gap-4">
+            <svg class="w-9 h-9 text-[#4fc3f7]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+            </svg>
+            <div class="flex flex-col">
+                <p class="text-[12.5px] font-medium tracking-widest text-white">PT WAKAMIYA MANDIRI SEJAHTERA</p>
+                <p class="text-[11.5px] font-medium tracking-widest text-[#4fc3f7] mt-0.5">LPK WAKAMIYA</p>
+                <p class="text-[11px] font-light text-gray-300 mt-0.5">日本語学校トレーニングセンター</p>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Floating Features Widget (Right side desktop) -->
+    <div class="hidden xl:block absolute right-12 top-1/2 -translate-y-1/2 glass-panel p-8 rounded-[1.5rem] w-[320px] z-10 border border-white/20 shadow-2xl">
+        <h3 class="text-lg font-bold text-white mb-6 pb-4 border-b border-white/20 tracking-wide text-center">システムの特徴<br><span class="text-sm text-[#4fc3f7] font-medium tracking-normal mt-1 block">Fitur Sistem</span></h3>
+        <ul class="space-y-6">
+            <li class="flex items-center gap-5">
+                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center border border-white/10 flex-shrink-0">
+                    <svg class="w-6 h-6 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                </div>
+                <div class="flex flex-col">
+                    <p class="text-base font-bold text-white mb-0.5 tracking-wide">安全なデータ</p>
+                    <p class="text-sm text-gray-300 font-light">Keamanan Data Terjamin</p>
+                </div>
+            </li>
+            <li class="flex items-center gap-5">
+                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center border border-white/10 flex-shrink-0">
+                    <svg class="w-6 h-6 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div class="flex flex-col">
+                    <p class="text-base font-bold text-white mb-0.5 tracking-wide">リアルタイム</p>
+                    <p class="text-sm text-gray-300 font-light">Sinkronisasi Real-time</p>
+                </div>
+            </li>
+            <li class="flex items-center gap-5">
+                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center border border-white/10 flex-shrink-0">
+                    <svg class="w-6 h-6 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+                <div class="flex flex-col">
+                    <p class="text-base font-bold text-white mb-0.5 tracking-wide">簡単アクセス</p>
+                    <p class="text-sm text-gray-300 font-light">Akses Cepat & Mudah</p>
+                </div>
+            </li>
+            <li class="flex items-center gap-5">
+                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center border border-white/10 flex-shrink-0">
+                    <svg class="w-6 h-6 text-[#4fc3f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
+                <div class="flex flex-col">
+                    <p class="text-base font-bold text-white mb-0.5 tracking-wide">効率的な管理</p>
+                    <p class="text-sm text-gray-300 font-light">Manajemen Efisien</p>
+                </div>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Bottom Footer Bar -->
+    <div class="relative z-10 w-full bg-transparent border-t border-white/15 mt-auto">
+        <div class="w-full max-w-[1600px] mx-auto px-10 xl:px-16 py-5 flex flex-col xl:flex-row items-center justify-between text-xs">
+            <div class="flex flex-wrap justify-center items-center gap-8 xl:gap-12">
+                <a href="https://www.lpkwakamiya.com" target="_blank" class="flex items-center gap-3 text-gray-200 hover:text-white transition-colors">
+                    <svg class="w-[22px] h-[22px] text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
+                    <span class="tracking-wide text-[14px] font-normal">www.lpkwakamiya.com</span>
+                </a>
+                
+                <a href="mailto:lpkwakamiya01@gmail.com" class="flex items-center gap-3 text-gray-200 hover:text-white transition-colors">
+                    <svg class="w-[22px] h-[22px] text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <span class="tracking-wide text-[14px] font-normal">lpkwakamiya01@gmail.com</span>
+                </a>
+                
+                <a href="https://wa.me/6282128370414" target="_blank" class="flex items-center gap-3 text-gray-200 hover:text-white transition-colors">
+                    <svg class="w-[22px] h-[22px] text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" fill="white"></path></svg>
+                    <span class="tracking-wide text-[14px] font-normal">082128370414</span>
+                </a>
+                
+                <a href="https://instagram.com/lpkwakamiya" target="_blank" class="flex items-center gap-3 text-gray-200 hover:text-white transition-colors">
+                    <svg class="w-[22px] h-[22px] text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                    <span class="tracking-wide text-[14px] font-normal">@lpkwakamiya</span>
+                </a>
+                
+                <a href="https://tiktok.com/@lpk.wakamiya" target="_blank" class="flex items-center gap-3 text-gray-200 hover:text-white transition-colors">
+                    <svg class="w-[22px] h-[22px] text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"></path></svg>
+                    <span class="tracking-wide text-[14px] font-normal">@lpk.wakamiya</span>
+                </a>
+            </div>
+            
+            <div class="flex items-center gap-6 mt-4 md:mt-0">
+                <div class="w-px h-6 bg-gray-600 hidden md:block"></div>
+                <span class="text-gray-300 tracking-wide text-[13px] font-normal">&copy; 2026 LPK WAKAMIYA</span>
+                <div class="px-5 py-1.5 rounded-[1.25rem] border border-[#004f8e] text-[12px] font-medium tracking-wide text-[#4fc3f7] bg-[#021021]">Version 1.0</div>
+            </div>
         </div>
     </div>
 
+    <!-- Live Clock Script -->
+    <script>
+        function updateDateTime() {
+            try {
+                const now = new Date();
+                
+                // Format Time in WIB (Asia/Jakarta)
+                const optionsTime = { timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+                const timeStr = new Intl.DateTimeFormat('id-ID', optionsTime).format(now).replace(/\./g, ':');
+                document.getElementById('live-time').innerText = timeStr;
+
+                // Format Date in WIB (Asia/Jakarta)
+                const optionsDate = { timeZone: 'Asia/Jakarta', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+                const formatterDate = new Intl.DateTimeFormat('id-ID', optionsDate);
+                const parts = formatterDate.formatToParts(now);
+                
+                let weekday = '', day = '', month = '', year = '';
+                parts.forEach(p => {
+                    if(p.type === 'weekday') weekday = p.value;
+                    if(p.type === 'day') day = p.value;
+                    if(p.type === 'month') month = p.value;
+                    if(p.type === 'year') year = p.value;
+                });
+                
+                weekday = weekday.replace(',', '');
+
+                document.getElementById('live-date-main').innerText = `${day} ${month} ${year}`;
+                document.getElementById('live-date-sub').innerText = weekday;
+            } catch (e) {
+                console.error("Live clock error:", e);
+            }
+        }
+        
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eye-icon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>';
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>';
+            }
+        }
+        
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+    </script>
 </body>
 </html>
+
+
+

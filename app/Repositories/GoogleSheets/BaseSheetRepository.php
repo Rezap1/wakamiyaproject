@@ -20,6 +20,7 @@ abstract class BaseSheetRepository
     public function __construct()
     {
         $this->spreadsheetId = config('services.google.spreadsheet_id');
+        $this->cacheTtl = config('cache.wms.master', 60); // Default to 60s
         $this->client = new Google_Client();
         $this->client->setApplicationName('Wakamiya Management System');
         $this->client->setScopes([Google_Service_Sheets::SPREADSHEETS]);
@@ -44,37 +45,61 @@ abstract class BaseSheetRepository
         $startTime = microtime(true);
         $isHit = Cache::has($this->cacheKey . '_all');
 
-        $data = Cache::remember($this->cacheKey . '_all', $this->cacheTtl, function () {
-            return retry(3, function () {
-                $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
-                $values = $response->getValues();
+        try {
+            $data = Cache::remember($this->cacheKey . '_all', $this->cacheTtl, function () {
+                return retry(3, function () {
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
+                    $values = $response->getValues();
 
-                if (empty($values) || count($values) <= 1) {
-                    return collect([]);
-                }
-
-                $headers = array_shift($values);
-                $data = [];
-
-                foreach ($values as $row) {
-                    $item = [];
-                    foreach ($headers as $index => $header) {
-                        $item[$header] = $row[$index] ?? null;
+                    if (empty($values) || count($values) <= 1) {
+                        return collect([]);
                     }
-                    $data[] = $item;
-                }
 
-                return collect($data);
-            }, 1000);
-        });
+                    $headers = array_shift($values);
+                    $data = [];
 
-        $duration = round((microtime(true) - $startTime) * 1000, 2);
-        Log::info("Google Sheets FetchAll on {$this->sheetName}", [
-            'duration_ms' => $duration,
-            'cache' => $isHit ? 'HIT' : 'MISS'
-        ]);
+                    foreach ($values as $row) {
+                        $item = [];
+                        $isEmptyRow = true;
+                        
+                        foreach ($headers as $index => $header) {
+                            $val = $row[$index] ?? null;
+                            $item[$header] = $val;
+                            
+                            // Check if at least one column has data
+                            if (!empty(trim((string)$val))) {
+                                $isEmptyRow = false;
+                            }
+                        }
 
-        return $data;
+                        // Skip completely empty rows
+                        if ($isEmptyRow) {
+                            continue;
+                        }
+
+                        // Skip rows missing a primary key (if defined)
+                        if (!empty($this->primaryKey) && empty(trim((string)($item[$this->primaryKey] ?? '')))) {
+                            continue;
+                        }
+
+                        $data[] = $item;
+                    }
+
+                    return collect($data);
+                }, 1000);
+            });
+
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            Log::info("Google Sheets FetchAll on {$this->sheetName}", [
+                'duration_ms' => $duration,
+                'cache' => $isHit ? 'HIT' : 'MISS'
+            ]);
+
+            return $data;
+        } catch (\Exception $e) {
+            Log::error("Google API Error during fetchAll on {$this->sheetName}: " . $e->getMessage());
+            return collect([]); // Graceful fallback
+        }
     }
 
     /**
@@ -122,109 +147,124 @@ abstract class BaseSheetRepository
         $startTime = microtime(true);
         $lockKey = $this->sheetName . '_write_lock';
 
-        return Cache::lock($lockKey, 10)->block(5, function () use ($data, $startTime) {
-            $result = retry(3, function () use ($data) {
-                // First get the headers to ensure data is in the correct order
-                $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName . '!1:1');
-                $headers = $response->getValues()[0] ?? [];
+        try {
+            return Cache::lock($lockKey, 10)->block(5, function () use ($data, $startTime) {
+                $result = retry(3, function () use ($data) {
+                    // First get the headers to ensure data is in the correct order
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName . '!1:1');
+                    $headers = $response->getValues()[0] ?? [];
 
-                $rowValues = [];
-                foreach ($headers as $header) {
-                    $rowValues[] = $data[$header] ?? '';
-                }
+                    $rowValues = [];
+                    foreach ($headers as $header) {
+                        $rowValues[] = $data[$header] ?? '';
+                    }
 
-                $body = new \Google_Service_Sheets_ValueRange([
-                    'values' => [$rowValues]
-                ]);
+                    $body = new \Google_Service_Sheets_ValueRange([
+                        'values' => [$rowValues]
+                    ]);
 
-                $params = [
-                    'valueInputOption' => 'USER_ENTERED'
-                ];
+                    $params = [
+                        'valueInputOption' => 'USER_ENTERED'
+                    ];
 
-                return $this->service->spreadsheets_values->append($this->spreadsheetId, $this->sheetName, $body, $params);
-            }, 1000);
-            
-            $this->clearCache();
-            
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
-            Log::info("Google Sheets Append on {$this->sheetName}", ['duration_ms' => $duration]);
-            
-            return $result;
-        });
+                    return $this->service->spreadsheets_values->append($this->spreadsheetId, $this->sheetName, $body, $params);
+                }, 1000);
+                
+                $this->clearCache();
+                
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                Log::info("Google Sheets Append on {$this->sheetName}", ['duration_ms' => $duration]);
+                
+                return $result;
+            });
+        } catch (\Exception $e) {
+            Log::error("Google API Error during append on {$this->sheetName}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function update($id, array $data)
+    {
+        return $this->updateRow($id, $data);
     }
 
     /**
      * Update an existing row by ID (assuming primaryKey is always a header).
      * This is an expensive operation in Google Sheets API, so use carefully.
      */
-    public function update(string $id, array $data)
+    public function updateRow($id, array $data)
     {
         $startTime = microtime(true);
         $lockKey = $this->sheetName . '_write_lock';
 
-        return Cache::lock($lockKey, 10)->block(5, function () use ($id, $data, $startTime) {
-            $result = retry(3, function () use ($id, $data) {
-                // Fetch all current values without cache to find the row index
-                $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
-                $values = $response->getValues();
-                
-                if (empty($values)) {
-                    return false;
-                }
-
-                $headers = $values[0];
-                $idIndex = array_search($this->primaryKey, $headers);
-                
-                if ($idIndex === false) {
-                    throw new \Exception("Header '{$this->primaryKey}' not found in sheet.");
-                }
-
-                $rowIndexToUpdate = -1;
-                foreach ($values as $index => $row) {
-                    if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
-                        $rowIndexToUpdate = $index + 1; // Google Sheets is 1-indexed
-                        break;
+        try {
+            return Cache::lock($lockKey, 10)->block(5, function () use ($id, $data, $startTime) {
+                $result = retry(3, function () use ($id, $data) {
+                    // Fetch all current values without cache to find the row index
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
+                    $values = $response->getValues();
+                    
+                    if (empty($values)) {
+                        return false;
                     }
-                }
 
-                if ($rowIndexToUpdate === -1) {
-                    return false; // Not found
-                }
+                    $headers = $values[0];
+                    $idIndex = array_search($this->primaryKey, $headers);
+                    
+                    if ($idIndex === false) {
+                        throw new \Exception("Header '{$this->primaryKey}' not found in sheet.");
+                    }
 
-                $rowValues = [];
-                foreach ($headers as $header) {
-                    // Keep existing value if not provided in $data
-                    $existingValue = $values[$rowIndexToUpdate - 1][array_search($header, $headers)] ?? '';
-                    $rowValues[] = array_key_exists($header, $data) ? $data[$header] : $existingValue;
-                }
+                    $rowIndexToUpdate = -1;
+                    foreach ($values as $index => $row) {
+                        if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
+                            $rowIndexToUpdate = $index + 1; // Google Sheets is 1-indexed
+                            break;
+                        }
+                    }
 
-                $range = $this->sheetName . '!A' . $rowIndexToUpdate;
+                    if ($rowIndexToUpdate === -1) {
+                        return false; // Not found
+                    }
+
+                    $rowValues = [];
+                    foreach ($headers as $header) {
+                        // Keep existing value if not provided in $data
+                        $existingValue = $values[$rowIndexToUpdate - 1][array_search($header, $headers)] ?? '';
+                        $rowValues[] = array_key_exists($header, $data) ? $data[$header] : $existingValue;
+                    }
+
+                    $range = $this->sheetName . '!A' . $rowIndexToUpdate;
+                    
+                    $body = new \Google_Service_Sheets_ValueRange([
+                        'values' => [$rowValues]
+                    ]);
+
+                    $params = [
+                        'valueInputOption' => 'USER_ENTERED'
+                    ];
+
+                    $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
+                    return true;
+                }, 1000);
                 
-                $body = new \Google_Service_Sheets_ValueRange([
-                    'values' => [$rowValues]
-                ]);
-
-                $params = [
-                    'valueInputOption' => 'USER_ENTERED'
-                ];
-
-                $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
-                return true;
-            }, 1000);
-            
-            $this->clearCache();
-            
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
-            Log::info("Google Sheets Update on {$this->sheetName}", ['duration_ms' => $duration]);
-            
-            return $result;
-        });
+                $this->clearCache();
+                
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                Log::info("Google Sheets Update on {$this->sheetName}", ['duration_ms' => $duration]);
+                
+                return $result;
+            });
+        } catch (\Exception $e) {
+            Log::error("Google API Error during update on {$this->sheetName}: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**
      * Soft delete a row by setting Is_Active to FALSE.
      */
-    public function softDelete(string $id)
+    public function softDelete($id)
     {
         return $this->update($id, [
             'Is_Active' => 'FALSE',
@@ -235,77 +275,82 @@ abstract class BaseSheetRepository
     /**
      * Hard delete a row by ID.
      */
-    public function delete(string $id)
+    public function delete($id)
     {
         $startTime = microtime(true);
         $lockKey = $this->sheetName . '_write_lock';
 
-        return Cache::lock($lockKey, 10)->block(5, function () use ($id, $startTime) {
-            $result = retry(3, function () use ($id) {
-                $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
-                $values = $response->getValues();
-                
-                if (empty($values)) {
-                    return false;
-                }
-
-                $headers = $values[0];
-                $idIndex = array_search($this->primaryKey, $headers);
-                
-                if ($idIndex === false) {
-                    return false;
-                }
-
-                $rowIndexToDelete = -1;
-                foreach ($values as $index => $row) {
-                    if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
-                        $rowIndexToDelete = $index; // 0-indexed for API
-                        break;
+        try {
+            return Cache::lock($lockKey, 10)->block(5, function () use ($id, $startTime) {
+                $result = retry(3, function () use ($id) {
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
+                    $values = $response->getValues();
+                    
+                    if (empty($values)) {
+                        return false;
                     }
-                }
 
-                if ($rowIndexToDelete === -1) {
-                    return false;
-                }
-
-                $spreadsheet = $this->service->spreadsheets->get($this->spreadsheetId);
-                $sheetId = null;
-                foreach ($spreadsheet->getSheets() as $sheet) {
-                    if ($sheet->getProperties()->getTitle() == $this->sheetName) {
-                        $sheetId = $sheet->getProperties()->getSheetId();
-                        break;
+                    $headers = $values[0];
+                    $idIndex = array_search($this->primaryKey, $headers);
+                    
+                    if ($idIndex === false) {
+                        return false;
                     }
-                }
 
-                if ($sheetId === null) {
-                    return false;
-                }
+                    $rowIndexToDelete = -1;
+                    foreach ($values as $index => $row) {
+                        if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
+                            $rowIndexToDelete = $index; // 0-indexed for API
+                            break;
+                        }
+                    }
 
-                $request = new \Google_Service_Sheets_Request([
-                    'deleteDimension' => [
-                        'range' => [
-                            'sheetId' => $sheetId,
-                            'dimension' => 'ROWS',
-                            'startIndex' => $rowIndexToDelete,
-                            'endIndex' => $rowIndexToDelete + 1
+                    if ($rowIndexToDelete === -1) {
+                        return false;
+                    }
+
+                    $spreadsheet = $this->service->spreadsheets->get($this->spreadsheetId);
+                    $sheetId = null;
+                    foreach ($spreadsheet->getSheets() as $sheet) {
+                        if ($sheet->getProperties()->getTitle() == $this->sheetName) {
+                            $sheetId = $sheet->getProperties()->getSheetId();
+                            break;
+                        }
+                    }
+
+                    if ($sheetId === null) {
+                        return false;
+                    }
+
+                    $request = new \Google_Service_Sheets_Request([
+                        'deleteDimension' => [
+                            'range' => [
+                                'sheetId' => $sheetId,
+                                'dimension' => 'ROWS',
+                                'startIndex' => $rowIndexToDelete,
+                                'endIndex' => $rowIndexToDelete + 1
+                            ]
                         ]
-                    ]
-                ]);
+                    ]);
 
-                $batchUpdateRequest = new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest([
-                    'requests' => [$request]
-                ]);
+                    $batchUpdateRequest = new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest([
+                        'requests' => [$request]
+                    ]);
 
-                $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
-                return true;
-            }, 1000);
-            
-            $this->clearCache();
+                    $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
+                    return true;
+                }, 1000);
+                
+                $this->clearCache();
 
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
-            Log::info("Google Sheets Delete on {$this->sheetName}", ['duration_ms' => $duration]);
-            
-            return $result;
-        });
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                Log::info("Google Sheets Delete on {$this->sheetName}", ['duration_ms' => $duration]);
+                
+                return $result;
+            });
+        } catch (\Exception $e) {
+            Log::error("Google API Error during delete on {$this->sheetName}: " . $e->getMessage());
+            return false;
+        }
     }
 }

@@ -13,6 +13,46 @@ use Illuminate\Support\Facades\Log;
 
 class CompanyController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $companies = $this->companyService->getAllCompanies();
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $companies = \App\Helpers\CollectionHelper::search($companies, $search, ['Company_Code', 'Company_Name', 'Company_Email', 'Company_Phone']);
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $companies = $companies->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        return [
+            'moduleName' => 'Mitra Perusahaan (Company)',
+            'data' => collect(array_values($companies->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['Kode Perusahaan', 'Nama Perusahaan', 'Email', 'Telepon', 'Status'],
+            'mapRow' => function($row) {
+                return [
+                    $row['Company_Code'] ?? '-',
+                    $row['Company_Name'] ?? '-',
+                    $row['Email'] ?? '-',
+                    $row['Phone_Number'] ?? '-',
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                ];
+            },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$companies->count().'</td></tr>'
+        ];
+    }
+
     protected $companyService;
     protected $activityLogService;
 
@@ -24,18 +64,25 @@ class CompanyController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-    public function index()
+    public function index(\Illuminate\Http\Request $request)
     {
         try {
             $companies = $this->companyService->getAllCompanies();
 
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $companies = \App\Helpers\CollectionHelper::search($companies, $search, ['Company_ID', 'Company_Code', 'Company_Name', 'Company_Email', 'Company_Phone']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $companies = $companies->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
             // Pagination
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $perPage = 10;
-            $currentItems = $companies->slice(($currentPage - 1) * $perPage, $perPage)->all();
-            $companiesPaginated = new LengthAwarePaginator($currentItems, count($companies), $perPage, $currentPage, [
-                'path' => LengthAwarePaginator::resolveCurrentPath(),
-            ]);
+            $companiesPaginated = \App\Helpers\CollectionHelper::paginate($companies, 10)->withQueryString();
 
             return view('companies.index', [
                 'companies' => $companiesPaginated
@@ -168,14 +215,14 @@ class CompanyController extends Controller
                 Auth::id() ?? 'SYSTEM',
                 'DELETE',
                 'MASTER_COMPANY',
-                "Menonaktifkan perusahaan (Soft Delete): {$id}",
+                "Menonaktifkan perusahaan (Hard Delete): {$id}",
                 request()->ip(),
                 $company,
                 array_merge($company, ['Is_Active' => 'FALSE']),
                 request()->userAgent()
             );
 
-            return redirect()->route('companies.index')->with('success', 'Data perusahaan berhasil dinonaktifkan.');
+            return redirect()->route('companies.index')->with('success', 'Data perusahaan berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting company: ' . $e->getMessage());
             return redirect()->route('companies.index')->with('error', 'Terjadi kesalahan saat menghapus data perusahaan.');

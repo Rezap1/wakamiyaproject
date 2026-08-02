@@ -3,15 +3,24 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class ProgramService
 {
     protected $programRepository;
+    protected $studentRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(ProgramRepositoryInterface $programRepository)
-    {
+    public function __construct(
+        ProgramRepositoryInterface $programRepository,
+        StudentRepositoryInterface $studentRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->programRepository = $programRepository;
+        $this->studentRepository = $studentRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllPrograms()
@@ -54,6 +63,17 @@ class ProgramService
 
         $this->programRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'PROGRAM',
+            'CREATE',
+            'PROGRAM',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -94,11 +114,45 @@ class ProgramService
             }
         }
 
-        return $this->programRepository->update($id, $mappedData);
+        $res = $this->programRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'PROGRAM',
+            'UPDATE',
+            'PROGRAM',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteProgram($id)
     {
-        return $this->programRepository->softDelete($id);
+        // Soft Delete Protection
+        $students = $this->studentRepository->fetchAll();
+        $relatedStudentsCount = $students->where('Program_ID', $id)->count();
+
+        if ($relatedStudentsCount > 0) {
+            throw new Exception("Program ini masih digunakan oleh {$relatedStudentsCount} data Siswa. Silakan ubah status menjadi Inactive.");
+        }
+
+        $res = $this->programRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'PROGRAM',
+            'DELETE',
+            'PROGRAM',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

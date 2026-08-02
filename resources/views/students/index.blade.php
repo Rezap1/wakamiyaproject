@@ -1,216 +1,125 @@
 @extends('layouts.app')
-
 @section('header', 'Manajemen Siswa')
-
 @section('content')
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-    <!-- Header -->
-    <div class="px-6 py-5 border-b border-gray-100 flex flex-col md:flex-row md:justify-between md:items-center gap-4 bg-white">
-        <div>
-            <h2 class="text-xl font-extrabold text-gray-900">Daftar Induk Siswa</h2>
-            <p class="text-sm font-medium text-gray-500 mt-1">Kelola data pendaftaran dan profil seluruh siswa aktif maupun alumni.</p>
-        </div>
-        <div>
-            <div class="flex gap-2">
-                <a href="{{ route('students.index') }}" class="inline-flex items-center justify-center p-3 border border-gray-200 rounded-xl shadow-sm text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" title="Refresh Data">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                </a>
-                                <a href="{{ route('students.create') }}" class="inline-flex items-center justify-center px-5 py-3 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 transition-all hover:-translate-y-0.5 hover:shadow-primary-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    Daftarkan Siswa
-                </a>
-                            </div>
-        </div>
-    </div>
-    
-    <!-- Filters -->
-    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div class="relative lg:col-span-1">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+
+<x-universal.index-layout 
+    title="Daftar Induk Siswa" 
+    description="Kelola data pendaftaran dan profil seluruh siswa aktif maupun alumni."
+    :breadcrumbs="['Dashboard' => route('dashboard'), 'Master' => '#', 'Siswa' => route('students.index')]"
+    add-action="{{ route('students.create') }}"
+    add-text="Daftarkan Siswa"
+>
+
+    <x-slot:headerActions>
+        <x-universal.multi-export route-prefix="students" />
+    </x-slot:headerActions>
+    <x-slot:toolbar>
+        <x-universal.toolbar 
+            search-url="{{ route('students.index') }}" 
+            refresh-url="{{ route('students.index') }}"
+            export-url="#"
+        >
+            <div class="w-full md:w-auto">
+                <select name="program" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
+                    <option value="">Semua Program</option>
+                    @foreach($programs as $program)
+                        <option value="{{ $program['Program_ID'] }}" {{ request('program') == $program['Program_ID'] ? 'selected' : '' }}>{{ $program['Program_Code'] }}</option>
+                    @endforeach
+                </select>
             </div>
-            <input type="text" id="searchInput" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors" placeholder="Cari Nama, NIS...">
-        </div>
+            <div class="w-full md:w-auto">
+                <select name="batch" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
+                    <option value="">Semua Angkatan</option>
+                    @foreach($batches as $batch)
+                        <option value="{{ $batch['Batch_ID'] }}" {{ request('batch') == $batch['Batch_ID'] ? 'selected' : '' }}>{{ $batch['Batch_Code'] }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="w-full md:w-auto">
+                <select name="class" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
+                    <option value="">Semua Kelas</option>
+                    @foreach($classes as $cls)
+                        <option value="{{ $cls['Class_ID'] }}" {{ request('class') == $cls['Class_ID'] ? 'selected' : '' }}>{{ $cls['Class_Code'] }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </x-universal.toolbar>
+    </x-slot:toolbar>
+
+    <x-universal.data-table :empty="count($students) === 0" empty-title="Data Siswa Kosong" empty-description="Belum ada siswa yang terdaftar.">
+        <x-slot:header>
+            <th class="px-6 py-4">Identitas Siswa</th>
+            <th class="px-6 py-4">Program / Kelas</th>
+            <th class="px-6 py-4">Kontak</th>
+            <th class="px-6 py-4">Tgl Registrasi</th>
+            <th class="px-6 py-4">Status</th>
+            <th class="px-6 py-4 text-right">Aksi</th>
+        </x-slot:header>
+
+        @foreach($students as $student)
+        <tr class="hover:bg-slate-50 transition-colors {{ ($student['Is_Active'] ?? 'TRUE') === 'FALSE' ? 'opacity-50' : '' }}">
+            <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full {{ $student['Gender'] == 'Laki-laki' ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-pink-100 text-pink-600 border-pink-200' }} flex items-center justify-center font-bold text-sm border shrink-0">
+                        {{ substr($student['Full_Name'], 0, 1) }}
+                    </div>
+                    <div>
+                        <div class="font-bold text-slate-800">{{ $student['Full_Name'] }}</div>
+                        <div class="text-[11px] font-bold text-slate-500 mt-0.5">{{ $student['Student_Number'] }}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                <div class="font-bold text-indigo-700 truncate max-w-xs" title="{{ $student['Program_Name'] }}">{{ $student['Program_Name'] }}</div>
+                <div class="text-xs font-medium text-slate-500 mt-0.5 flex items-center gap-1">
+                    {{ $student['Class_Name'] }}
+                    <span class="text-slate-300">•</span>
+                    {{ $student['Batch_Name'] }}
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                <div class="text-sm font-medium text-slate-800 flex items-center">
+                    <svg class="w-3.5 h-3.5 mr-1.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                    {{ $student['Phone_Number'] ?: '-' }}
+                </div>
+                <div class="text-xs font-medium text-slate-500 mt-1 flex items-center">
+                    <svg class="w-3.5 h-3.5 mr-1.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    {{ $student['Email'] ?: '-' }}
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                <div class="text-xs text-slate-500">
+                    {{ isset($student['Registration_Date']) && $student['Registration_Date'] ? \Carbon\Carbon::parse($student['Registration_Date'])->format('d M Y') : (isset($student['Created_At']) && $student['Created_At'] ? \Carbon\Carbon::parse($student['Created_At'])->format('d M Y') : '-') }}
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                <div class="flex flex-col gap-1.5 items-start">
+                    <x-badge status="{{ ($student['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Active' : 'Inactive' }}">
+                        {{ ($student['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Sistem Aktif' : 'Sistem Nonaktif' }}
+                    </x-badge>
+                    <x-badge color="blue">{{ $student['Enrollment_Status'] }}</x-badge>
+                </div>
+            </td>
+            <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                    <x-universal.action-button action="detail" url="{{ route('students.show', $student['Student_ID']) }}" />
+                    <x-universal.action-button action="edit" url="{{ route('students.edit', $student['Student_ID']) }}" />
+                    @if(($student['Is_Active'] ?? 'TRUE') === 'TRUE')
+                        <x-universal.action-button action="delete" url="{{ route('students.destroy', $student['Student_ID']) }}" />
+                    @endif
+                </div>
+            </td>
+        </tr>
+        @endforeach
         
-        <select id="programFilter" class="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-xl bg-white font-medium lg:col-span-1">
-            <option value="ALL">Semua Program</option>
-            @foreach($programs as $program)
-                <option value="{{ $program['Program_ID'] }}">{{ $program['Program_Code'] }}</option>
-            @endforeach
-        </select>
+        <x-slot:pagination>
+            <x-universal.pagination :paginator="$students" />
+        </x-slot:pagination>
+    </x-universal.data-table>
 
-        <select id="batchFilter" class="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-xl bg-white font-medium lg:col-span-1">
-            <option value="ALL">Semua Angkatan</option>
-            @foreach($batches as $batch)
-                <option value="{{ $batch['Batch_ID'] }}">{{ $batch['Batch_Code'] }}</option>
-            @endforeach
-        </select>
-        
-        <select id="classFilter" class="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-xl bg-white font-medium lg:col-span-1">
-            <option value="ALL">Semua Kelas</option>
-            @foreach($classes as $cls)
-                <option value="{{ $cls['Class_ID'] }}">{{ $cls['Class_Code'] }}</option>
-            @endforeach
-        </select>
+</x-universal.index-layout>
 
-        <select id="statusFilter" class="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 rounded-xl bg-white font-medium lg:col-span-1">
-            <option value="ALL">Semua Status (Aktif)</option>
-            <option value="TRUE">Aktif Saja</option>
-            <option value="FALSE">Nonaktif Saja</option>
-        </select>
-    </div>
-
-    <!-- Table -->
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-white">
-                <tr>
-                    <th scope="col" class="px-6 py-5 text-left text-xs font-extrabold text-gray-500 uppercase tracking-wider">Identitas Siswa</th>
-                    <th scope="col" class="px-6 py-5 text-left text-xs font-extrabold text-gray-500 uppercase tracking-wider">Program / Kelas</th>
-                    <th scope="col" class="px-6 py-5 text-left text-xs font-extrabold text-gray-500 uppercase tracking-wider">Kontak</th>
-                    <th scope="col" class="px-6 py-5 text-left text-xs font-extrabold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" class="px-6 py-5 text-right text-xs font-extrabold text-gray-500 uppercase tracking-wider">Aksi</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-100" id="tableBody">
-                @forelse($students as $student)
-                <tr class="hover:bg-primary-50/30 transition-colors group {{ ($student['Is_Active'] ?? 'TRUE') === 'FALSE' ? 'opacity-50' : '' }} filter-row" 
-                    data-search="{{ strtolower($student['Full_Name'].$student['Student_Number']) }}" 
-                    data-status="{{ $student['Is_Active'] ?? 'TRUE' }}"
-                    data-program="{{ $student['Program_ID'] }}"
-                    data-batch="{{ $student['Batch_ID'] }}"
-                    data-class="{{ $student['Class_ID'] }}">
-                    
-                    <td class="px-6 py-4">
-                        <div class="flex items-center">
-                            <div class="h-10 w-10 flex-shrink-0 rounded-full {{ $student['Gender'] == 'Laki-laki' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600' }} flex items-center justify-center font-bold text-sm shadow-sm border border-white">
-                                {{ substr($student['Full_Name'], 0, 1) }}
-                            </div>
-                            <div class="ml-4">
-                                <div class="text-sm font-bold text-gray-900">{{ $student['Full_Name'] }}</div>
-                                <div class="text-xs font-mono text-gray-500 mt-0.5">{{ $student['Student_Number'] }}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4">
-                        <div class="text-sm font-bold text-indigo-700 truncate max-w-xs" title="{{ $student['Program_Name'] }}">{{ $student['Program_Name'] }}</div>
-                        <div class="text-xs text-gray-500 mt-0.5 font-medium flex items-center gap-1">
-                            {{ $student['Class_Name'] }}
-                            <span class="text-gray-300">•</span>
-                            {{ $student['Batch_Name'] }}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4">
-                        <div class="text-sm text-gray-900 flex items-center">
-                            <svg class="w-3.5 h-3.5 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                            {{ $student['Phone_Number'] ?: '-' }}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1 flex items-center">
-                            <svg class="w-3.5 h-3.5 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                            {{ $student['Email'] ?: '-' }}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex flex-col gap-1.5 items-start">
-                            @if(($student['Is_Active'] ?? 'TRUE') === 'TRUE')
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200">
-                                    Sistem Aktif
-                                </span>
-                            @else
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-700 border border-red-200">
-                                    Sistem Nonaktif
-                                </span>
-                            @endif
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                {{ $student['Enrollment_Status'] }}
-                            </span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-2 h-full items-center">
-                        <a href="{{ route('students.show', $student['Student_ID']) }}" class="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg" title="Profil">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                        </a>
-                                                <a href="{{ route('students.edit', $student['Student_ID']) }}" class="text-blue-500 hover:text-blue-700 transition-colors p-2 hover:bg-blue-50 rounded-lg" title="Edit">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                        </a>
-                                                                        @if(($student['Is_Active'] ?? 'TRUE') === 'TRUE')
-                        <form action="{{ route('students.destroy', $student['Student_ID']) }}" method="POST" class="inline-block" onsubmit="return confirm('Apakah Anda yakin ingin menonaktifkan siswa ini?');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="text-red-500 hover:text-red-700 transition-colors p-2 hover:bg-red-50 rounded-lg" title="Nonaktifkan">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                        </form>
-                        @endif
-                                            </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="5" class="px-6 py-10 text-center">
-                        <div class="flex flex-col items-center justify-center">
-                            <svg class="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                            <p class="text-gray-500 text-sm font-medium">Belum ada data siswa yang terdaftar.</p>
-                        </div>
-                    </td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
-    
-    <!-- Pagination -->
-    <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-        <div class="text-sm text-gray-500 font-medium">
-            Menampilkan <span class="font-bold text-gray-900">{{ $students->firstItem() ?? 0 }}</span> sampai <span class="font-bold text-gray-900">{{ $students->lastItem() ?? 0 }}</span> dari <span class="font-bold text-gray-900">{{ $students->total() }}</span> total data
-        </div>
-        <div>
-            {{ $students->links('pagination::tailwind') }}
-        </div>
-    </div>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const searchInput = document.getElementById('searchInput');
-        const statusFilter = document.getElementById('statusFilter');
-        const programFilter = document.getElementById('programFilter');
-        const batchFilter = document.getElementById('batchFilter');
-        const classFilter = document.getElementById('classFilter');
-        const rows = document.querySelectorAll('.filter-row');
-
-        function filterTable() {
-            const searchTerm = searchInput.value.toLowerCase();
-            const statusValue = statusFilter.value;
-            const programValue = programFilter.value;
-            const batchValue = batchFilter.value;
-            const classValue = classFilter.value;
-
-            rows.forEach(row => {
-                const searchString = row.getAttribute('data-search');
-                const rowStatus = row.getAttribute('data-status');
-                const rowProgram = row.getAttribute('data-program');
-                const rowBatch = row.getAttribute('data-batch');
-                const rowClass = row.getAttribute('data-class');
-                
-                const matchesSearch = searchString.includes(searchTerm);
-                const matchesStatus = statusValue === 'ALL' || rowStatus === statusValue;
-                const matchesProgram = programValue === 'ALL' || rowProgram === programValue;
-                const matchesBatch = batchValue === 'ALL' || rowBatch === batchValue;
-                const matchesClass = classValue === 'ALL' || rowClass === classValue;
-                
-                if (matchesSearch && matchesStatus && matchesProgram && matchesBatch && matchesClass) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-        }
-
-        searchInput.addEventListener('input', filterTable);
-        statusFilter.addEventListener('change', filterTable);
-        programFilter.addEventListener('change', filterTable);
-        batchFilter.addEventListener('change', filterTable);
-        classFilter.addEventListener('change', filterTable);
-    });
-</script>
 @endsection
+
+
+

@@ -27,8 +27,16 @@ class StoreStudentRequest extends FormRequest
                 }
             ],
             'Registration_Date' => 'required|date',
-            'Full_Name' => 'required|string|max:150',
-            'Gender' => 'required|in:Laki-laki,Perempuan',
+            'User_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $userService = app(\App\Services\Core\UserService::class);
+                    if (!$userService->getUserById($value)) {
+                        $fail('User tidak ditemukan.');
+                    }
+                }
+            ],
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
             'National_ID' => [
@@ -45,13 +53,39 @@ class StoreStudentRequest extends FormRequest
                     }
                 }
             ],
-            'Phone_Number' => 'nullable|string|max:30',
-            'Email' => 'nullable|email|max:100',
+
             'Address' => 'nullable|string',
             'Education' => 'required|string|max:100',
-            'Program_ID' => 'required|string',
-            'Batch_ID' => 'required|string',
-            'Class_ID' => 'required|string',
+            'Program_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $programService = app(\App\Services\Core\ProgramService::class);
+                    if (!$programService->getProgramById($value)) {
+                        $fail('Program tidak ditemukan.');
+                    }
+                }
+            ],
+            'Batch_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $batchService = app(\App\Services\Core\BatchService::class);
+                    if (!$batchService->getBatchById($value)) {
+                        $fail('Batch tidak ditemukan.');
+                    }
+                }
+            ],
+            'Class_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $classService = app(\App\Services\Core\ClassService::class);
+                    if (!$classService->getClassById($value)) {
+                        $fail('Class tidak ditemukan.');
+                    }
+                }
+            ],
             'Enrollment_Status' => 'required|string|max:50',
             'Graduation_Status' => 'nullable|string|max:50',
             'Is_Active' => 'nullable|in:TRUE,FALSE',
@@ -65,10 +99,8 @@ class StoreStudentRequest extends FormRequest
             'Program_ID.required' => 'Program wajib dipilih.',
             'Batch_ID.required' => 'Angkatan (Batch) wajib dipilih.',
             'Class_ID.required' => 'Kelas wajib dipilih.',
-            'Gender.required' => 'Jenis kelamin wajib dipilih.',
-            'Education.required' => 'Pendidikan terakhir wajib diisi.',
             'Registration_Date.required' => 'Tanggal registrasi wajib diisi.',
-            'Email.email' => 'Format email tidak valid.'
+            'User_ID.required' => 'Akun Pengguna (User) wajib dipilih.'
         ];
     }
 }

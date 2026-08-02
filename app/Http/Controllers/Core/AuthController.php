@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Core;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Services\Core\ActivityLogService;
+use App\Services\Core\EnterpriseEventService;
 
 class AuthController extends Controller
 {
-    protected $activityLogService;
+    protected $enterpriseEvent;
 
-    public function __construct(ActivityLogService $activityLogService)
+    public function __construct(EnterpriseEventService $enterpriseEvent)
     {
-        $this->activityLogService = $activityLogService;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function showLoginForm()
@@ -35,15 +35,64 @@ class AuthController extends Controller
             $request->session()->regenerate();
             
             // Log successful login
-            $this->activityLogService->logAction(
-                Auth::id(), 
-                'LOGIN', 
-                'Auth', 
-                'Pengguna berhasil login'
+            $this->enterpriseEvent->dispatch(
+                'SYSTEM',
+                'LOGIN',
+                'AUTH',
+                'LOGIN',
+                Auth::id(),
+                [],
+                [],
+                ['description' => 'Pengguna berhasil login']
             );
+
+            // Get role to redirect
+            $user = Auth::user();
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $role = $roleService->getRoleById($user->Role_ID);
+            
+            if (!$role || (isset($role['Is_Active']) && strtoupper(trim($role['Is_Active'])) === 'FALSE')) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return redirect()->route('login')->withErrors(['email' => 'Akun Anda menggunakan Role yang tidak valid atau sedang dihapus.']);
+            }
+            
+            $roleName = strtolower(trim($role['Role_Name'] ?? ''));
+            
+            // Map roles like "HR Staff" to "hr"
+            $alias = 'administrator';
+            if (str_contains($roleName, 'hr')) $alias = 'hr';
+            elseif (str_contains($roleName, 'academic')) $alias = 'academic';
+            elseif (str_contains($roleName, 'marketing')) $alias = 'marketing';
+            elseif (str_contains($roleName, 'finance')) $alias = 'finance';
+            elseif (str_contains($roleName, 'director')) $alias = 'director';
+            elseif (str_contains($roleName, 'teacher')) $alias = 'teacher';
+            elseif (str_contains($roleName, 'student')) $alias = 'student';
+            elseif (str_contains($roleName, 'admin')) $alias = 'administrator';
+            
+            $dashboardRoute = 'dashboard.' . $alias;
+
+            if (\Illuminate\Support\Facades\Route::has($dashboardRoute)) {
+                return redirect()->intended(route($dashboardRoute));
+            }
 
             return redirect()->intended(route('dashboard'));
         }
+
+        // FAILED LOGIN (can add event here but wait to see if requested, only LOGIN LOGOUT specified, actually requested FAILED LOGIN too)
+        try {
+            $this->enterpriseEvent->dispatch(
+                'SYSTEM',
+                'FAILED_LOGIN',
+                'AUTH',
+                'FAILED_LOGIN',
+                'SYSTEM',
+                [],
+                [],
+                ['email' => $credentials['email']]
+            );
+        } catch (\Exception $e) {}
 
         return back()->withErrors([
             'email' => __('auth.failed'),
@@ -54,11 +103,15 @@ class AuthController extends Controller
     {
         // Log logout
         if (Auth::check()) {
-            $this->activityLogService->logAction(
-                Auth::id(), 
-                'LOGOUT', 
-                'Auth', 
-                'Pengguna berhasil logout'
+            $this->enterpriseEvent->dispatch(
+                'SYSTEM',
+                'LOGOUT',
+                'AUTH',
+                'LOGOUT',
+                Auth::id(),
+                [],
+                [],
+                ['description' => 'Pengguna berhasil logout']
             );
         }
 

@@ -17,7 +17,7 @@ class RoleRepository extends BaseSheetRepository implements RoleRepositoryInterf
     public function findById(string $id)
     {
         $roles = $this->fetchAll();
-        return $roles->firstWhere('id', $id);
+        return $roles->firstWhere($this->primaryKey, $id);
     }
 
     public function create(array $data)

@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class StudentService
@@ -14,27 +15,56 @@ class StudentService
     protected $programRepository;
     protected $batchRepository;
     protected $classRepository;
+    protected $enterpriseEvent;
 
     public function __construct(
         StudentRepositoryInterface $studentRepository,
         ProgramRepositoryInterface $programRepository,
         BatchRepositoryInterface $batchRepository,
-        ClassRepositoryInterface $classRepository
+        ClassRepositoryInterface $classRepository,
+        EnterpriseEventService $enterpriseEvent
     ) {
         $this->studentRepository = $studentRepository;
         $this->programRepository = $programRepository;
         $this->batchRepository = $batchRepository;
         $this->classRepository = $classRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllStudents()
     {
-        return $this->studentRepository->fetchAll();
+        $students = $this->studentRepository->fetchAll();
+        return $students->map(function ($student) {
+            $student['Completeness_Score'] = $this->calculateCompleteness($student);
+            return $student;
+        });
     }
 
     public function getStudentById($id)
     {
-        return $this->studentRepository->findById($id);
+        $student = $this->studentRepository->findById($id);
+        if ($student) {
+            $student['Completeness_Score'] = $this->calculateCompleteness($student);
+        }
+        return $student;
+    }
+
+    protected function calculateCompleteness($student)
+    {
+        $fieldsToCheck = [
+            'User_ID', 'Program_ID', 'Batch_ID', 'Class_ID',
+            'Student_Number', 'Full_Name', 'Gender', 'Birth_Place', 'Birth_Date',
+            'National_ID', 'Phone_Number', 'Email', 'Address', 'Education'
+        ];
+        
+        $filledCount = 0;
+        foreach ($fieldsToCheck as $field) {
+            if (!empty($student[$field])) {
+                $filledCount++;
+            }
+        }
+        
+        return round(($filledCount / count($fieldsToCheck)) * 100);
     }
 
     public function createStudent(array $data)
@@ -67,18 +97,31 @@ class StudentService
         }
 
         $newId = $this->studentRepository->generateNewId('STD', 6);
+        
+        $userService = app(\App\Services\Core\UserService::class);
+        $user = $userService->getUserById($data['User_ID']);
+        if (!$user) {
+            throw new Exception("User tidak ditemukan.");
+        }
+
+        $allStudents = $this->studentRepository->fetchAll();
+        $existingUser = $allStudents->firstWhere('User_ID', $data['User_ID']);
+        if ($existingUser) {
+            throw new Exception("User ini sudah terdaftar sebagai Siswa.");
+        }
 
         $mappedData = [
             'Student_ID' => $newId,
+            'User_ID' => $data['User_ID'],
             'Student_Number' => $data['Student_Number'],
             'Registration_Date' => $data['Registration_Date'],
-            'Full_Name' => $data['Full_Name'],
-            'Gender' => $data['Gender'],
+            'Full_Name' => $user['Full_Name'],
+            'Gender' => $data['Gender'] ?? '',
             'Birth_Place' => $data['Birth_Place'] ?? '',
             'Birth_Date' => $data['Birth_Date'] ?? '',
             'National_ID' => $data['National_ID'] ?? '',
-            'Phone_Number' => $data['Phone_Number'] ?? '',
-            'Email' => $data['Email'] ?? '',
+            'Phone_Number' => $user['Phone_Number'] ?? '',
+            'Email' => $user['Email'] ?? '',
             'Address' => $data['Address'] ?? '',
             'Education' => $data['Education'],
             'Program_ID' => $data['Program_ID'],
@@ -96,6 +139,17 @@ class StudentService
 
         $this->studentRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'STUDENT',
+            'CREATE',
+            'STUDENT',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -146,9 +200,24 @@ class StudentService
             'Updated_By' => auth()->id() ?? 'SYSTEM',
         ];
         
+        $userService = app(\App\Services\Core\UserService::class);
+        $userId = $data['User_ID'] ?? $student['User_ID'] ?? null;
+        if ($userId) {
+            $user = $userService->getUserById($userId);
+            if ($user) {
+                $mappedData['Full_Name'] = $user['Full_Name'];
+                $mappedData['Phone_Number'] = $user['Phone_Number'] ?? '';
+                $mappedData['Email'] = $user['Email'] ?? '';
+            }
+        }
+        
+        if (isset($data['User_ID'])) {
+            $mappedData['User_ID'] = $data['User_ID'];
+        }
+        
         $allowedFields = [
-            'Student_Number', 'Registration_Date', 'Full_Name', 'Gender',
-            'Birth_Place', 'Birth_Date', 'National_ID', 'Phone_Number', 'Email',
+            'Student_Number', 'Registration_Date', 'Gender',
+            'Birth_Place', 'Birth_Date', 'National_ID',
             'Address', 'Education', 'Program_ID', 'Class_ID', 'Batch_ID',
             'Enrollment_Status', 'Graduation_Status', 'Is_Active', 'Notes'
         ];
@@ -159,11 +228,77 @@ class StudentService
             }
         }
 
-        return $this->studentRepository->update($id, $mappedData);
+        $res = $this->studentRepository->update($id, $mappedData);
+        
+        // Phase 10.5: Generate Certificate and Academic Report on Graduation
+        try {
+            $newGradStatus = $mappedData['Graduation_Status'] ?? null;
+            $oldGradStatus = $student['Graduation_Status'] ?? null;
+            
+            if ($newGradStatus && in_array(strtolower($newGradStatus), ['lulus', 'graduated', 'completed']) && strtolower($oldGradStatus) !== strtolower($newGradStatus)) {
+                $program = $this->programRepository->findById($student['Program_ID']) ?? [];
+                // Retrieve scores for Academic Report
+                $scores = [];
+                try {
+                    $scoreRepo = app(\App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class);
+                    $scores = collect($scoreRepo->getAll())->where('Student_ID', $id)->values()->toArray();
+                } catch (\Exception $e) {}
+
+                $docAutomation = app(\App\Services\Core\DocumentAutomationService::class);
+                
+                // 1. Generate Certificate
+                $docAutomation->generateDocument(
+                    'Certificate',
+                    'Student',
+                    $id,
+                    ['student' => $res, 'program' => $program, 'certificate' => ['Issue_Date' => now()->format('Y-m-d')]],
+                    'pdf.certificate',
+                    auth()->user()->email ?? 'System'
+                );
+
+                // 2. Generate Academic Report
+                $docAutomation->generateDocument(
+                    'AcademicReport',
+                    'Student',
+                    $id,
+                    ['student' => $res, 'program' => $program, 'scores' => $scores],
+                    'pdf.academic_report',
+                    auth()->user()->email ?? 'System'
+                );
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to generate Graduation Documents for Student {$id}: " . $e->getMessage());
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'STUDENT',
+            'UPDATE',
+            'STUDENT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteStudent($id)
     {
-        return $this->studentRepository->softDelete($id);
+        $res = $this->studentRepository->delete($id);
+        
+        $this->enterpriseEvent->dispatch(
+            'STUDENT',
+            'DELETE',
+            'STUDENT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

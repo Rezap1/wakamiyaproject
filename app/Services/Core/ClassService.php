@@ -6,6 +6,8 @@ use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class ClassService
@@ -14,17 +16,23 @@ class ClassService
     protected $programRepository;
     protected $batchRepository;
     protected $teacherRepository;
+    protected $studentRepository;
+    protected $enterpriseEvent;
 
     public function __construct(
         ClassRepositoryInterface $classRepository,
         ProgramRepositoryInterface $programRepository,
         BatchRepositoryInterface $batchRepository,
-        TeacherRepositoryInterface $teacherRepository
+        TeacherRepositoryInterface $teacherRepository,
+        StudentRepositoryInterface $studentRepository,
+        EnterpriseEventService $enterpriseEvent
     ) {
         $this->classRepository = $classRepository;
         $this->programRepository = $programRepository;
         $this->batchRepository = $batchRepository;
         $this->teacherRepository = $teacherRepository;
+        $this->studentRepository = $studentRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllClasses()
@@ -91,6 +99,17 @@ class ClassService
 
         $this->classRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'CLASS',
+            'CREATE',
+            'CLASS',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -147,7 +166,7 @@ class ClassService
         $allowedFields = [
             'Class_Code', 'Class_Name', 'Batch_ID', 'Program_ID',
             'Homeroom_Teacher_ID', 'Capacity', 'Current_Student', 
-            'Class_Status', 'Description', 'Is_Active', 'Notes'
+            'Description', 'Is_Active', 'Notes'
         ];
 
         foreach ($allowedFields as $field) {
@@ -156,11 +175,45 @@ class ClassService
             }
         }
 
-        return $this->classRepository->update($id, $mappedData);
+        $res = $this->classRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'CLASS',
+            'UPDATE',
+            'CLASS',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteClass($id)
     {
-        return $this->classRepository->softDelete($id);
+        // Soft Delete Protection
+        $students = $this->studentRepository->fetchAll();
+        $relatedStudentsCount = $students->where('Class_ID', $id)->count();
+
+        if ($relatedStudentsCount > 0) {
+            throw new Exception("Class ini masih digunakan oleh {$relatedStudentsCount} data Siswa. Silakan ubah status menjadi Inactive.");
+        }
+
+        $res = $this->classRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'CLASS',
+            'DELETE',
+            'CLASS',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

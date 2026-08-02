@@ -13,30 +13,100 @@ use App\Services\Core\ActivityLogService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class TeacherController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $teachers = $this->teacherService->getAllTeachers();
+        $employees = $this->employeeService->getAllEmployees();
+        $departments = $this->departmentService->getAllDepartments();
+        $positions = $this->positionService->getAllPositions();
+        $users = $this->userService->getAllUsers();
+        
+        $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
+            $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
+            if ($user) {
+                $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
+                $teacher['Email'] = $user['Email'] ?? '-';
+                $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
+                $emp = collect($employees)->firstWhere('Employee_ID', $empId);
+            } else { $emp = null; }
+            
+            if ($emp) {
+                $dept = collect($departments)->firstWhere('Department_ID', $emp['Department_ID']);
+                $pos = collect($positions)->firstWhere('Position_ID', $emp['Position_ID']);
+                $teacher['Department_Name'] = $dept ? $dept['Department_Name'] : '-';
+                $teacher['Position_Name'] = $pos ? $pos['Position_Name'] : '-';
+            } else {
+                $teacher['Department_Name'] = '-';
+                $teacher['Position_Name'] = '-';
+            }
+            return $teacher;
+        });
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $teachers = \App\Helpers\CollectionHelper::search($teachers, $search, ['NUPTK', 'Full_Name', 'Department_Name', 'Position_Name']);
+        }
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        return [
+            'moduleName' => 'Pengajar (Teacher)',
+            'data' => collect(array_values($teachers->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['NUPTK', 'Nama Pengajar', 'Email', 'Departemen', 'Jabatan', 'Status'],
+            'mapRow' => function($row) {
+
+                return [
+                    $row['NUPTK'] ?? '-',
+                    $row['Full_Name'] ?? ($row['Teacher_ID'] ?? '-'),
+                    $row['Email'] ?? '-',
+                    $row['Department_Name'] ?? '-',
+                    $row['Position_Name'] ?? '-',
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                ];
+                    },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$teachers->count().'</td></tr>'
+        ];
+    }
+
     protected $teacherService;
     protected $employeeService;
     protected $departmentService;
     protected $positionService;
     protected $activityLogService;
+    protected $userService;
 
     public function __construct(
         TeacherService $teacherService,
         EmployeeService $employeeService,
         DepartmentService $departmentService,
         PositionService $positionService,
-        ActivityLogService $activityLogService
+        ActivityLogService $activityLogService,
+        \App\Services\Core\UserService $userService
     ) {
         $this->teacherService = $teacherService;
         $this->employeeService = $employeeService;
         $this->departmentService = $departmentService;
         $this->positionService = $positionService;
         $this->activityLogService = $activityLogService;
+        $this->userService = $userService;
     }
 
-    public function index()
+    public function index(\Illuminate\Http\Request $request)
     {
         try {
             $teachers = $this->teacherService->getAllTeachers();
@@ -44,9 +114,24 @@ class TeacherController extends Controller
             $departments = $this->departmentService->getAllDepartments();
             $positions = $this->positionService->getAllPositions();
             
+            $users = $this->userService->getAllUsers();
+            
             // Map names for display
-            $teachers = $teachers->map(function ($teacher) use ($employees, $departments, $positions) {
-                $emp = $employees->firstWhere('Employee_ID', $teacher['Employee_ID']);
+            $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
+                $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
+                
+                if ($user) {
+                    $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
+                    $teacher['Email'] = $user['Email'] ?? '-';
+                    $teacher['Phone_Number'] = $user['Phone_Number'] ?? '-';
+                    
+                    // Try to find Employee if User has Employee_ID, or just fallback
+                    $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
+                    $emp = $employees->firstWhere('Employee_ID', $empId);
+                } else {
+                    $emp = null;
+                }
+                
                 if ($emp) {
                     $teacher['Employee_Number'] = $emp['Employee_Number'];
                     
@@ -64,13 +149,27 @@ class TeacherController extends Controller
                 return $teacher;
             });
 
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $teachers = \App\Helpers\CollectionHelper::search($teachers, $search, ['Teacher_ID', 'Employee_ID', 'NUPTK', 'Full_Name', 'Email', 'Phone_Number', 'Employee_Number', 'Department_Name', 'Position_Name']);
+            }
+
+            if ($request->filled('teaching')) {
+                $teaching = $request->input('teaching');
+                if ($teaching !== 'all') {
+                    $teachers = $teachers->where('Teaching_Status', $teaching);
+                }
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
             // Pagination
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $perPage = 10;
-            $currentItems = $teachers->slice(($currentPage - 1) * $perPage, $perPage)->all();
-            $teachersPaginated = new LengthAwarePaginator($currentItems, count($teachers), $perPage, $currentPage, [
-                'path' => LengthAwarePaginator::resolveCurrentPath(),
-            ]);
+            $teachersPaginated = \App\Helpers\CollectionHelper::paginate($teachers, 10)->withQueryString();
             
             return view('teachers.index', [
                 'teachers' => $teachersPaginated
@@ -84,26 +183,15 @@ class TeacherController extends Controller
     public function create()
     {
         try {
-            $allEmployees = $this->employeeService->getAllEmployees()->where('Is_Active', 'TRUE');
+            $allUsers = $this->userService->getAllUsers();
             $allTeachers = $this->teacherService->getAllTeachers();
+            $usedUserIds = $allTeachers->pluck('User_ID')->filter()->toArray();
             
-            // Filter out employees who are already teachers
-            $teacherEmployeeIds = $allTeachers->pluck('Employee_ID')->toArray();
-            $employees = $allEmployees->filter(function($emp) use ($teacherEmployeeIds) {
-                return !in_array($emp['Employee_ID'], $teacherEmployeeIds);
-            });
+            $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
+                return !in_array($user['User_ID'], $usedUserIds) && ($user['Is_Active'] ?? 'TRUE') === 'TRUE';
+            })->values();
             
-            // Prepare JSON data for Autofill
-            $employeeData = $employees->mapWithKeys(function($emp) {
-                return [$emp['Employee_ID'] => [
-                    'Full_Name' => $emp['Full_Name'] ?? '',
-                    'Gender' => $emp['Gender'] ?? '',
-                    'Phone_Number' => $emp['Phone_Number'] ?? '',
-                    'Email' => $emp['Email'] ?? ''
-                ]];
-            })->toJson();
-            
-            return view('teachers.create', compact('employees', 'employeeData'));
+            return view('teachers.create', compact('users'));
         } catch (\Exception $e) {
             Log::error('Error loading create teacher form: ' . $e->getMessage());
             return redirect()->route('teachers.index')->with('error', 'Gagal memuat referensi data pegawai.');
@@ -142,7 +230,10 @@ class TeacherController extends Controller
                 return redirect()->route('teachers.index')->with('error', 'Data tenaga pendidik tidak ditemukan.');
             }
             
-            $emp = $this->employeeService->getEmployeeById($teacher['Employee_ID']);
+            $user = collect($this->userService->getAllUsers())->firstWhere('User_ID', $teacher['User_ID'] ?? '');
+            $empId = $user ? ($user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null) : null;
+            $emp = $empId ? $this->employeeService->getEmployeeById($empId) : null;
+            
             if ($emp) {
                 $teacher['Employee_Number'] = $emp['Employee_Number'];
                 $dept = $this->departmentService->getDepartmentById($emp['Department_ID']);
@@ -156,7 +247,7 @@ class TeacherController extends Controller
                 $teacher['Position_Name'] = '-';
             }
 
-            return view('teachers.show', compact('teacher'));
+            return view('teachers.show', compact('teacher', 'user', 'emp'));
         } catch (\Exception $e) {
             Log::error('Error showing teacher: ' . $e->getMessage());
             return redirect()->route('teachers.index')->with('error', 'Terjadi kesalahan saat memuat data tenaga pendidik.');
@@ -170,38 +261,15 @@ class TeacherController extends Controller
             if (!$teacher) {
                 return redirect()->route('teachers.index')->with('error', 'Data tenaga pendidik tidak ditemukan.');
             }
-            
-            $allEmployees = $this->employeeService->getAllEmployees()->where('Is_Active', 'TRUE');
+            $allUsers = $this->userService->getAllUsers();
             $allTeachers = $this->teacherService->getAllTeachers();
+            $usedUserIds = $allTeachers->where('Teacher_ID', '!=', $id)->pluck('User_ID')->filter()->toArray();
             
-            // Filter out employees who are already teachers, EXCEPT the current teacher's employee
-            $teacherEmployeeIds = $allTeachers->where('Teacher_ID', '!=', $id)->pluck('Employee_ID')->toArray();
-            
-            $employees = collect();
-            
-            // Include current employee even if inactive or anything
-            $currentEmp = $this->employeeService->getEmployeeById($teacher['Employee_ID']);
-            if ($currentEmp) {
-                $employees->push($currentEmp);
-            }
-            
-            foreach ($allEmployees as $emp) {
-                if (!in_array($emp['Employee_ID'], $teacherEmployeeIds) && $emp['Employee_ID'] !== $teacher['Employee_ID']) {
-                    $employees->push($emp);
-                }
-            }
-            
-            // Prepare JSON data for Autofill
-            $employeeData = $employees->mapWithKeys(function($emp) {
-                return [$emp['Employee_ID'] => [
-                    'Full_Name' => $emp['Full_Name'] ?? '',
-                    'Gender' => $emp['Gender'] ?? '',
-                    'Phone_Number' => $emp['Phone_Number'] ?? '',
-                    'Email' => $emp['Email'] ?? ''
-                ]];
-            })->toJson();
+            $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
+                return !in_array($user['User_ID'], $usedUserIds);
+            })->values();
 
-            return view('teachers.edit', compact('teacher', 'employees', 'employeeData'));
+            return view('teachers.edit', compact('teacher', 'users'));
         } catch (\Exception $e) {
             Log::error('Error editing teacher: ' . $e->getMessage());
             return redirect()->route('teachers.index')->with('error', 'Terjadi kesalahan saat memuat form edit.');
@@ -254,14 +322,14 @@ class TeacherController extends Controller
                 Auth::id() ?? 'SYSTEM',
                 'DELETE',
                 'MASTER_TEACHER',
-                "Menonaktifkan guru (Soft Delete): {$id}",
+                "Menonaktifkan guru (Hard Delete): {$id}",
                 request()->ip(),
                 $teacher,
                 array_merge($teacher, ['Is_Active' => 'FALSE']),
                 request()->userAgent()
             );
 
-            return redirect()->route('teachers.index')->with('success', 'Data tenaga pendidik berhasil dinonaktifkan.');
+            return redirect()->route('teachers.index')->with('success', 'Data tenaga pendidik berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting teacher: ' . $e->getMessage());
             return redirect()->route('teachers.index')->with('error', 'Terjadi kesalahan saat menghapus data tenaga pendidik.');

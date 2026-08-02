@@ -4,6 +4,7 @@ namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 
 class ActivityLogService
@@ -34,25 +35,37 @@ class ActivityLogService
         );
     }
 
-    public function logAction(string $userId, string $action, string $module, string $description, string $ipAddress = null, $oldValue = null, $newValue = null, string $userAgent = null)
+    public function logAction(string $userId, string $action, string $module, string $description, string $ipAddress = null, $oldValue = null, $newValue = null, string $userAgent = null, string $referenceType = '', string $referenceId = '')
     {
         try {
             $newId = $this->activityLogRepository->generateNewId('LOG', 7);
 
             $data = [
-                'Log_ID' => $newId,
+                'Audit_ID' => $newId,
                 'User_ID' => $userId,
+                'Role' => '',
+                'Department' => '',
                 'Module' => $module,
+                'Reference_Type' => $referenceType,
+                'Reference_ID' => $referenceId,
                 'Action' => $action,
-                'Description' => $description,
                 'Old_Value' => is_array($oldValue) ? json_encode($oldValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : $oldValue,
-                'New_Value' => is_array($newValue) ? json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : $newValue,
-                'IP_Address' => $ipAddress ?? request()->ip(),
-                'User_Agent' => $userAgent ?? request()->userAgent(),
+                'New_Value' => empty($newValue) ? $description : (is_array($newValue) ? json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : $newValue),
+                'IPAddress' => $ipAddress ?? request()->ip(),
+                'Device' => '',
+                'Browser' => $userAgent ?? request()->userAgent(),
+                'Operating_System' => '',
+                'Location' => '',
+                'Status' => 'SUCCESS',
                 'Created_At' => now()->toDateTimeString(),
             ];
             
-            return $this->activityLogRepository->create($data);
+            $result = $this->activityLogRepository->create($data);
+            
+            // Dashboard cache invalidation is now handled centrally by DashboardCacheService 
+            // via EnterpriseEventService. No direct Cache::forget here.
+            
+            return $result;
         } catch (\Exception $e) {
             Log::error('Failed to write Audit Log to Google Sheets: ' . $e->getMessage());
             return false;

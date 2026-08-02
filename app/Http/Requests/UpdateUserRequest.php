@@ -26,6 +26,7 @@ class UpdateUserRequest extends FormRequest
         return [
             'Username' => 'required|string|max:50',
             'Full_Name' => 'required|string|max:100',
+            'Phone_Number' => 'nullable|string|max:20',
             'Email' => 'required|email|max:100',
             'Password' => ['nullable', 'string', Password::min(8)->letters()->mixedCase()->numbers()->symbols()],
             'Role_ID' => 'required|string',

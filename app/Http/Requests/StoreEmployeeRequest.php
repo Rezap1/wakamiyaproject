@@ -14,8 +14,16 @@ class StoreEmployeeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Full_Name' => 'required|string|max:150',
-            'Gender' => 'required|in:Laki-laki,Perempuan',
+            'User_ID' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $userService = app(\App\Services\Core\UserService::class);
+                    if (!$userService->getUserById($value)) {
+                        $fail('User tidak ditemukan.');
+                    }
+                }
+            ],
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
             'National_ID' => [
@@ -28,18 +36,6 @@ class StoreEmployeeRequest extends FormRequest
                         if ($service->getEmployeeByNationalId($value)) {
                             $fail('Nomor Identitas (KTP) sudah terdaftar.');
                         }
-                    }
-                }
-            ],
-            'Phone_Number' => 'required|string|max:20',
-            'Email' => [
-                'required',
-                'email',
-                'max:100',
-                function ($attribute, $value, $fail) {
-                    $service = app(\App\Services\Core\EmployeeService::class);
-                    if ($service->getEmployeeByEmail($value)) {
-                        $fail('Alamat Email sudah terdaftar.');
                     }
                 }
             ],

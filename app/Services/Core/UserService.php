@@ -48,6 +48,7 @@ class UserService
             'Username' => $data['Username'] ?? $data['Email'],
             'Password' => Hash::make($data['Password']),
             'Full_Name' => $data['Full_Name'],
+            'Phone_Number' => $data['Phone_Number'] ?? '',
             'Email' => $data['Email'],
             'Employee_ID' => $data['Employee_ID'] ?? '',
             'Role_ID' => $data['Role_ID'],
@@ -76,6 +77,7 @@ class UserService
         
         if (isset($data['Username'])) $mappedData['Username'] = $data['Username'];
         if (isset($data['Full_Name'])) $mappedData['Full_Name'] = $data['Full_Name'];
+        if (isset($data['Phone_Number'])) $mappedData['Phone_Number'] = $data['Phone_Number'];
         if (isset($data['Email'])) $mappedData['Email'] = $data['Email'];
         if (isset($data['Employee_ID'])) $mappedData['Employee_ID'] = $data['Employee_ID'];
         if (isset($data['Role_ID'])) $mappedData['Role_ID'] = $data['Role_ID'];
@@ -92,6 +94,6 @@ class UserService
 
     public function deleteUser($id)
     {
-        return $this->userRepository->softDelete($id);
+        return $this->userRepository->delete($id);
     }
 }

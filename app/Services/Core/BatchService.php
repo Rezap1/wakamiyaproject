@@ -4,19 +4,27 @@ namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class BatchService
 {
     protected $batchRepository;
     protected $programRepository;
+    protected $studentRepository;
+    protected $enterpriseEvent;
 
     public function __construct(
         BatchRepositoryInterface $batchRepository,
-        ProgramRepositoryInterface $programRepository
+        ProgramRepositoryInterface $programRepository,
+        StudentRepositoryInterface $studentRepository,
+        EnterpriseEventService $enterpriseEvent
     ) {
         $this->batchRepository = $batchRepository;
         $this->programRepository = $programRepository;
+        $this->studentRepository = $studentRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllBatches()
@@ -71,6 +79,17 @@ class BatchService
 
         $this->batchRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'BATCH',
+            'CREATE',
+            'BATCH',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -124,11 +143,45 @@ class BatchService
             }
         }
 
-        return $this->batchRepository->update($id, $mappedData);
+        $res = $this->batchRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'BATCH',
+            'UPDATE',
+            'BATCH',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteBatch($id)
     {
-        return $this->batchRepository->softDelete($id);
+        // Soft Delete Protection
+        $students = $this->studentRepository->fetchAll();
+        $relatedStudentsCount = $students->where('Batch_ID', $id)->count();
+
+        if ($relatedStudentsCount > 0) {
+            throw new Exception("Batch ini masih digunakan oleh {$relatedStudentsCount} data Siswa. Silakan ubah status menjadi Inactive.");
+        }
+
+        $res = $this->batchRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'BATCH',
+            'DELETE',
+            'BATCH',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'ACADEMIC'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

@@ -14,6 +14,52 @@ use Illuminate\Support\Facades\Log;
 
 class PositionController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+    protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+        $positions = $this->positionService->getAllPositions();
+        $departments = $this->departmentService->getAllDepartments();
+        
+        $positions = $positions->map(function ($position) use ($departments) {
+            $dept = $departments->firstWhere('Department_ID', $position['Department_ID']);
+            $position['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
+            return $position;
+        });
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $positions = \App\Helpers\CollectionHelper::search($positions, $search, ['Position_ID', 'Position_Name', 'Department_Name']);
+        }
+        if ($request->filled('department')) {
+            $positions = $positions->where('Department_ID', $request->input('department'));
+        }
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $positions = $positions->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        return [
+            'moduleName' => 'POSITIONS',
+            'data' => $positions,
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['ID', 'Nama Posisi', 'Departemen', 'Status'],
+            'mapRow' => function($row) {
+                return [
+                    $row['Position_ID'] ?? '-', 
+                    $row['Position_Name'] ?? '-', 
+                    $row['Department_Name'] ?? '-',
+                    ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'
+                ];
+            },
+            'isLandscape' => false,
+            'summary' => '<tr><td>Total Posisi</td><td>: '.$positions->count().'</td></tr>'
+        ];
+    }
     protected $positionService;
     protected $departmentService;
     protected $activityLogService;

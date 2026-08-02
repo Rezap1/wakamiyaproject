@@ -3,6 +3,7 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
@@ -10,10 +11,14 @@ use Illuminate\Http\UploadedFile;
 class CompanyService
 {
     protected $companyRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(CompanyRepositoryInterface $companyRepository)
-    {
+    public function __construct(
+        CompanyRepositoryInterface $companyRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->companyRepository = $companyRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllCompanies()
@@ -87,6 +92,17 @@ class CompanyService
 
         $this->companyRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'COMPANY',
+            'CREATE',
+            'COMPANY',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -163,11 +179,37 @@ class CompanyService
             }
         }
 
-        return $this->companyRepository->update($id, $mappedData);
+        $res = $this->companyRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'COMPANY',
+            'UPDATE',
+            'COMPANY',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteCompany($id)
     {
-        return $this->companyRepository->softDelete($id);
+        $res = $this->companyRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'COMPANY',
+            'DELETE',
+            'COMPANY',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

@@ -3,14 +3,18 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\PositionRepositoryInterface;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use Exception;
 
 class PositionService
 {
     protected $positionRepository;
+    protected $employeeRepository;
 
-    public function __construct(PositionRepositoryInterface $positionRepository)
+    public function __construct(PositionRepositoryInterface $positionRepository, EmployeeRepositoryInterface $employeeRepository)
     {
         $this->positionRepository = $positionRepository;
+        $this->employeeRepository = $employeeRepository;
     }
 
     public function getAllPositions()
@@ -75,6 +79,14 @@ class PositionService
 
     public function deletePosition($id)
     {
-        return $this->positionRepository->softDelete($id);
+        // Soft Delete Protection
+        $employees = $this->employeeRepository->fetchAll();
+        $relatedEmployeesCount = $employees->where('Position_ID', $id)->count();
+
+        if ($relatedEmployeesCount > 0) {
+            throw new Exception("Posisi ini masih digunakan oleh {$relatedEmployeesCount} data Pegawai. Silakan ubah status menjadi Inactive.");
+        }
+
+        return $this->positionRepository->delete($id);
     }
 }

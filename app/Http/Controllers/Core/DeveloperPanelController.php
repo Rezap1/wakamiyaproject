@@ -9,7 +9,7 @@ class DeveloperPanelController extends Controller
 {
     public function index()
     {
-        // Mocking some system metrics since we don't have a traditional DB
+        // System metrics overview
         // In a real DB, we could query information_schema for table count
         $metrics = [
             'version' => 'v1.0 (Production)',

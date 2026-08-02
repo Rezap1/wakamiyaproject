@@ -114,4 +114,17 @@ return [
 
     'prefix' => env('CACHE_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-cache-'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | WMS Specific Cache Durations
+    |--------------------------------------------------------------------------
+    */
+    
+    'wms' => [
+        'master' => env('CACHE_WMS_MASTER', 60),
+        'dashboard' => env('CACHE_WMS_DASHBOARD', 60),
+        'analytics' => env('CACHE_WMS_ANALYTICS', 120),
+        'reference' => env('CACHE_WMS_REFERENCE', 300),
+    ],
+
 ];

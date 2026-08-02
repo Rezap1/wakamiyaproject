@@ -106,6 +106,6 @@ class DocumentService
      */
     public function deleteDocument(string $id, string $deletedBy): bool
     {
-        return $this->documentRepository->softDelete($id, $deletedBy);
+        return $this->documentRepository->delete($id, $deletedBy);
     }
 }

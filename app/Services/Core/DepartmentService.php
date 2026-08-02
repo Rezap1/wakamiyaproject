@@ -3,14 +3,24 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\DepartmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
+use Exception;
 
 class DepartmentService
 {
     protected $departmentRepository;
+    protected $employeeRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(DepartmentRepositoryInterface $departmentRepository)
-    {
+    public function __construct(
+        DepartmentRepositoryInterface $departmentRepository, 
+        EmployeeRepositoryInterface $employeeRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->departmentRepository = $departmentRepository;
+        $this->employeeRepository = $employeeRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllDepartments()
@@ -52,6 +62,17 @@ class DepartmentService
 
         $this->departmentRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'DEPARTMENT',
+            'CREATE',
+            'DEPARTMENT',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -68,11 +89,45 @@ class DepartmentService
         if (isset($data['Is_Active'])) $mappedData['Is_Active'] = $data['Is_Active'];
         if (isset($data['Notes'])) $mappedData['Notes'] = $data['Notes'];
 
-        return $this->departmentRepository->update($id, $mappedData);
+        $res = $this->departmentRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'DEPARTMENT',
+            'UPDATE',
+            'DEPARTMENT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteDepartment($id)
     {
-        return $this->departmentRepository->softDelete($id);
+        // Soft Delete Protection
+        $employees = $this->employeeRepository->fetchAll();
+        $relatedEmployeesCount = $employees->where('Department_ID', $id)->count();
+
+        if ($relatedEmployeesCount > 0) {
+            throw new Exception("Department ini masih digunakan oleh {$relatedEmployeesCount} data Pegawai. Silakan ubah status menjadi Inactive.");
+        }
+
+        $res = $this->departmentRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'DEPARTMENT',
+            'DELETE',
+            'DEPARTMENT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

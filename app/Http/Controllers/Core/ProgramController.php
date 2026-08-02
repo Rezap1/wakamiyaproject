@@ -13,6 +13,46 @@ use Illuminate\Support\Facades\Log;
 
 class ProgramController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+        protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+
+        $programs = $this->programService->getAllPrograms();
+
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $programs = \App\Helpers\CollectionHelper::search($programs, $search, ['Program_Code', 'Program_Name', 'Description']);
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $programs = $programs->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        return [
+            'moduleName' => 'Program Pelatihan (Program)',
+            'data' => collect(array_values($programs->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['Kode Program', 'Nama Program', 'Durasi', 'Status'],
+            'mapRow' => function($row) {
+
+                return [
+                    $row['Program_Code'] ?? '-',
+                    $row['Program_Name'] ?? '-',
+                    $row['Duration'] ?? '-',
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                ];
+                    },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Data</td><td>: '.$programs->count().'</td></tr>'
+        ];
+    }
+
     protected $programService;
     protected $activityLogService;
 
@@ -24,18 +64,25 @@ class ProgramController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-    public function index()
+    public function index(\Illuminate\Http\Request $request)
     {
         try {
             $programs = $this->programService->getAllPrograms();
 
+            $search = $request->input('search');
+            if (!empty($search)) {
+                $programs = \App\Helpers\CollectionHelper::search($programs, $search, ['Program_ID', 'Program_Code', 'Program_Name', 'Description']);
+            }
+
+            if ($request->filled('status')) {
+                $status = $request->input('status');
+                if ($status !== 'all') {
+                    $programs = $programs->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+                }
+            }
+
             // Pagination
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $perPage = 10;
-            $currentItems = $programs->slice(($currentPage - 1) * $perPage, $perPage)->all();
-            $programsPaginated = new LengthAwarePaginator($currentItems, count($programs), $perPage, $currentPage, [
-                'path' => LengthAwarePaginator::resolveCurrentPath(),
-            ]);
+            $programsPaginated = \App\Helpers\CollectionHelper::paginate($programs, 10)->withQueryString();
             
             return view('programs.index', [
                 'programs' => $programsPaginated
@@ -150,14 +197,14 @@ class ProgramController extends Controller
                 Auth::id() ?? 'SYSTEM',
                 'DELETE',
                 'MASTER_PROGRAM',
-                "Menonaktifkan program (Soft Delete): {$id}",
+                "Menonaktifkan program (Hard Delete): {$id}",
                 request()->ip(),
                 $program,
                 array_merge($program, ['Is_Active' => 'FALSE']),
                 request()->userAgent()
             );
 
-            return redirect()->route('programs.index')->with('success', 'Data program berhasil dinonaktifkan.');
+            return redirect()->route('programs.index')->with('success', 'Data program berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting program: ' . $e->getMessage());
             return redirect()->route('programs.index')->with('error', 'Terjadi kesalahan saat menghapus data program.');

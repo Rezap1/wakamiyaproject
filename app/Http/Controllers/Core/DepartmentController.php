@@ -13,6 +13,42 @@ use Illuminate\Support\Facades\Log;
 
 class DepartmentController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+    protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+        $departments = $this->departmentService->getAllDepartments();
+        
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $departments = \App\Helpers\CollectionHelper::search($departments, $search, ['Department_ID', 'Department_Name']);
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $departments = $departments->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+        
+        return [
+            'moduleName' => 'DEPARTMENTS',
+            'data' => $departments,
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['ID', 'Nama Departemen', 'Status'],
+            'mapRow' => function($row) {
+                return [
+                    $row['Department_ID'] ?? '-', 
+                    $row['Department_Name'] ?? '-', 
+                    ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'
+                ];
+            },
+            'isLandscape' => false,
+            'summary' => '<tr><td>Total Departemen</td><td>: '.$departments->count().'</td></tr>'
+        ];
+    }
     protected $departmentService;
     protected $activityLogService;
 

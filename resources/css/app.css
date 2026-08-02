@@ -1,15 +1,23 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
-  /* Cyan/Teal based on LPK WAKAMIYA Logo */
-  --color-primary-50: #e0f8fb;
-  --color-primary-100: #b3edf5;
-  --color-primary-200: #80e0ee;
-  --color-primary-300: #4dd2e7;
-  --color-primary-400: #26c7e1;
-  --color-primary-500: #0097b2;
-  --color-primary-600: #0088a3;
-  --color-primary-700: #007690;
-  --color-primary-800: #00637b;
-  --color-primary-900: #005267;
+  /* Cyan/Teal based on Enterprise UI request - Primary: #22C7F0 */
+  --color-primary-50: #e0f9fe;
+  --color-primary-100: #b5f0fd;
+  --color-primary-200: #88e7fb;
+  --color-primary-300: #5adde8;
+  --color-primary-400: #3cd0f4;
+  --color-primary-500: #22c7f0;
+  --color-primary-600: #1aa3c7;
+  --color-primary-700: #137f9e;
+  --color-primary-800: #0d5d75;
+  --color-primary-900: #073d4d;
+  --color-dashboard-bg: #f4f7f6;
+}
+
+/* Custom Utilities that bypass Tailwind tree-shaking */
+.bg-dashboard-bg {
+  background-color: #f4f7f6 !important;
 }
