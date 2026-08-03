@@ -45,7 +45,7 @@ class StudentDashboardService
 
     public function getDashboardData()
     {
-        $userId = Auth::id();
+        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : 'U-001';
 
         // === Resolve Student ID (fetch once) ===
         $allStudents = collect($this->studentService->getAllStudents());
@@ -98,7 +98,10 @@ class StudentDashboardService
 
         // === Latest Score ===
         $latestScore = $myScores->sortByDesc('Created_At')->first();
-        $avgScore = $myScores->count() > 0 ? round($myScores->avg('Score_Value'), 1) : 0;
+        $avgScore = $myScores->count() > 0 ? round($myScores->avg(function ($s) {
+            $val = $s['Score'] ?? $s['Score_Value'] ?? 0;
+            return is_numeric($val) ? (float) $val : 0;
+        }), 1) : 0;
 
         // === Attendance Percentage ===
         $totalMyAttendance = $myAttendances->count();
@@ -111,16 +114,17 @@ class StudentDashboardService
 
         // === Language Progress ===
         $langProgress = 0;
-        $jftScore = $myScores->firstWhere('Assessment_ID', 'JFT-001');
+        $jftScore = $myScores->firstWhere('Assessment_ID', 'JFT-001') ?? $myScores->firstWhere('Assignment_ID', 'JFT-001');
         if ($jftScore) {
-            $langProgress = ($jftScore['Score_Value'] ?? 0) >= config('assessment.passing_score', 65) ? 100 : 50;
+            $scoreVal = $jftScore['Score'] ?? $jftScore['Score_Value'] ?? 0;
+            $langProgress = $scoreVal >= config('assessment.passing_score', 65) ? 100 : 50;
         }
 
         $internals = $myScores->map(function ($s) {
             return [
-                'name'   => $s['Assessment_ID'],
+                'name'   => $s['Assessment_ID'] ?? $s['Assignment_ID'] ?? 'Task',
                 'status' => $s['Status'] ?? 'Completed',
-                'score'  => $s['Score_Value'],
+                'score'  => $s['Score'] ?? $s['Score_Value'] ?? 0,
                 'color'  => ($s['Status'] ?? '') == 'PASS' ? 'emerald' : 'red',
             ];
         })->take(4)->toArray();
@@ -129,7 +133,7 @@ class StudentDashboardService
         $kpi = [
             'today_class'           => $todayClassCount,
             'outstanding_bills'     => $totalOutstanding,
-            'latest_score'          => $avgScore,
+            'latest_score'          => $latestScore['Score'] ?? $latestScore['Score_Value'] ?? 0,
             'attendance_percentage' => $attendancePercentage . '%',
             'certificate_status'    => $certificateStatus,
         ];
@@ -159,6 +163,25 @@ class StudentDashboardService
                 'description' => 'Tagihan jatuh tempo: ' . ($nextDueDate['Due_Date'] ?? '—'),
                 'action_url'  => route('student.billing.index'),
             ];
+        }
+
+        // === Assignments ===
+        try {
+            $assignmentService = app(\App\Services\Core\AssignmentService::class);
+            $allAssignments = collect($assignmentService->getAll());
+            $myAssignments = $allAssignments->filter(function($item) use ($studentClassId) {
+                return ($item['Class_ID'] ?? '') == $studentClassId;
+            })->sortBy('Deadline')->take(5);
+
+            foreach($myAssignments as $assignment) {
+                $reminders[] = [
+                    'title'       => 'Tugas: ' . ($assignment['Title'] ?? 'Untitled'),
+                    'description' => 'Tenggat Waktu: ' . ($assignment['Deadline'] ?? '-'),
+                    'action_url'  => route('student.portal.assignments'),
+                ];
+            }
+        } catch (\Exception $e) {
+            // Ignore if AssignmentService is not available
         }
 
         // === Recent Activity (Student's own, max 10) ===

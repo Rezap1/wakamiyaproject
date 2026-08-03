@@ -7,9 +7,9 @@
 @php
     $formattedKpi = [
         ['title' => "Kelas Hari Ini", 'value' => $kpi['today_classes'] ?? 0, 'icon' => 'view-boards', 'color' => 'blue', 'link' => route('schedules.index')],
-        ['title' => 'Siswa Saya', 'value' => $kpi['my_students'] ?? 0, 'icon' => 'user-group', 'color' => 'emerald'],
+        ['title' => 'Siswa Saya', 'value' => $kpi['my_students'] ?? 0, 'icon' => 'user-group', 'color' => 'emerald', 'link' => route('students.index')],
         ['title' => 'Kehadiran Tertunda', 'value' => $kpi['attendance_pending'] ?? 0, 'icon' => 'clock', 'color' => ($kpi['attendance_pending'] ?? 0) > 0 ? 'amber' : 'emerald', 'link' => route('attendances.index')],
-        ['title' => 'Penilaian Tertunda', 'value' => $kpi['assessment_pending'] ?? 0, 'icon' => 'document-text', 'color' => ($kpi['assessment_pending'] ?? 0) > 0 ? 'rose' : 'emerald'],
+        ['title' => 'Penilaian Tertunda', 'value' => $kpi['assessment_pending'] ?? 0, 'icon' => 'document-text', 'color' => ($kpi['assessment_pending'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('assessments.index')],
         ['title' => 'Nilai Tertunda', 'value' => $kpi['score_pending'] ?? 0, 'icon' => 'clipboard-check', 'color' => ($kpi['score_pending'] ?? 0) > 0 ? 'amber' : 'emerald', 'link' => route('scores.index')],
         ['title' => 'Gaji Bulan Ini', 'value' => \App\Services\Core\DashboardHelperService::getSalaryStatus(auth()->id()), 'icon' => 'cash', 'color' => \App\Services\Core\DashboardHelperService::getSalaryStatus(auth()->id()) == 'Diterima' ? 'emerald' : 'rose', 'link' => '#'],
     ];

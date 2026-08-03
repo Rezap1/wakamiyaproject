@@ -286,6 +286,26 @@ class StudentService
 
     public function deleteStudent($id)
     {
+        // Enforce referential integrity
+        try {
+            $invoiceRepo = app(\App\Interfaces\GoogleSheets\InvoiceRepositoryInterface::class);
+            $invoices = collect($invoiceRepo->fetchAll())->where('Student_ID', $id);
+            if ($invoices->count() > 0) {
+                throw new Exception("Cannot delete student. Student is associated with {$invoices->count()} Invoice records.");
+            }
+            
+            $scoreRepo = app(\App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class);
+            $scores = collect($scoreRepo->fetchAll())->where('Student_ID', $id);
+            if ($scores->count() > 0) {
+                throw new Exception("Cannot delete student. Student has {$scores->count()} Score records.");
+            }
+        } catch (\Exception $e) {
+            if (strpos($e->getMessage(), 'Cannot delete student') !== false) {
+                throw $e;
+            }
+            // Ignore other exceptions in case repo is missing
+        }
+
         $res = $this->studentRepository->delete($id);
         
         $this->enterpriseEvent->dispatch(

@@ -8,6 +8,37 @@ use App\Services\Core\ActivityLogService;
 
 class AssignmentController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Deadline';
+
+    protected function getExportConfig(\Illuminate\Http\Request $request)
+    {
+        $assignments = $this->assignmentService->getAll();
+        
+        $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
+        $classes = $classRepo->fetchAll()->keyBy('Class_ID');
+
+        return [
+            'moduleName' => 'Tugas Harian (Assignments)',
+            'data' => collect(array_values($assignments->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['ID Tugas', 'Judul', 'Kelas', 'Deadline', 'Status'],
+            'mapRow' => function($row) use ($classes) {
+                $classId = $row['Class_ID'] ?? null;
+                $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
+                return [
+                    $row['Assignment_ID'] ?? '-',
+                    $row['Title'] ?? '-',
+                    $className ?? '-',
+                    $row['Deadline'] ?? '-',
+                    $row['Status'] ?? 'Active'
+                ];
+            },
+            'isLandscape' => false,
+        ];
+    }
+
     protected $assignmentService, $activityLogService;
     public function __construct(AssignmentService $assignmentService, ActivityLogService $activityLogService)
     {
@@ -24,7 +55,23 @@ class AssignmentController extends Controller
     ) { 
         $classes = $classRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        return view('academic.assignments.create', compact('classes', 'teachers')); 
+        
+        $currentTeacherId = null;
+        $user = auth()->user();
+        if ($user) {
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $role = $roleService->getRoleById($user->Role_ID ?? '');
+            $roleName = strtolower(trim($role['Role_Name'] ?? ''));
+            
+            if (str_contains($roleName, 'teacher') || str_contains($roleName, 'guru')) {
+                $teacherData = collect($teachers)->firstWhere('User_ID', $user->User_ID);
+                if ($teacherData) {
+                    $currentTeacherId = $teacherData['Teacher_ID'];
+                }
+            }
+        }
+        
+        return view('academic.assignments.create', compact('classes', 'teachers', 'currentTeacherId')); 
     }
     public function store(\App\Http\Requests\StoreAssignmentRequest $request) {
         $this->assignmentService->create($request->except('_token'));
@@ -39,7 +86,23 @@ class AssignmentController extends Controller
         $assignment = $this->assignmentService->getById($id);
         $classes = $classRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        return view('academic.assignments.edit', compact('assignment', 'classes', 'teachers'));
+        
+        $currentTeacherId = null;
+        $user = auth()->user();
+        if ($user) {
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $role = $roleService->getRoleById($user->Role_ID ?? '');
+            $roleName = strtolower(trim($role['Role_Name'] ?? ''));
+            
+            if (str_contains($roleName, 'teacher') || str_contains($roleName, 'guru')) {
+                $teacherData = collect($teachers)->firstWhere('User_ID', $user->User_ID);
+                if ($teacherData) {
+                    $currentTeacherId = $teacherData['Teacher_ID'];
+                }
+            }
+        }
+        
+        return view('academic.assignments.edit', compact('assignment', 'classes', 'teachers', 'currentTeacherId'));
     }
     public function update(\App\Http\Requests\UpdateAssignmentRequest $request, $id) {
         $this->assignmentService->update($id, $request->except(['_token', '_method']));

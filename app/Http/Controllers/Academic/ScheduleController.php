@@ -57,6 +57,32 @@ class ScheduleController extends Controller
     public function index(Request $request)
     {
         $schedules = $this->scheduleService->getAll();
+        
+        $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
+        $classes = $classRepo->fetchAll()->keyBy('Class_ID');
+        
+        $subjectRepo = app(\App\Repositories\GoogleSheets\SubjectRepository::class);
+        $subjects = $subjectRepo->fetchAll()->keyBy('Subject_ID');
+        
+        $teacherRepo = app(\App\Repositories\GoogleSheets\TeacherRepository::class);
+        $teachers = $teacherRepo->fetchAll()->keyBy('Teacher_ID');
+
+        $schedules = $schedules->map(function($item) use ($classes, $subjects, $teachers) {
+            $classId = $item['Class_ID'] ?? null;
+            $subjectId = $item['Subject_ID'] ?? null;
+            $teacherId = $item['Teacher_ID'] ?? null;
+            
+            $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
+            $subjectName = $subjectId && isset($subjects[$subjectId]) ? $subjects[$subjectId]['Subject_Name'] : $subjectId;
+            $teacherName = $teacherId && isset($teachers[$teacherId]) ? $teachers[$teacherId]['Full_Name'] : $teacherId;
+            
+            $item['Class_Name'] = $className;
+            $item['Subject_Name'] = $subjectName;
+            $item['Teacher_Name'] = $teacherName;
+            
+            return $item;
+        });
+
         return view('academic.schedules.index', compact('schedules'));
     }
 
@@ -70,7 +96,17 @@ class ScheduleController extends Controller
         $subjects = $subjectRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
         $academicYears = $ayRepo->fetchAll();
-        return view('academic.schedules.create', compact('classes', 'subjects', 'teachers', 'academicYears'));
+        
+        $currentTeacherId = '';
+        if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
+            $userId = auth()->user()->User_ID ?? '';
+            $teacher = collect($teachers)->firstWhere('User_ID', $userId);
+            if ($teacher) {
+                $currentTeacherId = $teacher['Teacher_ID'];
+            }
+        }
+        
+        return view('academic.schedules.create', compact('classes', 'subjects', 'teachers', 'academicYears', 'currentTeacherId'));
     }
 
     public function store(\App\Http\Requests\StoreScheduleRequest $request)
@@ -100,7 +136,16 @@ class ScheduleController extends Controller
         $teachers = $teacherRepo->fetchAll();
         $academicYears = $ayRepo->fetchAll();
         
-        return view('academic.schedules.edit', compact('schedule', 'classes', 'subjects', 'teachers', 'academicYears'));
+        $currentTeacherId = '';
+        if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
+            $userId = auth()->user()->User_ID ?? '';
+            $teacher = collect($teachers)->firstWhere('User_ID', $userId);
+            if ($teacher) {
+                $currentTeacherId = $teacher['Teacher_ID'];
+            }
+        }
+        
+        return view('academic.schedules.edit', compact('schedule', 'classes', 'subjects', 'teachers', 'academicYears', 'currentTeacherId'));
     }
 
     public function update(\App\Http\Requests\UpdateScheduleRequest $request, $id)

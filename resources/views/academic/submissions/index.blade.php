@@ -50,11 +50,18 @@
             data-status="{{ $s['Status'] ?? '' }}">
             
             <td class="px-6 py-4">
+                @php
+                    $studentData = collect($students ?? [])->firstWhere('Student_ID', $s['Student_ID']);
+                    $studentName = $studentData ? ($studentData['Full_Name'] ?? $s['Student_ID']) : ($s['Student_ID'] ?? '-');
+                @endphp
                 <div class="flex items-center">
                     <div class="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs mr-3">
-                        {{ substr($s['Student_ID'] ?? 'S', 0, 1) }}
+                        {{ substr($studentName, 0, 1) }}
                     </div>
-                    <div class="font-bold text-slate-800">{{ $s['Student_ID'] ?? '-' }}</div>
+                    <div>
+                        <div class="font-bold text-slate-800">{{ $studentName }}</div>
+                        <div class="text-[10px] text-slate-500">{{ $s['Student_ID'] ?? '-' }}</div>
+                    </div>
                 </div>
             </td>
             <td class="px-6 py-4">

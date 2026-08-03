@@ -17,6 +17,8 @@
         ['title' => 'Lihat Jadwal', 'url' => route('student.schedule'), 'icon' => 'calendar', 'color' => 'indigo'],
         ['title' => 'Unggah Pembayaran', 'url' => route('student.billing.index'), 'icon' => 'cash', 'color' => 'blue'],
         ['title' => 'Nilai Saya', 'url' => route('student.progress'), 'icon' => 'clipboard-check', 'color' => 'emerald'],
+        ['title' => 'Tugas Saya', 'url' => route('student.portal.assignments'), 'icon' => 'document-text', 'color' => 'amber'],
+        ['title' => 'Materi Pelajaran', 'url' => route('student.portal.materials'), 'icon' => 'book-open', 'color' => 'cyan'],
     ];
 @endphp
 

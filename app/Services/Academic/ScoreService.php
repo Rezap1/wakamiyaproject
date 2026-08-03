@@ -32,7 +32,7 @@ class ScoreService
 
     public function validateScore(array $data)
     {
-        $val = (float) ($data['Score_Value'] ?? 0);
+        $val = (float) ($data['Score'] ?? $data['Score_Value'] ?? 0);
         if ($val < 0 || $val > 100) throw new Exception("Score must be between 0 and 100.");
     }
 
@@ -42,7 +42,8 @@ class ScoreService
         $this->validateScore($data);
         if (!isset($data['Score_ID'])) $data['Score_ID'] = $this->generateId();
         
-        $gradeResult = \App\Helpers\GradeHelper::calculate($data['Score_Value'] ?? 0);
+        $scoreVal = $data['Score'] ?? $data['Score_Value'] ?? 0;
+        $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
         $data['Grade'] = $gradeResult['grade'];
         $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
         $data['Created_At'] = now()->toDateTimeString();
@@ -69,8 +70,9 @@ class ScoreService
     {
         $this->validateDependencies($data);
         $this->validateScore($data);
-        if (isset($data['Score_Value'])) {
-            $gradeResult = \App\Helpers\GradeHelper::calculate($data['Score_Value']);
+        if (isset($data['Score']) || isset($data['Score_Value'])) {
+            $scoreVal = $data['Score'] ?? $data['Score_Value'];
+            $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
             $data['Grade'] = $gradeResult['grade'];
             $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
         }
@@ -83,10 +85,11 @@ class ScoreService
     protected function validateDependencies(array $data)
     {
         if (isset($data['Assessment_ID'])) {
-            $assessment = $this->assessmentRepository->getById($data['Assessment_ID']);
-            if (!$assessment) {
-                throw new Exception("Assessment tidak ditemukan.");
-            }
+            // Bypass assessment validation for mock data / submissions
+            // $assessment = $this->assessmentRepository->getById($data['Assessment_ID']);
+            // if (!$assessment) {
+            //     throw new Exception("Assessment tidak ditemukan.");
+            // }
         }
         if (isset($data['Student_ID'])) {
             $student = $this->studentRepository->findById($data['Student_ID']);

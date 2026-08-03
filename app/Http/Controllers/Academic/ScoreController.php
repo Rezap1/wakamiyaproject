@@ -38,8 +38,8 @@ class ScoreController extends Controller
                 return [
                     $row['Score_ID'] ?? '-',
                     $studentName . ($studentId ? " ($studentId)" : ''),
-                    $row['Assessment_ID'] ?? '-',
-                    $row['Score_Value'] ?? '-',
+                    $row['Assessment_ID'] ?? $row['Assignment_ID'] ?? '-',
+                    $row['Score'] ?? $row['Score_Value'] ?? '-',
                     $row['Remarks'] ?? '-'
                 ];
             },
@@ -56,7 +56,7 @@ class ScoreController extends Controller
         $this->activityLogService = $activityLogService;
     }
 
-        public function index()
+    public function index(Request $request)
     {
         $scores = $this->scoreService->getAll();
         
@@ -66,9 +66,15 @@ class ScoreController extends Controller
         $scores = $scores->map(function($item) use ($students) {
             $studentId = $item['Student_ID'] ?? null;
             $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
-            $item['Student_ID'] = $studentName . ($studentId ? " ($studentId)" : '');
+            $item['Student_Name'] = $studentName;
+            $item['Student_Display'] = $studentName . ($studentId ? " ($studentId)" : '');
             return $item;
         });
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Score_Value']);
+        }
 
         $scores = \App\Helpers\CollectionHelper::paginate($scores, 10)->withQueryString();
         
@@ -130,9 +136,9 @@ class ScoreController extends Controller
     public function exportCSV()
     {
         $scores = $this->scoreService->getAll();
-        $csv = "Score_ID,Student_ID,Assessment_ID,Score_Value,Grade,Status\n";
+        $csv = "Score_ID,Student_ID,Assessment_ID,Score,Grade,Status\n";
         foreach ($scores as $s) {
-            $csv .= ($s['Score_ID']??'').",".($s['Student_ID']??'').",".($s['Assessment_ID']??'').",".($s['Score_Value']??'').",".($s['Grade']??'').",".($s['Status']??'')."\n";
+            $csv .= ($s['Score_ID']??'').",".($s['Student_ID']??'').",".($s['Assessment_ID'] ?? $s['Assignment_ID'] ?? '').",".($s['Score'] ?? $s['Score_Value'] ?? '').",".($s['Grade']??'').",".($s['Status']??'')."\n";
         }
         return response($csv)->header('Content-Type', 'text/csv')->header('Content-Disposition', 'attachment; filename="scores.csv"');
     }

@@ -49,19 +49,19 @@
 
         @foreach($schedules as $schedule)
         <tr class="hover:bg-slate-50 transition-colors filter-row" 
-            data-search="{{ strtolower(($schedule['Class_ID'] ?? '').($schedule['Subject_ID'] ?? '').($schedule['Teacher_ID'] ?? '')) }}" 
+            data-search="{{ strtolower(($schedule['Class_Name'] ?? '').($schedule['Subject_Name'] ?? '').($schedule['Teacher_Name'] ?? '').($schedule['Class_ID'] ?? '').($schedule['Subject_ID'] ?? '').($schedule['Teacher_ID'] ?? '')) }}" 
             data-day="{{ $schedule['Day_Of_Week'] ?? '' }}">
             
             <td class="px-6 py-4">
-                <x-badge color="purple" class="mb-1 block w-max">{{ $schedule['Subject_ID'] ?? 'Unknown Subject' }}</x-badge>
-                <div class="font-bold text-slate-800">{{ $schedule['Class_ID'] ?? 'Unknown Class' }}</div>
+                <x-badge color="purple" class="mb-1 block w-max">{{ $schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Unknown Subject' }}</x-badge>
+                <div class="font-bold text-slate-800">{{ $schedule['Class_Name'] ?? $schedule['Class_ID'] ?? 'Unknown Class' }}</div>
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center">
                     <div class="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs mr-3">
-                        {{ substr($schedule['Teacher_ID'] ?? 'T', 0, 1) }}
+                        {{ substr($schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? 'T', 0, 1) }}
                     </div>
-                    <div class="text-sm font-bold text-slate-800">{{ $schedule['Teacher_ID'] ?? '-' }}</div>
+                    <div class="text-sm font-bold text-slate-800">{{ $schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? '-' }}</div>
                 </div>
             </td>
             <td class="px-6 py-4">

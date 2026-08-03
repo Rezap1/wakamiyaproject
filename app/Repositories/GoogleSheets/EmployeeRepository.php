@@ -39,24 +39,30 @@ class EmployeeRepository extends BaseSheetRepository implements EmployeeReposito
 
     public function generateEmployeeNumber(string $prefix, string $year, int $padding = 3): string
     {
-        $employees = $this->fetchAll();
-        
-        $maxNumber = 0;
-        
-        $pattern = "/^{$prefix}-{$year}-(\d{{$padding}})$/i";
-        
-        foreach ($employees as $employee) {
-            $empNo = $employee['Employee_Number'] ?? '';
-            if (preg_match($pattern, $empNo, $matches)) {
-                $number = (int) $matches[1];
-                if ($number > $maxNumber) {
-                    $maxNumber = $number;
+        $lockKey = $this->sheetName . '_empno_lock';
+        $counterKey = 'empno_counter_' . $this->sheetName . '_' . $prefix . '_' . $year;
+
+        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $year, $padding, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $employees = $this->fetchAll();
+                $maxNumber = 0;
+                $pattern = "/^{$prefix}-{$year}-(\d{{$padding}})$/i";
+                
+                foreach ($employees as $employee) {
+                    $empNo = $employee['Employee_Number'] ?? '';
+                    if (preg_match($pattern, $empNo, $matches)) {
+                        $number = (int) $matches[1];
+                        if ($number > $maxNumber) {
+                            $maxNumber = $number;
+                        }
+                    }
                 }
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $maxNumber);
             }
-        }
-        
-        $nextNumber = $maxNumber + 1;
-        return $prefix . '-' . $year . '-' . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
+            
+            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return $prefix . '-' . $year . '-' . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
+        });
     }
 
     public function create(array $data)

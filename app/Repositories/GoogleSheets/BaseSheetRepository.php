@@ -117,24 +117,28 @@ abstract class BaseSheetRepository
     public function generateNewId(string $prefix, int $padding = 6): string
     {
         $lockKey = $this->sheetName . '_write_lock';
+        $counterKey = 'id_counter_' . $this->sheetName . '_' . $prefix;
 
-        return Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $padding) {
-            $allData = $this->fetchAll();
-            $maxNumber = 0;
+        return Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $padding, $counterKey) {
+            if (!Cache::has($counterKey)) {
+                $allData = $this->fetchAll();
+                $maxNumber = 0;
 
-            foreach ($allData as $row) {
-                if (isset($row[$this->primaryKey])) {
-                    $idValue = (string) $row[$this->primaryKey];
-                    if (str_starts_with($idValue, $prefix)) {
-                        $numericPart = substr($idValue, strlen($prefix));
-                        if (is_numeric($numericPart)) {
-                            $maxNumber = max($maxNumber, (int) $numericPart);
+                foreach ($allData as $row) {
+                    if (isset($row[$this->primaryKey])) {
+                        $idValue = (string) $row[$this->primaryKey];
+                        if (str_starts_with($idValue, $prefix)) {
+                            $numericPart = substr($idValue, strlen($prefix));
+                            if (is_numeric($numericPart)) {
+                                $maxNumber = max($maxNumber, (int) $numericPart);
+                            }
                         }
                     }
                 }
+                Cache::forever($counterKey, $maxNumber);
             }
 
-            $nextNumber = $maxNumber + 1;
+            $nextNumber = Cache::increment($counterKey);
             return $prefix . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
         });
     }

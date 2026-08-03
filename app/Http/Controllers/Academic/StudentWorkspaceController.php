@@ -91,7 +91,10 @@ class StudentWorkspaceController extends Controller
         $studentId = $this->getStudentId();
         
         $myScores = collect($this->scoreService->getAll())->where('Student_ID', $studentId);
-        $avgScore = $myScores->count() > 0 ? round($myScores->avg('Score_Value'), 1) : 0;
+        $avgScore = $myScores->count() > 0 ? round($myScores->avg(function ($s) {
+            $val = $s['Score'] ?? $s['Score_Value'] ?? 0;
+            return is_numeric($val) ? (float) $val : 0;
+        }), 1) : 0;
         
         $myAttendances = collect($this->attendanceService->getAll())->where('Student_ID', $studentId);
         $totalMyAttendance = $myAttendances->count();
@@ -104,7 +107,7 @@ class StudentWorkspaceController extends Controller
             'completed_credits' => $myScores->where('Status', 'PASS')->count() * 3, // Assuming 3 credits per subject
             'status' => $avgScore >= 80 ? 'Excellent' : ($avgScore >= 60 ? 'Good' : 'Needs Improvement')
         ];
-        return view('academic.student.progress', compact('progress', 'studentId'));
+        return view('academic.student.progress', compact('progress', 'studentId', 'myScores', 'myAttendances'));
     }
 
     public function calendar()

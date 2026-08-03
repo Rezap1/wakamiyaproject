@@ -37,17 +37,26 @@ class AccountRepository extends BaseSheetRepository implements AccountRepository
 
     public function generateNewId(string $prefix = 'ACC', int $padding = 6): string
     {
-        $all = $this->fetchAll();
-        $maxId = 0;
-        foreach ($all as $item) {
-            if (preg_match('/^' . $prefix . '-(\d+)$/', $item[$this->primaryKey] ?? '', $matches)) {
-                $num = (int)$matches[1];
-                if ($num > $maxId) {
-                    $maxId = $num;
+        $lockKey = $this->sheetName . '_write_lock';
+        $counterKey = 'id_counter_' . $this->sheetName . '_' . $prefix;
+
+        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $padding, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $all = $this->fetchAll();
+                $maxId = 0;
+                foreach ($all as $item) {
+                    if (preg_match('/^' . $prefix . '-(\d+)$/', $item[$this->primaryKey] ?? '', $matches)) {
+                        $num = (int)$matches[1];
+                        if ($num > $maxId) {
+                            $maxId = $num;
+                        }
+                    }
                 }
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $maxId);
             }
-        }
-        $newId = $maxId + 1;
-        return $prefix . '-' . str_pad((string)$newId, $padding, '0', STR_PAD_LEFT);
+            
+            $newId = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return $prefix . '-' . str_pad((string)$newId, $padding, '0', STR_PAD_LEFT);
+        });
     }
 }

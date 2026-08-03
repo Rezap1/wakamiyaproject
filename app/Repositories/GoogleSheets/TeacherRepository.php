@@ -28,24 +28,30 @@ class TeacherRepository extends BaseSheetRepository implements TeacherRepository
 
     public function generateTeacherCode(string $prefix, string $year, int $padding = 3): string
     {
-        $teachers = $this->fetchAll();
-        
-        $maxNumber = 0;
-        
-        $pattern = "/^{$prefix}-{$year}-(\d{{$padding}})$/i";
-        
-        foreach ($teachers as $teacher) {
-            $tchCode = $teacher['Teacher_Code'] ?? '';
-            if (preg_match($pattern, $tchCode, $matches)) {
-                $number = (int) $matches[1];
-                if ($number > $maxNumber) {
-                    $maxNumber = $number;
+        $lockKey = $this->sheetName . '_tchcode_lock';
+        $counterKey = 'tchcode_counter_' . $this->sheetName . '_' . $prefix . '_' . $year;
+
+        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $year, $padding, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $teachers = $this->fetchAll();
+                $maxNumber = 0;
+                $pattern = "/^{$prefix}-{$year}-(\d{{$padding}})$/i";
+                
+                foreach ($teachers as $teacher) {
+                    $tchCode = $teacher['Teacher_Code'] ?? '';
+                    if (preg_match($pattern, $tchCode, $matches)) {
+                        $number = (int) $matches[1];
+                        if ($number > $maxNumber) {
+                            $maxNumber = $number;
+                        }
+                    }
                 }
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $maxNumber);
             }
-        }
-        
-        $nextNumber = $maxNumber + 1;
-        return $prefix . '-' . $year . '-' . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
+            
+            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return $prefix . '-' . $year . '-' . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
+        });
     }
 
     public function create(array $data)

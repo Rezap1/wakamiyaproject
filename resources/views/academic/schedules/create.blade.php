@@ -40,6 +40,20 @@
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Jadwal' => route('schedules.index'), 'Tambah Baru' => '#']"
     />
 
+    @if($errors->any())
+        <div class="bg-rose-50 border border-rose-200 text-rose-700 px-6 py-4 rounded-xl flex items-start shadow-sm">
+            <svg class="w-6 h-6 mr-3 text-rose-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div>
+                <h4 class="font-bold text-sm mb-1">Terjadi Kesalahan!</h4>
+                <ul class="list-disc list-inside text-sm">
+                    @foreach($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
+
     <x-card class="p-0 overflow-hidden">
         <form action="{{ route('schedules.store') }}" method="POST">
             @csrf
@@ -67,13 +81,18 @@
                     </div>
 
                     <div>
-                        <x-universal.searchable-select 
-                            name="Teacher_ID" 
-                            label="Pengajar" 
-                            :options="$teacherOptions" 
-                            :required="true" 
-                            value="{{ old('Teacher_ID') }}" 
-                        />
+                        @if(!empty($currentTeacherId))
+                            <x-input name="Teacher_ID_Display" label="Pengajar" value="{{ $teacherOptions[$currentTeacherId] ?? $currentTeacherId }}" readonly class="bg-slate-100 cursor-not-allowed" />
+                            <input type="hidden" name="Teacher_ID" value="{{ $currentTeacherId }}">
+                        @else
+                            <x-universal.searchable-select 
+                                name="Teacher_ID" 
+                                label="Pengajar" 
+                                :options="$teacherOptions" 
+                                :required="true" 
+                                value="{{ old('Teacher_ID') }}" 
+                            />
+                        @endif
                     </div>
 
                     <div>

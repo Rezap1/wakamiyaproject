@@ -61,15 +61,22 @@
                         />
                     </div>
 
-                    <div>
-                        <x-universal.searchable-select 
-                            name="Teacher_ID" 
-                            label="Pengajar" 
-                            :options="$teacherOptions" 
-                            :required="true" 
-                            value="{{ old('Teacher_ID', $assignment['Teacher_ID'] ?? '') }}" 
-                        />
-                    </div>
+                    @if(isset($currentTeacherId))
+                        <input type="hidden" name="Teacher_ID" value="{{ $currentTeacherId }}">
+                        <div>
+                            <x-input name="_teacher_display" label="Pengajar" value="{{ $teacherOptions[$currentTeacherId] ?? 'Nama Pengajar' }}" disabled readonly />
+                        </div>
+                    @else
+                        <div>
+                            <x-universal.searchable-select 
+                                name="Teacher_ID" 
+                                label="Pengajar" 
+                                :options="$teacherOptions" 
+                                :required="true" 
+                                value="{{ old('Teacher_ID', $assignment['Teacher_ID'] ?? '') }}" 
+                            />
+                        </div>
+                    @endif
 
                     <div>
                         @php

@@ -46,6 +46,7 @@
             <x-sidebar.nav-link href="{{ route('schedules.index') }}" active="{{ request()->routeIs('schedules.*') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('attendances.index') }}" active="{{ request()->routeIs('attendances.*') }}" icon="clock">Kehadiran</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('assignments.index') }}" active="{{ request()->routeIs('assignments.*') }}" icon="document-text">Tugas Harian</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('submissions.index') }}" active="{{ request()->routeIs('submissions.*') }}" icon="inbox">Pengumpulan Tugas</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('scores.index') }}" active="{{ request()->routeIs('scores.*') }}" icon="chart-bar">Nilai</x-sidebar.nav-link>
         @endif
 
@@ -76,14 +77,19 @@
         <!-- TEACHER WORKSPACE -->
         @if($userRole === 'TEACHER')
             <x-sidebar.nav-link href="{{ route('dashboard.teacher') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-            <x-sidebar.nav-link href="{{ route('academic.calendar') }}" active="{{ request()->routeIs('academic.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('teacher.workspace.calendar') }}" active="{{ request()->routeIs('teacher.workspace.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('attendances.index') }}" active="{{ request()->routeIs('attendances.*') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('assignments.index') }}" active="{{ request()->routeIs('assignments.*') }}" icon="document-text">Tugas Harian</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('submissions.index') }}" active="{{ request()->routeIs('submissions.*') }}" icon="inbox">Pengumpulan Tugas</x-sidebar.nav-link>
         @endif
         
         <!-- STUDENT WORKSPACE -->
         @if($userRole === 'STUDENT')
             <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('student.portal.assignments') }}" active="{{ request()->routeIs('student.portal.assignments*') }}" icon="document-text">Tugas</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('student.progress') }}" active="{{ request()->routeIs('student.progress') }}" icon="clipboard-check">Nilai</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('student.portal.materials') }}" active="{{ request()->routeIs('student.portal.materials*') }}" icon="book-open">Materi</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('student.billing.index') }}" active="{{ request()->routeIs('student.billing.*') }}" icon="cash">Tagihan Saya</x-sidebar.nav-link>
         @endif
 

@@ -50,9 +50,22 @@ class InvoiceService
     {
         $prefix = $type === 'COMPANY' ? 'INV-CORP' : 'INV-STU';
         $year = date('Y');
-        $all = $this->repository->getAll();
-        $count = collect($all)->count() + 1;
-        return sprintf("%s-%s-%06d", $prefix, $year, $count);
+        
+        $counterKey = 'invoice_counter_' . $prefix . '_' . $year;
+        $lockKey = 'invoice_write_lock';
+
+        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $year, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $all = $this->repository->getAll();
+                $count = collect($all)->filter(function($item) use ($prefix, $year) {
+                    return str_starts_with($item['Invoice_ID'] ?? '', "{$prefix}-{$year}-");
+                })->count();
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $count);
+            }
+            
+            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return sprintf("%s-%s-%06d", $prefix, $year, $nextNumber);
+        });
     }
 
     public function create(array $data)

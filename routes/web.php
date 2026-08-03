@@ -16,13 +16,8 @@ use App\Http\Controllers\Core\StudentController;
 use App\Http\Controllers\Core\CompanyController;
 use App\Http\Controllers\Core\ModuleController;
 use App\Http\Controllers\Core\PermissionController;
-use App\Http\Controllers\Core\JobOrderController;
-use App\Http\Controllers\Core\InterviewController;
-use App\Http\Controllers\Core\MatchingController;
-use App\Http\Controllers\Core\ApplicationController;
 use App\Http\Controllers\Core\DocumentController;
-use App\Http\Controllers\Core\CoeController;
-use App\Http\Controllers\Core\VisaController;
+use App\Http\Controllers\Core\StudentPortalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -215,50 +210,6 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{id}', [CompanyController::class, 'destroy'])->name('destroy');
     });
 
-    // Job Order Management (Under Construction)
-    /* Route::prefix('job-orders')->name('job-orders.')->group(function () {
-        Route::get('/', [JobOrderController::class, 'index'])->name('index');
-        Route::get('/create', [JobOrderController::class, 'create'])->name('create');
-        Route::post('/', [JobOrderController::class, 'store'])->name('store');
-        Route::get('/{id}', [JobOrderController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [JobOrderController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [JobOrderController::class, 'update'])->name('update');
-        Route::delete('/{id}', [JobOrderController::class, 'destroy'])->name('destroy');
-    }); */
-
-    // Interview Management (Under Construction)
-    /* Route::prefix('interviews')->name('interviews.')->group(function () {
-        Route::get('/', [InterviewController::class, 'index'])->name('index');
-        Route::get('/create', [InterviewController::class, 'create'])->name('create');
-        Route::post('/', [InterviewController::class, 'store'])->name('store');
-        Route::get('/{id}', [InterviewController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [InterviewController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [InterviewController::class, 'update'])->name('update');
-        Route::delete('/{id}', [InterviewController::class, 'destroy'])->name('destroy');
-    }); */
-
-    // Matching Management (Under Construction)
-    /* Route::prefix('matchings')->name('matchings.')->group(function () {
-        Route::get('/', [MatchingController::class, 'index'])->name('index');
-        Route::get('/create', [MatchingController::class, 'create'])->name('create');
-        Route::post('/', [MatchingController::class, 'store'])->name('store');
-        Route::get('/{id}', [MatchingController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [MatchingController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [MatchingController::class, 'update'])->name('update');
-        Route::delete('/{id}', [MatchingController::class, 'destroy'])->name('destroy');
-    }); */
-
-    // Application Management (Under Construction)
-    /* Route::prefix('applications')->name('applications.')->group(function () {
-        Route::get('/', [ApplicationController::class, 'index'])->name('index');
-        Route::get('/create', [ApplicationController::class, 'create'])->name('create');
-        Route::post('/', [ApplicationController::class, 'store'])->name('store');
-        Route::get('/{id}', [ApplicationController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [ApplicationController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [ApplicationController::class, 'update'])->name('update');
-        Route::delete('/{id}', [ApplicationController::class, 'destroy'])->name('destroy');
-    }); */
-
     // Document Management
     Route::prefix('documents')->name('documents.')->group(function () {
         Route::get('/preview-pdf', [DocumentController::class, 'previewPdf'])->name('preview-pdf');
@@ -274,28 +225,6 @@ Route::middleware('auth')->group(function () {
         Route::put('/{id}', [DocumentController::class, 'update'])->name('update');
         Route::delete('/{id}', [DocumentController::class, 'destroy'])->name('destroy');
     });
-
-    // COE Management (Under Construction)
-    /* Route::prefix('coes')->name('coes.')->group(function () {
-        Route::get('/', [CoeController::class, 'index'])->name('index');
-        Route::get('/create', [CoeController::class, 'create'])->name('create');
-        Route::post('/', [CoeController::class, 'store'])->name('store');
-        Route::get('/{id}', [CoeController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [CoeController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [CoeController::class, 'update'])->name('update');
-        Route::delete('/{id}', [CoeController::class, 'destroy'])->name('destroy');
-    }); */
-
-    // Visa Management (Under Construction)
-    /* Route::prefix('visas')->name('visas.')->group(function () {
-        Route::get('/', [VisaController::class, 'index'])->name('index');
-        Route::get('/create', [VisaController::class, 'create'])->name('create');
-        Route::post('/', [VisaController::class, 'store'])->name('store');
-        Route::get('/{id}', [VisaController::class, 'show'])->name('show');
-        Route::get('/{id}/edit', [VisaController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [VisaController::class, 'update'])->name('update');
-        Route::delete('/{id}', [VisaController::class, 'destroy'])->name('destroy');
-    }); */
 
     // Module Management
     Route::prefix('modules')->name('modules.')->group(function () {
@@ -441,9 +370,25 @@ Route::middleware('auth')->group(function () {
         Route::get('/{id}', [\App\Http\Controllers\Core\AuditLogController::class, 'show'])->name('show');
     });
 
+    // Student Portal
+    Route::prefix('student/portal')->name('student.portal.')->group(function () {
+        Route::get('/assignments', [StudentPortalController::class, 'assignments'])->name('assignments');
+        Route::get('/assignments/{id}', [StudentPortalController::class, 'showAssignment'])->name('assignments.show');
+        Route::post('/assignments/{id}/upload', [StudentPortalController::class, 'uploadSubmission'])->name('assignments.upload');
+        Route::get('/materials', [StudentPortalController::class, 'materials'])->name('materials');
+    });
+
+    // Student Billing (Invoices)
+    Route::prefix('student/billing')->name('student.billing.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Finance\StudentBillingController::class, 'index'])->name('index');
+        Route::get('/{id}', [\App\Http\Controllers\Finance\StudentBillingController::class, 'show'])->name('show');
+        Route::post('/{id}/pay', [\App\Http\Controllers\Finance\StudentBillingController::class, 'pay'])->name('pay');
+    });
+
     // API routes for dynamic UI
     Route::prefix('api')->group(function () {
         Route::get('/classes/{id}/students', [\App\Http\Controllers\Core\ClassController::class, 'getStudents']);
+        Route::get('/employees/{id}', [\App\Http\Controllers\Core\EmployeeController::class, 'lookup']);
     });
 
     // System Settings Management
@@ -483,16 +428,28 @@ Route::middleware('auth')->group(function () {
         }
     });
 
+    // Teacher Academic Workspace
+    Route::prefix('teacher/workspace')->name('teacher.workspace.')->group(function () {
+        Route::get('/classes', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'myClasses'])->name('classes');
+        Route::get('/calendar', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'calendar'])->name('calendar');
+        Route::get('/reports', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'reports'])->name('reports');
+    });
+
+    // Student Academic Workspace (Progress, Schedule)
+    Route::prefix('student')->name('student.')->group(function () {
+        Route::get('/schedule', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'mySchedule'])->name('schedule');
+        Route::get('/progress', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'progress'])->name('progress');
+        Route::get('/subjects', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'mySubjects'])->name('subjects');
+        Route::get('/calendar', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'calendar'])->name('calendar');
+    });
+
     // --- DUMMY ROUTES FOR SCAFFOLDED VIEWS TO PREVENT ROUTE NOT FOUND EXCEPTIONS ---
     $dummyRoutes = [
         
         'activity' => ['index', 'export'],
         'notifications' => ['markRead', 'index', 'show', 'markAllRead', 'archive', 'destroy'],
-        'academic' => ['calendar'],
-        'student.billing' => ['index', 'show', 'pay'],
         'search' => ['index', 'overlay', 'clearHistory'],
         'profile' => ['index'],
-        'student' => ['schedule', 'progress'],
         'templates' => ['index', 'create', 'edit'],
         'pdf' => ['preview', 'download', 'generate'],
         

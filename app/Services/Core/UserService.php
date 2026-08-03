@@ -94,6 +94,19 @@ class UserService
 
     public function deleteUser($id)
     {
+        $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
+        $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+        
+        $employee = collect($employeeRepo->fetchAll())->firstWhere('User_ID', $id);
+        if ($employee) {
+            throw new \Exception("Cannot delete user. User is associated with an Employee record.");
+        }
+        
+        $student = collect($studentRepo->fetchAll())->firstWhere('User_ID', $id);
+        if ($student) {
+            throw new \Exception("Cannot delete user. User is associated with a Student record.");
+        }
+        
         return $this->userRepository->delete($id);
     }
 }

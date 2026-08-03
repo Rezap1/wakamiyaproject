@@ -32,11 +32,12 @@
 
         @foreach($scores as $item)
             @php
-                $val = $item['Score_Value'] ?? 0;
+                $val = $item['Score'] ?? $item['Score_Value'] ?? 0;
+                $val = is_numeric($val) ? (float) $val : 0;
                 $result = \App\Helpers\GradeHelper::calculate($val);
             @endphp
             <tr class="hover:bg-slate-50 transition-colors">
-                <td class="px-6 py-4 font-bold text-slate-800">{{ $item['Student_ID'] ?? 'Unknown' }}</td>
+                <td class="px-6 py-4 font-bold text-slate-800">{{ $item['Student_Display'] ?? $item['Student_ID'] ?? 'Unknown' }}</td>
                 <td class="px-6 py-4 text-center font-black text-slate-800 text-lg">{{ $val }}</td>
                 <td class="px-6 py-4 text-center font-bold">{{ $result['grade'] }}</td>
                 <td class="px-6 py-4 text-center">

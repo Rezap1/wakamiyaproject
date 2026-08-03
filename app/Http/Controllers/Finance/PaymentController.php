@@ -22,14 +22,27 @@ class PaymentController extends Controller
             $payments = $payments->where('Payment_Type', $type);
         }
 
+        $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
+        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
+        $payments = $payments->map(function ($item) use ($students) {
+            $studentId = $item['Student_ID'] ?? null;
+            if ($studentId && isset($students[$studentId])) {
+                $item['student_name'] = $students[$studentId]['Full_Name'] ?? '-';
+            } else {
+                $item['student_name'] = '-';
+            }
+            return $item;
+        });
+
         $search = $request->input('search');
         if ($search) {
             $payments = $payments->filter(function($item) use ($search) {
                 return stripos($item['Payment_ID'] ?? '', $search) !== false ||
-                       stripos($item['Invoice_ID'] ?? '', $search) !== false;
+                       stripos($item['Invoice_ID'] ?? '', $search) !== false ||
+                       stripos($item['student_name'] ?? '', $search) !== false;
             });
         }
-
+        
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
         if ($dateFrom || $dateTo) {
@@ -52,17 +65,6 @@ class PaymentController extends Controller
                 return true;
             });
         }
-        $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
-        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
-        $payments = $payments->map(function ($item) use ($students) {
-            $studentId = $item['Student_ID'] ?? null;
-            if ($studentId && isset($students[$studentId])) {
-                $item['student_name'] = $students[$studentId]['Full_Name'] ?? '-';
-            } else {
-                $item['student_name'] = '-';
-            }
-            return $item;
-        });
         
         return [
             'moduleName' => 'Pembayaran (Payments)',
@@ -102,14 +104,26 @@ class PaymentController extends Controller
             $payments = $payments->where('Payment_Type', $type);
         }
 
+        $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
+        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
+        
+        $payments = $payments->map(function ($item) use ($students) {
+            $studentId = $item['Student_ID'] ?? null;
+            $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
+            $item['Student_ID'] = $studentName . ($studentId ? " ($studentId)" : '');
+            // Do not overwrite Amount_Paid
+            return $item;
+        });
+
         $search = $request->input('search');
         if ($search) {
             $payments = $payments->filter(function($item) use ($search) {
                 return stripos($item['Payment_ID'] ?? '', $search) !== false ||
-                       stripos($item['Invoice_ID'] ?? '', $search) !== false;
+                       stripos($item['Invoice_ID'] ?? '', $search) !== false ||
+                       stripos($item['Student_ID'] ?? '', $search) !== false;
             });
         }
-
+        
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
         if ($dateFrom || $dateTo) {
@@ -134,20 +148,6 @@ class PaymentController extends Controller
                 return true;
             });
         }
-
-        $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
-        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
-        
-        $payments = $payments->map(function ($item) use ($students) {
-            $studentId = $item['Student_ID'] ?? null;
-            $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
-            $item['Student_ID'] = $studentName . ($studentId ? " ($studentId)" : '');
-            // Do not overwrite Amount_Paid
-            return $item;
-        });
-
-
-
         // Pagination
         $payments = \App\Helpers\CollectionHelper::paginate($payments, 10)->withQueryString();
         
@@ -216,3 +216,4 @@ class PaymentController extends Controller
         }
     }
 }
+

@@ -69,12 +69,23 @@
                         value=""
                     />
                     
-                    <x-universal.select 
-                        name="Teacher_ID" 
-                        label="Pengajar" 
-                        :options="$teacherOptions"
-                        value=""
-                    />
+                    @if(!empty($currentTeacherId))
+                        <x-universal.input 
+                            name="Teacher_ID_Display" 
+                            label="Pengajar" 
+                            value="{{ $teacherOptions[$currentTeacherId] ?? $currentTeacherId }}" 
+                            readonly 
+                            class="bg-slate-100 cursor-not-allowed" 
+                        />
+                        <input type="hidden" name="Teacher_ID" value="{{ $currentTeacherId }}">
+                    @else
+                        <x-universal.select 
+                            name="Teacher_ID" 
+                            label="Pengajar" 
+                            :options="$teacherOptions"
+                            value=""
+                        />
+                    @endif
                     
                     <x-universal.input 
                         name="Exam_Date" 

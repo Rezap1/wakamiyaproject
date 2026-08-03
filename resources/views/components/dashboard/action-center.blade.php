@@ -40,7 +40,7 @@
                     <h4 class="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 relative z-10">{{ $item['title'] }}</h4>
                     <div class="text-2xl font-black text-white relative z-10">{{ $item['value'] }}</div>
                     @if(isset($item['link']))
-                        <a href="{{ $item['link'] }}" class="absolute inset-0 z-20"></a>
+                        <a href="{{ $item['link'] }}" class="absolute inset-0 z-20 block w-full h-full cursor-pointer"></a>
                     @endif
                 </div>
             @else
@@ -51,7 +51,7 @@
                     <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">{{ $item['title'] }}</h4>
                     <div class="text-2xl font-black text-{{ $item['color'] ?? 'slate' }}-600 relative z-10">{{ $item['value'] }}</div>
                     @if(isset($item['link']))
-                        <a href="{{ $item['link'] }}" class="absolute inset-0 z-20"></a>
+                        <a href="{{ $item['link'] }}" class="absolute inset-0 z-20 block w-full h-full cursor-pointer"></a>
                     @endif
                 </div>
             @endif

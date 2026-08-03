@@ -81,6 +81,11 @@ class AssessmentController extends Controller
             return $item;
         });
 
+        if (request()->filled('search')) {
+            $search = request()->input('search');
+            $assessments = \App\Helpers\CollectionHelper::search($assessments, $search, ['Assessment_ID', 'Name', 'Title', 'Subject_ID', 'Class_ID', 'Program_ID']);
+        }
+
         $assessments = \App\Helpers\CollectionHelper::paginate($assessments, 10)->withQueryString();
 
         return view('academic.assessments.index', compact('assessments'));
@@ -98,7 +103,17 @@ class AssessmentController extends Controller
         $classes = $classRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
-        return view('academic.assessments.create', compact('programs', 'batches', 'classes', 'teachers', 'subjects'));
+        
+        $currentTeacherId = '';
+        if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
+            $userId = auth()->user()->User_ID ?? '';
+            $teacher = collect($teachers)->firstWhere('User_ID', $userId);
+            if ($teacher) {
+                $currentTeacherId = $teacher['Teacher_ID'];
+            }
+        }
+        
+        return view('academic.assessments.create', compact('programs', 'batches', 'classes', 'teachers', 'subjects', 'currentTeacherId'));
     }
 
     public function store(\App\Http\Requests\StoreAssessmentRequest $request)
@@ -132,7 +147,17 @@ class AssessmentController extends Controller
         $classes = $classRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
-        return view('academic.assessments.edit', compact('assessment', 'programs', 'batches', 'classes', 'teachers', 'subjects'));
+        
+        $currentTeacherId = '';
+        if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
+            $userId = auth()->user()->User_ID ?? '';
+            $teacher = collect($teachers)->firstWhere('User_ID', $userId);
+            if ($teacher) {
+                $currentTeacherId = $teacher['Teacher_ID'];
+            }
+        }
+        
+        return view('academic.assessments.edit', compact('assessment', 'programs', 'batches', 'classes', 'teachers', 'subjects', 'currentTeacherId'));
     }
 
     public function update(\App\Http\Requests\UpdateAssessmentRequest $request, $id)

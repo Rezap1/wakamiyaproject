@@ -47,61 +47,58 @@ class StudentBillingController extends Controller
     {
         $studentId = $this->getStudentId();
         
-        $data = Cache::remember("student_billing_{$studentId}", 60, function() use ($studentId) {
-            $allInvoices = $this->invoiceService->getAll();
-            $myInvoices = $allInvoices->filter(function($inv) use ($studentId) {
-                return ($inv['Student_ID'] ?? '') == $studentId;
-            })->values();
+        $allInvoices = $this->invoiceService->getAll();
+        $myInvoices = $allInvoices->filter(function($inv) use ($studentId) {
+            return ($inv['Student_ID'] ?? '') == $studentId;
+        })->values();
 
-            $allPayments = $this->paymentService->getAll();
-            $myPayments = $allPayments->filter(function($pay) use ($studentId) {
-                return ($pay['Student_ID'] ?? '') == $studentId;
-            })->values();
+        $allPayments = $this->paymentService->getAll();
+        $myPayments = $allPayments->filter(function($pay) use ($studentId) {
+            return ($pay['Student_ID'] ?? '') == $studentId;
+        })->values();
 
-            $totalOutstanding = $myInvoices->where('Status', 'Waiting Payment')->sum('Amount');
-            $totalPaid = $myPayments->where('Status', 'Verified')->sum('Amount_Paid');
+        $totalOutstanding = $myInvoices->where('Status', 'Waiting Payment')->sum('Amount');
+        $totalPaid = $myPayments->where('Status', 'Verified')->sum('Amount_Paid');
 
-            // Calculate Dynamic Education Fee
-            $biayaBelajar = $this->systemSettingService->getDefaultTuitionFee();
-            $student = $this->studentRepo->findById($studentId);
-            
-            if ($student) {
-                // Check Batch Fee first (Priority 2, actually priority is Program -> Batch, wait. The user says Priority: Program -> Batch -> Config. Oh, usually it's Batch over Program because Batch is more specific, but user said Program -> Batch. I'll follow Program -> Batch).
-                if (!empty($student['Program_ID'])) {
-                    $program = $this->programRepo->findById($student['Program_ID']);
-                    if ($program && !empty($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
-                        $biayaBelajar = (float)$program['Tuition_Fee'];
-                    } elseif (!empty($student['Batch_ID'])) {
-                        $batch = $this->batchRepo->findById($student['Batch_ID']);
-                        if ($batch && !empty($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
-                            $biayaBelajar = (float)$batch['Tuition_Fee'];
-                        }
+        // Calculate Dynamic Education Fee
+        $biayaBelajar = $this->systemSettingService->getDefaultTuitionFee();
+        $student = $this->studentRepo->findById($studentId);
+        
+        if ($student) {
+            if (!empty($student['Program_ID'])) {
+                $program = $this->programRepo->findById($student['Program_ID']);
+                if ($program && !empty($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
+                    $biayaBelajar = (float)$program['Tuition_Fee'];
+                } elseif (!empty($student['Batch_ID'])) {
+                    $batch = $this->batchRepo->findById($student['Batch_ID']);
+                    if ($batch && !empty($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
+                        $biayaBelajar = (float)$batch['Tuition_Fee'];
                     }
                 }
             }
+        }
 
-            // Calculate Sisa Tagihan Pendidikan (Only for 'Pendidikan' category)
-            $totalDibayarPendidikan = $myInvoices->where('Category', 'Pendidikan')->where('Status', 'Paid')->sum('Amount');
-            $sisaTagihan = max(0, $biayaBelajar - $totalDibayarPendidikan);
-            
-            $progress = 0;
-            if ($biayaBelajar > 0) {
-                $progress = min(100, round(($totalDibayarPendidikan / $biayaBelajar) * 100));
-            }
-            if ($sisaTagihan == 0 && $biayaBelajar > 0) {
-                $progress = 100;
-            }
+        // Calculate Sisa Tagihan Pendidikan (Only for 'Pendidikan' category)
+        $totalDibayarPendidikan = $myInvoices->where('Category', 'Pendidikan')->where('Status', 'Paid')->sum('Amount');
+        $sisaTagihan = max(0, $biayaBelajar - $totalDibayarPendidikan);
+        
+        $progress = 0;
+        if ($biayaBelajar > 0) {
+            $progress = min(100, round(($totalDibayarPendidikan / $biayaBelajar) * 100));
+        }
+        if ($sisaTagihan == 0 && $biayaBelajar > 0) {
+            $progress = 100;
+        }
 
-            $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
-                return [
-                    'total_billed' => $invs->sum('Amount'),
-                    'total_paid' => $invs->where('Status', 'Paid')->sum('Amount'),
-                    'outstanding' => $invs->where('Status', '!=', 'Paid')->sum('Amount')
-                ];
-            });
-
-            return compact('myInvoices', 'myPayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown');
+        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
+            return [
+                'total_billed' => $invs->sum('Amount'),
+                'total_paid' => $invs->where('Status', 'Paid')->sum('Amount'),
+                'outstanding' => $invs->where('Status', '!=', 'Paid')->sum('Amount')
+            ];
         });
+
+        $data = compact('myInvoices', 'myPayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown');
 
         return view('student.billing.index', $data);
     }

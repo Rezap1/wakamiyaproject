@@ -56,6 +56,19 @@ class SubjectController extends Controller
     public function index(Request $request)
     {
         $subjects = $this->subjectService->getAll();
+        
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
+            $subjects = $subjects->filter(function($item) use ($search) {
+                return str_contains(strtolower($item['Subject_Code'] ?? ''), $search) || 
+                       str_contains(strtolower($item['Subject_Name'] ?? ''), $search);
+            })->values();
+        }
+        
+        if ($request->filled('status') && $request->status !== 'ALL') {
+            $subjects = $subjects->where('Is_Active', $request->status);
+        }
+
         return view('academic.subjects.index', compact('subjects'));
     }
 

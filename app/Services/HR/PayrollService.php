@@ -37,15 +37,35 @@ class PayrollService
     public function GeneratePayrollNumber()
     {
         $year = date('Y');
-        $count = $this->payrollRepo->getAll()->count() + 1;
-        return sprintf("PAY-%s-%06d", $year, $count);
+        $counterKey = 'payroll_counter_' . $year;
+        
+        return \Illuminate\Support\Facades\Cache::lock('payroll_write_lock', 10)->block(5, function () use ($year, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $count = $this->payrollRepo->getAll()->filter(function($item) use ($year) {
+                    return str_starts_with($item['Payroll_Number'] ?? '', "PAY-{$year}-");
+                })->count();
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $count);
+            }
+            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return sprintf("PAY-%s-%06d", $year, $nextNumber);
+        });
     }
 
     public function GenerateDocumentNumber()
     {
         $year = date('Y');
-        $count = $this->payrollRepo->getAll()->count() + 1;
-        return sprintf("DOC-PAY-%s-%06d", $year, $count);
+        $counterKey = 'doc_payroll_counter_' . $year;
+        
+        return \Illuminate\Support\Facades\Cache::lock('doc_payroll_write_lock', 10)->block(5, function () use ($year, $counterKey) {
+            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
+                $count = $this->payrollRepo->getAll()->filter(function($item) use ($year) {
+                    return str_starts_with($item['Document_Number'] ?? '', "DOC-PAY-{$year}-");
+                })->count();
+                \Illuminate\Support\Facades\Cache::forever($counterKey, $count);
+            }
+            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
+            return sprintf("DOC-PAY-%s-%06d", $year, $nextNumber);
+        });
     }
 
     public function CalculateBasicSalary($employeeId) { return 0; /* Fetched from employee data if implemented */ }
