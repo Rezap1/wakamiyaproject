@@ -109,6 +109,46 @@ class UserResolverHelper
     }
 
     /**
+     * Resolve Role ID or Role string to human readable Role Name.
+     */
+    public static function getRoleName(?string $roleId): string
+    {
+        if (empty($roleId)) {
+            return '-';
+        }
+
+        $trimmed = trim($roleId);
+
+        $knownRoles = [
+            'ROL000001' => 'DIRECTOR',
+            'ROL000002' => 'ADMINISTRATOR',
+            'ROL000003' => 'HR',
+            'ROL000004' => 'ACADEMIC',
+            'ROL000005' => 'FINANCE',
+            'ROL000006' => 'TEACHER',
+            'ROL000007' => 'MARKETING',
+            'ROL000008' => 'STUDENT',
+        ];
+
+        if (isset($knownRoles[$trimmed])) {
+            return $knownRoles[$trimmed];
+        }
+
+        try {
+            $rolesMap = Cache::remember('all_roles_lookup_map', 300, function () {
+                $repo = app(\App\Interfaces\GoogleSheets\RoleRepositoryInterface::class);
+                return collect($repo->fetchAll())->keyBy('Role_ID');
+            });
+
+            if (isset($rolesMap[$trimmed])) {
+                return $rolesMap[$trimmed]['Role_Name'] ?? $trimmed;
+            }
+        } catch (\Exception $e) {}
+
+        return $trimmed;
+    }
+
+    /**
      * Clear resolution lookup caches.
      */
     public static function clearCache(): void
@@ -117,5 +157,6 @@ class UserResolverHelper
         Cache::forget('all_students_lookup_map');
         Cache::forget('all_teachers_lookup_map');
         Cache::forget('all_users_lookup_map');
+        Cache::forget('all_roles_lookup_map');
     }
 }

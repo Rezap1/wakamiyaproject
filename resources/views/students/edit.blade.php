@@ -5,7 +5,9 @@
     @php
         $userOptions = [];
         foreach($users as $user) {
-            $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Role: ' . $user['Role_ID'];
+            $roleId = $user['Role_ID'] ?? '';
+            $roleName = \App\Helpers\UserResolverHelper::getRoleName($roleId);
+            $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Peran: ' . $roleName;
         }
         if(isset($student['User_ID']) && !collect($users)->contains('User_ID', $student['User_ID'])) {
             $userOptions[$student['User_ID']] = $student['Full_Name'] . ' (' . ($student['Email'] ?? '') . ')';

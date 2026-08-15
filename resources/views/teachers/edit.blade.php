@@ -7,7 +7,12 @@
     @php
         $userOptions = [];
         foreach($users as $user) {
-            $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Role: ' . $user['Role_ID'];
+            $roleId = $user['Role_ID'] ?? '';
+            $roleName = \App\Helpers\UserResolverHelper::getRoleName($roleId);
+            if (strtoupper(trim($roleName)) === 'STUDENT' || $roleId === 'ROL000008') {
+                continue;
+            }
+            $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Peran: ' . $roleName;
         }
         if(isset($teacher['User_ID']) && !collect($users)->contains('User_ID', $teacher['User_ID'])) {
             $userOptions[$teacher['User_ID']] = ($teacher['Full_Name'] ?? '') . ' (' . ($teacher['Email'] ?? '') . ')';
