@@ -19,10 +19,68 @@ class EmployeeService
         $this->enterpriseEvent = $enterpriseEvent;
     }
 
+    public function getProfilePhotoPath(string $employeeId): ?string
+    {
+        if (empty($employeeId)) return null;
+
+        $mapFile = storage_path('app/employee_photos.json');
+        if (file_exists($mapFile)) {
+            $map = json_decode(file_get_contents($mapFile), true) ?? [];
+            if (!empty($map[$employeeId]) && file_exists(public_path($map[$employeeId]))) {
+                return $map[$employeeId];
+            }
+        }
+
+        // Fallback: check filesystem directly for employee_{Employee_ID}.*
+        $files = glob(storage_path('app/public/profiles/employee_' . $employeeId . '.*'));
+        if (!empty($files)) {
+            $filename = basename($files[0]);
+            return 'storage/profiles/' . $filename;
+        }
+
+        return null;
+    }
+
+    public function saveProfilePhoto(string $employeeId, \Illuminate\Http\UploadedFile $file): string
+    {
+        $ext = strtolower($file->getClientOriginalExtension());
+        $filename = 'employee_' . $employeeId . '.' . $ext;
+        
+        $dir = storage_path('app/public/profiles');
+        if (!file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        // Clean old files for this employee
+        $oldFiles = glob($dir . '/employee_' . $employeeId . '.*');
+        if ($oldFiles) {
+            foreach ($oldFiles as $old) {
+                @unlink($old);
+            }
+        }
+
+        $file->storeAs('profiles', $filename, 'public');
+        $photoPath = 'storage/profiles/' . $filename;
+
+        // Save in JSON map
+        $mapFile = storage_path('app/employee_photos.json');
+        $map = file_exists($mapFile) ? (json_decode(file_get_contents($mapFile), true) ?? []) : [];
+        $map[$employeeId] = $photoPath;
+        file_put_contents($mapFile, json_encode($map, JSON_PRETTY_PRINT));
+
+        return $photoPath;
+    }
+
     public function getAllEmployees()
     {
         $employees = $this->employeeRepository->fetchAll();
         return $employees->map(function ($employee) {
+            if (empty($employee['Full_Name']) && !empty($employee['User_ID'])) {
+                $employee['Full_Name'] = \App\Helpers\UserResolverHelper::getName($employee['User_ID']);
+            }
+            if (empty($employee['Profile_Photo']) && !empty($employee['Employee_ID'])) {
+                $employee['Profile_Photo'] = $this->getProfilePhotoPath($employee['Employee_ID']);
+            }
             $employee['Completeness_Score'] = $this->calculateCompleteness($employee);
             return $employee;
         });
@@ -32,6 +90,12 @@ class EmployeeService
     {
         $employee = $this->employeeRepository->findById($id);
         if ($employee) {
+            if (empty($employee['Full_Name']) && !empty($employee['User_ID'])) {
+                $employee['Full_Name'] = \App\Helpers\UserResolverHelper::getName($employee['User_ID']);
+            }
+            if (empty($employee['Profile_Photo']) && !empty($employee['Employee_ID'])) {
+                $employee['Profile_Photo'] = $this->getProfilePhotoPath($employee['Employee_ID']);
+            }
             $employee['Completeness_Score'] = $this->calculateCompleteness($employee);
         }
         return $employee;
@@ -44,6 +108,12 @@ class EmployeeService
         }
         $employee = $this->employeeRepository->findByNationalId($nationalId);
         if ($employee) {
+            if (empty($employee['Full_Name']) && !empty($employee['User_ID'])) {
+                $employee['Full_Name'] = \App\Helpers\UserResolverHelper::getName($employee['User_ID']);
+            }
+            if (empty($employee['Profile_Photo']) && !empty($employee['Employee_ID'])) {
+                $employee['Profile_Photo'] = $this->getProfilePhotoPath($employee['Employee_ID']);
+            }
             $employee['Completeness_Score'] = $this->calculateCompleteness($employee);
         }
         return $employee;
@@ -66,6 +136,29 @@ class EmployeeService
             $data['Employee_Number'] = $this->employeeRepository->generateEmployeeNumber('EMP', $year, 3);
         }
 
+        // Auto-populate Full_Name, Email, Phone_Number from User if User_ID is provided
+        if (!empty($data['User_ID'])) {
+            try {
+                $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
+                $user = $userRepo->findById($data['User_ID']);
+                if ($user) {
+                    if (empty($data['Full_Name'])) {
+                        $data['Full_Name'] = $user['Full_Name'] ?? $user['Username'] ?? '';
+                    }
+                    if (empty($data['Email'])) {
+                        $data['Email'] = $user['Email'] ?? '';
+                    }
+                    if (empty($data['Phone_Number'])) {
+                        $data['Phone_Number'] = $user['Phone_Number'] ?? '';
+                    }
+                }
+            } catch (\Exception $e) {}
+        }
+
+        if (empty($data['Full_Name']) && !empty($data['User_ID'])) {
+            $data['Full_Name'] = \App\Helpers\UserResolverHelper::getName($data['User_ID']);
+        }
+
         if (!isset($data['Is_Active'])) {
             $data['Is_Active'] = 'TRUE';
         }
@@ -78,11 +171,12 @@ class EmployeeService
 
         // Handle profile photo upload
         if (isset($data['Profile_Photo']) && $data['Profile_Photo'] instanceof \Illuminate\Http\UploadedFile) {
-            $file = $data['Profile_Photo'];
-            $filename = 'employee_' . $data['Employee_ID'] . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $file->storeAs('profiles', $filename, 'public');
-            $data['Profile_Photo'] = 'storage/profiles/' . $filename;
+            $savedPath = $this->saveProfilePhoto($data['Employee_ID'], $data['Profile_Photo']);
+            $data['Profile_Photo'] = $savedPath;
         }
+
+        // Remove UploadedFile instance if any remaining before repository call
+        unset($data['Profile_Photo']);
 
         $res = $this->employeeRepository->create($data);
         $this->employeeRepository->clearCache();
@@ -109,11 +203,11 @@ class EmployeeService
         $data['Updated_At'] = now()->toDateTimeString();
 
         if (isset($data['Profile_Photo']) && $data['Profile_Photo'] instanceof \Illuminate\Http\UploadedFile) {
-            $file = $data['Profile_Photo'];
-            $filename = 'employee_' . $id . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $file->storeAs('profiles', $filename, 'public');
-            $data['Profile_Photo'] = 'storage/profiles/' . $filename;
+            $savedPath = $this->saveProfilePhoto($id, $data['Profile_Photo']);
+            $data['Profile_Photo'] = $savedPath;
         }
+
+        unset($data['Profile_Photo']);
 
         $res = $this->employeeRepository->updateRow($id, $data);
         $this->employeeRepository->clearCache();
@@ -138,6 +232,25 @@ class EmployeeService
     public function deleteEmployee(string $id): bool
     {
         $res = $this->employeeRepository->delete($id);
+        
+        // Clean photo
+        $dir = storage_path('app/public/profiles');
+        $oldFiles = glob($dir . '/employee_' . $id . '.*');
+        if ($oldFiles) {
+            foreach ($oldFiles as $old) {
+                @unlink($old);
+            }
+        }
+
+        $mapFile = storage_path('app/employee_photos.json');
+        if (file_exists($mapFile)) {
+            $map = json_decode(file_get_contents($mapFile), true) ?? [];
+            if (isset($map[$id])) {
+                unset($map[$id]);
+                file_put_contents($mapFile, json_encode($map, JSON_PRETTY_PRINT));
+            }
+        }
+
         $this->employeeRepository->clearCache();
         if (class_exists('App\Helpers\UserResolverHelper')) {
             \App\Helpers\UserResolverHelper::clearCache();

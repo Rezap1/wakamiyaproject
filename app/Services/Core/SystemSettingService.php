@@ -97,4 +97,38 @@ class SystemSettingService
         }
         return 0;
     }
+
+    /**
+     * Get centralized Company Profile configuration (H8.1–H8.3).
+     * Reads from MASTER_SYSTEM_SETTING with safe fallback defaults.
+     *
+     * @return array{company: array, bank: array, document: array}
+     */
+    public function getCompanyProfile(): array
+    {
+        return [
+            'company' => [
+                'name'     => $this->get('COMPANY_NAME', 'WAKAMIYA MANAGEMENT SYSTEM'),
+                'tagline'  => $this->get('COMPANY_TAGLINE', 'Enterprise Human Resource Engine'),
+                'logo'     => $this->get('COMPANY_LOGO', ''),
+                'address'  => $this->get('COMPANY_ADDRESS', 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930'),
+                'phone'    => $this->get('COMPANY_PHONE', '(021) 8000-9999'),
+                'whatsapp' => $this->get('COMPANY_WA', ''),
+                'email'    => $this->get('COMPANY_EMAIL', 'hr@wakamiya.ac.id'),
+                'website'  => $this->get('COMPANY_WEB', 'https://wakamiya.ac.id'),
+                'npwp'     => $this->get('COMPANY_NPWP', ''),
+            ],
+            'bank' => [
+                'name'           => $this->get('COMPANY_BANK_NAME', ''),
+                'account_number' => $this->get('COMPANY_BANK_ACCOUNT', ''),
+                'account_holder' => $this->get('COMPANY_BANK_HOLDER', ''),
+            ],
+            'document' => [
+                'signature_url' => $this->get('COMPANY_SIGNATURE_URL', ''),
+                'stamp_url'     => $this->get('COMPANY_STAMP_URL', ''),
+                'signer_name'   => $this->get('COMPANY_SIGNER_NAME', ''),
+                'signer_title'  => $this->get('COMPANY_SIGNER_TITLE', ''),
+            ],
+        ];
+    }
 }

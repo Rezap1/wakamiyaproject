@@ -6,7 +6,13 @@
     $isActive = ($employee['Is_Active'] ?? 'TRUE') === 'TRUE';
     $statusColor = $isActive ? 'green' : 'red';
     $statusText = $isActive ? 'Pegawai Aktif' : 'Nonaktif';
-    $photoUrl = !empty($employee['Profile_Photo']) ? $employee['Profile_Photo'] : 'https://ui-avatars.com/api/?name=' . urlencode($employee['Full_Name'] ?? 'Emp') . '&background=0D8ABC&color=fff&size=256';
+    $empName = !empty($employee['Full_Name']) ? $employee['Full_Name'] : \App\Helpers\UserResolverHelper::getName($employee['User_ID'] ?? '');
+    $rawPhoto = $employee['Profile_Photo'] ?? '';
+    if (!empty($rawPhoto)) {
+        $photoUrl = str_starts_with($rawPhoto, 'http') ? $rawPhoto : asset($rawPhoto);
+    } else {
+        $photoUrl = 'https://ui-avatars.com/api/?name=' . urlencode($empName ?: 'Karyawan') . '&background=0D8ABC&color=fff&size=256';
+    }
     $completeness = $employee['Completeness_Score'] ?? 0;
 @endphp
 
@@ -46,7 +52,7 @@
 
     <!-- MAIN DETAIL LAYOUT -->
     <x-universal.detail-layout 
-        title="{{ $employee['Full_Name'] }}" 
+        title="{{ $empName }}" 
         description="NIK: {{ $employee['Employee_Number'] }} | {{ $employee['Position_Name'] }}"
         status="{{ $statusText }}"
         badgeColor="{{ $statusColor }}"
@@ -64,11 +70,11 @@
                 <!-- SECTION F: PROFILE PHOTO & COMPLETENESS SCORE -->
                 <div class="bg-gradient-to-r from-slate-50 to-blue-50/30 p-5 rounded-2xl border border-slate-200/80 flex flex-col md:flex-row items-center gap-6">
                     <div class="relative w-28 h-28 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-slate-200 shrink-0">
-                        <img src="{{ $photoUrl }}" alt="Foto {{ $employee['Full_Name'] }}" class="w-full h-full object-cover">
+                        <img src="{{ $photoUrl }}" alt="Foto {{ $empName }}" class="w-full h-full object-cover">
                     </div>
                     <div class="flex-1 w-full space-y-2 text-center md:text-left">
                         <div class="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                            <h2 class="text-xl font-bold text-slate-800">{{ $employee['Full_Name'] }}</h2>
+                            <h2 class="text-xl font-bold text-slate-800">{{ $empName }}</h2>
                             <span class="px-2.5 py-0.5 text-xs font-bold rounded-lg bg-blue-100 text-blue-700">{{ $employee['Employee_Number'] }}</span>
                         </div>
                         <p class="text-xs text-slate-500 font-medium">{{ $employee['Position_Name'] }} &bull; {{ $employee['Department_Name'] }}</p>
@@ -95,7 +101,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Nama Lengkap</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">{{ $employee['Full_Name'] }}</p>
+                            <p class="text-sm font-bold text-slate-800 mt-1">{{ $empName }}</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Jenis Kelamin</p>

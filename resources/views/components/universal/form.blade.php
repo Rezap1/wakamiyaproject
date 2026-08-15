@@ -8,7 +8,7 @@
         @endif
     </div>
 
-    <form action="{{ $action }}" method="{{ $method === 'GET' ? 'GET' : 'POST' }}" {{ $hasFiles ? 'enctype="multipart/form-data"' : '' }} x-data="smartForm()" @submit="isSubmitting = true">
+    <form action="{{ $action }}" method="{{ $method === 'GET' ? 'GET' : 'POST' }}" {!! $hasFiles ? 'enctype="multipart/form-data"' : '' !!} x-data="smartForm()" @submit="isSubmitting = true">
         @csrf
         @if(in_array($method, ['PUT', 'PATCH', 'DELETE']))
             @method($method)

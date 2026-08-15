@@ -20,7 +20,7 @@ class SystemSettingController extends Controller
 
     public function index(Request $request)
     {
-        $categories = ['General', 'Company', 'Academic', 'Finance', 'Payroll', 'Attendance', 'Assessment', 'Notification', 'Workflow', 'Document', 'Security', 'System'];
+        $categories = ['General', 'Company', 'Company_Bank', 'Company_Document', 'Academic', 'Finance', 'Payroll', 'Attendance', 'Assessment', 'Notification', 'Workflow', 'Document', 'Security', 'System'];
         $activeTab = $request->query('tab', 'General');
         
         $settings = $this->settingService->category($activeTab);
@@ -39,6 +39,52 @@ class SystemSettingController extends Controller
         
         $changes = 0;
 
+        // Handle file uploads for settings with Value_Type = 'file'
+        if ($request->hasFile('setting_files')) {
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+            $maxSize = 2 * 1024 * 1024; // 2MB
+
+            foreach ($request->file('setting_files') as $settingId => $file) {
+                if (!$file->isValid()) {
+                    continue;
+                }
+
+                // Validate file type (security: no executables)
+                if (!in_array($file->getMimeType(), $allowedMimes)) {
+                    continue;
+                }
+
+                // Validate file size
+                if ($file->getSize() > $maxSize) {
+                    continue;
+                }
+
+                // Determine storage subdirectory based on setting key
+                $setting = $this->settingService->getSettings()->firstWhere('Setting_ID', $settingId);
+                $settingKey = $setting['Setting_Key'] ?? $settingId;
+                
+                $subDir = 'companies/documents';
+                if (str_contains($settingKey, 'LOGO')) {
+                    $subDir = 'companies/logos';
+                } elseif (str_contains($settingKey, 'STAMP')) {
+                    $subDir = 'companies/stamps';
+                } elseif (str_contains($settingKey, 'SIGNATURE')) {
+                    $subDir = 'companies/signatures';
+                }
+
+                $filename = strtolower(str_replace(['SET_', 'COMP_', 'DOC_'], '', $settingId)) . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $file->storeAs($subDir, $filename, 'public');
+                $storedPath = 'storage/' . $subDir . '/' . $filename;
+
+                // Update the setting value with the new file path
+                if ($this->settingService->set($settingId, $storedPath, $userEmail)) {
+                    $changes++;
+                    try { $this->auditService->log('System_Settings', 'Upload_File', 'Setting', $settingId, null, $storedPath); } catch(\Exception $e) {}
+                }
+            }
+        }
+
+        // Handle text/number settings
         foreach($settingsData as $id => $value) {
             if($this->settingService->set($id, $value, $userEmail)) {
                 $changes++;
@@ -53,6 +99,6 @@ class SystemSettingController extends Controller
             }
         }
 
-        return redirect()->route('settings.index', ['tab' => $activeTab])->with('success', "$changes settings updated successfully.");
+        return redirect()->route('settings.index', ['tab' => $activeTab])->with('success', "$changes pengaturan berhasil diperbarui.");
     }
 }

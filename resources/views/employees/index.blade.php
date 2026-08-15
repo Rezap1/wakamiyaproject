@@ -52,13 +52,19 @@
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
                     @php
-                        $avatarUrl = !empty($employee['Profile_Photo']) ? $employee['Profile_Photo'] : 'https://ui-avatars.com/api/?name=' . urlencode($employee['Full_Name'] ?? 'Emp') . '&background=0D8ABC&color=fff&size=80';
+                        $empName = !empty($employee['Full_Name']) ? $employee['Full_Name'] : \App\Helpers\UserResolverHelper::getName($employee['User_ID'] ?? '');
+                        $rawPhoto = $employee['Profile_Photo'] ?? '';
+                        if (!empty($rawPhoto)) {
+                            $avatarUrl = str_starts_with($rawPhoto, 'http') ? $rawPhoto : asset($rawPhoto);
+                        } else {
+                            $avatarUrl = 'https://ui-avatars.com/api/?name=' . urlencode($empName ?: 'Karyawan') . '&background=0D8ABC&color=fff&size=80';
+                        }
                     @endphp
                     <div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-sm">
-                        <img src="{{ $avatarUrl }}" alt="{{ $employee['Full_Name'] }}" class="w-full h-full object-cover">
+                        <img src="{{ $avatarUrl }}" alt="{{ $empName }}" class="w-full h-full object-cover">
                     </div>
                     <div>
-                        <div class="font-bold text-slate-800">{{ $employee['Full_Name'] }}</div>
+                        <div class="font-bold text-slate-800">{{ $empName }}</div>
                         <div class="text-xs font-bold text-blue-600 mt-0.5">{{ $employee['Employee_Number'] }}</div>
                     </div>
                 </div>
