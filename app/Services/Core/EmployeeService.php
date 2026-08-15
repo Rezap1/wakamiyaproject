@@ -37,6 +37,147 @@ class EmployeeService
         return $employee;
     }
 
+    public function getEmployeeByNationalId(string $nationalId)
+    {
+        if (empty($nationalId)) {
+            return null;
+        }
+        $employee = $this->employeeRepository->findByNationalId($nationalId);
+        if ($employee) {
+            $employee['Completeness_Score'] = $this->calculateCompleteness($employee);
+        }
+        return $employee;
+    }
+
+    public function createEmployee(array $data): array
+    {
+        // Auto-generate Employee_ID (EMP00000X) if empty
+        if (empty($data['Employee_ID'])) {
+            $all = $this->employeeRepository->fetchAll();
+            $lastId = $all->pluck('Employee_ID')->map(function($id) {
+                return (int) preg_replace('/[^0-9]/', '', $id);
+            })->max() ?? 0;
+            $data['Employee_ID'] = 'EMP' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
+        }
+
+        // Auto-generate Employee_Number (NIK) if empty
+        if (empty($data['Employee_Number'])) {
+            $year = date('Y');
+            $data['Employee_Number'] = $this->employeeRepository->generateEmployeeNumber('EMP', $year, 3);
+        }
+
+        if (!isset($data['Is_Active'])) {
+            $data['Is_Active'] = 'TRUE';
+        }
+        if (!isset($data['Employment_Status'])) {
+            $data['Employment_Status'] = 'ACTIVE';
+        }
+        if (!isset($data['Created_At'])) {
+            $data['Created_At'] = now()->toDateTimeString();
+        }
+
+        // Handle profile photo upload
+        if (isset($data['Profile_Photo']) && $data['Profile_Photo'] instanceof \Illuminate\Http\UploadedFile) {
+            $file = $data['Profile_Photo'];
+            $filename = 'employee_' . $data['Employee_ID'] . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->storeAs('profiles', $filename, 'public');
+            $data['Profile_Photo'] = 'storage/profiles/' . $filename;
+        }
+
+        $res = $this->employeeRepository->create($data);
+        $this->employeeRepository->clearCache();
+        if (class_exists('App\Helpers\UserResolverHelper')) {
+            \App\Helpers\UserResolverHelper::clearCache();
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'HR',
+            'CREATE',
+            'EMPLOYEE',
+            $data['Employee_ID'],
+            auth()->id() ?? 'SYSTEM',
+            ['HR', 'ADMINISTRATOR'],
+            [$data['Employee_ID']],
+            $data
+        );
+
+        return $res;
+    }
+
+    public function updateEmployee(string $id, array $data): bool
+    {
+        $data['Updated_At'] = now()->toDateTimeString();
+
+        if (isset($data['Profile_Photo']) && $data['Profile_Photo'] instanceof \Illuminate\Http\UploadedFile) {
+            $file = $data['Profile_Photo'];
+            $filename = 'employee_' . $id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->storeAs('profiles', $filename, 'public');
+            $data['Profile_Photo'] = 'storage/profiles/' . $filename;
+        }
+
+        $res = $this->employeeRepository->updateRow($id, $data);
+        $this->employeeRepository->clearCache();
+        if (class_exists('App\Helpers\UserResolverHelper')) {
+            \App\Helpers\UserResolverHelper::clearCache();
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'HR',
+            'UPDATE',
+            'EMPLOYEE',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['HR', 'ADMINISTRATOR'],
+            [$id],
+            $data
+        );
+
+        return $res;
+    }
+
+    public function deleteEmployee(string $id): bool
+    {
+        $res = $this->employeeRepository->delete($id);
+        $this->employeeRepository->clearCache();
+        if (class_exists('App\Helpers\UserResolverHelper')) {
+            \App\Helpers\UserResolverHelper::clearCache();
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'HR',
+            'DELETE',
+            'EMPLOYEE',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['HR', 'ADMINISTRATOR'],
+            [$id],
+            ['Status' => 'DELETED']
+        );
+
+        return $res;
+    }
+
+    public function sendEmployeeDataEmail(string $id, string $email, $sender = null): bool
+    {
+        $employee = $this->getEmployeeById($id);
+        if (!$employee) {
+            throw new \Exception("Karyawan #{$id} tidak ditemukan.");
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'HR',
+            'SEND_EMAIL',
+            'EMPLOYEE_DATA',
+            $id,
+            $sender->User_ID ?? 'SYSTEM',
+            ['HR', 'ADMINISTRATOR'],
+            [$id],
+            ['Target_Email' => $email]
+        );
+
+        return true;
+    }
+
     public function isEmployeeActive($id): bool
     {
         $employee = $this->getEmployeeById($id);
@@ -81,6 +222,9 @@ class EmployeeService
 
         $res = $this->employeeRepository->updateRow($employeeId, $data);
         $this->employeeRepository->clearCache();
+        if (class_exists('App\Helpers\UserResolverHelper')) {
+            \App\Helpers\UserResolverHelper::clearCache();
+        }
 
         $this->enterpriseEvent->dispatch(
             'HR', 
