@@ -101,7 +101,7 @@ class EmployeeService
             $data
         );
 
-        return $res;
+        return $data;
     }
 
     public function updateEmployee(string $id, array $data): bool
@@ -132,7 +132,7 @@ class EmployeeService
             $data
         );
 
-        return $res;
+        return (bool) $res;
     }
 
     public function deleteEmployee(string $id): bool
@@ -154,7 +154,7 @@ class EmployeeService
             ['Status' => 'DELETED']
         );
 
-        return $res;
+        return (bool) $res;
     }
 
     public function sendEmployeeDataEmail(string $id, string $email, $sender = null): bool
@@ -220,7 +220,7 @@ class EmployeeService
             $data['Notes'] = $notes;
         }
 
-        $res = $this->employeeRepository->updateRow($employeeId, $data);
+        $this->employeeRepository->updateRow($employeeId, $data);
         $this->employeeRepository->clearCache();
         if (class_exists('App\Helpers\UserResolverHelper')) {
             \App\Helpers\UserResolverHelper::clearCache();
@@ -237,7 +237,7 @@ class EmployeeService
             ['Status' => $upperStatus, 'Notes' => $notes]
         );
 
-        return $res;
+        return $this->getEmployeeById($employeeId) ?? $data;
     }
 
     protected function calculateCompleteness($employee)
