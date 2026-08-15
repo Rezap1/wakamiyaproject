@@ -37,13 +37,73 @@ class EmployeeService
         return $employee;
     }
 
+    public function isEmployeeActive($id): bool
+    {
+        $employee = $this->getEmployeeById($id);
+        if (!$employee) return false;
+
+        $status = strtoupper(trim($employee['Employment_Status'] ?? $employee['Is_Active'] ?? 'ACTIVE'));
+        $isActiveFlag = strtoupper(trim($employee['Is_Active'] ?? 'TRUE'));
+
+        if ($isActiveFlag === 'FALSE') return false;
+        
+        return !in_array($status, ['INACTIVE', 'RESIGNED', 'TERMINATED']);
+    }
+
+    public function updateLifecycleStatus(string $employeeId, string $status, ?string $notes = null): array
+    {
+        $employee = $this->getEmployeeById($employeeId);
+        if (!$employee) {
+            throw new \Exception("Pegawai #{$employeeId} tidak ditemukan.");
+        }
+
+        $validStatuses = ['ACTIVE', 'INACTIVE', 'RESIGNED', 'TERMINATED', 'TRANSFERRED'];
+        $upperStatus = strtoupper(trim($status));
+        if (!in_array($upperStatus, $validStatuses)) {
+            throw new \Exception("Status kepegawaian '{$status}' tidak valid.");
+        }
+
+        $data = [
+            'Employment_Status' => $upperStatus,
+            'Updated_At' => now()->toDateTimeString()
+        ];
+
+        if (in_array($upperStatus, ['INACTIVE', 'RESIGNED', 'TERMINATED'])) {
+            $data['Is_Active'] = 'FALSE';
+            $data['Exit_Date'] = now()->toDateString();
+        } else {
+            $data['Is_Active'] = 'TRUE';
+        }
+
+        if ($notes) {
+            $data['Notes'] = $notes;
+        }
+
+        $res = $this->employeeRepository->updateRow($employeeId, $data);
+        $this->employeeRepository->clearCache();
+
+        $this->enterpriseEvent->dispatch(
+            'HR', 
+            'UPDATE', 
+            'EMPLOYEE_LIFECYCLE', 
+            $employeeId, 
+            auth()->id() ?? 'SYSTEM', 
+            ['HR', 'ADMINISTRATOR'], 
+            [$employeeId], 
+            ['Status' => $upperStatus, 'Notes' => $notes]
+        );
+
+        return $res;
+    }
+
     protected function calculateCompleteness($employee)
     {
         $fieldsToCheck = [
             'User_ID', 'Department_ID', 'Position_ID', 'Employee_Number',
             'Full_Name', 'Gender', 'Birth_Place', 'Birth_Date',
             'National_ID', 'Phone_Number', 'Email', 'Address', 
-            'Join_Date', 'Employment_Status', 'Tax_Number', 'Bank_Name', 'Bank_Account_Number'
+            'Join_Date', 'Employment_Status', 'Tax_Number', 'Bank_Name', 'Bank_Account_Number',
+            'Profile_Photo'
         ];
         
         $filledCount = 0;
@@ -55,166 +115,64 @@ class EmployeeService
         
         return round(($filledCount / count($fieldsToCheck)) * 100);
     }
-    
-    public function getEmployeeByEmail($email)
-    {
-        return $this->employeeRepository->findByEmail($email);
-    }
-    
-    public function getEmployeeByNationalId($nationalId)
-    {
-        return $this->employeeRepository->findByNationalId($nationalId);
-    }
 
-    public function createEmployee(array $data)
+    public function isAuthorizedForSensitiveData($user = null): bool
     {
-        $newId = $this->employeeRepository->generateNewId('EMP', 6);
-        $year = Carbon::now()->format('Y');
-        $newEmployeeNumber = $this->employeeRepository->generateEmployeeNumber('WKM', $year, 3);
-        
-        $userService = app(\App\Services\Core\UserService::class);
-        $user = $userService->getUserById($data['User_ID']);
+        $user = $user ?? auth()->user();
         if (!$user) {
-            throw new \Exception("User tidak ditemukan.");
+            return false;
         }
 
-        // Prevent Duplicate Employee for same User
-        $allEmployees = $this->employeeRepository->fetchAll();
-        $existingUser = $allEmployees->firstWhere('User_ID', $data['User_ID']);
-        if ($existingUser) {
-            throw new \Exception("User ini sudah terdaftar sebagai Employee.");
-        }
-
-        if (!empty($data['National_ID'])) {
-            $existingByNationalId = $this->getEmployeeByNationalId($data['National_ID']);
-            if ($existingByNationalId) {
-                throw new \Exception("NIK (KTP) sudah terdaftar.");
+        try {
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $roleId = $user->Role_ID ?? '';
+            if (!empty($roleId)) {
+                $role = $roleService->getRoleById($roleId);
+                $roleName = strtoupper(trim($role['Role_Name'] ?? ''));
+                if (str_contains($roleName, 'ADMIN') || str_contains($roleName, 'HR') || str_contains($roleName, 'DIRECTOR')) {
+                    return true;
+                }
             }
-        }
+        } catch (\Exception $e) {}
 
-        $mappedData = [
-            'Employee_ID' => $newId,
-            'Employee_Number' => $newEmployeeNumber,
-            'User_ID' => $data['User_ID'],
-            'Full_Name' => $user['Full_Name'],
-            'Gender' => $data['Gender'] ?? '',
-            'Birth_Place' => $data['Birth_Place'] ?? '',
-            'Birth_Date' => $data['Birth_Date'] ?? '',
-            'National_ID' => $data['National_ID'] ?? '',
-            'Phone_Number' => $user['Phone_Number'] ?? '',
-            'Email' => $user['Email'],
-            'Address' => $data['Address'] ?? '',
-            'Department_ID' => $data['Department_ID'],
-            'Position_ID' => $data['Position_ID'],
-            'Join_Date' => $data['Join_Date'],
-            'Employment_Status' => $data['Employment_Status'],
-            'Tax_Number' => $data['Tax_Number'] ?? '',
-            'Bank_Name' => $data['Bank_Name'] ?? '',
-            'Bank_Account_Number' => $data['Bank_Account_Number'] ?? '',
-            'Account_Holder_Name' => $data['Account_Holder_Name'] ?? '',
-            'Is_Active' => $data['Is_Active'] ?? 'TRUE',
-            'Created_At' => now()->toDateTimeString(),
-            'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
-            'Notes' => $data['Notes'] ?? ''
-        ];
-
-        $this->employeeRepository->create($mappedData);
-        
-        $this->enterpriseEvent->dispatch(
-            'EMPLOYEE',
-            'CREATE',
-            'EMPLOYEE',
-            $newId,
-            auth()->id() ?? 'SYSTEM',
-            ['ADMINISTRATOR', 'HR'],
-            [],
-            $mappedData
-        );
-
-        return $mappedData;
-    }
-    
-    public function updateEmployee($id, array $data)
-    {
-        $mappedData = [
-            'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
-        ];
-        
-        $employee = $this->getEmployeeById($id);
-        if (!$employee) {
-            throw new \Exception("Employee not found.");
-        }
-
-        if (isset($data['National_ID']) && !empty($data['National_ID']) && $data['National_ID'] !== $employee['National_ID']) {
-            $existingByNationalId = $this->getEmployeeByNationalId($data['National_ID']);
-            if ($existingByNationalId) {
-                throw new \Exception("NIK (KTP) sudah terdaftar.");
-            }
-        }
-        
-        $userService = app(\App\Services\Core\UserService::class);
-        $userId = $data['User_ID'] ?? $this->getEmployeeById($id)['User_ID'] ?? null;
-        if ($userId) {
-            $user = $userService->getUserById($userId);
-            if ($user) {
-                $mappedData['Full_Name'] = $user['Full_Name'];
-                $mappedData['Phone_Number'] = $user['Phone_Number'] ?? '';
-                $mappedData['Email'] = $user['Email'];
-            }
-        }
-        
-        if (isset($data['User_ID'])) {
-            $mappedData['User_ID'] = $data['User_ID'];
-        }
-        
-        // Map allowed fields
-        $allowedFields = [
-            'Gender', 'Birth_Place', 'Birth_Date', 'National_ID',
-            'Address', 'Department_ID', 'Position_ID',
-            'Join_Date', 'Employment_Status', 'Tax_Number', 'Bank_Name',
-            'Bank_Account_Number', 'Account_Holder_Name', 'Is_Active', 'Notes'
-        ];
-
-        foreach ($allowedFields as $field) {
-            if (isset($data[$field])) {
-                $mappedData[$field] = $data[$field];
-            }
-        }
-
-        $res = $this->employeeRepository->update($id, $mappedData);
-
-        $this->enterpriseEvent->dispatch(
-            'EMPLOYEE',
-            'UPDATE',
-            'EMPLOYEE',
-            $id,
-            auth()->id() ?? 'SYSTEM',
-            ['ADMINISTRATOR', 'HR'],
-            [],
-            $mappedData
-        );
-
-        return $res;
+        $rawRole = strtoupper(trim($user->Role ?? ''));
+        return str_contains($rawRole, 'ADMIN') || str_contains($rawRole, 'HR') || str_contains($rawRole, 'DIRECTOR');
     }
 
-    public function deleteEmployee($id)
+    public function maskSensitiveFields(array $employee, bool $isAuthorized = false): array
     {
-        $res = $this->employeeRepository->delete($id);
+        if ($isAuthorized) {
+            return $employee;
+        }
 
-        $this->enterpriseEvent->dispatch(
-            'EMPLOYEE',
-            'DELETE',
-            'EMPLOYEE',
-            $id,
-            auth()->id() ?? 'SYSTEM',
-            ['ADMINISTRATOR', 'HR'],
-            [],
-            []
-        );
+        if (!empty($employee['National_ID'])) {
+            $employee['National_ID'] = $this->maskNik($employee['National_ID']);
+        }
+        if (!empty($employee['Tax_Number'])) {
+            $employee['Tax_Number'] = $this->maskNpwp($employee['Tax_Number']);
+        }
+        if (!empty($employee['Bank_Account_Number'])) {
+            $employee['Bank_Account_Number'] = $this->maskBankAccount($employee['Bank_Account_Number']);
+        }
 
-        return $res;
+        return $employee;
+    }
+
+    protected function maskNik(string $nik): string
+    {
+        if (strlen($nik) <= 6) return '******';
+        return substr($nik, 0, 4) . '********' . substr($nik, -4);
+    }
+
+    protected function maskNpwp(string $npwp): string
+    {
+        if (strlen($npwp) <= 6) return '******';
+        return substr($npwp, 0, 3) . '.***.***.*-' . substr($npwp, -3);
+    }
+
+    protected function maskBankAccount(string $account): string
+    {
+        if (strlen($account) <= 4) return '****';
+        return '******' . substr($account, -4);
     }
 }

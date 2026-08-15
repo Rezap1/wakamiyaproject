@@ -4,17 +4,23 @@ namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\PositionRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use Exception;
 
 class PositionService
 {
     protected $positionRepository;
     protected $employeeRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(PositionRepositoryInterface $positionRepository, EmployeeRepositoryInterface $employeeRepository)
-    {
+    public function __construct(
+        PositionRepositoryInterface $positionRepository,
+        EmployeeRepositoryInterface $employeeRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->positionRepository = $positionRepository;
         $this->employeeRepository = $employeeRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllPositions()
@@ -57,6 +63,17 @@ class PositionService
 
         $this->positionRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'POSITION',
+            'CREATE',
+            'POSITION',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -74,7 +91,20 @@ class PositionService
         if (isset($data['Is_Active'])) $mappedData['Is_Active'] = $data['Is_Active'];
         if (isset($data['Notes'])) $mappedData['Notes'] = $data['Notes'];
 
-        return $this->positionRepository->update($id, $mappedData);
+        $res = $this->positionRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'POSITION',
+            'UPDATE',
+            'POSITION',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deletePosition($id)
@@ -87,6 +117,19 @@ class PositionService
             throw new Exception("Posisi ini masih digunakan oleh {$relatedEmployeesCount} data Pegawai. Silakan ubah status menjadi Inactive.");
         }
 
-        return $this->positionRepository->delete($id);
+        $res = $this->positionRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'POSITION',
+            'DELETE',
+            'POSITION',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR', 'HR'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

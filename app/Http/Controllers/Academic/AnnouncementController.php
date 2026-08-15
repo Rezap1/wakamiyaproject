@@ -10,12 +10,10 @@ use App\Services\Core\ActivityLogService;
 class AnnouncementController extends Controller
 {
     protected $announcementService;
-    protected $activityLogService;
 
-    public function __construct(AnnouncementService $announcementService, ActivityLogService $activityLogService)
+    public function __construct(AnnouncementService $announcementService)
     {
         $this->announcementService = $announcementService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(Request $request)
@@ -34,7 +32,6 @@ class AnnouncementController extends Controller
         try {
             $data = $request->except('_token');
             $this->announcementService->create($data);
-            $this->activityLogService->log(auth()->id(), 'CREATED', 'Master Announcement', 'Added new announcement: ' . $request->Title);
             return redirect()->route('announcements.index')->with('success', 'Announcement created successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -53,7 +50,6 @@ class AnnouncementController extends Controller
         try {
             $data = $request->except(['_token', '_method']);
             $this->announcementService->update($id, $data);
-            $this->activityLogService->log(auth()->id(), 'UPDATED', 'Master Announcement', 'Updated announcement ' . $id);
             return redirect()->route('announcements.index')->with('success', 'Announcement updated successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -64,7 +60,6 @@ class AnnouncementController extends Controller
     {
         try {
             $this->announcementService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETED', 'Master Announcement', 'Deleted announcement ' . $id);
             return redirect()->route('announcements.index')->with('success', 'Announcement deleted successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);

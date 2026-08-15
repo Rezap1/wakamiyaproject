@@ -50,12 +50,10 @@ class DepartmentController extends Controller
         ];
     }
     protected $departmentService;
-    protected $activityLogService;
 
-    public function __construct(DepartmentService $departmentService, ActivityLogService $activityLogService)
+    public function __construct(DepartmentService $departmentService)
     {
         $this->departmentService = $departmentService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index()
@@ -88,17 +86,6 @@ class DepartmentController extends Controller
         try {
             $data = $request->validated();
             $department = $this->departmentService->createDepartment($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_DEPARTMENT',
-                "Mendaftarkan departemen baru: {$department['Department_ID']}",
-                $request->ip(),
-                null,
-                $department,
-                $request->userAgent()
-            );
 
             return redirect()->route('departments.index')->with('success', 'Departemen berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -145,17 +132,6 @@ class DepartmentController extends Controller
 
             $data = $request->validated();
             $this->departmentService->updateDepartment($id, $data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_DEPARTMENT',
-                "Memperbarui departemen: {$id}",
-                $request->ip(),
-                $department,
-                array_merge($department, $data),
-                $request->userAgent()
-            );
 
             return redirect()->route('departments.index')->with('success', 'Departemen berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -173,17 +149,6 @@ class DepartmentController extends Controller
             }
 
             $this->departmentService->deleteDepartment($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_DEPARTMENT',
-                "Menonaktifkan departemen (Soft Delete): {$id}",
-                request()->ip(),
-                $department,
-                array_merge($department, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('departments.index')->with('success', 'Departemen berhasil dinonaktifkan.');
         } catch (\Exception $e) {

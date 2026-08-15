@@ -87,7 +87,6 @@ class TeacherController extends Controller
     protected $employeeService;
     protected $departmentService;
     protected $positionService;
-    protected $activityLogService;
     protected $userService;
 
     public function __construct(
@@ -95,14 +94,12 @@ class TeacherController extends Controller
         EmployeeService $employeeService,
         DepartmentService $departmentService,
         PositionService $positionService,
-        ActivityLogService $activityLogService,
         \App\Services\Core\UserService $userService
     ) {
         $this->teacherService = $teacherService;
         $this->employeeService = $employeeService;
         $this->departmentService = $departmentService;
         $this->positionService = $positionService;
-        $this->activityLogService = $activityLogService;
         $this->userService = $userService;
     }
 
@@ -203,17 +200,6 @@ class TeacherController extends Controller
         try {
             $data = $request->validated();
             $teacher = $this->teacherService->createTeacher($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_TEACHER',
-                "Mendaftarkan guru baru: {$teacher['Teacher_ID']}",
-                $request->ip(),
-                null,
-                $teacher,
-                $request->userAgent()
-            );
 
             return redirect()->route('teachers.index')->with('success', 'Tenaga Pendidik berhasil didaftarkan.');
         } catch (\Exception $e) {
@@ -286,20 +272,6 @@ class TeacherController extends Controller
 
             $data = $request->validated();
             $this->teacherService->updateTeacher($id, $data);
-            
-            // Re-fetch to get updated mapping (readonly fields updated)
-            $updatedTeacher = $this->teacherService->getTeacherById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_TEACHER',
-                "Memperbarui data guru: {$id}",
-                $request->ip(),
-                $teacher,
-                $updatedTeacher,
-                $request->userAgent()
-            );
 
             return redirect()->route('teachers.index')->with('success', 'Data tenaga pendidik berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -317,17 +289,6 @@ class TeacherController extends Controller
             }
 
             $this->teacherService->deleteTeacher($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_TEACHER',
-                "Menonaktifkan guru (Hard Delete): {$id}",
-                request()->ip(),
-                $teacher,
-                array_merge($teacher, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('teachers.index')->with('success', 'Data tenaga pendidik berhasil dihapus.');
         } catch (\Exception $e) {

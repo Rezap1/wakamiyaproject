@@ -32,6 +32,11 @@ Route::get('/', function () {
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/verify-receipt/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'verifyReceiptPublic'])->name('payments.verify-receipt-public');
+Route::get('/verify-invoice/{id}', [\App\Http\Controllers\Finance\InvoiceController::class, 'verifyInvoicePublic'])->name('invoices.verify-public');
+Route::get('/verify-payslip/{id}', [\App\Http\Controllers\Hr\PayrollController::class, 'verifyPayslipPublic'])->name('payrolls.verify-public');
+Route::get('/verify-leave/{id}', [\App\Http\Controllers\Hr\LeaveController::class, 'verifyLeavePublic'])->name('leaves.verify-public');
+Route::get('/verify-overtime/{id}', [\App\Http\Controllers\Hr\OvertimeController::class, 'verifyOvertimePublic'])->name('overtimes.verify-public');
 
 // Requires authentication
 Route::middleware('auth')->group(function () {
@@ -112,6 +117,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/{id}/edit', [EmployeeController::class, 'edit'])->name('edit');
         Route::put('/{id}', [EmployeeController::class, 'update'])->name('update');
         Route::delete('/{id}', [EmployeeController::class, 'destroy'])->name('destroy');
+        Route::post('/{id}/send-email', [EmployeeController::class, 'sendEmail'])->name('send-email');
     });
 
     // Teacher Management
@@ -286,6 +292,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/create', [\App\Http\Controllers\Finance\InvoiceController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Finance\InvoiceController::class, 'store'])->name('store');
         Route::post('/{id}/publish', [\App\Http\Controllers\Finance\InvoiceController::class, 'publish'])->name('publish');
+        Route::post('/{id}/cancel', [\App\Http\Controllers\Finance\InvoiceController::class, 'cancel'])->name('cancel');
+        Route::get('/{id}/pdf', [\App\Http\Controllers\Finance\InvoiceController::class, 'downloadInvoicePdf'])->name('pdf');
         Route::get('/{id}', [\App\Http\Controllers\Finance\InvoiceController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [\App\Http\Controllers\Finance\InvoiceController::class, 'edit'])->name('edit');
         Route::put('/{id}', [\App\Http\Controllers\Finance\InvoiceController::class, 'update'])->name('update');
@@ -303,6 +311,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/create', [\App\Http\Controllers\Finance\PaymentController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Finance\PaymentController::class, 'store'])->name('store');
         Route::post('/{id}/verify', [\App\Http\Controllers\Finance\PaymentController::class, 'verify'])->name('verify');
+        Route::get('/{id}/receipt', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadReceiptPdf'])->name('receipt');
         Route::get('/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [\App\Http\Controllers\Finance\PaymentController::class, 'edit'])->name('edit');
         Route::put('/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'update'])->name('update');
@@ -331,13 +340,61 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [\App\Http\Controllers\Hr\PayrollController::class, 'index'])->name('index');
         Route::get('/create', [\App\Http\Controllers\Hr\PayrollController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Hr\PayrollController::class, 'store'])->name('store');
+        Route::post('/batch-generate', [\App\Http\Controllers\Hr\PayrollController::class, 'batchGenerate'])->name('batch-generate');
+        Route::get('/{id}/pdf', [\App\Http\Controllers\Hr\PayrollController::class, 'downloadPayslipPdf'])->name('pdf');
+        Route::post('/{id}/submit', [\App\Http\Controllers\Hr\PayrollController::class, 'submit'])->name('submit');
+        Route::post('/{id}/approve', [\App\Http\Controllers\Hr\PayrollController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [\App\Http\Controllers\Hr\PayrollController::class, 'reject'])->name('reject');
         Route::post('/{id}/pay', [\App\Http\Controllers\Hr\PayrollController::class, 'pay'])->name('pay');
-        Route::get('/{id}/slip', [\App\Http\Controllers\Hr\PayrollController::class, 'slip'])->name('slip');
+        Route::get('/{id}/slip', [\App\Http\Controllers\Hr\PayrollController::class, 'downloadPayslipPdf'])->name('slip');
         Route::get('/{id}', [\App\Http\Controllers\Hr\PayrollController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [\App\Http\Controllers\Hr\PayrollController::class, 'edit'])->name('edit');
         Route::put('/{id}', [\App\Http\Controllers\Hr\PayrollController::class, 'update'])->name('update');
         Route::delete('/{id}', [\App\Http\Controllers\Hr\PayrollController::class, 'destroy'])->name('destroy');
     });
+
+    // HR - Dynamic QR Attendance Engine
+    Route::prefix('hr/attendance/qr')->name('hr.attendance.qr.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'index'])->name('index');
+        Route::post('/session', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'storeSession'])->name('session.store');
+        Route::get('/session/{sessionId}/display', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'displaySession'])->name('display');
+        Route::get('/session/{sessionId}/token', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'getDynamicToken'])->name('token');
+        Route::post('/session/{sessionId}/close', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'closeSession'])->name('close');
+        Route::get('/session/{sessionId}/summary', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'sessionSummary'])->name('summary');
+        Route::get('/scanner', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'scanner'])->name('scanner');
+        Route::post('/scan', [\App\Http\Controllers\Hr\QRAttendanceController::class, 'scan'])->name('scan');
+    });
+
+    // HR - Leave Management Engine
+    Route::prefix('hr/leaves')->name('hr.leaves.')->group(function () {
+        Route::get('/export-pdf', [\App\Http\Controllers\Hr\LeaveController::class, 'exportPdf'])->name('export-pdf');
+        Route::get('/export-excel', [\App\Http\Controllers\Hr\LeaveController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-csv', [\App\Http\Controllers\Hr\LeaveController::class, 'exportCsv'])->name('export-csv');
+        Route::get('/', [\App\Http\Controllers\Hr\LeaveController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Hr\LeaveController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Hr\LeaveController::class, 'store'])->name('store');
+        Route::get('/{id}/pdf', [\App\Http\Controllers\Hr\LeaveController::class, 'downloadLeavePdf'])->name('pdf');
+        Route::post('/{id}/approve', [\App\Http\Controllers\Hr\LeaveController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [\App\Http\Controllers\Hr\LeaveController::class, 'reject'])->name('reject');
+        Route::post('/{id}/cancel', [\App\Http\Controllers\Hr\LeaveController::class, 'cancel'])->name('cancel');
+        Route::get('/{id}', [\App\Http\Controllers\Hr\LeaveController::class, 'show'])->name('show');
+    });
+    Route::get('/hr/leaves/{id}/pdf', [\App\Http\Controllers\Hr\LeaveController::class, 'downloadLeavePdf'])->name('leaves.pdf');
+
+    // HR - Overtime Management Engine
+    Route::prefix('hr/overtimes')->name('hr.overtimes.')->group(function () {
+        Route::get('/export-pdf', [\App\Http\Controllers\Hr\OvertimeController::class, 'exportPdf'])->name('export-pdf');
+        Route::get('/export-excel', [\App\Http\Controllers\Hr\OvertimeController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-csv', [\App\Http\Controllers\Hr\OvertimeController::class, 'exportCsv'])->name('export-csv');
+        Route::get('/', [\App\Http\Controllers\Hr\OvertimeController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Hr\OvertimeController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Hr\OvertimeController::class, 'store'])->name('store');
+        Route::get('/{id}/pdf', [\App\Http\Controllers\Hr\OvertimeController::class, 'downloadOvertimePdf'])->name('pdf');
+        Route::post('/{id}/approve', [\App\Http\Controllers\Hr\OvertimeController::class, 'approve'])->name('approve');
+        Route::post('/{id}/reject', [\App\Http\Controllers\Hr\OvertimeController::class, 'reject'])->name('reject');
+        Route::get('/{id}', [\App\Http\Controllers\Hr\OvertimeController::class, 'show'])->name('show');
+    });
+    Route::get('/hr/overtimes/{id}/pdf', [\App\Http\Controllers\Hr\OvertimeController::class, 'downloadOvertimePdf'])->name('overtimes.pdf');
 
     // Permission Management (Under Construction)
     /* Route::prefix('permissions')->name('permissions.')->group(function () {
@@ -389,6 +446,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('api')->group(function () {
         Route::get('/classes/{id}/students', [\App\Http\Controllers\Core\ClassController::class, 'getStudents']);
         Route::get('/employees/{id}', [\App\Http\Controllers\Core\EmployeeController::class, 'lookup']);
+        Route::get('/students/{id}', [\App\Http\Controllers\Core\StudentController::class, 'lookup']);
     });
 
     // System Settings Management

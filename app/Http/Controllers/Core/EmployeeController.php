@@ -77,20 +77,17 @@ class EmployeeController extends Controller
     protected $employeeService;
     protected $departmentService;
     protected $positionService;
-    protected $activityLogService;
     protected $userService;
 
     public function __construct(
         EmployeeService $employeeService, 
         DepartmentService $departmentService, 
         PositionService $positionService,
-        ActivityLogService $activityLogService,
         \App\Services\Core\UserService $userService
     ) {
         $this->employeeService = $employeeService;
         $this->departmentService = $departmentService;
         $this->positionService = $positionService;
-        $this->activityLogService = $activityLogService;
         $this->userService = $userService;
     }
 
@@ -188,18 +185,10 @@ class EmployeeController extends Controller
     {
         try {
             $data = $request->validated();
+            if ($request->hasFile('Profile_Photo')) {
+                $data['Profile_Photo'] = $request->file('Profile_Photo');
+            }
             $employee = $this->employeeService->createEmployee($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_EMPLOYEE',
-                "Mendaftarkan karyawan baru: {$employee['Employee_ID']}",
-                $request->ip(),
-                null,
-                $employee,
-                $request->userAgent()
-            );
 
             return redirect()->route('employees.index')->with('success', 'Karyawan berhasil didaftarkan.');
         } catch (\Exception $e) {
@@ -216,13 +205,19 @@ class EmployeeController extends Controller
                 return redirect()->route('employees.index')->with('error', 'Data karyawan tidak ditemukan.');
             }
             
-            $dept = $this->departmentService->getDepartmentById($employee['Department_ID']);
-            $pos = $this->positionService->getPositionById($employee['Position_ID']);
+            $dept = $this->departmentService->getDepartmentById($employee['Department_ID'] ?? '');
+            $pos = $this->positionService->getPositionById($employee['Position_ID'] ?? '');
             
             $employee['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
             $employee['Position_Name'] = $pos ? $pos['Position_Name'] : 'Tidak Diketahui';
 
-            return view('employees.show', compact('employee'));
+            $isAuthorized = $this->employeeService->isAuthorizedForSensitiveData(auth()->user());
+            $sanitizedEmployee = $this->employeeService->maskSensitiveFields($employee, $isAuthorized);
+
+            return view('employees.show', [
+                'employee' => $sanitizedEmployee,
+                'isAuthorized' => $isAuthorized
+            ]);
         } catch (\Exception $e) {
             Log::error('Error showing employee: ' . $e->getMessage());
             return redirect()->route('employees.index')->with('error', 'Terjadi kesalahan saat memuat data karyawan.');
@@ -276,18 +271,11 @@ class EmployeeController extends Controller
             }
 
             $data = $request->validated();
+            if ($request->hasFile('Profile_Photo')) {
+                $data['Profile_Photo'] = $request->file('Profile_Photo');
+            }
+
             $this->employeeService->updateEmployee($id, $data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_EMPLOYEE',
-                "Memperbarui data karyawan: {$id}",
-                $request->ip(),
-                $employee,
-                array_merge($employee, $data),
-                $request->userAgent()
-            );
 
             return redirect()->route('employees.index')->with('success', 'Data karyawan berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -305,22 +293,27 @@ class EmployeeController extends Controller
             }
 
             $this->employeeService->deleteEmployee($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_EMPLOYEE',
-                "Menonaktifkan karyawan (Hard Delete): {$id}",
-                request()->ip(),
-                $employee,
-                array_merge($employee, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('employees.index')->with('success', 'Data karyawan berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting employee: ' . $e->getMessage());
             return redirect()->route('employees.index')->with('error', 'Terjadi kesalahan saat menghapus data karyawan.');
+        }
+    }
+
+    public function sendEmail(\Illuminate\Http\Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email'
+            ]);
+
+            $this->employeeService->sendEmployeeDataEmail($id, $request->input('email'), auth()->user());
+
+            return back()->with('success', 'Data karyawan berhasil dikirim via email ke: ' . $request->input('email'));
+        } catch (\Exception $e) {
+            Log::error('Error sending employee email: ' . $e->getMessage());
+            return back()->with('error', 'Gagal mengirim email: ' . $e->getMessage());
         }
     }
 
@@ -349,5 +342,4 @@ class EmployeeController extends Controller
             return response()->json(['error' => 'Terjadi kesalahan internal.'], 500);
         }
     }
-
 }

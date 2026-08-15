@@ -24,8 +24,10 @@ class StoreEmployeeRequest extends FormRequest
                     }
                 }
             ],
+            'Gender' => 'nullable|string|max:20',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
+            'Profile_Photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
             'National_ID' => [
                 'nullable',
                 'string',

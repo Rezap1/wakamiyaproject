@@ -54,12 +54,10 @@ class ModuleController extends Controller
     }
 
     protected $moduleService;
-    protected $activityLogService;
 
-    public function __construct(ModuleService $moduleService, ActivityLogService $activityLogService)
+    public function __construct(ModuleService $moduleService)
     {
         $this->moduleService = $moduleService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -100,17 +98,6 @@ class ModuleController extends Controller
             $data = $request->validated();
             $module = $this->moduleService->createModule($data);
             
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_MODULE',
-                "Mendaftarkan modul baru: {$module['Module_ID']}",
-                $request->ip(),
-                null,
-                $module,
-                $request->userAgent()
-            );
-
             return redirect()->route('modules.index')->with('success', 'Modul berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating module: ' . $e->getMessage());
@@ -157,17 +144,6 @@ class ModuleController extends Controller
             $data = $request->validated();
             $this->moduleService->updateModule($id, $data);
             
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_MODULE',
-                "Memperbarui modul: {$id}",
-                $request->ip(),
-                $module,
-                array_merge($module, $data),
-                $request->userAgent()
-            );
-
             return redirect()->route('modules.index')->with('success', 'Modul berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating module: ' . $e->getMessage());
@@ -185,17 +161,6 @@ class ModuleController extends Controller
 
             $this->moduleService->deleteModule($id);
             
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_MODULE',
-                "Menonaktifkan modul (Hard Delete): {$id}",
-                request()->ip(),
-                $module,
-                array_merge($module, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
-
             return redirect()->route('modules.index')->with('success', 'Modul berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting module: ' . $e->getMessage());

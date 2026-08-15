@@ -20,6 +20,25 @@ class AttendanceRepository extends BaseSheetRepository implements AttendanceRepo
         return $items->firstWhere($this->primaryKey, $id);
     }
 
+    public function findByEmployeeAndSession(string $employeeId, string $sessionId)
+    {
+        $items = $this->fetchAll();
+        return $items->first(function ($att) use ($employeeId, $sessionId) {
+            return ($att['Employee_ID'] ?? '') === $employeeId && 
+                   ($att['Session_ID'] ?? '') === $sessionId &&
+                   strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+        });
+    }
+
+    public function findEmployeeAttendances(string $employeeId)
+    {
+        $items = $this->fetchAll();
+        return $items->filter(function ($att) use ($employeeId) {
+            return ($att['Employee_ID'] ?? '') === $employeeId &&
+                   strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+        })->values();
+    }
+
     public function create(array $data)
     {
         return $this->append($data);

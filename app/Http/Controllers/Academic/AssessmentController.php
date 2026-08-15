@@ -46,15 +46,14 @@ class AssessmentController extends Controller
         ];
     }
 
-    protected $assessmentService, $activityLogService;
+    protected $assessmentService;
 
-    public function __construct(AssessmentService $assessmentService, ActivityLogService $activityLogService)
+    public function __construct(AssessmentService $assessmentService)
     {
         $this->assessmentService = $assessmentService;
-        $this->activityLogService = $activityLogService;
     }
 
-        public function index()
+    public function index()
     {
         $assessments = $this->assessmentService->getAll();
         
@@ -120,7 +119,6 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->create($request->except('_token'));
-            $this->activityLogService->log(auth()->id(), 'CREATE_ASSESSMENT', 'Assessment', 'Created assessment');
             return redirect()->route('assessments.index')->with('success', 'Assessment created successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -164,7 +162,6 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->update($id, $request->except(['_token', '_method']));
-            $this->activityLogService->log(auth()->id(), 'UPDATE_ASSESSMENT', 'Assessment', 'Updated assessment ' . $id);
             return redirect()->route('assessments.index')->with('success', 'Assessment updated successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -175,7 +172,6 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETE_ASSESSMENT', 'Assessment', 'Deleted assessment ' . $id);
             return redirect()->route('assessments.index')->with('success', 'Assessment deleted successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);

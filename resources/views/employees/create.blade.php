@@ -19,6 +19,7 @@
     <x-universal.form 
         action="{{ route('employees.store') }}" 
         method="POST"
+        :hasFiles="true"
         title="Tambah Karyawan" 
         description="Lengkapi informasi di bawah ini. Nomor Induk Karyawan (NIK) akan dibuat otomatis oleh sistem."
         buttonText="Simpan Karyawan"
@@ -26,7 +27,21 @@
         <div class="space-y-8">
             <!-- SECTION: DATA PRIBADI -->
             <div>
-                <h3 class="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Data Pribadi</h3>
+                <h3 class="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Data Pribadi & Foto Profil</h3>
+                
+                <!-- PROFILE PHOTO UPLOAD PREVIEW -->
+                <div class="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-center gap-4">
+                    <div class="relative w-24 h-24 rounded-full overflow-hidden border-2 border-white shadow-md bg-slate-200 flex items-center justify-center shrink-0">
+                        <img id="photo_preview" src="https://ui-avatars.com/api/?name=Karyawan+Baru&background=0D8ABC&color=fff&size=128" alt="Preview Foto" class="w-full h-full object-cover">
+                    </div>
+                    <div class="flex-1 w-full">
+                        <label for="Profile_Photo" class="block text-xs font-bold text-slate-700 mb-1">Foto Profil Karyawan (Opsional)</label>
+                        <input type="file" name="Profile_Photo" id="Profile_Photo" accept="image/jpeg,image/png,image/jpg,image/webp" onchange="previewImage(this)" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer">
+                        <p class="text-[11px] text-slate-500 mt-1">Format: JPG, PNG, WEBP. Maksimum: 2MB.</p>
+                        @error('Profile_Photo') <p class="mt-1 text-xs font-bold text-rose-500">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <x-universal.searchable-select 
@@ -208,6 +223,16 @@
             filterPositions();
         }
     });
+
+    function previewImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('photo_preview').src = e.target.result;
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
 </script>
 @endsection
 

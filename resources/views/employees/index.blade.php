@@ -4,7 +4,7 @@
 
 <x-universal.index-layout 
     title="Daftar Karyawan" 
-    description="Kelola data seluruh karyawan, informasi pribadi, dan jabatan."
+    description="Kelola data seluruh karyawan, informasi pribadi, foto profil, dan jabatan."
     :breadcrumbs="['Dasbor' => route('dashboard'), 'Data Master' => '#', 'Karyawan' => route('employees.index')]"
     add-action="{{ route('employees.create') }}"
     add-text="Tambah Karyawan"
@@ -51,8 +51,11 @@
         <tr class="hover:bg-slate-50 transition-colors {{ ($employee['Is_Active'] ?? 'TRUE') === 'FALSE' ? 'opacity-50' : '' }}">
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm border border-slate-200 shrink-0">
-                        {{ substr($employee['Full_Name'] ?? 'U', 0, 1) }}
+                    @php
+                        $avatarUrl = !empty($employee['Profile_Photo']) ? $employee['Profile_Photo'] : 'https://ui-avatars.com/api/?name=' . urlencode($employee['Full_Name'] ?? 'Emp') . '&background=0D8ABC&color=fff&size=80';
+                    @endphp
+                    <div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-sm">
+                        <img src="{{ $avatarUrl }}" alt="{{ $employee['Full_Name'] }}" class="w-full h-full object-cover">
                     </div>
                     <div>
                         <div class="font-bold text-slate-800">{{ $employee['Full_Name'] }}</div>
@@ -97,6 +100,3 @@
 </x-universal.index-layout>
 
 @endsection
-
-
-

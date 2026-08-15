@@ -8,10 +8,14 @@ use Illuminate\Support\Facades\Hash;
 class UserService
 {
     protected $userRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(UserRepositoryInterface $userRepository)
-    {
+    public function __construct(
+        UserRepositoryInterface $userRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->userRepository = $userRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllUsers()
@@ -64,6 +68,17 @@ class UserService
         ];
 
         $this->userRepository->create($mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'USER',
+            'CREATE',
+            'USER',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            ['Username' => $mappedData['Username'], 'Email' => $mappedData['Email']]
+        );
         
         return $mappedData;
     }
@@ -89,7 +104,20 @@ class UserService
             $mappedData['Last_Password_Change'] = now()->toDateTimeString();
         }
 
-        return $this->userRepository->update($id, $mappedData);
+        $res = $this->userRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'USER',
+            'UPDATE',
+            'USER',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteUser($id)
@@ -107,6 +135,19 @@ class UserService
             throw new \Exception("Cannot delete user. User is associated with a Student record.");
         }
         
-        return $this->userRepository->delete($id);
+        $res = $this->userRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'USER',
+            'DELETE',
+            'USER',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

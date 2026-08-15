@@ -2,40 +2,44 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreScoreRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
+            'Student_ID' => 'required|string',
+            'Assessment_ID' => 'required|string',
+            'Assessment_Category' => 'nullable|in:GENERAL,SPORTS,LANGUAGE',
+            
+            // General Score
+            'Score_Value' => 'nullable|numeric|min:0|max:100',
+            'Score' => 'nullable|numeric|min:0|max:100',
+            'Subject_ID' => 'nullable|string',
 
-            'Assessment_ID' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    $service = app(\App\Services\Academic\AssessmentService::class);
-                    $parent = $service->getById($value);
-                    if (!$parent) {
-                        $fail('Parent data Assessment_ID tidak ditemukan.');
-                    }
-                }
-            ],
-        
-            //
+            // Sports Assessment Metrics
+            'running_distance' => 'required_if:Assessment_Category,SPORTS|nullable|numeric|min:0',
+            'running_time' => 'required_if:Assessment_Category,SPORTS|nullable|numeric|min:0',
+            'push_up' => 'required_if:Assessment_Category,SPORTS|nullable|integer|min:0',
+            'sit_up' => 'required_if:Assessment_Category,SPORTS|nullable|integer|min:0',
+
+            // Language Assessment Rubric (Scale 0-100 or 1-5)
+            'speaking' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'writing' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'listening' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'reading' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'ethics' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'motivation' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+            'attendance' => 'required_if:Assessment_Category,LANGUAGE|nullable|numeric|min:0|max:100',
+
+            'Notes' => 'nullable|string',
+            'Remarks' => 'nullable|string',
         ];
     }
 }

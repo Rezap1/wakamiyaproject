@@ -14,8 +14,22 @@ class PayrollRepository extends BaseSheetRepository implements PayrollRepository
     }
 
     public function getAll() { return $this->fetchAll(); }
+    
     public function getById($id) { return $this->fetchAll()->firstWhere($this->primaryKey, $id); }
+    
+    public function findByEmployeeAndPeriod(string $employeeId, string $period)
+    {
+        return $this->fetchAll()->first(function ($item) use ($employeeId, $period) {
+            $itemPeriod = $item['Payroll_Period'] ?? $item['Period'] ?? '';
+            return ($item['Employee_ID'] ?? '') === $employeeId &&
+                   $itemPeriod === $period &&
+                   ($item['Status'] ?? '') !== 'Cancelled';
+        });
+    }
+
     public function create(array $data) { return $this->append($data); }
+    
+    public function update($id, array $data) { return $this->updateRow($id, $data); }
 
     public function delete($id) { return $this->updateRow($id, ['Status' => 'Cancelled']); }
 }

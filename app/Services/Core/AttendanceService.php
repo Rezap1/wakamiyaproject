@@ -23,6 +23,25 @@ class AttendanceService
         return $this->repository->findById($id);
     }
 
+    public function getEmployeeAttendanceBySession(string $employeeId, string $sessionId)
+    {
+        $all = collect($this->getAll());
+        return $all->first(function ($att) use ($employeeId, $sessionId) {
+            return ($att['Employee_ID'] ?? '') === $employeeId && 
+                   ($att['Session_ID'] ?? '') === $sessionId &&
+                   strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+        });
+    }
+
+    public function getEmployeeAttendances(string $employeeId)
+    {
+        $all = collect($this->getAll());
+        return $all->filter(function ($att) use ($employeeId) {
+            return ($att['Employee_ID'] ?? '') === $employeeId &&
+                   strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+        })->values();
+    }
+
     public function generateId()
     {
         return $this->repository->generateNewId('ATT', 6);

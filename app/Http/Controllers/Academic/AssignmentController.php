@@ -39,11 +39,10 @@ class AssignmentController extends Controller
         ];
     }
 
-    protected $assignmentService, $activityLogService;
-    public function __construct(AssignmentService $assignmentService, ActivityLogService $activityLogService)
+    protected $assignmentService;
+    public function __construct(AssignmentService $assignmentService)
     {
         $this->assignmentService = $assignmentService;
-        $this->activityLogService = $activityLogService;
     }
     public function index() {
         $assignments = $this->assignmentService->getAll();
@@ -75,7 +74,6 @@ class AssignmentController extends Controller
     }
     public function store(\App\Http\Requests\StoreAssignmentRequest $request) {
         $this->assignmentService->create($request->except('_token'));
-        $this->activityLogService->log(auth()->id(), 'CREATED', 'Assignment', 'Created assignment: ' . $request->Title);
         return redirect()->route('assignments.index')->with('success', 'Created!');
     }
     public function edit(
@@ -106,7 +104,6 @@ class AssignmentController extends Controller
     }
     public function update(\App\Http\Requests\UpdateAssignmentRequest $request, $id) {
         $this->assignmentService->update($id, $request->except(['_token', '_method']));
-        $this->activityLogService->log(auth()->id(), 'UPDATED', 'Assignment', 'Updated assignment ' . $id);
         return redirect()->route('assignments.index')->with('success', 'Updated!');
     }
     public function destroy($id) {

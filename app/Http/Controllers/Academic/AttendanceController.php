@@ -57,12 +57,11 @@ class AttendanceController extends Controller
         ];
     }
 
-    protected $attendanceService, $activityLogService;
+    protected $attendanceService;
 
-    public function __construct(AttendanceService $attendanceService, ActivityLogService $activityLogService)
+    public function __construct(AttendanceService $attendanceService)
     {
         $this->attendanceService = $attendanceService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(Request $request)
@@ -198,7 +197,6 @@ class AttendanceController extends Controller
                 }
             }
             
-            $this->activityLogService->log(auth()->id(), 'MARK_ATTENDANCE', 'Attendance', "Marked attendance for $count students in class $classId");
             return redirect()->route('attendances.index')->with('success', "Kehadiran $count siswa berhasil dicatat.");
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -227,7 +225,6 @@ class AttendanceController extends Controller
     public function update(\App\Http\Requests\UpdateAttendanceRequest $request, $id)
     {
         $this->attendanceService->update($id, $request->except(['_token', '_method']));
-        $this->activityLogService->log(auth()->id(), 'UPDATE_ATTENDANCE', 'Attendance', 'Updated attendance ' . $id);
         return redirect()->route('attendances.index')->with('success', 'Attendance Updated.');
     }
 
@@ -247,7 +244,6 @@ class AttendanceController extends Controller
     {
         try {
             $this->attendanceService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETE_ATTENDANCE', 'Attendance', 'Deleted attendance ' . $id);
             return redirect()->route('attendances.index')->with('success', 'Data kehadiran berhasil dihapus.');
         } catch (\Exception $e) {
             return redirect()->route('attendances.index')->withErrors(['error' => 'Gagal menghapus data: ' . $e->getMessage()]);

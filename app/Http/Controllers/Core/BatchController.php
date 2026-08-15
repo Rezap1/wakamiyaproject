@@ -70,16 +70,13 @@ class BatchController extends Controller
 
     protected $batchService;
     protected $programService;
-    protected $activityLogService;
 
     public function __construct(
         BatchService $batchService,
-        ProgramService $programService,
-        ActivityLogService $activityLogService
+        ProgramService $programService
     ) {
         $this->batchService = $batchService;
         $this->programService = $programService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -147,17 +144,6 @@ class BatchController extends Controller
         try {
             $data = $request->validated();
             $batch = $this->batchService->createBatch($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_BATCH',
-                "Membuat angkatan baru: {$batch['Batch_ID']} - {$batch['Batch_Name']}",
-                $request->ip(),
-                null,
-                $batch,
-                $request->userAgent()
-            );
 
             return redirect()->route('batches.index')->with('success', 'Angkatan (Batch) berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -219,19 +205,6 @@ class BatchController extends Controller
 
             $data = $request->validated();
             $this->batchService->updateBatch($id, $data);
-            
-            $updatedBatch = $this->batchService->getBatchById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_BATCH',
-                "Memperbarui data angkatan: {$id}",
-                $request->ip(),
-                $batch,
-                $updatedBatch,
-                $request->userAgent()
-            );
 
             return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -249,17 +222,6 @@ class BatchController extends Controller
             }
 
             $this->batchService->deleteBatch($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_BATCH',
-                "Menonaktifkan angkatan (Hard Delete): {$id}",
-                request()->ip(),
-                $batch,
-                array_merge($batch, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil dihapus.');
         } catch (\Exception $e) {

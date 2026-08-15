@@ -54,14 +54,11 @@ class CompanyController extends Controller
     }
 
     protected $companyService;
-    protected $activityLogService;
 
     public function __construct(
-        CompanyService $companyService,
-        ActivityLogService $activityLogService
+        CompanyService $companyService
     ) {
         $this->companyService = $companyService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -112,17 +109,6 @@ class CompanyController extends Controller
             }
 
             $company = $this->companyService->createCompany($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_COMPANY',
-                "Mendaftarkan perusahaan baru: {$company['Company_Code']} - {$company['Company_Name']}",
-                $request->ip(),
-                null,
-                $company,
-                $request->userAgent()
-            );
 
             return redirect()->route('companies.index')->with('success', 'Data Perusahaan berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -180,19 +166,6 @@ class CompanyController extends Controller
             }
 
             $this->companyService->updateCompany($id, $data);
-            
-            $updatedCompany = $this->companyService->getCompanyById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_COMPANY',
-                "Memperbarui profil perusahaan: {$id}",
-                $request->ip(),
-                $company,
-                $updatedCompany,
-                $request->userAgent()
-            );
 
             return redirect()->route('companies.index')->with('success', 'Profil perusahaan berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -210,17 +183,6 @@ class CompanyController extends Controller
             }
 
             $this->companyService->deleteCompany($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_COMPANY',
-                "Menonaktifkan perusahaan (Hard Delete): {$id}",
-                request()->ip(),
-                $company,
-                array_merge($company, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('companies.index')->with('success', 'Data perusahaan berhasil dihapus.');
         } catch (\Exception $e) {

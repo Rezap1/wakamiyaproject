@@ -1,9 +1,12 @@
 <?php
+
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Finance\AccountService;
+use App\Http\Requests\StoreAccountRequest;
+use App\Http\Requests\UpdateAccountRequest;
 
 class AccountController extends Controller
 {
@@ -11,7 +14,7 @@ class AccountController extends Controller
 
     protected $exportDateField = 'Created_At';
 
-    protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
         $accounts = $this->accountService->getAll();
         
@@ -19,26 +22,29 @@ class AccountController extends Controller
             $search = strtolower($request->search);
             $accounts = $accounts->filter(function($acc) use ($search) {
                 return str_contains(strtolower($acc['Account_Code'] ?? ''), $search) ||
-                        str_contains(strtolower($acc['Account_Name'] ?? ''), $search);
+                        str_contains(strtolower($acc['Account_Name'] ?? ''), $search) ||
+                        str_contains(strtolower($acc['Account_Category'] ?? ''), $search);
             })->values();
         }
         
         return [
-            'moduleName' => 'Master Akun (Accounts)',
+            'moduleName' => 'Master Akun (Chart of Accounts)',
             'data' => collect(array_values($accounts->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['Kode Akun', 'Nama Akun', 'Kategori', 'Keterangan', 'Status'],
+            'headers' => ['Kode Akun', 'Nama Akun', 'Kategori Akun', 'Normal Balance', 'Akun Induk', 'Keterangan', 'Status'],
             'mapRow' => function($row) {
                 return [
                     $row['Account_Code'] ?? '-', 
                     $row['Account_Name'] ?? '-', 
                     $row['Account_Category'] ?? '-', 
+                    $row['Normal_Balance'] ?? 'DEBIT',
+                    $row['Parent_Account_ID'] ?? '-', 
                     $row['Description'] ?? '-',
-                    $row['Is_Active'] ? 'Aktif' : 'Tidak Aktif'
+                    (($row['Is_Active'] ?? 'TRUE') === 'TRUE') ? 'Aktif' : 'Tidak Aktif'
                 ];
             },
-            'isLandscape' => false,
-            'summary' => '<tr><td>Total Data</td><td>: '.$accounts->count().'</td></tr>'
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Akun Master</td><td>: '.$accounts->count().'</td></tr>'
         ];
     }
 
@@ -57,7 +63,8 @@ class AccountController extends Controller
             $search = strtolower($request->search);
             $accounts = $accounts->filter(function($acc) use ($search) {
                 return str_contains(strtolower($acc['Account_Code'] ?? ''), $search) ||
-                        str_contains(strtolower($acc['Account_Name'] ?? ''), $search);
+                        str_contains(strtolower($acc['Account_Name'] ?? ''), $search) ||
+                        str_contains(strtolower($acc['Account_Category'] ?? ''), $search);
             })->values();
         }
 
@@ -72,19 +79,11 @@ class AccountController extends Controller
         return view('finance.accounts.create', compact('accounts'));
     }
 
-    public function store(Request $request)
+    public function store(StoreAccountRequest $request)
     {
         try {
-            $request->validate([
-                'Account_Code' => 'required|string|max:50',
-                'Account_Name' => 'required|string|max:255',
-                'Account_Category' => 'required|string',
-                'Parent_Account_ID' => 'nullable|string',
-                'Description' => 'nullable|string'
-            ]);
-
-            $this->accountService->create($request->except('_token'));
-            return redirect()->route('accounts.index')->with('success', 'Master Account berhasil ditambahkan.');
+            $this->accountService->create($request->validated());
+            return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil ditambahkan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
         }
@@ -100,19 +99,11 @@ class AccountController extends Controller
         return view('finance.accounts.edit', compact('account', 'accounts'));
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateAccountRequest $request, $id)
     {
         try {
-            $request->validate([
-                'Account_Code' => 'required|string|max:50',
-                'Account_Name' => 'required|string|max:255',
-                'Account_Category' => 'required|string',
-                'Parent_Account_ID' => 'nullable|string',
-                'Description' => 'nullable|string'
-            ]);
-
-            $this->accountService->update($id, $request->except(['_token', '_method']));
-            return redirect()->route('accounts.index')->with('success', 'Master Account berhasil diupdate.');
+            $this->accountService->update($id, $request->validated());
+            return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
         }
@@ -122,7 +113,7 @@ class AccountController extends Controller
     {
         try {
             $this->accountService->delete($id);
-            return redirect()->route('accounts.index')->with('success', 'Master Account berhasil dihapus.');
+            return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }

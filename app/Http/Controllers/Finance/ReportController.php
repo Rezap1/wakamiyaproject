@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
@@ -7,7 +8,10 @@ use App\Services\Finance\FinanceReportService;
 
 class ReportController extends Controller
 {
+    use \App\Traits\Exportable;
+
     protected $reportService;
+    protected $exportDateField = 'Transaction_Date';
 
     public function __construct(FinanceReportService $reportService)
     {
@@ -21,12 +25,18 @@ class ReportController extends Controller
 
     public function cashFlow(Request $request)
     {
-        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        
-        $data = $this->reportService->getCashFlow($startDate, $endDate);
-        
-        return view('finance.reports.cash_flow', array_merge($data, compact('startDate', 'endDate')));
+        try {
+            $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+            $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+            $accountId = $request->input('account_id', 'ALL');
+            $category = $request->input('category', 'ALL');
+            
+            $data = $this->reportService->getCashFlow($startDate, $endDate, $accountId, $category);
+            
+            return view('finance.reports.cash_flow', array_merge($data, compact('startDate', 'endDate', 'accountId', 'category')));
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     public function outstandingInvoices(Request $request)
@@ -39,9 +49,6 @@ class ReportController extends Controller
         
         return view('finance.reports.outstanding', array_merge($data, compact('type', 'studentId', 'companyId')));
     }
-    use \App\Traits\Exportable;
-
-    protected $exportDateField = 'Transaction_Date'; // Default for cash flow
 
     public function getExportConfig(Request $request)
     {
@@ -88,28 +95,34 @@ class ReportController extends Controller
         // Default: cash_flow
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        $data = $this->reportService->getCashFlow($startDate, $endDate);
+        $accountId = $request->input('account_id', 'ALL');
+        $category = $request->input('category', 'ALL');
+
+        $data = $this->reportService->getCashFlow($startDate, $endDate, $accountId, $category);
 
         $this->exportDateField = 'Transaction_Date';
 
         return [
-            'moduleName' => 'Laporan Arus Kas',
+            'moduleName' => 'Laporan Arus Kas (Cash Flow)',
             'data' => collect($data['transactions'] ?? collect([]))->values(),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Nominal'],
+            'headers' => ['Tanggal', 'Akun', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'],
             'mapRow' => function($row) {
                 return [
                     $row['Transaction_Date'] ?? '-',
-                    $row['Transaction_Type'] ?? '-',
+                    $row['Account_ID'] ?? '-',
+                    $row['Type'] ?? '-',
                     $row['Category'] ?? '-',
                     $row['Description'] ?? '-',
                     'Rp ' . number_format((float)($row['Amount'] ?? 0), 0, ',', '.')
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Pemasukan</td><td>: Rp ' . number_format($data['total_income'] ?? 0, 0, ',', '.') . '</td></tr>' .
-                         '<tr><td>Pengeluaran</td><td>: Rp ' . number_format($data['total_expense'] ?? 0, 0, ',', '.') . '</td></tr>' .
-                         '<tr><td>Arus Kas Bersih</td><td>: Rp ' . number_format($data['net_cash_flow'] ?? 0, 0, ',', '.') . '</td></tr>'
+            'summary' => '<tr><td>Saldo Awal (Opening Balance)</td><td>: Rp ' . number_format($data['opening_balance'] ?? 0, 0, ',', '.') . '</td></tr>' .
+                         '<tr><td>Total Pemasukan (Income)</td><td>: Rp ' . number_format($data['total_income'] ?? 0, 0, ',', '.') . '</td></tr>' .
+                         '<tr><td>Total Pengeluaran (Expense)</td><td>: Rp ' . number_format($data['total_expense'] ?? 0, 0, ',', '.') . '</td></tr>' .
+                         '<tr><td>Arus Kas Bersih (Net Cash Flow)</td><td>: Rp ' . number_format($data['net_cash_flow'] ?? 0, 0, ',', '.') . '</td></tr>' .
+                         '<tr><td><strong>Saldo Akhir (Closing Balance)</strong></td><td><strong>: Rp ' . number_format($data['closing_balance'] ?? 0, 0, ',', '.') . '</strong></td></tr>'
         ];
     }
 }

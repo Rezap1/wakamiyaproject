@@ -90,20 +90,17 @@ class ClassController extends Controller
     protected $programService;
     protected $batchService;
     protected $teacherService;
-    protected $activityLogService;
 
     public function __construct(
         ClassService $classService,
         ProgramService $programService,
         BatchService $batchService,
-        TeacherService $teacherService,
-        ActivityLogService $activityLogService
+        TeacherService $teacherService
     ) {
         $this->classService = $classService;
         $this->programService = $programService;
         $this->batchService = $batchService;
         $this->teacherService = $teacherService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -190,17 +187,6 @@ class ClassController extends Controller
         try {
             $data = $request->validated();
             $class = $this->classService->createClass($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_CLASS',
-                "Membuat kelas baru: {$class['Class_ID']} - {$class['Class_Name']}",
-                $request->ip(),
-                null,
-                $class,
-                $request->userAgent()
-            );
 
             return redirect()->route('classes.index')->with('success', 'Kelas berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -277,19 +263,6 @@ class ClassController extends Controller
 
             $data = $request->validated();
             $this->classService->updateClass($id, $data);
-            
-            $updatedClass = $this->classService->getClassById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_CLASS',
-                "Memperbarui data kelas: {$id}",
-                $request->ip(),
-                $class,
-                $updatedClass,
-                $request->userAgent()
-            );
 
             return redirect()->route('classes.index')->with('success', 'Data kelas berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -307,17 +280,6 @@ class ClassController extends Controller
             }
 
             $this->classService->deleteClass($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_CLASS',
-                "Menonaktifkan kelas (Hard Delete): {$id}",
-                request()->ip(),
-                $class,
-                array_merge($class, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('classes.index')->with('success', 'Data kelas berhasil dihapus.');
         } catch (\Exception $e) {

@@ -1,68 +1,89 @@
 @extends('layouts.app')
 
 @section('header')
-    <div class="flex justify-between items-center">
-        <h2 class="font-semibold text-xl text-slate-800 leading-tight">Akun Master</h2>
-        <a href="{{ route('accounts.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700">Tambah Akun</a>
-    </div>
+    <h2 class="font-bold text-xl text-slate-800 leading-tight">Master Akun Keuangan (Chart of Accounts)</h2>
 @endsection
 
 @section('content')
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            
-            <div class="bg-white p-4 rounded shadow mb-6">
-                <form method="GET" action="{{ route('accounts.index') }}" class="flex gap-4">
-                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari Kode / Nama Akun..." class="form-input w-full md:w-1/3 rounded-md border-gray-300">
-                    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700">Cari</button>
-                    @if(request('search'))
-                        <a href="{{ route('accounts.index') }}" class="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300">Reset</a>
-                    @endif
-                </form>
-            </div>
-
-            <x-slot:headerActions>
+<x-universal.index-layout 
+    title="Master Akun (Chart of Accounts)" 
+    description="Kelola seluruh daftar akun keuangan, kategori akuntansi standar, dan saldo normal."
+    :breadcrumbs="['Dasbor' => route('dashboard'), 'Keuangan' => '#', 'Master Akun' => route('accounts.index')]"
+    add-action="{{ route('accounts.create') }}"
+    add-text="Tambah Akun"
+>
+    <x-slot:headerActions>
         <x-universal.multi-export route-prefix="accounts" />
     </x-slot:headerActions>
-    <x-universal.data-table>
-                <x-slot:header>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode Akun</th>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Akun</th>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipe</th>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Induk</th>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Dibuat</th>
-                    <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                </x-slot:header>
+    <x-slot:toolbar>
+        <x-universal.toolbar 
+            search-url="{{ route('accounts.index') }}" 
+            refresh-url="{{ route('accounts.index') }}"
+            export-url="{{ route('accounts.export-pdf') }}"
+        />
+    </x-slot:toolbar>
 
-                @forelse($accounts as $account)
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ $account['Account_Code'] ?? '-' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $account['Account_Name'] ?? '-' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $account['Account_Category'] ?? '-' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $account['Parent_Account_ID'] ?? '-' }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                        {{ isset($account['Created_At']) && $account['Created_At'] ? \Carbon\Carbon::parse($account['Created_At'])->format('d M Y') : '-' }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex space-x-2">
-                        <a href="{{ route('accounts.edit', $account['Account_ID']) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
-                        <form action="{{ route('accounts.destroy', $account['Account_ID']) }}" method="POST" onsubmit="return confirm('Yakin ingin menghapus?');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
-                        </form>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">Data Akun Master tidak ditemukan.</td>
-                </tr>
-                @endforelse
-            </x-universal.data-table>
+    <x-universal.data-table :empty="count($accounts) === 0" empty-title="Data Akun Kosong" empty-description="Belum ada master akun yang terdaftar.">
+        <x-slot:header>
+            <th class="px-6 py-4">Kode Akun</th>
+            <th class="px-6 py-4">Nama Akun</th>
+            <th class="px-6 py-4 text-center">Kategori Akun</th>
+            <th class="px-6 py-4 text-center">Saldo Normal</th>
+            <th class="px-6 py-4">Akun Induk</th>
+            <th class="px-6 py-4 text-right">Aksi</th>
+        </x-slot:header>
 
-            <div class="mt-4">
-                {{ $accounts->links() }}
-            </div>
-            
-        </div>
-    </div>
+        @foreach($accounts as $account)
+            @php
+                $cat = strtoupper($account['Account_Category'] ?? 'ASSET');
+                $norm = strtoupper($account['Normal_Balance'] ?? ($cat === 'ASSET' || $cat === 'EXPENSE' ? 'DEBIT' : 'CREDIT'));
+            @endphp
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-6 py-4 font-mono font-bold text-slate-800 text-sm">
+                    {{ $account['Account_Code'] ?? '-' }}
+                </td>
+                <td class="px-6 py-4 font-bold text-slate-800 text-sm">
+                    {{ $account['Account_Name'] ?? '-' }}
+                    @if(!empty($account['Description']))
+                        <div class="text-xs text-slate-400 font-normal truncate max-w-xs mt-0.5">{{ $account['Description'] }}</div>
+                    @endif
+                </td>
+                <td class="px-6 py-4 text-center">
+                    @if($cat === 'ASSET')
+                        <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-100 text-blue-800">ASSET</span>
+                    @elseif($cat === 'LIABILITY')
+                        <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-800">LIABILITY</span>
+                    @elseif($cat === 'EQUITY')
+                        <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-indigo-100 text-indigo-800">EQUITY</span>
+                    @elseif($cat === 'REVENUE')
+                        <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-800">REVENUE</span>
+                    @else
+                        <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-100 text-rose-800">EXPENSE</span>
+                    @endif
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <span class="px-2.5 py-1 text-xs font-black rounded-lg border {{ $norm === 'DEBIT' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200' }}">
+                        {{ $norm }}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm font-medium text-slate-600">
+                    {{ $account['Parent_Account_ID'] ?: '-' }}
+                </td>
+                <td class="px-6 py-4 text-right">
+                    <div class="flex items-center justify-end gap-2">
+                        <x-universal.action-button action="edit" url="{{ route('accounts.edit', $account['Account_ID']) }}" />
+                        <x-universal.action-button action="delete" url="{{ route('accounts.destroy', $account['Account_ID']) }}" />
+                    </div>
+                </td>
+            </tr>
+        @endforeach
+        
+        <x-slot:pagination>
+            @if(method_exists($accounts, 'links'))
+                <x-universal.pagination :paginator="$accounts" />
+            @endif
+        </x-slot:pagination>
+    </x-universal.data-table>
+
+</x-universal.index-layout>
 @endsection

@@ -80,7 +80,6 @@ class StudentController extends Controller
     protected $programService;
     protected $batchService;
     protected $classService;
-    protected $activityLogService;
     protected $userService;
 
     public function __construct(
@@ -88,14 +87,12 @@ class StudentController extends Controller
         ProgramService $programService,
         BatchService $batchService,
         ClassService $classService,
-        ActivityLogService $activityLogService,
         \App\Services\Core\UserService $userService
     ) {
         $this->studentService = $studentService;
         $this->programService = $programService;
         $this->batchService = $batchService;
         $this->classService = $classService;
-        $this->activityLogService = $activityLogService;
         $this->userService = $userService;
     }
 
@@ -209,17 +206,6 @@ class StudentController extends Controller
         try {
             $data = $request->validated();
             $student = $this->studentService->createStudent($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_STUDENT',
-                "Mendaftarkan siswa baru: {$student['Student_ID']} - {$student['Full_Name']}",
-                $request->ip(),
-                null,
-                $student,
-                $request->userAgent()
-            );
 
             return redirect()->route('students.index')->with('success', 'Siswa berhasil didaftarkan.');
         } catch (\Exception $e) {
@@ -304,19 +290,6 @@ class StudentController extends Controller
 
             $data = $request->validated();
             $this->studentService->updateStudent($id, $data);
-            
-            $updatedStudent = $this->studentService->getStudentById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_STUDENT',
-                "Memperbarui data profil siswa: {$id}",
-                $request->ip(),
-                $student,
-                $updatedStudent,
-                $request->userAgent()
-            );
 
             return redirect()->route('students.index')->with('success', 'Data profil siswa berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -334,17 +307,6 @@ class StudentController extends Controller
             }
 
             $this->studentService->deleteStudent($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_STUDENT',
-                "Menonaktifkan data siswa (Hard Delete): {$id}",
-                request()->ip(),
-                $student,
-                array_merge($student, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('students.index')->with('success', 'Data siswa berhasil dihapus.');
         } catch (\Exception $e) {

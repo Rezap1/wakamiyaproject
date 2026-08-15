@@ -1,85 +1,93 @@
 @extends('layouts.app')
 
 @section('header')
-        <h2 class="font-semibold text-xl text-slate-800 leading-tight">Laporan Piutang</h2>
+    <h2 class="font-bold text-xl text-slate-800 leading-tight">Laporan Piutang & Tagihan Belum Lunas</h2>
 @endsection
 
 @section('content')
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            
-            <div class="bg-white p-4 rounded shadow mb-6">
-                <form method="GET" action="{{ route('reports.finance.outstanding') }}" class="flex flex-col md:flex-row gap-4 items-end">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Tipe Invoice</label>
-                        <select name="type" class="form-select rounded-md border-gray-300">
-                            <option value="">Semua Tipe</option>
-                            <option value="STUDENT" {{ $type == 'STUDENT' ? 'selected' : '' }}>Siswa</option>
-                            <option value="COMPANY" {{ $type == 'COMPANY' ? 'selected' : '' }}>Perusahaan</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700 h-10">Filter</button>
-                    <div class="ml-auto h-10 flex items-center">
-                        <x-universal.multi-export route-prefix="reports.finance" :extra-params="['report_type' => 'outstanding']" />
-                    </div>
-                </form>
-            </div>
+<div class="space-y-6">
+    <x-universal.index-layout 
+        title="Laporan Piutang" 
+        description="Pantau seluruh sisa piutang tagihan aktif, status pembayaran parsial, dan tagihan terkurasi terlambat (OVERDUE)."
+        :breadcrumbs="['Dasbor' => route('dashboard.finance'), 'Keuangan' => '#', 'Laporan' => route('reports.finance.index'), 'Laporan Piutang' => route('reports.finance.outstanding')]"
+    >
+        <x-slot:headerActions>
+            <x-universal.multi-export route-prefix="reports.finance" :extra-params="['report_type' => 'outstanding']" />
+        </x-slot:headerActions>
 
-            <div class="bg-white p-4 rounded shadow border-l-4 border-red-500 mb-6">
-                <p class="text-gray-500 text-sm">Total Piutang Belum Terbayar</p>
-                <p class="text-3xl font-bold text-red-600">Rp {{ number_format($total_outstanding, 0, ',', '.') }}</p>
-            </div>
-
-            <div class="bg-white rounded shadow overflow-hidden">
-                <div class="p-4 border-b">
-                    <h3 class="font-bold">Rincian Tagihan Belum Lunas</h3>
+        <x-slot:toolbar>
+            <form method="GET" action="{{ route('reports.finance.outstanding') }}" class="w-full flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <select name="type" class="bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5" onchange="this.form.submit()">
+                        <option value="">Semua Tipe Entitas</option>
+                        <option value="STUDENT" {{ $type == 'STUDENT' ? 'selected' : '' }}>Siswa</option>
+                        <option value="COMPANY" {{ $type == 'COMPANY' ? 'selected' : '' }}>Perusahaan</option>
+                    </select>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jatuh Tempo</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">No Tagihan</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tujuan</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Tagihan</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sudah Dibayar</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sisa Piutang</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            @forelse($invoices as $inv)
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 {{ $inv['Due_Date'] < date('Y-m-d') ? 'text-red-600 font-bold' : '' }}">{{ $inv['Due_Date'] ?? '-' }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ $inv['Invoice_ID'] ?? '-' }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    @if($inv['Invoice_Type'] == 'STUDENT')
-                                        Siswa: {{ $inv['Student_Name'] ?? $inv['Student_ID'] }}
-                                    @elseif($inv['Invoice_Type'] == 'COMPANY')
-                                        Perusahaan: {{ $inv['Company_Name'] ?? $inv['Company_ID'] }}
-                                    @else
-                                        {{ $inv['Invoice_Type'] }}
-                                    @endif
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                        {{ $inv['Status'] ?? '-' }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">Rp {{ number_format($inv['Amount'] ?? 0, 0, ',', '.') }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">Rp {{ number_format($inv['Paid_Amount'] ?? 0, 0, ',', '.') }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-right text-red-600">Rp {{ number_format($inv['Remaining_Amount'] ?? 0, 0, ',', '.') }}</td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="7" class="px-6 py-4 text-center text-gray-500">Tidak ada piutang saat ini.</td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-        </div>
-    </div>
+                <div class="bg-rose-50 border border-rose-200 px-4 py-2 rounded-xl flex items-center gap-3">
+                    <span class="text-xs font-bold text-rose-800 uppercase">Total Piutang Belum Terbayar:</span>
+                    <span class="text-lg font-black text-rose-600">Rp {{ number_format($total_outstanding, 0, ',', '.') }}</span>
+                </div>
+            </form>
+        </x-slot:toolbar>
+
+        <x-universal.data-table :empty="count($invoices) === 0" empty-title="Tidak Ada Piutang" empty-description="Seluruh tagihan telah lunas atau belum ada tagihan aktif.">
+            <x-slot:header>
+                <th class="px-6 py-4">Jatuh Tempo</th>
+                <th class="px-6 py-4">No. Tagihan</th>
+                <th class="px-6 py-4">Penerima Tagihan</th>
+                <th class="px-6 py-4 text-center">Status</th>
+                <th class="px-6 py-4 text-right">Total Tagihan</th>
+                <th class="px-6 py-4 text-right">Sudah Dibayar</th>
+                <th class="px-6 py-4 text-right">Sisa Piutang</th>
+            </x-slot:header>
+
+            @foreach($invoices as $inv)
+                @php
+                    $status = $inv['Status'] ?? 'Waiting Payment';
+                    $remaining = (float)($inv['Remaining_Amount'] ?? 0);
+                @endphp
+                <tr class="hover:bg-slate-50 transition-colors {{ $status === 'OVERDUE' ? 'bg-rose-50/50' : '' }}">
+                    <td class="px-6 py-4 text-sm font-bold {{ $status === 'OVERDUE' ? 'text-rose-600' : 'text-slate-800' }}">
+                        {{ !empty($inv['Due_Date']) ? \Carbon\Carbon::parse($inv['Due_Date'])->format('d M Y') : '-' }}
+                        @if($status === 'OVERDUE')
+                            <div class="text-[10px] font-black text-rose-500 uppercase mt-0.5">⚠️ Terlambat</div>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 font-mono font-bold text-slate-800 text-sm">
+                        {{ $inv['Invoice_ID'] ?? '-' }}
+                    </td>
+                    <td class="px-6 py-4 text-sm font-bold text-slate-800">
+                        @if(($inv['Invoice_Type'] ?? '') == 'STUDENT')
+                            Siswa: {{ $inv['Student_Name'] ?? ($inv['Student_ID'] ?? '-') }}
+                        @elseif(($inv['Invoice_Type'] ?? '') == 'COMPANY')
+                            Perusahaan: {{ $inv['Company_Name'] ?? ($inv['Company_ID'] ?? '-') }}
+                        @else
+                            {{ $inv['Invoice_Type'] ?? '-' }}
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        @if($status === 'OVERDUE')
+                            <span class="px-2.5 py-1 text-xs font-black rounded-lg bg-rose-500 text-white uppercase shadow-xs">⚠️ OVERDUE</span>
+                        @elseif($status === 'Partial Paid')
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-purple-100 text-purple-800 uppercase">🟪 PARTIAL PAID</span>
+                        @else
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-800 uppercase">⏳ WAITING PAYMENT</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 text-right font-bold text-slate-700 text-sm">
+                        Rp {{ number_format((float)($inv['Amount'] ?? 0), 0, ',', '.') }}
+                    </td>
+                    <td class="px-6 py-4 text-right font-bold text-emerald-600 text-sm">
+                        Rp {{ number_format((float)($inv['Paid_Amount'] ?? 0), 0, ',', '.') }}
+                    </td>
+                    <td class="px-6 py-4 text-right font-black text-rose-600 text-sm">
+                        Rp {{ number_format($remaining, 0, ',', '.') }}
+                    </td>
+                </tr>
+            @endforeach
+        </x-universal.data-table>
+    </x-universal.index-layout>
+</div>
 @endsection

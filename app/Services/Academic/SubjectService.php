@@ -3,14 +3,19 @@
 namespace App\Services\Academic;
 
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 
 class SubjectService
 {
     protected $repository;
+    protected $enterpriseEvent;
 
-    public function __construct(SubjectRepositoryInterface $repository)
-    {
+    public function __construct(
+        SubjectRepositoryInterface $repository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->repository = $repository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAll()
@@ -62,6 +67,18 @@ class SubjectService
         
         $result = $this->repository->create($data);
         $this->repository->clearCache();
+
+        $this->enterpriseEvent->dispatch(
+            'ACADEMIC',
+            'CREATE',
+            'SUBJECT',
+            $result['Subject_ID'] ?? $data['Subject_ID'],
+            auth()->id() ?? 'SYSTEM',
+            ['ACADEMIC'],
+            [],
+            $data
+        );
+
         return $result;
     }
     
@@ -72,6 +89,18 @@ class SubjectService
         $data['Updated_At'] = now()->toDateTimeString();
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
+
+        $this->enterpriseEvent->dispatch(
+            'ACADEMIC',
+            'UPDATE',
+            'SUBJECT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ACADEMIC'],
+            [],
+            $data
+        );
+
         return $result;
     }
     
@@ -79,6 +108,18 @@ class SubjectService
     {
         $result = $this->repository->delete($id);
         $this->repository->clearCache();
+
+        $this->enterpriseEvent->dispatch(
+            'ACADEMIC',
+            'DELETE',
+            'SUBJECT',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ACADEMIC'],
+            [],
+            []
+        );
+
         return $result;
     }
 }

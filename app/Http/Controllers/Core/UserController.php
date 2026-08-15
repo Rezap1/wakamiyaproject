@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Core\UserService;
 use App\Services\Core\RoleService;
-use App\Services\Core\ActivityLogService;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use Illuminate\Support\Facades\Auth;
@@ -16,13 +15,11 @@ class UserController extends Controller
 {
     protected $userService;
     protected $roleService;
-    protected $activityLogService;
 
-    public function __construct(UserService $userService, RoleService $roleService, ActivityLogService $activityLogService)
+    public function __construct(UserService $userService, RoleService $roleService)
     {
         $this->userService = $userService;
         $this->roleService = $roleService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(Request $request)
@@ -39,14 +36,7 @@ class UserController extends Controller
             $users = $users->where('Role_ID', $request->input('role'));
         }
 
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if ($status !== 'all') {
-                $users = $users->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
-            }
-        }
-
-        $users = \App\Helpers\CollectionHelper::paginate($users, 15)->withQueryString();
+        $users = \App\Helpers\CollectionHelper::paginate($users, 10)->withQueryString();
 
         return view('users.index', compact('users', 'roles'));
     }
@@ -54,8 +44,7 @@ class UserController extends Controller
     public function create()
     {
         $roles = $this->roleService->getAllRoles();
-        $nextUserId = $this->userService->getNextUserId();
-        return view('users.create', compact('roles', 'nextUserId'));
+        return view('users.create', compact('roles'));
     }
 
     public function store(StoreUserRequest $request)
@@ -64,8 +53,8 @@ class UserController extends Controller
             $data = $request->validated();
             
             // Cek email unique
-            $existing = $this->userService->getUserByEmail($data['Email']);
-            if ($existing) {
+            $existingEmail = $this->userService->getUserByEmail($data['Email']);
+            if ($existingEmail) {
                 return back()->withErrors(['Email' => 'Email already exists.'])->withInput();
             }
 
@@ -76,16 +65,6 @@ class UserController extends Controller
             }
 
             $newUser = $this->userService->createUser($data);
-
-            $this->activityLogService->logAction(
-                Auth::user()->User_ID ?? 'SYSTEM', 
-                'CREATE', 
-                'MASTER_USER', 
-                'Created user ' . ($data['Username'] ?? $data['Email']),
-                null,
-                null,
-                $newUser
-            );
 
             return redirect()->route('users.index')->with('success', 'Data pengguna berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -131,16 +110,6 @@ class UserController extends Controller
 
             $this->userService->updateUser($id, $data);
 
-            $this->activityLogService->logAction(
-                Auth::user()->User_ID ?? 'SYSTEM', 
-                'UPDATE', 
-                'MASTER_USER', 
-                'Updated user ' . ($data['Username'] ?? $data['Email']),
-                null,
-                $user,
-                $data
-            );
-
             return redirect()->route('users.index')->with('success', 'Data pengguna berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal mengupdate data di Spreadsheet: ' . $e->getMessage()])->withInput();
@@ -158,16 +127,6 @@ class UserController extends Controller
             // Soft delete
             $this->userService->deleteUser($id);
 
-            $this->activityLogService->logAction(
-                Auth::user()->User_ID ?? 'SYSTEM', 
-                'DELETE', 
-                'MASTER_USER', 
-                'Soft deleted user ' . ($user['Username'] ?? $id),
-                null,
-                $user,
-                ['Is_Active' => 'FALSE']
-            );
-
             return redirect()->route('users.index')->with('success', 'Pengguna berhasil dihapus (Hard Delete).');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $e->getMessage()]);
@@ -175,8 +134,6 @@ class UserController extends Controller
     }
 
     use \App\Traits\Exportable;
-
-    protected $exportDateField = 'Created_At';
 
     protected function getExportConfig(Request $request)
     {

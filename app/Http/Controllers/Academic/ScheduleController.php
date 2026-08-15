@@ -46,12 +46,10 @@ class ScheduleController extends Controller
     }
 
     protected $scheduleService;
-    protected $activityLogService;
 
-    public function __construct(ScheduleService $scheduleService, ActivityLogService $activityLogService)
+    public function __construct(ScheduleService $scheduleService)
     {
         $this->scheduleService = $scheduleService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(Request $request)
@@ -114,7 +112,6 @@ class ScheduleController extends Controller
         try {
             $data = $request->except('_token');
             $this->scheduleService->create($data);
-            $this->activityLogService->log(auth()->id(), 'CREATED', 'Master Schedule', 'Added new schedule for class ' . $request->Class_ID);
             return redirect()->route('schedules.index')->with('success', 'Schedule created successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -153,7 +150,6 @@ class ScheduleController extends Controller
         try {
             $data = $request->except(['_token', '_method']);
             $this->scheduleService->update($id, $data);
-            $this->activityLogService->log(auth()->id(), 'UPDATED', 'Master Schedule', 'Updated schedule ' . $id);
             return redirect()->route('schedules.index')->with('success', 'Schedule updated successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -164,7 +160,6 @@ class ScheduleController extends Controller
     {
         try {
             $this->scheduleService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETED', 'Master Schedule', 'Deleted schedule ' . $id);
             return redirect()->route('schedules.index')->with('success', 'Schedule deleted successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);

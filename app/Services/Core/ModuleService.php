@@ -3,14 +3,19 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\ModuleRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 
 class ModuleService
 {
     protected $moduleRepository;
+    protected $enterpriseEvent;
 
-    public function __construct(ModuleRepositoryInterface $moduleRepository)
-    {
+    public function __construct(
+        ModuleRepositoryInterface $moduleRepository,
+        EnterpriseEventService $enterpriseEvent
+    ) {
         $this->moduleRepository = $moduleRepository;
+        $this->enterpriseEvent = $enterpriseEvent;
     }
 
     public function getAllModules()
@@ -53,6 +58,17 @@ class ModuleService
 
         $this->moduleRepository->create($mappedData);
         
+        $this->enterpriseEvent->dispatch(
+            'MODULE',
+            'CREATE',
+            'MODULE',
+            $newId,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            $mappedData
+        );
+
         return $mappedData;
     }
     
@@ -70,11 +86,37 @@ class ModuleService
         if (isset($data['Is_Active'])) $mappedData['Is_Active'] = $data['Is_Active'];
         if (isset($data['Notes'])) $mappedData['Notes'] = $data['Notes'];
 
-        return $this->moduleRepository->update($id, $mappedData);
+        $res = $this->moduleRepository->update($id, $mappedData);
+
+        $this->enterpriseEvent->dispatch(
+            'MODULE',
+            'UPDATE',
+            'MODULE',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            $mappedData
+        );
+
+        return $res;
     }
 
     public function deleteModule($id)
     {
-        return $this->moduleRepository->delete($id);
+        $res = $this->moduleRepository->delete($id);
+
+        $this->enterpriseEvent->dispatch(
+            'MODULE',
+            'DELETE',
+            'MODULE',
+            $id,
+            auth()->id() ?? 'SYSTEM',
+            ['ADMINISTRATOR'],
+            [],
+            []
+        );
+
+        return $res;
     }
 }

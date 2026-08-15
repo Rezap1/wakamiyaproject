@@ -54,14 +54,11 @@ class ProgramController extends Controller
     }
 
     protected $programService;
-    protected $activityLogService;
 
     public function __construct(
-        ProgramService $programService,
-        ActivityLogService $activityLogService
+        ProgramService $programService
     ) {
         $this->programService = $programService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -103,17 +100,6 @@ class ProgramController extends Controller
         try {
             $data = $request->validated();
             $program = $this->programService->createProgram($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_PROGRAM',
-                "Membuat program baru: {$program['Program_ID']} - {$program['Program_Name']}",
-                $request->ip(),
-                null,
-                $program,
-                $request->userAgent()
-            );
 
             return redirect()->route('programs.index')->with('success', 'Program berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -162,19 +148,6 @@ class ProgramController extends Controller
 
             $data = $request->validated();
             $this->programService->updateProgram($id, $data);
-            
-            $updatedProgram = $this->programService->getProgramById($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_PROGRAM',
-                "Memperbarui data program: {$id}",
-                $request->ip(),
-                $program,
-                $updatedProgram,
-                $request->userAgent()
-            );
 
             return redirect()->route('programs.index')->with('success', 'Data program berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -192,17 +165,6 @@ class ProgramController extends Controller
             }
 
             $this->programService->deleteProgram($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_PROGRAM',
-                "Menonaktifkan program (Hard Delete): {$id}",
-                request()->ip(),
-                $program,
-                array_merge($program, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('programs.index')->with('success', 'Data program berhasil dihapus.');
         } catch (\Exception $e) {

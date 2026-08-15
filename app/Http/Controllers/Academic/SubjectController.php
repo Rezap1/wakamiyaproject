@@ -45,12 +45,10 @@ class SubjectController extends Controller
     }
 
     protected $subjectService;
-    protected $activityLogService;
 
-    public function __construct(SubjectService $subjectService, ActivityLogService $activityLogService)
+    public function __construct(SubjectService $subjectService)
     {
         $this->subjectService = $subjectService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index(Request $request)
@@ -82,7 +80,6 @@ class SubjectController extends Controller
         try {
             $data = $request->except('_token');
             $this->subjectService->create($data);
-            $this->activityLogService->log(auth()->id(), 'CREATED', 'Master Subject', 'Added new subject ' . $request->Subject_Name);
             return redirect()->route('subjects.index')->with('success', 'Subject created successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -101,7 +98,6 @@ class SubjectController extends Controller
         try {
             $data = $request->except(['_token', '_method']);
             $this->subjectService->update($id, $data);
-            $this->activityLogService->log(auth()->id(), 'UPDATED', 'Master Subject', 'Updated subject ' . $id);
             return redirect()->route('subjects.index')->with('success', 'Subject updated successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
@@ -112,7 +108,6 @@ class SubjectController extends Controller
     {
         try {
             $this->subjectService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETED', 'Master Subject', 'Deleted subject ' . $id);
             return redirect()->route('subjects.index')->with('success', 'Subject deleted successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);

@@ -62,13 +62,11 @@ class PositionController extends Controller
     }
     protected $positionService;
     protected $departmentService;
-    protected $activityLogService;
 
-    public function __construct(PositionService $positionService, DepartmentService $departmentService, ActivityLogService $activityLogService)
+    public function __construct(PositionService $positionService, DepartmentService $departmentService)
     {
         $this->positionService = $positionService;
         $this->departmentService = $departmentService;
-        $this->activityLogService = $activityLogService;
     }
 
     public function index()
@@ -118,17 +116,6 @@ class PositionController extends Controller
         try {
             $data = $request->validated();
             $position = $this->positionService->createPosition($data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'CREATE',
-                'MASTER_POSITION',
-                "Mendaftarkan posisi baru: {$position['Position_ID']}",
-                $request->ip(),
-                null,
-                $position,
-                $request->userAgent()
-            );
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil ditambahkan.');
         } catch (\Exception $e) {
@@ -190,17 +177,6 @@ class PositionController extends Controller
 
             $data = $request->validated();
             $this->positionService->updatePosition($id, $data);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'UPDATE',
-                'MASTER_POSITION',
-                "Memperbarui posisi: {$id}",
-                $request->ip(),
-                $position,
-                array_merge($position, $data),
-                $request->userAgent()
-            );
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil diperbarui.');
         } catch (\Exception $e) {
@@ -218,17 +194,6 @@ class PositionController extends Controller
             }
 
             $this->positionService->deletePosition($id);
-            
-            $this->activityLogService->logAction(
-                Auth::id() ?? 'SYSTEM',
-                'DELETE',
-                'MASTER_POSITION',
-                "Menonaktifkan posisi (Soft Delete): {$id}",
-                request()->ip(),
-                $position,
-                array_merge($position, ['Is_Active' => 'FALSE']),
-                request()->userAgent()
-            );
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil dinonaktifkan.');
         } catch (\Exception $e) {

@@ -78,8 +78,8 @@ class StudentBillingController extends Controller
             }
         }
 
-        // Calculate Sisa Tagihan Pendidikan (Only for 'Pendidikan' category)
-        $totalDibayarPendidikan = $myInvoices->where('Category', 'Pendidikan')->where('Status', 'Paid')->sum('Amount');
+        // Calculate Sisa Tagihan Pendidikan (Only for 'Biaya Pendidikan' category)
+        $totalDibayarPendidikan = $myInvoices->where('Category', 'Biaya Pendidikan')->where('Status', 'Paid')->sum('Amount');
         $sisaTagihan = max(0, $biayaBelajar - $totalDibayarPendidikan);
         
         $progress = 0;

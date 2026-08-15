@@ -40,11 +40,10 @@ class SubmissionController extends Controller
         ];
     }
 
-    protected $submissionService, $activityLogService;
-    public function __construct(SubmissionService $submissionService, ActivityLogService $activityLogService)
+    protected $submissionService;
+    public function __construct(SubmissionService $submissionService)
     {
         $this->submissionService = $submissionService;
-        $this->activityLogService = $activityLogService;
     }
     public function index(\App\Repositories\GoogleSheets\StudentRepository $studentRepo) {
         $submissions = $this->submissionService->getAll();
@@ -71,7 +70,6 @@ class SubmissionController extends Controller
         $data['Submission_Date'] = now()->toDateTimeString();
         $data['Status'] = 'Submitted';
         $this->submissionService->create($data);
-        $this->activityLogService->log(auth()->id(), 'UPLOADED', 'Submission', 'Uploaded submission for assignment ' . $request->Assignment_ID);
         return redirect()->route('submissions.index')->with('success', 'Submitted!');
     }
     public function edit(
@@ -87,7 +85,6 @@ class SubmissionController extends Controller
     public function update(\App\Http\Requests\UpdateSubmissionRequest $request, $id) {
         $data = $request->except(['_token', '_method']);
         $this->submissionService->update($id, $data);
-        $this->activityLogService->log(auth()->id(), 'REVIEWED', 'Submission', 'Reviewed submission ' . $id);
         
         // Sync to MASTER_SCORE if graded
         if (($data['Status'] ?? '') === 'Graded') {
@@ -120,7 +117,6 @@ class SubmissionController extends Controller
     {
         try {
             $this->submissionService->delete($id);
-            $this->activityLogService->log(auth()->id(), 'DELETED', 'Submission', 'Deleted submission ' . $id);
             return redirect()->route('submissions.index')->with('success', 'Submission berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
