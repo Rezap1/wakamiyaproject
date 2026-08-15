@@ -73,7 +73,7 @@
             </td>
             <td class="px-6 py-4">
                 <x-badge color="blue">{{ $employee['Employment_Status'] }}</x-badge>
-                <div class="text-[11px] font-medium text-slate-500 mt-1.5">Bergabung: {{ $employee['Join_Date'] ? \Carbon\Carbon::parse($employee['Join_Date'])->format('d M Y') : '-' }}</div>
+                <div class="text-[11px] font-medium text-slate-500 mt-1.5">Bergabung: {{ \App\Helpers\DateHelper::format($employee['Join_Date'] ?? '', 'd M Y') }}</div>
             </td>
             <td class="px-6 py-4">
                 <x-badge status="{{ ($employee['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Active' : 'Inactive' }}">

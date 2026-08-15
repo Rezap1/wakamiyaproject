@@ -112,12 +112,12 @@
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($student['Created_At']) ? \Carbon\Carbon::parse($student['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($student['Created_At'] ?? '', 'd M Y, H:i') }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($student['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($student['Updated_At']) ? \Carbon\Carbon::parse($student['Updated_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($student['Updated_At'] ?? '', 'd M Y, H:i') }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ $student['Updated_By'] ?? 'Sistem' }}</p>
                     </div>
                 </div>

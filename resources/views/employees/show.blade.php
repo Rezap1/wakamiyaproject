@@ -238,12 +238,12 @@
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($employee['Created_At']) ? \Carbon\Carbon::parse($employee['Created_At'])->format('d M Y, H:i:s') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($employee['Created_At'] ?? '', 'd M Y, H:i:s') }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($employee['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($employee['Updated_At']) ? \Carbon\Carbon::parse($employee['Updated_At'])->format('d M Y, H:i:s') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($employee['Updated_At'] ?? '', 'd M Y, H:i:s') }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ $employee['Updated_By'] ?? 'Sistem' }}</p>
                     </div>
                 </div>
