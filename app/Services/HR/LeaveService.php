@@ -264,6 +264,18 @@ class LeaveService
             throw new Exception("Dokumen Cuti #{$leaveId} tidak ditemukan.");
         }
 
+        // IDOR Protection for Student & Employee Users
+        $user = auth()->user();
+        if ($user && ($user->Role ?? '') === 'STUDENT') {
+            throw new Exception("Akses Ditolak: Siswa tidak memiliki akses ke dokumen cuti HR.");
+        }
+        if ($user && in_array(strtoupper($user->Role ?? ''), ['TEACHER', 'EMPLOYEE'])) {
+            $emp = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
+            if (!$emp || ($leave['Employee_ID'] ?? '') !== ($emp['Employee_ID'] ?? '')) {
+                throw new Exception("Akses Ditolak: Dokumen cuti #{$leaveId} bukan milik akun Anda.");
+            }
+        }
+
         $employee = $this->employeeRepo->findById($leave['Employee_ID'] ?? '') ?? [];
 
         $verificationUrl = route('leaves.verify-public', $leaveId);
@@ -277,13 +289,14 @@ class LeaveService
             }
         }
 
+        $systemSettingService = app(\App\Services\Core\SystemSettingService::class);
+        $companyProfile = $systemSettingService->getCompanyProfile();
+
         return [
-            'company' => [
-                'name' => 'WAKAMIYA MANAGEMENT SYSTEM',
-                'tagline' => 'Enterprise Human Resource Engine',
-                'address' => 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930',
-                'contact' => 'Telp: (021) 8000-9999 | Email: hr@wakamiya.ac.id'
-            ],
+            'companyProfile' => $companyProfile,
+            'company' => $companyProfile['company'],
+            'bank' => $companyProfile['bank'],
+            'document' => $companyProfile['document'],
             'leave' => $leave,
             'employee' => $employee,
             'verificationUrl' => $verificationUrl,

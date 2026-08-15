@@ -169,22 +169,13 @@
 </head>
 <body>
 
-    <!-- HEADER BRANDING -->
-    <table class="header-table">
-        <tr>
-            <td>
-                <div class="company-name">{{ $company['name'] ?? 'WAKAMIYA MANAGEMENT SYSTEM' }}</div>
-                <div class="company-sub">{{ $company['tagline'] ?? 'Enterprise ERP System' }}</div>
-                <div style="font-size: 9px; color: #64748b; margin-top: 4px;">
-                    {{ $company['address'] ?? '' }} &bull; {{ $company['contact'] ?? '' }}
-                </div>
-            </td>
-            <td class="doc-title">
-                <div class="doc-title-text">INVOICE TAGIHAN</div>
-                <div class="doc-subtitle">NO: {{ $invoice['Invoice_ID'] ?? '-' }}</div>
-            </td>
-        </tr>
-    </table>
+    <!-- SHARED OFFICIAL PDF HEADER (H8.4 / H8.6) -->
+    @include('pdf.components.header', ['company' => $company ?? $companyProfile['company'] ?? []])
+
+    <div style="text-align: right; margin-top: -15px; margin-bottom: 15px;">
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">INVOICE TAGIHAN</div>
+        <div style="font-size: 11px; font-weight: 700; color: #2563eb; font-family: monospace;">NO: {{ $invoice['Invoice_ID'] ?? '-' }}</div>
+    </div>
 
     <!-- INFORMATION CARDS -->
     <table class="info-grid">
@@ -306,47 +297,31 @@
                 </table>
             </td>
         </tr>
-    </table>
+    <!-- CENTRAL BANK PAYMENT INFORMATION (H8.2 / H8.6) -->
+    @php
+        $bankData   = $bank ?? $companyProfile['bank'] ?? [];
+        $bankName   = $bankData['name'] ?? '';
+        $bankAcc    = $bankData['account_number'] ?? '';
+        $bankHolder = $bankData['account_holder'] ?? '';
+    @endphp
+    @if(!empty($bankName) || !empty($bankAcc))
+        <div style="margin-top: 15px; margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
+            <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px;">Informasi Rekening Pembayaran Transfer Bank</div>
+            <div style="font-size: 10px; color: #0f172a;">
+                <strong>Nama Bank:</strong> {{ !empty($bankName) ? $bankName : '-' }} | 
+                <strong>No. Rekening:</strong> {{ !empty($bankAcc) ? $bankAcc : '-' }} | 
+                <strong>Atas Nama:</strong> {{ !empty($bankHolder) ? $bankHolder : '-' }}
+            </div>
+        </div>
+    @endif
 
-    <!-- FOOTER SIGNATURE & QR CODE -->
-    <table class="footer-table">
-        <tr>
-            <td>
-                <div class="qr-box">
-                    <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">Verifikasi Keabsahan Invoice</div>
-                    @if(!empty($qrCodeSvg))
-                        <div style="margin: 0 auto; display: inline-block;">
-                            {!! $qrCodeSvg !!}
-                        </div>
-                    @else
-                        <div style="font-size: 9px; color: #2563eb; font-weight: bold; word-break: break-all; margin: 10px 0;">
-                            {{ $verificationUrl }}
-                        </div>
-                    @endif
-                    <div style="font-size: 8px; color: #64748b; margin-top: 4px;">Pindai QR Code untuk memverifikasi keaslian dokumen tagihan ini secara publik.</div>
-                </div>
-            </td>
-            <td>
-                <div class="signature-box">
-                    <div style="font-size: 10px; font-weight: 700; color: #64748b;">Diterbitkan & Disahkan Oleh:</div>
-                    <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">Departemen Keuangan WMS</div>
-                    
-                    <div class="signature-line"></div>
-                    <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                        Finance Officer WMS
-                    </div>
-                    <div style="font-size: 9px; color: #64748b;">
-                        Tanggal: {{ date('d M Y') }}
-                    </div>
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    <!-- DISCLAIMER -->
-    <div class="disclaimer">
-        Dokumen ini merupakan Invoice Tagihan Resmi yang diterbitkan secara elektronik oleh Wakamiya Management System (WMS). Pembayaran dianggap sah setelah bukti pembayaran diverifikasi oleh Departemen Keuangan.
-    </div>
+    <!-- SHARED OFFICIAL PDF FOOTER (H8.5 / H8.6) -->
+    @include('pdf.components.footer', [
+        'document' => $document ?? $companyProfile['document'] ?? [],
+        'verificationUrl' => $verificationUrl ?? null,
+        'qrCodeSvg' => $qrCodeSvg ?? null,
+        'notice' => 'Dokumen ini merupakan Invoice Tagihan Resmi yang diterbitkan secara elektronik oleh ' . ($company['name'] ?? 'Wakamiya Management System (WMS)') . '. Pembayaran dianggap sah setelah bukti pembayaran diverifikasi oleh Departemen Keuangan.'
+    ])
 
 </body>
 </html>

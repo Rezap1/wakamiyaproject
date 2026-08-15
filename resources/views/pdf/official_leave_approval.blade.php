@@ -131,19 +131,13 @@
 </head>
 <body>
 
-    <!-- HEADER BRANDING -->
-    <table class="header-table">
-        <tr>
-            <td>
-                <div class="company-name">{{ $company['name'] ?? 'WAKAMIYA MANAGEMENT SYSTEM' }}</div>
-                <div class="company-sub">{{ $company['tagline'] ?? 'Enterprise Human Resource Engine' }}</div>
-            </td>
-            <td class="doc-title">
-                <div class="doc-title-text">SURAT PERSETUJUAN CUTI</div>
-                <div class="doc-subtitle">NO: {{ $leave['Document_Number'] ?? $leave['Leave_ID'] ?? '-' }}</div>
-            </td>
-        </tr>
-    </table>
+    <!-- SHARED OFFICIAL PDF HEADER (H8.4 / H8.8) -->
+    @include('pdf.components.header', ['company' => $company ?? $companyProfile['company'] ?? []])
+
+    <div style="text-align: right; margin-top: -15px; margin-bottom: 15px;">
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">SURAT PERSETUJUAN CUTI</div>
+        <div style="font-size: 11px; font-weight: 700; color: #2563eb; font-family: monospace;">NO: {{ $leave['Document_Number'] ?? $leave['Leave_ID'] ?? '-' }}</div>
+    </div>
 
     <!-- INFORMATION CARDS -->
     <table class="info-grid">
@@ -194,41 +188,13 @@
         </div>
     </div>
 
-    <!-- FOOTER SIGNATURE & QR CODE -->
-    <table class="footer-table">
-        <tr>
-            <td>
-                <div class="qr-box">
-                    <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">Verifikasi Surat Cuti</div>
-                    @if(!empty($qrCodeSvg))
-                        <div style="margin: 0 auto; display: inline-block;">
-                            {!! $qrCodeSvg !!}
-                        </div>
-                    @else
-                        <div style="font-size: 9px; color: #2563eb; font-weight: bold; word-break: break-all;">
-                            {{ $verificationUrl }}
-                        </div>
-                    @endif
-                    <div style="font-size: 8px; color: #64748b; margin-top: 4px;">Pindai QR Code untuk memverifikasi keabsahan persetujuan cuti ini secara publik.</div>
-                </div>
-            </td>
-            <td>
-                <div class="signature-box">
-                    <div style="font-size: 10px; font-weight: 700; color: #64748b;">Disetujui Oleh:</div>
-                    <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">HR Department WMS</div>
-                    
-                    <div class="signature-line"></div>
-                    <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                        {{ $leave['Approved_By'] ?? 'HR Manager' }}
-                    </div>
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    <div class="disclaimer">
-        Dokumen ini diterbitkan secara elektronik oleh Wakamiya Management System (WMS) dan memiliki kekuatan verifikasi sah.
-    </div>
+    <!-- SHARED OFFICIAL PDF FOOTER (H8.5 / H8.8) -->
+    @include('pdf.components.footer', [
+        'document' => $document ?? $companyProfile['document'] ?? [],
+        'verificationUrl' => $verificationUrl ?? null,
+        'qrCodeSvg' => $qrCodeSvg ?? null,
+        'notice' => 'Dokumen ini diterbitkan secara elektronik oleh ' . ($company['name'] ?? 'Wakamiya Management System (WMS)') . ' dan memiliki kekuatan verifikasi sah.'
+    ])
 
 </body>
 </html>

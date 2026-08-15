@@ -128,14 +128,14 @@ class PaymentService
             }
         }
 
+        $systemSettingService = app(\App\Services\Core\SystemSettingService::class);
+        $companyProfile = $systemSettingService->getCompanyProfile();
+
         return [
-            'company' => [
-                'name' => 'WAKAMIYA MANAGEMENT SYSTEM',
-                'tagline' => 'Enterprise ERP & Educational Management System',
-                'address' => 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930',
-                'contact' => 'Telp: (021) 8000-9999 | Email: finance@wakamiya.ac.id',
-                'website' => 'https://wakamiya.ac.id'
-            ],
+            'companyProfile' => $companyProfile,
+            'company' => $companyProfile['company'],
+            'bank' => $companyProfile['bank'],
+            'document' => $companyProfile['document'],
             'payment' => $payment,
             'invoice' => $invoice,
             'customer' => [
@@ -153,6 +153,11 @@ class PaymentService
             'verificationUrl' => $verificationUrl,
             'qrCodeSvg' => $qrCodeSvg
         ];
+    }
+
+    public function getReceiptDocumentData(string $paymentId): array
+    {
+        return $this->getPaymentReceiptData($paymentId);
     }
 
     public function generateReceiptNumber($type = 'STUDENT')
@@ -217,6 +222,11 @@ class PaymentService
         }
 
         return ($methodUpper === 'CASH' || $methodUpper === 'TUNAI') ? '101' : '102';
+    }
+
+    public function create(array $data)
+    {
+        return $this->submitPayment($data);
     }
 
     public function submitPayment(array $data)

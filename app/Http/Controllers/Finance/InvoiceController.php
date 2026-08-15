@@ -184,6 +184,11 @@ class InvoiceController extends Controller
         }
     }
 
+    public function downloadInvoicePdf($id)
+    {
+        return $this->downloadPdf($id);
+    }
+
     public function verifyInvoicePublic($id)
     {
         try {

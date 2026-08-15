@@ -20,13 +20,33 @@ class SystemSettingController extends Controller
 
     public function index(Request $request)
     {
-        $categories = ['General', 'Company', 'Company_Bank', 'Company_Document', 'Academic', 'Finance', 'Payroll', 'Attendance', 'Assessment', 'Notification', 'Workflow', 'Document', 'Security', 'System'];
+        $categories = ['General', 'Company', 'Company_Bank', 'Company_Document', 'Academic', 'Finance', 'Payroll', 'Attendance', 'Assessment', 'Notification', 'Email_Delivery', 'Workflow', 'Document', 'Security', 'System'];
         $activeTab = $request->query('tab', 'General');
         
         $settings = $this->settingService->category($activeTab);
         $parameters = $this->settingService->getParameters()->where('Module', $activeTab);
 
         return view('system.settings.index', compact('categories', 'activeTab', 'settings', 'parameters'));
+    }
+
+    public function sendTestEmail(Request $request)
+    {
+        $recipient = trim($request->input('recipient', ''));
+        if (empty($recipient)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alamat email penerima tidak boleh kosong.'
+            ], 422);
+        }
+
+        $emailDeliveryService = app(\App\Services\Core\EmailDeliveryService::class);
+        $result = $emailDeliveryService->sendTestEmail($recipient);
+
+        if (!($result['success'] ?? false)) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result, 200);
     }
 
     public function update(Request $request)
@@ -98,6 +118,8 @@ class SystemSettingController extends Controller
                 try { $this->auditService->log('System_Settings', 'Update_Parameter', 'Parameter', $id, null, $value); } catch(\Exception $e) {}
             }
         }
+
+        $this->settingService->reloadCache();
 
         return redirect()->route('settings.index', ['tab' => $activeTab])->with('success', "$changes pengaturan berhasil diperbarui.");
     }

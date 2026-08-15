@@ -28,7 +28,7 @@
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{{ $invoice['Invoice_ID'] ?? '' }} | {{ $invoice['Category'] ?? '' }}</p>
                 <h2 class="text-4xl font-black text-slate-800 my-2">Rp {{ number_format($amount, 0, ',', '.') }}</h2>
                 
-                <div class="flex justify-center items-center gap-2 my-3">
+                <div class="flex justify-center items-center gap-3 my-3">
                     @if($status === 'OVERDUE')
                         <span class="px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wide bg-rose-500 text-white shadow-xs">⚠️ OVERDUE</span>
                     @elseif($status === 'Paid')
@@ -40,6 +40,10 @@
                     @else
                         <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-slate-100 text-slate-700">{{ $status }}</span>
                     @endif
+
+                    <a href="{{ route('invoices.export-pdf', ['id' => $invoice['Invoice_ID']]) }}" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1">
+                        📄 <span>Download PDF</span>
+                    </a>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-100 max-w-md mx-auto">

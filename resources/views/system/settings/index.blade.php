@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('header', 'Pengaturan Sistem')
 @section('content')
-<div class="space-y-6 max-w-6xl mx-auto">
+<div class="space-y-6 max-w-6xl mx-auto" x-data="emailSettings()">
     <x-page-header title="Pengaturan Sistem" description="Pusat konfigurasi master untuk Sistem Manajemen Wakamiya." :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Pengaturan' => '#']" />
 
     <div class="flex flex-col md:flex-row gap-6">
@@ -24,6 +24,7 @@
                             'Attendance' => 'Kehadiran',
                             'Assessment' => 'Penilaian',
                             'Notification' => 'Notifikasi',
+                            'Email_Delivery' => 'Email Delivery',
                             'Workflow' => 'Alur Kerja',
                             'Document' => 'Dokumen',
                             'Security' => 'Keamanan',
@@ -36,6 +37,7 @@
                             'Company_Bank' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>',
                             'Company_Document' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>',
                             'Finance' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+                            'Email_Delivery' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>',
                         ];
                     @endphp
                     @foreach($categories as $cat)
@@ -54,10 +56,58 @@
         <!-- Configuration Form -->
         <div class="flex-grow">
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-6 border-b border-slate-100">
-                    <h2 class="text-xl font-bold text-slate-800">Konfigurasi {{ $categoryLabels[$activeTab] ?? $activeTab }}</h2>
-                    <p class="text-sm text-slate-500 mt-1">Kelola semua parameter dan pengaturan yang terkait dengan {{ strtolower($categoryLabels[$activeTab] ?? $activeTab) }}.</p>
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">Konfigurasi {{ $categoryLabels[$activeTab] ?? $activeTab }}</h2>
+                        <p class="text-sm text-slate-500 mt-1">Kelola semua parameter dan pengaturan yang terkait dengan {{ strtolower($categoryLabels[$activeTab] ?? $activeTab) }}.</p>
+                    </div>
+                    @if($activeTab === 'Email_Delivery')
+                        <span class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5">
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                            🟢 Email Sender Configured
+                        </span>
+                    @endif
                 </div>
+
+                @if($activeTab === 'Email_Delivery')
+                    @php
+                        $senderConfig = app(\App\Services\Core\EmailDeliveryService::class)->getSenderConfig();
+                    @endphp
+                    <div class="p-6 space-y-6">
+                        <div class="bg-slate-900 text-white rounded-2xl p-6 border border-slate-800 space-y-5">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                                <div>
+                                    <h3 class="text-sm font-bold uppercase tracking-wider text-emerald-400">Pengaturan Alamat Pengirim (Email Sender)</h3>
+                                    <p class="text-xs text-slate-400 mt-0.5">Admin cukup menentukan Email dan Nama Pengirim. Provider Email dikelola terpisah di layer environment terenkripsi.</p>
+                                </div>
+                                <button type="button" @click="openTestModal = true" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5">
+                                    🚀 <span>Test Email</span>
+                                </button>
+                            </div>
+
+                            <form action="{{ route('settings.update') }}" method="POST" class="space-y-4">
+                                @csrf
+                                <input type="hidden" name="active_tab" value="Email_Delivery">
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Email Pengirim (EMAIL_FROM_ADDRESS)</label>
+                                    <input type="email" name="settings[SET_EMAIL_FROM_ADDRESS]" value="{{ $senderConfig['from_address'] }}" class="w-full text-xs bg-slate-800 border-slate-700 rounded-xl text-white p-3 font-semibold focus:ring-2 focus:ring-emerald-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Nama Pengirim (EMAIL_FROM_NAME)</label>
+                                    <input type="text" name="settings[SET_EMAIL_FROM_NAME]" value="{{ $senderConfig['from_name'] }}" class="w-full text-xs bg-slate-800 border-slate-700 rounded-xl text-white p-3 font-semibold focus:ring-2 focus:ring-emerald-500">
+                                </div>
+
+                                <div class="pt-2 flex justify-end">
+                                    <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition-all">
+                                        Simpan Configuration
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                @else
                 
                 <form action="{{ route('settings.update') }}" method="POST" enctype="multipart/form-data" class="p-6">
                     @csrf
@@ -84,7 +134,6 @@
                                     @elseif(($s['Value_Type'] ?? 'text') == 'textarea')
                                         <textarea name="settings[{{ $s['Setting_ID'] }}]" rows="3" class="w-full rounded-lg border-slate-200 text-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50">{{ $s['Setting_Value'] }}</textarea>
                                     @elseif(($s['Value_Type'] ?? 'text') == 'file')
-                                        {{-- File upload field with preview --}}
                                         <div class="space-y-2">
                                             @if(!empty($s['Setting_Value']))
                                                 <div class="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
@@ -140,8 +189,66 @@
                     </div>
                     @endif
                 </form>
+
+                @endif
             </div>
         </div>
     </div>
+
+    <!-- TEST EMAIL MODAL -->
+    <div x-show="openTestModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" x-cloak>
+        <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold text-white">🚀 Kirim Test Email</h3>
+                <button @click="openTestModal = false" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 mb-1">Email Penerima Test (Recipient Target)</label>
+                <input type="email" x-model="testRecipient" placeholder="rezagaming800@gmail.com" class="w-full text-xs bg-slate-800 border-slate-700 rounded-xl text-white p-2.5">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button @click="openTestModal = false" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl">Batal</button>
+                <button @click="runTestEmail()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30">
+                    Kirim Test Email
+                </button>
+            </div>
+        </div>
+    </div>
+
 </div>
+
+<script>
+function emailSettings() {
+    return {
+        openTestModal: false,
+        testRecipient: 'rezagaming800@gmail.com',
+
+        runTestEmail() {
+            if (!this.testRecipient) {
+                alert('Masukkan email penerima test!');
+                return;
+            }
+
+            fetch("{{ route('settings.test_email') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ recipient: this.testRecipient })
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message);
+                if (data.success) {
+                    this.openTestModal = false;
+                }
+            })
+            .catch(err => {
+                alert('Gagal mengirim test email: ' + err.message);
+            });
+        }
+    }
+}
+</script>
 @endsection

@@ -30,12 +30,18 @@ class SystemSettingService
 
     public function get($key, $default = null) {
         $setting = $this->getSettings()->firstWhere('Setting_Key', $key);
-        return $setting ? $setting['Setting_Value'] : $default;
+        if ($setting && isset($setting['Setting_Value']) && $setting['Setting_Value'] !== '') {
+            return $setting['Setting_Value'];
+        }
+        return $default;
     }
 
     public function parameter($module, $key, $default = null) {
         $param = $this->getParameters()->where('Module', $module)->firstWhere('Parameter_Key', $key);
-        return $param ? $param['Parameter_Value'] : $default;
+        if ($param && isset($param['Parameter_Value']) && $param['Parameter_Value'] !== '') {
+            return $param['Parameter_Value'];
+        }
+        return $default;
     }
 
     public function category($category) {
@@ -45,6 +51,9 @@ class SystemSettingService
     public function set($id, $value, $updaterEmail) {
         $setting = $this->settingRepo->getById($id);
         if($setting) {
+            if (isset($setting['Setting_Value']) && (string)$setting['Setting_Value'] === (string)$value) {
+                return true;
+            }
             $setting['Setting_Value'] = $value;
             $setting['Updated_By'] = $updaterEmail;
             $setting['Updated_At'] = now()->toDateTimeString();
@@ -58,6 +67,9 @@ class SystemSettingService
     public function updateParameter($id, $value) {
         $param = $this->paramRepo->getById($id);
         if($param) {
+            if (isset($param['Parameter_Value']) && (string)$param['Parameter_Value'] === (string)$value) {
+                return true;
+            }
             $param['Parameter_Value'] = $value;
             $param['Updated_At'] = now()->toDateTimeString();
             $this->paramRepo->update($id, $param);

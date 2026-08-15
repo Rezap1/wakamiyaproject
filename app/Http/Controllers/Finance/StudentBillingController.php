@@ -105,8 +105,13 @@ class StudentBillingController extends Controller
 
     public function show($id)
     {
+        $studentId = $this->getStudentId();
         $invoice = $this->invoiceService->getById($id);
         
+        if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId) {
+            abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda.");
+        }
+
         $allPayments = $this->paymentService->getAll();
         $relatedPayments = $allPayments->where('Invoice_ID', $id)->values();
 

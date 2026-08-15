@@ -167,22 +167,13 @@
 </head>
 <body>
 
-    <!-- HEADER BRANDING -->
-    <table class="header-table">
-        <tr>
-            <td>
-                <div class="company-name">{{ $company['name'] ?? 'WAKAMIYA MANAGEMENT SYSTEM' }}</div>
-                <div class="company-sub">{{ $company['tagline'] ?? 'Enterprise ERP System' }}</div>
-                <div style="font-size: 9px; color: #64748b; margin-top: 4px;">
-                    {{ $company['address'] ?? '' }} &bull; {{ $company['contact'] ?? '' }}
-                </div>
-            </td>
-            <td class="doc-title">
-                <div class="doc-title-text">KWITANSI RESMI</div>
-                <div class="doc-subtitle">NO: {{ $payment['Payment_ID'] ?? '-' }}</div>
-            </td>
-        </tr>
-    </table>
+    <!-- SHARED OFFICIAL PDF HEADER (H8.4 / H8.7) -->
+    @include('pdf.components.header', ['company' => $company ?? $companyProfile['company'] ?? []])
+
+    <div style="text-align: right; margin-top: -15px; margin-bottom: 15px;">
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">KWITANSI RESMI</div>
+        <div style="font-size: 11px; font-weight: 700; color: #2563eb; font-family: monospace;">NO: {{ $payment['Payment_ID'] ?? '-' }}</div>
+    </div>
 
     <!-- INFORMATION CARDS -->
     <table class="info-grid">
@@ -264,45 +255,13 @@
         </tbody>
     </table>
 
-    <!-- FOOTER SIGNATURE & QR CODE -->
-    <table class="footer-table">
-        <tr>
-            <td>
-                <div class="qr-box">
-                    <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">Verifikasi Keabsahan Kuitansi</div>
-                    @if(!empty($qrCodeSvg))
-                        <div style="margin: 0 auto; display: inline-block;">
-                            {!! $qrCodeSvg !!}
-                        </div>
-                    @else
-                        <div style="font-size: 9px; color: #2563eb; font-weight: bold; word-break: break-all; margin: 10px 0;">
-                            {{ $verificationUrl }}
-                        </div>
-                    @endif
-                    <div style="font-size: 8px; color: #64748b; margin-top: 4px;">Pindai QR Code untuk memverifikasi keaslian kuitansi ini secara publik.</div>
-                </div>
-            </td>
-            <td>
-                <div class="signature-box">
-                    <div style="font-size: 10px; font-weight: 700; color: #64748b;">Diverifikasi & Disahkan Oleh:</div>
-                    <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">Departemen Keuangan WMS</div>
-                    
-                    <div class="signature-line"></div>
-                    <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                        {{ $payment['Verified_By'] ?? 'Finance Officer' }}
-                    </div>
-                    <div style="font-size: 9px; color: #64748b;">
-                        Tanggal: {{ !empty($payment['Verified_At']) ? \Carbon\Carbon::parse($payment['Verified_At'])->format('d M Y') : date('d M Y') }}
-                    </div>
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    <!-- DISCLAIMER -->
-    <div class="disclaimer">
-        Dokumen ini merupakan Kuitansi Resmi yang diterbitkan secara elektronik oleh Wakamiya Management System (WMS). Kuitansi ini sah tanpa memerlukan tanda tangan basah dan dilindungi oleh sistem verifikasi QR Code terenkripsi.
-    </div>
+    <!-- SHARED OFFICIAL PDF FOOTER (H8.5 / H8.7) -->
+    @include('pdf.components.footer', [
+        'document' => $document ?? $companyProfile['document'] ?? [],
+        'verificationUrl' => $verificationUrl ?? null,
+        'qrCodeSvg' => $qrCodeSvg ?? null,
+        'notice' => 'Dokumen ini merupakan Kuitansi Resmi yang diterbitkan secara elektronik oleh ' . ($company['name'] ?? 'Wakamiya Management System (WMS)') . '. Kuitansi ini sah tanpa memerlukan tanda tangan basah dan dilindungi oleh sistem verifikasi QR Code terenkripsi.'
+    ])
 
 </body>
 </html>

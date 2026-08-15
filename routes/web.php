@@ -281,6 +281,17 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{id}', [\App\Http\Controllers\Finance\TransactionController::class, 'destroy'])->name('destroy');
     });
 
+    // Smart Generator Invoice & Kwitansi Pro V3
+    Route::prefix('finance/smart-generator')->name('finance.smart_generator.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'index'])->name('index');
+        Route::get('/student-invoices/search', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'searchStudentInvoices'])->name('search_student_invoices');
+        Route::post('/pdf', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'exportPdf'])->name('pdf');
+        Route::post('/save', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'saveHistory'])->name('save');
+        Route::get('/history-api', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'getHistoryApi'])->name('history_api');
+        Route::delete('/history/{id}', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'deleteHistory'])->name('delete_history');
+        Route::post('/send-email', [\App\Http\Controllers\Finance\SmartGeneratorController::class, 'sendEmail'])->name('send_email');
+    });
+
     // Finance - Invoices
     Route::prefix('finance/invoices')->name('invoices.')->group(function () {
         Route::get('/preview-pdf', [\App\Http\Controllers\Finance\InvoiceController::class, 'previewPdf'])->name('preview-pdf');
@@ -450,9 +461,10 @@ Route::middleware('auth')->group(function () {
     });
 
     // System Settings Management
-    Route::prefix('settings')->name('settings.')->group(function () {
+    Route::prefix('settings')->name('settings.')->middleware('role:ADMINISTRATOR,DIRECTOR')->group(function () {
         Route::get('/', [\App\Http\Controllers\Core\SystemSettingController::class, 'index'])->name('index');
         Route::post('/update', [\App\Http\Controllers\Core\SystemSettingController::class, 'update'])->name('update');
+        Route::post('/test-email', [\App\Http\Controllers\Core\SystemSettingController::class, 'sendTestEmail'])->name('test_email');
     });
 
         Route::prefix('academic')->group(function () {

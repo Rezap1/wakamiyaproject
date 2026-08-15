@@ -244,14 +244,14 @@ class InvoiceService
             }
         }
 
+        $systemSettingService = app(\App\Services\Core\SystemSettingService::class);
+        $companyProfile = $systemSettingService->getCompanyProfile();
+
         return [
-            'company' => [
-                'name' => 'WAKAMIYA MANAGEMENT SYSTEM',
-                'tagline' => 'Enterprise ERP & Educational Management System',
-                'address' => 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930',
-                'contact' => 'Telp: (021) 8000-9999 | Email: billing@wakamiya.ac.id',
-                'website' => 'https://wakamiya.ac.id'
-            ],
+            'companyProfile' => $companyProfile,
+            'company' => $companyProfile['company'],
+            'bank' => $companyProfile['bank'],
+            'document' => $companyProfile['document'],
             'invoice' => $invoice,
             'customer' => [
                 'type' => $customerType,
@@ -355,7 +355,7 @@ class InvoiceService
             $data
         );
         
-        return $this->formatInvoiceRecord($res);
+        return $this->formatInvoiceRecord($data);
     }
 
     public function publish($id)
@@ -394,7 +394,7 @@ class InvoiceService
             ['Status' => 'Waiting Payment', 'Previous_Status' => 'Draft']
         );
 
-        return $this->formatInvoiceRecord($res);
+        return $this->formatInvoiceRecord($invoice);
     }
 
     public function cancel($id)

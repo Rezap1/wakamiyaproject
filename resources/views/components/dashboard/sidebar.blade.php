@@ -18,6 +18,7 @@
             <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('settings.index') }}" active="{{ request()->routeIs('settings.*') }}" icon="cog">Pengaturan Sistem</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('users.index') }}" active="{{ request()->routeIs('users.*') }}" icon="users">Pengguna</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('modules.index') }}" active="{{ request()->routeIs('modules.*') }}" icon="puzzle-piece">Modul</x-sidebar.nav-link>
@@ -63,6 +64,7 @@
             <x-sidebar.nav-link href="{{ route('accounts.index') }}" active="{{ request()->routeIs('accounts.*') }}" icon="collection">Master Akun</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('transactions.index') }}" active="{{ request()->routeIs('transactions.*') }}" icon="switch-horizontal">Transaksi</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('invoices.index') }}" active="{{ request()->routeIs('invoices.*') }}" icon="document-duplicate">Tagihan (Invoice)</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('payments.index') }}" active="{{ request()->routeIs('payments.*') }}" icon="credit-card">Pembayaran</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Finance</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('settings.index') }}" active="{{ request()->routeIs('settings.*') }}" icon="cog">Pengaturan Sistem</x-sidebar.nav-link>
@@ -72,6 +74,7 @@
         @if($userRole === 'DIRECTOR')
             <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
         @endif
         
         <!-- TEACHER WORKSPACE -->
