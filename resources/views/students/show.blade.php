@@ -113,7 +113,7 @@
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
                         <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($student['Created_At']) ? \Carbon\Carbon::parse($student['Created_At'])->format('d M Y, H:i') : '-' }}</p>
-                        <p class="text-xs text-slate-500 mt-1">Oleh: {{ $student['Created_By'] ?? 'Sistem' }}</p>
+                        <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($student['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>

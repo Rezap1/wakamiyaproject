@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Services\HR\OvertimeService;
 use App\Http\Requests\StoreOvertimeRequest;
 use App\Helpers\ReportHelper;
+use App\Helpers\UserResolverHelper;
 
 class OvertimeController extends Controller
 {
@@ -26,7 +27,7 @@ class OvertimeController extends Controller
             'mapRow' => function($row) {
                 return [
                     $row['Overtime_ID'] ?? '-',
-                    $row['Employee_Name'] ?? $row['Employee_ID'] ?? '-',
+                    UserResolverHelper::getName($row['Employee_ID'] ?? ''),
                     $row['Date'] ?? '-',
                     $row['Start_Time'] ?? '-',
                     $row['End_Time'] ?? '-',
@@ -61,6 +62,12 @@ class OvertimeController extends Controller
             }
         }
 
+        $overtimes = $overtimes->map(function($ot) {
+            $ot['Employee_Name'] = UserResolverHelper::getName($ot['Employee_ID'] ?? '');
+            $ot['Approved_By_Name'] = UserResolverHelper::getName($ot['Approved_By'] ?? '');
+            return $ot;
+        });
+
         $overtimes = \App\Helpers\CollectionHelper::paginate($overtimes, 10)->withQueryString();
 
         return view('hr.overtimes.index', compact('overtimes'));
@@ -86,6 +93,8 @@ class OvertimeController extends Controller
     {
         try {
             $docData = $this->overtimeService->getOvertimeDocumentData($id);
+            $docData['overtime']['Employee_Name'] = UserResolverHelper::getName($docData['overtime']['Employee_ID'] ?? '');
+            $docData['overtime']['Approved_By_Name'] = UserResolverHelper::getName($docData['overtime']['Approved_By'] ?? '');
             return view('hr.overtimes.show', ['overtime' => $docData['overtime'], 'docData' => $docData]);
         } catch (\Exception $e) {
             return redirect()->route('hr.overtimes.index')->with('error', $e->getMessage());
@@ -95,7 +104,7 @@ class OvertimeController extends Controller
     public function approve($id)
     {
         try {
-            $approver = auth()->user()->Email ?? 'HR Manager';
+            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
             $this->overtimeService->approveOvertime($id, $approver);
             return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur disetujui (Approved).');
         } catch (\Exception $e) {
@@ -106,7 +115,7 @@ class OvertimeController extends Controller
     public function reject(Request $request, $id)
     {
         try {
-            $approver = auth()->user()->Email ?? 'HR Manager';
+            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
             $reason = $request->input('reason');
             $this->overtimeService->rejectOvertime($id, $approver, $reason);
             return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur ditolak (Rejected).');
@@ -119,6 +128,8 @@ class OvertimeController extends Controller
     {
         try {
             $docData = $this->overtimeService->getOvertimeDocumentData($id);
+            $docData['overtime']['Employee_Name'] = UserResolverHelper::getName($docData['overtime']['Employee_ID'] ?? '');
+            $docData['overtime']['Approved_By'] = UserResolverHelper::getName($docData['overtime']['Approved_By'] ?? '');
             return ReportHelper::export(
                 'pdf',
                 'Surat_Lembur_' . $id,
@@ -138,6 +149,8 @@ class OvertimeController extends Controller
     {
         try {
             $docData = $this->overtimeService->getOvertimeDocumentData($id);
+            $docData['overtime']['Employee_Name'] = UserResolverHelper::getName($docData['overtime']['Employee_ID'] ?? '');
+            $docData['overtime']['Approved_By'] = UserResolverHelper::getName($docData['overtime']['Approved_By'] ?? '');
             return view('hr.overtimes.verify_overtime_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $e->getMessage());

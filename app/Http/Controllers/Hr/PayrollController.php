@@ -8,6 +8,7 @@ use App\Services\HR\PayrollService;
 use App\Http\Requests\StorePayrollRequest;
 use App\Http\Requests\GenerateBatchPayrollRequest;
 use App\Helpers\ReportHelper;
+use App\Helpers\UserResolverHelper;
 
 class PayrollController extends Controller
 {
@@ -35,22 +36,19 @@ class PayrollController extends Controller
             });
         }
         
-        $employeeRepo = app(\App\Repositories\GoogleSheets\EmployeeRepository::class);
-        $employees = $employeeRepo->fetchAll()->keyBy('Employee_ID');
-        
         return [
             'moduleName' => 'Penggajian (Payroll)',
             'data' => collect(array_values($payrolls->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['ID Payroll', 'No. Payroll', 'Pegawai', 'Periode', 'Gaji Pokok', 'Potongan', 'Gaji Bersih', 'Status'],
-            'mapRow' => function($row) use ($employees) {
+            'mapRow' => function($row) {
                 $empId = $row['Employee_ID'] ?? null;
-                $empName = $empId && isset($employees[$empId]) ? $employees[$empId]['Full_Name'] : $empId;
+                $empName = UserResolverHelper::getName($empId);
                 
                 return [
                     $row['Payroll_ID'] ?? '-',
                     $row['Payroll_Number'] ?? '-',
-                    $empName . ($empId ? " ({$empId})" : ''),
+                    $empName,
                     $row['Payroll_Period'] ?? '-',
                     'Rp ' . number_format((float)($row['Base_Salary'] ?? 0), 0, ',', '.'),
                     'Rp ' . number_format((float)($row['Total_Deductions'] ?? 0), 0, ',', '.'),
@@ -90,18 +88,17 @@ class PayrollController extends Controller
         $search = $request->input('search');
         if ($search) {
             $payrolls = $payrolls->filter(function($item) use ($search) {
+                $empName = UserResolverHelper::getName($item['Employee_ID'] ?? '');
                 return stripos($item['Payroll_ID'] ?? '', $search) !== false ||
                        stripos($item['Payroll_Number'] ?? '', $search) !== false ||
-                       stripos($item['Employee_ID'] ?? '', $search) !== false;
+                       stripos($item['Employee_ID'] ?? '', $search) !== false ||
+                       stripos($empName, $search) !== false;
             });
         }
 
-        $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
-        $employees = collect($employeeRepo->fetchAll())->keyBy('Employee_ID');
-
-        $payrolls = $payrolls->map(function($p) use ($employees) {
-            $empId = $p['Employee_ID'] ?? null;
-            $p['Employee_Name'] = ($empId && isset($employees[$empId])) ? $employees[$empId]['Full_Name'] : ($empId ?? '-');
+        $payrolls = $payrolls->map(function($p) {
+            $p['Employee_Name'] = UserResolverHelper::getName($p['Employee_ID'] ?? '');
+            $p['Approved_By_Name'] = UserResolverHelper::getName($p['Approved_By'] ?? '');
             return $p;
         });
 
@@ -143,6 +140,9 @@ class PayrollController extends Controller
     {
         try {
             $docData = $this->payrollService->getPayslipDocumentData($id);
+            if (isset($docData['payroll']['Approved_By'])) {
+                $docData['payroll']['Approved_By_Name'] = UserResolverHelper::getName($docData['payroll']['Approved_By']);
+            }
             return view('hr.payroll.show', ['payroll' => $docData['payroll'], 'docData' => $docData]);
         } catch (\Exception $e) {
             return redirect()->route('payrolls.index')->with('error', $e->getMessage());
@@ -206,6 +206,9 @@ class PayrollController extends Controller
     {
         try {
             $docData = $this->payrollService->getPayslipDocumentData($id);
+            if (isset($docData['payroll']['Approved_By'])) {
+                $docData['payroll']['Approved_By'] = UserResolverHelper::getName($docData['payroll']['Approved_By']);
+            }
             
             return ReportHelper::export(
                 'pdf',
@@ -226,6 +229,9 @@ class PayrollController extends Controller
     {
         try {
             $docData = $this->payrollService->getPayslipDocumentData($id);
+            if (isset($docData['payroll']['Approved_By'])) {
+                $docData['payroll']['Approved_By'] = UserResolverHelper::getName($docData['payroll']['Approved_By']);
+            }
             return view('finance.payrolls.verify_payslip_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $e->getMessage());

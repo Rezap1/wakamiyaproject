@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Services\HR\LeaveService;
 use App\Http\Requests\StoreLeaveRequest;
 use App\Helpers\ReportHelper;
+use App\Helpers\UserResolverHelper;
 
 class LeaveController extends Controller
 {
@@ -26,7 +27,7 @@ class LeaveController extends Controller
             'mapRow' => function($row) {
                 return [
                     $row['Leave_ID'] ?? '-',
-                    $row['Employee_Name'] ?? $row['Employee_ID'] ?? '-',
+                    UserResolverHelper::getName($row['Employee_ID'] ?? ''),
                     $row['Leave_Type'] ?? '-',
                     $row['Start_Date'] ?? '-',
                     $row['End_Date'] ?? '-',
@@ -60,6 +61,12 @@ class LeaveController extends Controller
             }
         }
 
+        $leaves = $leaves->map(function($l) {
+            $l['Employee_Name'] = UserResolverHelper::getName($l['Employee_ID'] ?? '');
+            $l['Approved_By_Name'] = UserResolverHelper::getName($l['Approved_By'] ?? '');
+            return $l;
+        });
+
         $leaves = \App\Helpers\CollectionHelper::paginate($leaves, 10)->withQueryString();
 
         return view('hr.leaves.index', compact('leaves'));
@@ -85,6 +92,8 @@ class LeaveController extends Controller
     {
         try {
             $docData = $this->leaveService->getLeaveDocumentData($id);
+            $docData['leave']['Employee_Name'] = UserResolverHelper::getName($docData['leave']['Employee_ID'] ?? '');
+            $docData['leave']['Approved_By_Name'] = UserResolverHelper::getName($docData['leave']['Approved_By'] ?? '');
             return view('hr.leaves.show', ['leave' => $docData['leave'], 'docData' => $docData]);
         } catch (\Exception $e) {
             return redirect()->route('hr.leaves.index')->with('error', $e->getMessage());
@@ -94,7 +103,7 @@ class LeaveController extends Controller
     public function approve($id)
     {
         try {
-            $approver = auth()->user()->Email ?? 'HR Manager';
+            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
             $this->leaveService->approveLeave($id, $approver);
             return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti disetujui (Approved).');
         } catch (\Exception $e) {
@@ -105,7 +114,7 @@ class LeaveController extends Controller
     public function reject(Request $request, $id)
     {
         try {
-            $approver = auth()->user()->Email ?? 'HR Manager';
+            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
             $reason = $request->input('reason');
             $this->leaveService->rejectLeave($id, $approver, $reason);
             return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti ditolak (Rejected).');
@@ -129,6 +138,8 @@ class LeaveController extends Controller
     {
         try {
             $docData = $this->leaveService->getLeaveDocumentData($id);
+            $docData['leave']['Employee_Name'] = UserResolverHelper::getName($docData['leave']['Employee_ID'] ?? '');
+            $docData['leave']['Approved_By'] = UserResolverHelper::getName($docData['leave']['Approved_By'] ?? '');
             return ReportHelper::export(
                 'pdf',
                 'Surat_Cuti_' . $id,
@@ -148,6 +159,8 @@ class LeaveController extends Controller
     {
         try {
             $docData = $this->leaveService->getLeaveDocumentData($id);
+            $docData['leave']['Employee_Name'] = UserResolverHelper::getName($docData['leave']['Employee_ID'] ?? '');
+            $docData['leave']['Approved_By'] = UserResolverHelper::getName($docData['leave']['Approved_By'] ?? '');
             return view('hr.leaves.verify_leave_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $e->getMessage());

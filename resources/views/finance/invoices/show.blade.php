@@ -16,12 +16,13 @@
     $remaining = (float)($invoice['Remaining_Amount'] ?? $amount);
     $paid = (float)($invoice['Paid_Amount'] ?? 0);
     $lineItems = $invoice['Parsed_Line_Items'] ?? [];
+    $studentName = $invoice['student_name'] ?? \App\Helpers\UserResolverHelper::getName($invoice['Student_ID'] ?? '');
 @endphp
 
 <div class="max-w-5xl mx-auto space-y-6">
     <x-universal.detail-layout 
         title="Invoice #{{ $invoice['Invoice_ID'] ?? '-' }}" 
-        description="Target Tagihan: {{ $invoice['Student_ID'] ?? ($invoice['Company_ID'] ?? 'Pihak Terkait') }}"
+        description="Pihak Tagihan: {{ $studentName !== '-' ? $studentName : ($invoice['Company_Name'] ?? 'Pihak Terkait') }} ({{ $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? '-' }})"
         status="{{ $status }}"
         badgeColor="{{ $badgeColor }}"
         :breadcrumbs="['Dasbor' => route('dashboard.finance'), 'Keuangan' => '#', 'Tagihan' => route('invoices.index'), 'Detail' => '#']"
@@ -59,8 +60,8 @@
                         <div class="flex items-center gap-3">
                             <span class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-lg">⚠️</span>
                             <div>
-                                <h4 class="text-sm font-black text-rose-900 uppercase tracking-wider">TAGIHAN INI TELAH TERLAMBAT (OVERDUE)</h4>
-                                <p class="text-xs text-rose-700 mt-0.5">Tanggal jatuh tempo {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d M Y') : '-' }} telah terlewati. Sisa piutang sebesar <strong>Rp {{ number_format($remaining, 0, ',', '.') }}</strong> belum dilunasi.</p>
+                                <h4 class="text-sm font-bold text-rose-900">Tagihan Ini Telah Jatuh Tempo (OVERDUE)</h4>
+                                <p class="text-xs text-rose-700 mt-0.5">Jatuh tempo pada {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d M Y') : '-' }}. Mohon segera hubungi siswa/pembayar.</p>
                             </div>
                         </div>
                     </div>
@@ -70,122 +71,70 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="bg-slate-900 text-white p-5 rounded-2xl shadow-md">
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Grand Total Tagihan</p>
-                        <p class="text-2xl font-black mt-1">Rp {{ number_format($amount, 0, ',', '.') }}</p>
+                        <p class="text-2xl font-black mt-1 text-emerald-400">Rp {{ number_format($amount, 0, ',', '.') }}</p>
                     </div>
 
-                    <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl">
-                        <p class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Sudah Terbayar (Verified)</p>
-                        <p class="text-2xl font-black text-emerald-700 mt-1">Rp {{ number_format($paid, 0, ',', '.') }}</p>
+                    <div class="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Sudah Dibayar</p>
+                        <p class="text-2xl font-black text-emerald-600 mt-1">Rp {{ number_format($paid, 0, ',', '.') }}</p>
                     </div>
 
-                    <div class="p-5 rounded-2xl border {{ $remaining > 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-200' }}">
-                        <p class="text-xs font-bold uppercase tracking-wider {{ $remaining > 0 ? 'text-rose-800' : 'text-slate-600' }}">Sisa Piutang Terkini</p>
-                        <p class="text-2xl font-black mt-1 {{ $remaining > 0 ? 'text-rose-700' : 'text-slate-800' }}">
-                            Rp {{ number_format($remaining, 0, ',', '.') }}
-                        </p>
+                    <div class="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
+                        <p class="text-xs font-bold text-rose-800 uppercase tracking-wider">Sisa Piutang (Belum Lunas)</p>
+                        <p class="text-2xl font-black text-rose-700 mt-1">Rp {{ number_format($remaining, 0, ',', '.') }}</p>
                     </div>
                 </div>
 
-                <!-- ITEMIZED LINE ITEMS TABLE -->
+                <!-- ITEMIZED LINE ITEMS -->
                 <div>
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Rincian Komponen Item Tagihan (Itemized Line Items)</h3>
-                    <div class="overflow-x-auto border border-slate-200 rounded-2xl">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase">
-                                    <th class="p-3 text-center w-10">#</th>
-                                    <th class="p-3">Deskripsi Komponen Item</th>
-                                    <th class="p-3 text-center w-16">Qty</th>
-                                    <th class="p-3 text-right">Harga Satuan</th>
-                                    <th class="p-3 text-right">Potongan/Diskon</th>
-                                    <th class="p-3 text-right">Pajak</th>
-                                    <th class="p-3 text-right">Subtotal</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 text-xs">
-                                @forelse($lineItems as $idx => $item)
-                                    <tr class="hover:bg-slate-50/50">
-                                        <td class="p-3 text-center font-bold text-slate-400">{{ $idx + 1 }}</td>
-                                        <td class="p-3 font-bold text-slate-800">{{ $item['description'] ?? '-' }}</td>
-                                        <td class="p-3 text-center font-bold text-slate-700">{{ $item['qty'] ?? 1 }}</td>
-                                        <td class="p-3 text-right font-medium text-slate-700">Rp {{ number_format((float)($item['unit_price'] ?? 0), 0, ',', '.') }}</td>
-                                        <td class="p-3 text-right text-emerald-600 font-bold">
-                                            {{ ($item['discount'] ?? 0) > 0 ? '- Rp ' . number_format((float)$item['discount'], 0, ',', '.') : '-' }}
-                                        </td>
-                                        <td class="p-3 text-right text-rose-600 font-bold">
-                                            {{ ($item['tax'] ?? 0) > 0 ? '+ Rp ' . number_format((float)$item['tax'], 0, ',', '.') : '-' }}
-                                        </td>
-                                        <td class="p-3 text-right font-black text-slate-900">
-                                            Rp {{ number_format((float)($item['subtotal'] ?? 0), 0, ',', '.') }}
-                                        </td>
-                                    </tr>
-                                @empty
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Rincian Komponen Tagihan (Line Items)</h3>
+                    @if(count($lineItems) > 0)
+                        <div class="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
                                     <tr>
-                                        <td colspan="7" class="p-4 text-center text-slate-400 italic">Tidak ada rincian item.</td>
+                                        <th class="p-3">Deskripsi Komponen</th>
+                                        <th class="p-3 text-center">Jumlah (Qty)</th>
+                                        <th class="p-3 text-right">Harga Satuan</th>
+                                        <th class="p-3 text-right">Total Subtotal</th>
                                     </tr>
-                                @endforelse
-                            </tbody>
-                            <tfoot class="bg-slate-50 border-t border-slate-200 text-xs">
-                                @if(($invoice['Total_Discount'] ?? 0) > 0)
-                                    <tr>
-                                        <td colspan="6" class="p-2 text-right font-bold text-slate-500">Total Diskon / Potongan:</td>
-                                        <td class="p-2 text-right font-bold text-emerald-600">- Rp {{ number_format((float)$invoice['Total_Discount'], 0, ',', '.') }}</td>
-                                    </tr>
-                                @endif
-                                @if(($invoice['Total_Tax'] ?? 0) > 0)
-                                    <tr>
-                                        <td colspan="6" class="p-2 text-right font-bold text-slate-500">Total Pajak:</td>
-                                        <td class="p-2 text-right font-bold text-rose-600">+ Rp {{ number_format((float)$invoice['Total_Tax'], 0, ',', '.') }}</td>
-                                    </tr>
-                                @endif
-                                <tr class="font-black text-slate-900 text-sm">
-                                    <td colspan="6" class="p-3 text-right uppercase">Grand Total Tagihan:</td>
-                                    <td class="p-3 text-right text-blue-600">Rp {{ number_format($amount, 0, ',', '.') }}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- HEADER INFO -->
-                <div>
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100">Informasi Metadata Tagihan</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                            <p class="text-xs font-bold text-slate-400 uppercase">Kategori Tagihan</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">{{ $invoice['Category'] ?? '-' }}</p>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    @foreach($lineItems as $item)
+                                        <tr>
+                                            <td class="p-3 font-bold text-slate-800">{{ $item['description'] ?? '-' }}</td>
+                                            <td class="p-3 text-center font-medium">{{ $item['qty'] ?? 1 }}</td>
+                                            <td class="p-3 text-right font-medium">Rp {{ number_format((float)($item['unit_price'] ?? 0), 0, ',', '.') }}</td>
+                                            <td class="p-3 text-right font-bold text-slate-900">Rp {{ number_format((float)($item['subtotal'] ?? 0), 0, ',', '.') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
                         </div>
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                            <p class="text-xs font-bold text-slate-400 uppercase">Tipe Invoice</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">{{ $invoice['Invoice_Type'] ?? 'STUDENT' }}</p>
+                    @else
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600">
+                            Tagihan tunggal sebesar <strong>Rp {{ number_format($amount, 0, ',', '.') }}</strong> untuk kategori <strong>{{ $invoice['Category'] ?? 'Pendidikan' }}</strong>.
                         </div>
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                            <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Jatuh Tempo</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">
-                                {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d M Y') : '-' }}
-                            </p>
-                        </div>
-                    </div>
+                    @endif
                 </div>
             </div>
         </x-slot:information>
 
         <x-slot:audit>
             <div class="space-y-4">
-                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">System Metadata & Audit Trail</h3>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">Metadata & Audit Trail</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase">ID Tagihan (Primary Key)</p>
-                        <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $invoice['Invoice_ID'] }}</p>
+                        <p class="text-xs font-bold text-slate-400 uppercase">Dibuat Oleh</p>
+                        <p class="text-sm font-bold text-slate-800 mt-1">{{ $invoice['Created_By_Name'] ?? \App\Helpers\UserResolverHelper::getName($invoice['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase">Status Dinamis</p>
-                        <p class="text-sm font-bold text-slate-800 mt-1 uppercase">{{ $status }}</p>
+                        <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Pembuatan</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($invoice['Created_At']) ? \Carbon\Carbon::parse($invoice['Created_At'])->format('d M Y, H:i') : '-' }}</p>
                     </div>
                 </div>
             </div>
         </x-slot:audit>
-
     </x-universal.detail-layout>
 </div>
 @endsection

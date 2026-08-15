@@ -97,7 +97,7 @@
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
                         <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($teacher['Created_At']) ? \Carbon\Carbon::parse($teacher['Created_At'])->format('d M Y, H:i:s') : '-' }}</p>
-                        <p class="text-xs text-slate-500 mt-1">Oleh: {{ $teacher['Created_By'] ?? 'Sistem' }}</p>
+                        <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($teacher['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>

@@ -25,7 +25,7 @@
         <x-slot:header>
             <th class="px-6 py-4">ID Departemen / Kode</th>
             <th class="px-6 py-4">Nama Departemen</th>
-            <th class="px-6 py-4">Manajer ID</th>
+            <th class="px-6 py-4">Manajer / Pimpinan</th>
             <th class="px-6 py-4">Dibuat Pada</th>
             <th class="px-6 py-4">Status</th>
             <th class="px-6 py-4 text-right">Aksi</th>
@@ -45,10 +45,12 @@
                     <div class="font-bold text-slate-800">{{ $department['Department_Name'] ?? '-' }}</div>
                     <div class="text-xs text-slate-500">{{ Str::limit($department['Notes'] ?? '-', 30) }}</div>
                 </td>
-                <td class="px-6 py-4 text-sm font-bold text-slate-700">{{ $department['Manager_Employee_ID'] ?: '-' }}</td>
+                <td class="px-6 py-4 text-sm font-bold text-slate-700">
+                    {{ !empty($department['Manager_Name']) && $department['Manager_Name'] !== '-' ? $department['Manager_Name'] : ($department['Manager_Employee_ID'] ?: '-') }}
+                </td>
                 <td class="px-6 py-4">
                     <div class="text-sm font-medium">{{ !empty($department['Created_At']) ? \Carbon\Carbon::parse($department['Created_At'])->format('d M Y, H:i') : '-' }}</div>
-                    <div class="text-xs text-slate-500">{{ $department['Created_By'] ?? '-' }}</div>
+                    <div class="text-xs text-slate-500">{{ !empty($department['Created_By_Name']) && $department['Created_By_Name'] !== '-' ? $department['Created_By_Name'] : ($department['Created_By'] ?? '-') }}</div>
                 </td>
                 <td class="px-6 py-4">
                     <x-badge color="{{ $badgeColor }}">{{ $status }}</x-badge>
@@ -69,5 +71,6 @@
             @endif
         </x-slot:pagination>
     </x-universal.data-table>
+
 </x-universal.index-layout>
 @endsection

@@ -81,7 +81,7 @@
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-slate-500">Dibuat Oleh</dt>
-                        <dd class="mt-1 text-sm font-bold text-slate-900">{{ $position['Created_By'] ?? '-' }}</dd>
+                        <dd class="mt-1 text-sm font-bold text-slate-900">{{ \App\Helpers\UserResolverHelper::getName($position['Created_By'] ?? '') }}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-slate-500">Terakhir Diperbarui</dt>

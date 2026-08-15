@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDepartmentRequest;
 use App\Http\Requests\UpdateDepartmentRequest;
 use App\Services\Core\DepartmentService;
-use App\Services\Core\ActivityLogService;
-use Illuminate\Support\Facades\Auth;
+use App\Helpers\UserResolverHelper;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 
@@ -37,11 +36,13 @@ class DepartmentController extends Controller
             'moduleName' => 'DEPARTMENTS',
             'data' => $departments,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID', 'Nama Departemen', 'Status'],
+            'headers' => ['ID', 'Nama Departemen', 'Manajer', 'Status'],
             'mapRow' => function($row) {
+                $mgr = UserResolverHelper::getName($row['Manager_Employee_ID'] ?? '');
                 return [
                     $row['Department_ID'] ?? '-', 
                     $row['Department_Name'] ?? '-', 
+                    $mgr ?: '-',
                     ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'
                 ];
             },
@@ -49,6 +50,7 @@ class DepartmentController extends Controller
             'summary' => '<tr><td>Total Departemen</td><td>: '.$departments->count().'</td></tr>'
         ];
     }
+
     protected $departmentService;
 
     public function __construct(DepartmentService $departmentService)
@@ -59,9 +61,12 @@ class DepartmentController extends Controller
     public function index()
     {
         try {
-            $departments = $this->departmentService->getAllDepartments();
+            $departments = $this->departmentService->getAllDepartments()->map(function ($dept) {
+                $dept['Manager_Name'] = UserResolverHelper::getName($dept['Manager_Employee_ID'] ?? '');
+                $dept['Created_By_Name'] = UserResolverHelper::getName($dept['Created_By'] ?? '');
+                return $dept;
+            });
             
-            // Custom collection pagination
             $currentPage = LengthAwarePaginator::resolveCurrentPage();
             $perPage = 10;
             $currentItems = $departments->slice(($currentPage - 1) * $perPage, $perPage)->all();
@@ -72,13 +77,14 @@ class DepartmentController extends Controller
             return view('departments.index', ['departments' => $departmentsPaginated]);
         } catch (\Exception $e) {
             Log::error('Error fetching departments: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data departemen dari Google Sheets.');
+            return redirect()->route('dashboard')->with('error', 'Gagal memuat data departemen.');
         }
     }
 
     public function create()
     {
-        return view('departments.create');
+        $employees = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll();
+        return view('departments.create', compact('employees'));
     }
 
     public function store(StoreDepartmentRequest $request)
@@ -90,7 +96,7 @@ class DepartmentController extends Controller
             return redirect()->route('departments.index')->with('success', 'Departemen berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating department: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data ke Google Sheets.')->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data.')->withInput();
         }
     }
 
@@ -101,6 +107,8 @@ class DepartmentController extends Controller
             if (!$department) {
                 return redirect()->route('departments.index')->with('error', 'Departemen tidak ditemukan.');
             }
+            $department['Manager_Name'] = UserResolverHelper::getName($department['Manager_Employee_ID'] ?? '');
+            $department['Created_By_Name'] = UserResolverHelper::getName($department['Created_By'] ?? '');
             return view('departments.show', compact('department'));
         } catch (\Exception $e) {
             Log::error('Error showing department: ' . $e->getMessage());
@@ -115,45 +123,34 @@ class DepartmentController extends Controller
             if (!$department) {
                 return redirect()->route('departments.index')->with('error', 'Departemen tidak ditemukan.');
             }
-            return view('departments.edit', compact('department'));
+            $employees = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll();
+            return view('departments.edit', compact('department', 'employees'));
         } catch (\Exception $e) {
             Log::error('Error editing department: ' . $e->getMessage());
-            return redirect()->route('departments.index')->with('error', 'Terjadi kesalahan saat memuat data departemen.');
+            return redirect()->route('departments.index')->with('error', 'Terjadi kesalahan.');
         }
     }
 
     public function update(UpdateDepartmentRequest $request, $id)
     {
         try {
-            $department = $this->departmentService->getDepartmentById($id);
-            if (!$department) {
-                return redirect()->route('departments.index')->with('error', 'Departemen tidak ditemukan.');
-            }
-
             $data = $request->validated();
             $this->departmentService->updateDepartment($id, $data);
-
             return redirect()->route('departments.index')->with('success', 'Departemen berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating department: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data di Google Sheets.')->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data.')->withInput();
         }
     }
 
     public function destroy($id)
     {
         try {
-            $department = $this->departmentService->getDepartmentById($id);
-            if (!$department) {
-                return redirect()->route('departments.index')->with('error', 'Departemen tidak ditemukan.');
-            }
-
             $this->departmentService->deleteDepartment($id);
-
-            return redirect()->route('departments.index')->with('success', 'Departemen berhasil dinonaktifkan.');
+            return redirect()->route('departments.index')->with('success', 'Departemen berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Error deleting department: ' . $e->getMessage());
-            return redirect()->route('departments.index')->with('error', 'Terjadi kesalahan saat menghapus data di Google Sheets.');
+            return redirect()->route('departments.index')->with('error', 'Terjadi kesalahan saat menghapus data.');
         }
     }
 }
