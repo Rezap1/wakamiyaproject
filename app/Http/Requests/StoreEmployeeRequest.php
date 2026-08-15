@@ -11,6 +11,14 @@ class StoreEmployeeRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation()
+    {
+        if (!$this->hasFile('Profile_Photo')) {
+            $this->request->remove('Profile_Photo');
+            $this->files->remove('Profile_Photo');
+        }
+    }
+
     public function rules(): array
     {
         return [
@@ -27,7 +35,7 @@ class StoreEmployeeRequest extends FormRequest
             'Gender' => 'nullable|string|max:20',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
-            'Profile_Photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'Profile_Photo' => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:2048',
             'National_ID' => [
                 'nullable',
                 'string',
