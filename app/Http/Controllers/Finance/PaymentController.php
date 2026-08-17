@@ -173,4 +173,33 @@ class PaymentController extends Controller
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
+    public function verify($id)
+    {
+        try {
+            $this->paymentService->verifyPayment($id);
+            return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diverifikasi.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function edit($id)
+    {
+        $payment = $this->paymentService->getById($id);
+        if (!$payment) {
+            return redirect()->route('payments.index')->with('error', 'Pembayaran tidak ditemukan.');
+        }
+        return view('finance.payments.show', compact('payment'));
+    }
+
+    public function update(UpdatePaymentRequest $request, $id)
+    {
+        try {
+            $this->paymentService->update($id, $request->validated());
+            return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diperbarui.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+        }
+    }
 }

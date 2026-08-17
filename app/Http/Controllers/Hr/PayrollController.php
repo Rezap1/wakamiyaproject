@@ -247,4 +247,26 @@ class PayrollController extends Controller
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
+    public function edit($id)
+    {
+        try {
+            $docData = $this->payrollService->getPayslipDocumentData($id);
+            $employees = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll();
+            return view('hr.payroll.show', ['payroll' => $docData['payroll'], 'docData' => $docData, 'employees' => $employees]);
+        } catch (\Exception $e) {
+            return redirect()->route('payrolls.index')->with('error', $e->getMessage());
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $user = auth()->user()->Email ?? 'HR Admin';
+            $this->payrollService->updateStatus($id, $request->input('Status', 'Draft'), $user);
+            return redirect()->route('payrolls.show', $id)->with('success', 'Status Payroll berhasil diperbarui.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
 }

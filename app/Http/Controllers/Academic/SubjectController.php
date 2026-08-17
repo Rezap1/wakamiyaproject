@@ -86,6 +86,11 @@ class SubjectController extends Controller
         }
     }
 
+    public function show($id)
+    {
+        return $this->edit($id);
+    }
+
     public function edit($id)
     {
         $subject = $this->subjectService->getById($id);

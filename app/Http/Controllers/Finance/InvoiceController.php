@@ -199,4 +199,24 @@ class InvoiceController extends Controller
             abort(404, $e->getMessage());
         }
     }
+
+    public function publish($id)
+    {
+        try {
+            $this->invoiceService->update($id, ['Status' => 'UNPAID']);
+            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dipublikasikan (Status: UNPAID).');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function cancel($id)
+    {
+        try {
+            $this->invoiceService->update($id, ['Status' => 'CANCELLED']);
+            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dibatalkan (Status: CANCELLED).');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
 }

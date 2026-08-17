@@ -102,7 +102,21 @@ class QRAttendanceService
         ];
     }
 
-    public function processScan(string $tokenString, ?string $deviceInfo = null): array
+    public function calculateDistance(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadius = 6371000;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+             
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return round($earthRadius * $c, 2);
+    }
+
+    public function processScan(string $tokenString, ?string $deviceInfo = null, ?float $userLat = null, ?float $userLon = null): array
     {
         // 1. Decode Payload
         $decodedJson = base64_decode($tokenString, true);
@@ -115,10 +129,16 @@ class QRAttendanceService
             throw new Exception("Format data Token QR Code tidak valid.");
         }
 
+        $qrType = $payload['qr_type'] ?? 'EMPLOYEE';
         $sessionId = $payload['session_id'];
         $expiresAt = (int) $payload['expires_at'];
         $nonce = $payload['nonce'];
         $sig = $payload['sig'];
+
+        // Strict QR Type Check
+        if (strtoupper($qrType) === 'STUDENT') {
+            throw new Exception("Akses Ditolak: QR Code ini khusus untuk Presensi Siswa.");
+        }
 
         // 2. Security Validation: Expiration TTL Check
         if ($expiresAt < now()->timestamp) {
@@ -133,7 +153,10 @@ class QRAttendanceService
         // 4. Security Validation: HMAC Signature Verification
         $expectedSig = hash_hmac('sha256', "{$sessionId}|{$expiresAt}|{$nonce}", config('app.key', 'WakamiyaKey321'));
         if (!hash_equals($expectedSig, $sig)) {
-            throw new Exception("Tanda tangan digital QR Code tidak valid atau telah dimanipulasi.");
+            $expectedSigWithType = hash_hmac('sha256', "{$qrType}|{$sessionId}|{$expiresAt}|{$nonce}", config('app.key', 'WakamiyaKey321'));
+            if (!hash_equals($expectedSigWithType, $sig)) {
+                throw new Exception("Tanda tangan digital QR Code tidak valid atau telah dimanipulasi.");
+            }
         }
 
         // 5. Security Validation: Session Active Check
@@ -144,8 +167,22 @@ class QRAttendanceService
 
         // 6. Security Validation: Server-side Authenticated Employee Resolution (NO CLIENT IDOR TRUST)
         $user = auth()->user();
-        if (!$user || ($user->Role ?? '') === 'STUDENT') {
+        $roleName = strtoupper(trim($user->Role ?? ''));
+        if (!$user || $roleName === 'STUDENT' || str_contains($roleName, 'STUDENT')) {
             throw new Exception("Akses Ditolak: Hanya Pegawai/Guru yang dapat melakukan presensi HR.");
+        }
+
+        // Geofencing Check if coordinates are provided
+        $settingService = app(\App\Services\Core\SystemSettingService::class);
+        $geofenceEnabled = strtoupper(trim((string) $settingService->get('LPK_GEOFENCE_ENABLED', 'TRUE'))) !== 'FALSE';
+        if ($geofenceEnabled && $userLat !== null && $userLon !== null) {
+            $lpkLat = (float) $settingService->get('LPK_LATITUDE', -6.812391);
+            $lpkLon = (float) $settingService->get('LPK_LONGITUDE', 107.194458);
+            $allowedRadius = (float) $settingService->get('LPK_ALLOWED_RADIUS_METERS', 20);
+            $distance = $this->calculateDistance($userLat, $userLon, $lpkLat, $lpkLon);
+            if ($distance > $allowedRadius) {
+                throw new Exception("Anda berada di luar area LPK. Jarak Anda: {$distance} meter. Maksimal jarak yang diizinkan: 20 meter.");
+            }
         }
 
         $allEmployees = collect($this->employeeRepository->fetchAll());
@@ -186,7 +223,7 @@ class QRAttendanceService
             $status = $isLate ? 'LATE' : 'PRESENT';
             $lateMinutes = $isLate ? max(1, $nowCarbon->diffInMinutes(Carbon::parse($startTimeStr))) : 0;
 
-            // 9. Zero Schema Mutation Persistence
+            // 9. Persistence
             $attendanceId = 'ATT-' . date('Ymd') . '-' . strtoupper(Str::random(6));
             $record = [
                 'Attendance_ID' => $attendanceId,
@@ -197,7 +234,7 @@ class QRAttendanceService
                 'Check_In_Time' => $currentTimeStr,
                 'Status' => $status,
                 'Late_Minutes' => $lateMinutes,
-                'Verification_Method' => 'DYNAMIC_QR',
+                'Verification_Method' => 'EMPLOYEE_GEO_QR',
                 'Device_Info' => $deviceInfo ?? request()->header('User-Agent', 'Mobile Scanner'),
                 'Is_Active' => 'TRUE',
                 'Created_At' => now()->toDateTimeString()

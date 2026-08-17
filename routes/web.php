@@ -196,8 +196,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/', [StudentController::class, 'store'])->name('store');
         Route::get('/{id}', [StudentController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [StudentController::class, 'edit'])->name('edit');
+        Route::post('/{id}/graduate', [StudentController::class, 'graduate'])->name('graduate');
         Route::put('/{id}', [StudentController::class, 'update'])->name('update');
         Route::delete('/{id}', [StudentController::class, 'destroy'])->name('destroy');
+    });
+
+    // Alumni Management
+    Route::prefix('academic/alumni')->name('alumni.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Academic\AlumniController::class, 'index'])->name('index');
+        Route::get('/{id}', [\App\Http\Controllers\Academic\AlumniController::class, 'show'])->name('show');
     });
 
     // Company Management
@@ -511,6 +518,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/progress', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'progress'])->name('progress');
         Route::get('/subjects', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'mySubjects'])->name('subjects');
         Route::get('/calendar', [\App\Http\Controllers\Academic\StudentWorkspaceController::class, 'calendar'])->name('calendar');
+    });
+
+    // Student Geo-Fenced QR Attendance
+    Route::prefix('attendance/student')->name('attendances.student.')->group(function () {
+        Route::get('/scanner', [\App\Http\Controllers\Academic\StudentQRAttendanceController::class, 'scanner'])->name('scanner');
+        Route::post('/scan', [\App\Http\Controllers\Academic\StudentQRAttendanceController::class, 'scan'])->name('scan');
+        Route::get('/token', [\App\Http\Controllers\Academic\StudentQRAttendanceController::class, 'getDynamicToken'])->name('token');
     });
 
     // --- DUMMY ROUTES FOR SCAFFOLDED VIEWS TO PREVENT ROUTE NOT FOUND EXCEPTIONS ---

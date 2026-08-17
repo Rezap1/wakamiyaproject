@@ -9,10 +9,10 @@
 
 <div class="max-w-4xl mx-auto space-y-6" x-data="academicScoreEditEngine()">
     <x-universal.form 
-        action="{{ route('scores.update', $score['Score_ID']) }}" 
+        action="{{ route('scores.update', $score['Score_ID'] ?? '') }}" 
         method="PUT"
         title="Edit Data Nilai & Evaluasi" 
-        description="Perbarui metrik dan evaluasi siswa (ID: {{ $score['Score_ID'] }})."
+        description="Perbarui metrik dan evaluasi siswa (ID: {{ $score['Score_ID'] ?? '-' }})."
         buttonText="Perbarui Data Nilai"
     >
         <div class="space-y-8">
@@ -22,19 +22,19 @@
                     <x-universal.input 
                         name="Score_ID" 
                         label="ID Nilai" 
-                        value="{{ $score['Score_ID'] }}"
+                        value="{{ $score['Score_ID'] ?? '-' }}"
                         readonly
                     />
                     <x-universal.input 
                         name="Assessment_ID" 
                         label="ID Assessment" 
-                        value="{{ $score['Assessment_ID'] }}"
+                        value="{{ $score['Assessment_ID'] ?? '-' }}"
                         readonly
                     />
                     <x-universal.input 
                         name="Student_ID" 
                         label="ID Siswa" 
-                        value="{{ $score['Student_ID'] }}"
+                        value="{{ $score['Student_ID'] ?? '-' }}"
                         readonly
                     />
                 </div>

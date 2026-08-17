@@ -1,8 +1,8 @@
 @extends('layouts.app')
-@section('header', 'Pindai QR Pegawai')
+@section('header', 'Pindai QR')
 @section('content')
 
-<div class="max-w-md mx-auto space-y-4 pb-20 select-none" x-data="employeeQrScannerEngine()">
+<div class="max-w-md mx-auto space-y-4 pb-20 select-none" x-data="studentQrScannerEngine()">
 
     <!-- ==================================================== -->
     <!-- STATE 1: PINDAI QR (ACTIVE CAMERA SCANNER VIEW)      -->
@@ -10,17 +10,17 @@
     <div x-show="viewState === 'SCANNING'" class="space-y-4">
         <!-- MOBILE HEADER WITH BACK LINK -->
         <div class="flex items-center justify-between pt-1 pb-1">
-            <a href="{{ route('dashboard.hr') }}" class="flex items-center gap-2 text-sm font-bold text-slate-800 hover:text-sky-600 transition-colors">
+            <a href="{{ route('dashboard.student') }}" class="flex items-center gap-2 text-sm font-bold text-slate-800 hover:text-sky-600 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                <span>Pindai QR Pegawai</span>
+                <span>Pindai QR</span>
             </a>
         </div>
 
-        <p class="text-xs text-center font-medium text-slate-400 -mt-2">Arahkan kamera ke QR Code Pegawai</p>
+        <p class="text-xs text-center font-medium text-slate-400 -mt-2">Arahkan kamera ke QR Code</p>
 
         <!-- CAMERA VIEWPORT WITH WAKAMIYA SKY BLUE CORNER GUIDES & LASER SCAN -->
         <div class="relative overflow-hidden rounded-3xl border-2 border-slate-900 bg-black aspect-square flex items-center justify-center shadow-2xl">
-            <div id="hr-qr-reader" class="w-full h-full"></div>
+            <div id="student-qr-reader" class="w-full h-full"></div>
             
             <!-- CORNER RETICLE GUIDES & LASER LINE -->
             <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -36,7 +36,7 @@
             </div>
 
             <span class="absolute bottom-4 text-[11px] text-white/80 font-medium bg-black/40 backdrop-blur-md px-3 py-1 rounded-full">
-                QR Pegawai akan dipindai otomatis
+                QR akan dipindai otomatis
             </span>
         </div>
 
@@ -44,11 +44,11 @@
         <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center text-lg shrink-0 border border-sky-200">
-                    👔
+                    🎓
                 </div>
                 <div>
-                    <h4 class="text-xs font-black text-slate-900">Presensi Pegawai & Guru</h4>
-                    <p class="text-[11px] text-slate-500 font-medium">Gunakan QR Code khusus Pegawai/Guru</p>
+                    <h4 class="text-xs font-black text-slate-900">Presensi Siswa</h4>
+                    <p class="text-[11px] text-slate-500 font-medium">Gunakan QR Code khusus siswa</p>
                 </div>
             </div>
 
@@ -70,7 +70,7 @@
     <div x-show="viewState === 'PROCESSING'" class="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center py-16 space-y-4">
         <div class="w-16 h-16 border-4 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
         <h3 class="text-lg font-black text-slate-900">Memverifikasi Presensi...</h3>
-        <p class="text-xs text-slate-500 font-medium max-w-xs mx-auto">Sedang memeriksa enkripsi token QR Pegawai, lokasi LPK, dan data pegawai...</p>
+        <p class="text-xs text-slate-500 font-medium max-w-xs mx-auto">Sedang memeriksa enkripsi token QR, lokasi LPK, dan identitas siswa...</p>
     </div>
 
     <!-- ==================================================== -->
@@ -87,12 +87,12 @@
         
         <div class="space-y-1">
             <h2 class="text-2xl font-black text-slate-900 tracking-tight">Presensi Berhasil!</h2>
-            <p class="text-xs text-slate-500 font-medium">Presensi Pegawai berhasil dicatat</p>
+            <p class="text-xs text-slate-500 font-medium">Anda telah berhasil melakukan presensi</p>
         </div>
 
         <!-- DETAIL PRESENSI CARD -->
         <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs space-y-2.5 text-left font-medium">
-            <h4 class="text-[11px] font-black text-slate-800 border-b border-slate-200 pb-2">Detail Presensi Pegawai</h4>
+            <h4 class="text-[11px] font-black text-slate-800 border-b border-slate-200 pb-2">Detail Presensi</h4>
             <div class="flex justify-between border-b border-slate-200/60 pb-2">
                 <span class="text-slate-500">Tanggal</span>
                 <span class="font-bold text-slate-800" x-text="successData.date">18 Agustus 2026</span>
@@ -116,8 +116,11 @@
         </div>
 
         <div class="space-y-2">
-            <a href="{{ route('dashboard.hr') }}" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30 flex items-center justify-center transition-all">
+            <a href="{{ route('dashboard.student') }}" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30 flex items-center justify-center transition-all">
                 Kembali ke Dashboard
+            </a>
+            <a href="{{ route('student.progress') }}" class="block text-xs font-bold text-sky-600 hover:underline">
+                Lihat Riwayat
             </a>
         </div>
     </div>
@@ -151,7 +154,7 @@
             <button type="button" @click="requestGpsAndReset()" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30">
                 Coba Lagi
             </button>
-            <a href="{{ route('dashboard.hr') }}" class="block text-xs font-bold text-slate-500 hover:underline">
+            <a href="{{ route('dashboard.student') }}" class="block text-xs font-bold text-slate-500 hover:underline">
                 Kembali
             </a>
         </div>
@@ -184,7 +187,7 @@
             <button type="button" @click="resetToScan()" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30">
                 Coba Lagi
             </button>
-            <a href="{{ route('dashboard.hr') }}" class="block text-xs font-bold text-slate-500 hover:underline">
+            <a href="{{ route('dashboard.student') }}" class="block text-xs font-bold text-slate-500 hover:underline">
                 Kembali
             </a>
         </div>
@@ -213,7 +216,7 @@
             <button type="button" @click="startScanner()" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30">
                 Coba Lagi
             </button>
-            <a href="{{ route('dashboard.hr') }}" class="block text-xs font-bold text-slate-500 hover:underline">
+            <a href="{{ route('dashboard.student') }}" class="block text-xs font-bold text-slate-500 hover:underline">
                 Kembali
             </a>
         </div>
@@ -233,7 +236,7 @@
         <div class="space-y-1">
             <h3 class="text-lg font-black text-slate-900">QR Tidak Sesuai</h3>
             <p class="text-xs text-slate-500 font-medium max-w-xs mx-auto">
-                QR Code ini khusus untuk Presensi Siswa. Pegawai wajib melakukan scan pada QR Code Absensi Pegawai.
+                QR Code ini tidak sesuai. Pastikan Anda menggunakan QR Code yang benar. QR ini bukan untuk presensi Anda.
             </p>
         </div>
 
@@ -259,7 +262,7 @@
             <button type="button" @click="resetToScan()" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-sky-500/30">
                 Coba Lagi
             </button>
-            <a href="{{ route('dashboard.hr') }}" class="block text-xs font-bold text-slate-500 hover:underline">
+            <a href="{{ route('dashboard.student') }}" class="block text-xs font-bold text-slate-500 hover:underline">
                 Kembali
             </a>
         </div>
@@ -271,9 +274,9 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <script>
-    function employeeQrScannerEngine() {
+    function studentQrScannerEngine() {
         return {
-            viewState: 'SCANNING',
+            viewState: 'SCANNING', // SCANNING, PROCESSING, SUCCESS, GEO_ERROR, OUTSIDE_GEOFENCE, CAMERA_ERROR, CROSS_QR_ERROR, GENERAL_ERROR
             errorMessage: '',
             coords: { lat: null, lon: null, distanceText: '8,4 meter' },
             successData: { date: '18 Agustus 2026', time: '07:42:18', distance: '8,4', statusLabel: 'HADIR', message: '' },
@@ -319,7 +322,7 @@
                         return;
                     }
 
-                    this.html5QrCode = new Html5Qrcode("hr-qr-reader");
+                    this.html5QrCode = new Html5Qrcode("student-qr-reader");
                     const config = { fps: 10, qrbox: { width: 240, height: 240 } };
 
                     try {
@@ -368,7 +371,7 @@
                     this.html5QrCode.pause(true);
                 }
 
-                fetch("{{ route('hr.attendance.qr.scan') }}", {
+                fetch("{{ route('attendances.student.scan') }}", {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -397,7 +400,7 @@
                     } else {
                         const msg = data.message || 'Gagal memproses presensi.';
                         this.errorMessage = msg;
-                        if (msg.includes('bukan QR Absensi Pegawai') || msg.includes('khusus untuk Presensi Siswa')) {
+                        if (msg.includes('bukan QR Absensi Siswa') || msg.includes('khusus untuk Presensi Pegawai')) {
                             this.viewState = 'CROSS_QR_ERROR';
                         } else if (msg.includes('di luar area LPK')) {
                             this.viewState = 'OUTSIDE_GEOFENCE';

@@ -20,7 +20,7 @@
                 <div class="h-24 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
                 <div class="px-6 pb-6 relative">
                     <div class="absolute -top-12 left-6">
-                        <img src="https://ui-avatars.com/api/?name={{ urlencode($user->Username ?? 'U') }}&size=96&background=022c43&color=fff&rounded=true" alt="Avatar" class="w-24 h-24 rounded-full border-4 border-white shadow-md">
+                        <x-user-avatar :user="$user" class="w-24 h-24" text-size="text-2xl" />
                     </div>
                     <div class="pt-14">
                         <h2 class="text-xl font-extrabold text-slate-900">{{ $user->Username ?? 'User' }}</h2>

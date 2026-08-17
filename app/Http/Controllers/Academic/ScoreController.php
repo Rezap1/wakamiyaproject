@@ -130,7 +130,22 @@ class ScoreController extends Controller
         \App\Repositories\GoogleSheets\AssessmentRepository $assessmentRepo,
         \App\Repositories\GoogleSheets\SubjectRepository $subjectRepo
     ) {
-        $students = $studentRepo->fetchAll();
+        $user = auth()->user();
+        $userRole = strtoupper($user->Role ?? '');
+        
+        // H8.21: Teacher scope authorization
+        if ($userRole === 'TEACHER') {
+            $teacherId = $user->Employee_ID ?? null;
+            if ($teacherId) {
+                $scopedStudents = $this->scoreService->getStudentsInTeacherScope($teacherId);
+                $students = collect($scopedStudents);
+            } else {
+                $students = collect([]);
+            }
+        } else {
+            $students = $studentRepo->fetchAll();
+        }
+        
         $teachers = $teacherRepo->fetchAll();
         $assessments = $assessmentRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
@@ -140,7 +155,31 @@ class ScoreController extends Controller
     public function store(\App\Http\Requests\StoreScoreRequest $request)
     {
         try {
-            $this->scoreService->create($request->validated());
+            $user = auth()->user();
+            $userRole = strtoupper($user->Role ?? '');
+            $validated = $request->validated();
+            
+            // H8.21: Server-side teacher scope authorization
+            if ($userRole === 'TEACHER') {
+                $teacherId = $user->Employee_ID ?? null;
+                if (!$teacherId || !$this->scoreService->isStudentInTeacherScope($validated['Student_ID'], $teacherId)) {
+                    return back()->withErrors(['error' => 'Anda tidak memiliki izin untuk menilai siswa ini.'])->withInput();
+                }
+            }
+            
+            // Set Assessment_Date
+            if (!empty($validated['Assessment_Date'])) {
+                $validated['Assessment_Date'] = $validated['Assessment_Date'];
+            } else {
+                $validated['Assessment_Date'] = now()->format('Y-m-d');
+            }
+            
+            // Auto-set Assessment_ID if not provided
+            if (empty($validated['Assessment_ID'])) {
+                $validated['Assessment_ID'] = 'DIRECT-' . now()->format('Ymd');
+            }
+            
+            $this->scoreService->create($validated);
             return redirect()->route('scores.index')->with('success', 'Nilai berhasil dicatat dan dipublikasikan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();

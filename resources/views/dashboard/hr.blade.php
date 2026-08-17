@@ -20,14 +20,20 @@
     ];
 @endphp
 
-<x-dashboard.action-center 
-    title="Dashboard HR" 
-    description="Pusat pengelolaan SDM, absensi, dan payroll."
-    :kpi="$formattedKpi"
-    :quick-actions="$quickActions"
-    :reminders="array_slice($reminders ?? [], 0, 5)"
-    :recent-activities="$recentActivities ?? []"
->
-</x-dashboard.action-center>
+<!-- MOBILE-FIRST DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="HR" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block">
+    <x-dashboard.action-center 
+        title="Dashboard HR" 
+        description="Pusat pengelolaan SDM, absensi, dan payroll."
+        :kpi="$formattedKpi"
+        :quick-actions="$quickActions"
+        :reminders="array_slice($reminders ?? [], 0, 5)"
+        :recent-activities="$recentActivities ?? []"
+    >
+    </x-dashboard.action-center>
+</div>
 
 @endsection

@@ -77,8 +77,10 @@ class QRAttendanceController extends Controller
         try {
             $token = $request->input('token');
             $deviceInfo = $request->input('device_info');
+            $lat = $request->filled('latitude') ? (float) $request->input('latitude') : null;
+            $lon = $request->filled('longitude') ? (float) $request->input('longitude') : null;
             
-            $result = $this->qrService->processScan($token, $deviceInfo);
+            $result = $this->qrService->processScan($token, $deviceInfo, $lat, $lon);
 
             return response()->json([
                 'success' => true,

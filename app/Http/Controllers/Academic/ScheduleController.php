@@ -118,6 +118,16 @@ class ScheduleController extends Controller
         }
     }
 
+    public function show(
+        $id,
+        \App\Repositories\GoogleSheets\ClassRepository $classRepo,
+        \App\Repositories\GoogleSheets\SubjectRepository $subjectRepo,
+        \App\Repositories\GoogleSheets\TeacherRepository $teacherRepo,
+        \App\Repositories\GoogleSheets\AcademicYearRepository $ayRepo
+    ) {
+        return $this->edit($id, $classRepo, $subjectRepo, $teacherRepo, $ayRepo);
+    }
+
     public function edit(
         $id,
         \App\Repositories\GoogleSheets\ClassRepository $classRepo,

@@ -86,6 +86,8 @@
         // Global Double-Submit Protection removed due to browser compatibility issues
     </script>
     
+    <x-mobile-bottom-nav :userRole="$userRole ?? 'STUDENT'" />
+    <x-floating-qr-button />
     <x-toast />
     <x-confirm-dialog />
 </body>

@@ -342,4 +342,21 @@ class StudentController extends Controller
             return response()->json(['error' => 'Terjadi kesalahan internal.'], 500);
         }
     }
+
+    public function graduate($id)
+    {
+        try {
+            $student = $this->studentService->getStudentById($id);
+            if (!$student) {
+                return redirect()->route('students.show', $id)->with('error', 'Data siswa tidak ditemukan.');
+            }
+
+            $this->studentService->processGraduation($id);
+
+            return redirect()->route('alumni.show', $id)->with('success', 'Siswa ' . ($student['Full_Name'] ?? '') . ' telah berhasil diproses sebagai LULUS dan dipindahkan ke Alumni!');
+        } catch (\Exception $e) {
+            Log::error('Error graduating student: ' . $e->getMessage());
+            return redirect()->route('students.show', $id)->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+        }
+    }
 }

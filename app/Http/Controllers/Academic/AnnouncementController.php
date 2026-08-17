@@ -9,6 +9,33 @@ use App\Services\Core\ActivityLogService;
 
 class AnnouncementController extends Controller
 {
+    use \App\Traits\Exportable;
+
+    protected $exportDateField = 'Created_At';
+
+    protected function getExportConfig(Request $request)
+    {
+        $announcements = $this->announcementService->getAll();
+        
+        return [
+            'moduleName' => 'Pengumuman Akademik',
+            'data' => collect(array_values($announcements->toArray())),
+            'pdfView' => 'pdf.generic_table',
+            'headers' => ['Title', 'Category', 'Target Audience', 'Status', 'Created At'],
+            'mapRow' => function($row) {
+                return [
+                    $row['Title'] ?? '-',
+                    $row['Category'] ?? '-',
+                    $row['Target_Audience'] ?? 'ALL',
+                    $row['Status'] ?? 'PUBLISHED',
+                    $row['Created_At'] ?? '-'
+                ];
+            },
+            'isLandscape' => true,
+            'summary' => '<tr><td>Total Pengumuman</td><td>: '.$announcements->count().'</td></tr>'
+        ];
+    }
+
     protected $announcementService;
 
     public function __construct(AnnouncementService $announcementService)
@@ -36,6 +63,13 @@ class AnnouncementController extends Controller
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $e->getMessage()])->withInput();
         }
+    }
+
+    public function show($id)
+    {
+        $announcement = $this->announcementService->getById($id);
+        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Not found']);
+        return view('academic.announcements.edit', compact('announcement'));
     }
 
     public function edit($id)

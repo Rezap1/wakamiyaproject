@@ -321,4 +321,39 @@ class StudentService
 
         return $res;
     }
+
+    public function isAlumni($student)
+    {
+        if (empty($student)) return false;
+        
+        $gradStatus = strtolower(trim($student['Graduation_Status'] ?? ''));
+        $enrollStatus = strtolower(trim($student['Enrollment_Status'] ?? ''));
+        
+        return in_array($gradStatus, ['lulus', 'graduated', 'completed']) || in_array($enrollStatus, ['alumni', 'lulus', 'graduated']);
+    }
+
+    public function getAlumniStudents()
+    {
+        $students = $this->getAllStudents();
+        return $students->filter(function ($student) {
+            return $this->isAlumni($student);
+        })->values();
+    }
+
+    public function processGraduation($id, array $additionalData = [])
+    {
+        $student = $this->getStudentById($id);
+        if (!$student) {
+            throw new Exception("Data Siswa dengan ID {$id} tidak ditemukan.");
+        }
+
+        $updatePayload = array_merge($additionalData, [
+            'Graduation_Status' => 'Lulus',
+            'Enrollment_Status' => 'Alumni',
+            'Updated_At' => now()->toDateTimeString(),
+            'Updated_By' => auth()->id() ?? 'SYSTEM'
+        ]);
+
+        return $this->updateStudent($id, $updatePayload);
+    }
 }

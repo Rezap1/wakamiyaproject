@@ -76,6 +76,14 @@ class AssignmentController extends Controller
         $this->assignmentService->create($request->except('_token'));
         return redirect()->route('assignments.index')->with('success', 'Created!');
     }
+    public function show(
+        $id,
+        \App\Repositories\GoogleSheets\ClassRepository $classRepo,
+        \App\Repositories\GoogleSheets\TeacherRepository $teacherRepo
+    ) {
+        return $this->edit($id, $classRepo, $teacherRepo);
+    }
+
     public function edit(
         $id,
         \App\Repositories\GoogleSheets\ClassRepository $classRepo,

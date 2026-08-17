@@ -28,14 +28,20 @@
     }
 @endphp
 
-<x-dashboard.action-center 
-    title="Dashboard Marketing" 
-    description="Pusat pengelolaan kemitraan perusahaan dan arsip dokumen legal."
-    :kpi="$formattedKpi"
-    :quick-actions="$quickActions"
-    :reminders="$reminders"
-    :recent-activities="$recentActivities ?? []"
->
-</x-dashboard.action-center>
+<!-- MOBILE DASHBOARD HERO (100% UNIFIED WMS DESIGN SYSTEM ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="MARKETING" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block">
+    <x-dashboard.action-center 
+        title="Dashboard Marketing" 
+        description="Pusat pengelolaan kemitraan perusahaan dan arsip dokumen legal."
+        :kpi="$formattedKpi"
+        :quick-actions="$quickActions"
+        :reminders="$reminders"
+        :recent-activities="$recentActivities ?? []"
+    >
+    </x-dashboard.action-center>
+</div>
 
 @endsection

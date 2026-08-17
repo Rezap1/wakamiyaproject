@@ -21,14 +21,20 @@
     ];
 @endphp
 
-<x-dashboard.action-center 
-    title="Dashboard Guru" 
-    description="Pusat pengelolaan kelas, absensi, dan penilaian harian."
-    :kpi="$formattedKpi"
-    :quick-actions="$quickActions"
-    :reminders="array_slice($reminders ?? [], 0, 5)"
-    :recent-activities="$recentActivities ?? []"
->
-</x-dashboard.action-center>
+<!-- MOBILE-FIRST DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="TEACHER" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block">
+    <x-dashboard.action-center 
+        title="Dashboard Guru" 
+        description="Pusat pengelolaan kelas, absensi, dan penilaian harian."
+        :kpi="$formattedKpi"
+        :quick-actions="$quickActions"
+        :reminders="array_slice($reminders ?? [], 0, 5)"
+        :recent-activities="$recentActivities ?? []"
+    >
+    </x-dashboard.action-center>
+</div>
 
 @endsection

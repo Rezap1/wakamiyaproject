@@ -3,13 +3,16 @@
 @section('header', 'Dashboard')
 
 @section('content')
-<div class="space-y-6">
+
+<!-- MOBILE DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="ADMINISTRATOR" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block space-y-6">
 
     <!-- Welcome Banner -->
     <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <!-- Using a placeholder Mt Fuji image to match the request -->
         <div class="absolute inset-0 bg-cover bg-center opacity-90" style="background-image: url('https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80');"></div>
-        <!-- Gradient overlay to ensure text readability -->
         <div class="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent"></div>
         <div class="relative p-8 md:p-10 z-10 w-full md:w-2/3">
             <h1 class="text-3xl font-extrabold text-slate-800 mb-2">Selamat Datang, {{ auth()->user()->Full_Name ?? 'Administrator' }}!</h1>
@@ -128,7 +131,6 @@
         @php 
             $salStat = \App\Services\Core\DashboardHelperService::getSalaryStatus(auth()->id()); 
             $bgClass = $salStat == 'Diterima' ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600' : 'bg-rose-500 hover:bg-rose-600 border-rose-600';
-            $textClass = 'text-white';
             $iconBgClass = $salStat == 'Diterima' ? 'bg-emerald-600' : 'bg-rose-600';
         @endphp
         <a href="#" class="{{ $bgClass }} rounded-2xl p-4 shadow-sm border transition-colors block">
@@ -146,8 +148,7 @@
 
     <!-- Main Grid Section 1 -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        <!-- Grafik Student (Data Riil) -->
+        <!-- Grafik Student -->
         <div class="lg:col-span-5 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-sm font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-2">
@@ -261,7 +262,6 @@
                                 }
                             }
                             
-                            // Translate common auto-generated descriptions
                             if ($desc === 'Generated' || $desc === 'Aktivitas Generate_Invoice') {
                                 $desc = 'Tagihan berhasil dibuat otomatis';
                             } elseif (str_starts_with($desc, 'Aktivitas Create pada')) {
@@ -309,8 +309,7 @@
 
     <!-- Bottom Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <!-- Ringkasan Keuangan (Data Riil) -->
+        <!-- Ringkasan Keuangan -->
         <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
             <h3 class="text-sm font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-6">
                 <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>

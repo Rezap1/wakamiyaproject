@@ -103,13 +103,14 @@ class ScoreService
             }
 
         } elseif ($category === 'LANGUAGE') {
-            $speaking = (float) ($data['speaking'] ?? 0);
-            $writing = (float) ($data['writing'] ?? 0);
-            $listening = (float) ($data['listening'] ?? 0);
-            $reading = (float) ($data['reading'] ?? 0);
-            $ethics = (float) ($data['ethics'] ?? 0);
-            $motivation = (float) ($data['motivation'] ?? 0);
-            $attendance = (float) ($data['attendance'] ?? 0);
+            // H8.21: Language uses 1-5 scale
+            $speaking = (int) ($data['speaking'] ?? 0);
+            $writing = (int) ($data['writing'] ?? 0);
+            $listening = (int) ($data['listening'] ?? 0);
+            $reading = (int) ($data['reading'] ?? 0);
+            $ethics = (int) ($data['ethics'] ?? 0);
+            $motivation = (int) ($data['motivation'] ?? 0);
+            $attendance = (int) ($data['attendance'] ?? 0);
 
             $rubrics = [
                 'speaking' => $speaking, 
@@ -122,18 +123,23 @@ class ScoreService
             ];
 
             foreach ($rubrics as $key => $val) {
-                if ($val < 0 || $val > 100) {
-                    throw new Exception("Rubrik bahasa '{$key}' harus berada dalam rentang 0-100.");
+                if ($val < 1 || $val > 5) {
+                    throw new Exception("Rubrik bahasa '{$key}' harus berada dalam skala 1-5.");
                 }
                 $details[$key] = $val;
             }
 
             $details['notes'] = $notes;
-            $scoreVal = round(array_sum($rubrics) / count($rubrics));
+            // Convert 1-5 average to 0-100 scale for composite score
+            $avgScale = array_sum($rubrics) / count($rubrics);
+            $scoreVal = round(($avgScale / 5) * 100);
 
         } else {
-            // GENERAL ACADEMIC SCORE
+            // GENERAL ACADEMIC SCORE (Ujian Bab)
             $scoreVal = (float) ($data['Score_Value'] ?? $data['Score'] ?? 0);
+            if ($scoreVal < 1 || $scoreVal > 100) {
+                throw new Exception("Nilai Ujian Bab harus berada di antara 1 dan 100.");
+            }
             $details['subject_id'] = $data['Subject_ID'] ?? '';
             $details['notes'] = $notes;
         }
@@ -260,9 +266,53 @@ class ScoreService
     {
         if (isset($data['Student_ID'])) {
             $student = $this->studentRepository->findById($data['Student_ID']);
-            if (!$student || ($student['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                throw new Exception("Siswa tidak valid atau sedang tidak aktif.");
+            if (!$student) {
+                throw new Exception("Siswa tidak valid.");
             }
         }
+    }
+
+    /**
+     * H8.21: Get students within a teacher's scope.
+     * Teacher -> Schedule -> Class_ID -> ClassEnrollment -> Student
+     */
+    public function getStudentsInTeacherScope($teacherId): array
+    {
+        $scheduleRepo = app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class);
+        $enrollmentRepo = app(\App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class);
+        
+        $schedules = $scheduleRepo->fetchAll();
+        $classIds = $schedules->where('Teacher_ID', $teacherId)->pluck('Class_ID')->unique()->toArray();
+        
+        // Also include classes where teacher is homeroom
+        $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
+        $classes = $classRepo->fetchAll();
+        $homeroomClassIds = $classes->where('Homeroom_Teacher_ID', $teacherId)->pluck('Class_ID')->unique()->toArray();
+        $classIds = array_unique(array_merge($classIds, $homeroomClassIds));
+        
+        if (empty($classIds)) {
+            // Fallback: return students from MASTER_STUDENT with matching Class_ID
+            $allStudents = $this->studentRepository->fetchAll();
+            return $allStudents->toArray();
+        }
+        
+        $enrollments = $enrollmentRepo->fetchAll();
+        $studentIds = $enrollments->whereIn('Class_ID', $classIds)->pluck('Student_ID')->unique()->toArray();
+        
+        // Also include students directly assigned to these classes
+        $allStudents = $this->studentRepository->fetchAll();
+        $directStudentIds = $allStudents->whereIn('Class_ID', $classIds)->pluck('Student_ID')->unique()->toArray();
+        $studentIds = array_unique(array_merge($studentIds, $directStudentIds));
+        
+        return $allStudents->whereIn('Student_ID', $studentIds)->values()->toArray();
+    }
+
+    /**
+     * H8.21: Check if a student is within a teacher's scope.
+     */
+    public function isStudentInTeacherScope($studentId, $teacherId): bool
+    {
+        $scopedStudents = $this->getStudentsInTeacherScope($teacherId);
+        return collect($scopedStudents)->contains('Student_ID', $studentId);
     }
 }

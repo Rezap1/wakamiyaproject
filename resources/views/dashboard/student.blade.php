@@ -22,22 +22,28 @@
     ];
 @endphp
 
-<x-dashboard.action-center 
-    title="Dashboard Siswa" 
-    description="Pusat informasi akademik dan administrasi siswa LPK."
-    :kpi="$formattedKpi"
-    :quick-actions="$quickActions"
-    :reminders="array_slice($reminders ?? [], 0, 5)"
-    :recent-activities="$recentActivities ?? []"
->
-    <!-- Language Progress -->
-    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mt-6">
-        <h4 class="text-lg font-extrabold text-slate-800 mb-5">Kemajuan Bahasa</h4>
-        <div class="w-full bg-slate-100 rounded-full h-2.5 mb-2">
-            <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-500" style="width: {{ $langProgress ?? 0 }}%"></div>
+<!-- MOBILE-FIRST DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="STUDENT" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block">
+    <x-dashboard.action-center 
+        title="Dashboard Siswa" 
+        description="Pusat informasi akademik dan administrasi siswa LPK."
+        :kpi="$formattedKpi"
+        :quick-actions="$quickActions"
+        :reminders="array_slice($reminders ?? [], 0, 5)"
+        :recent-activities="$recentActivities ?? []"
+    >
+        <!-- Language Progress -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mt-6">
+            <h4 class="text-lg font-extrabold text-slate-800 mb-5">Kemajuan Bahasa</h4>
+            <div class="w-full bg-slate-100 rounded-full h-2.5 mb-2">
+                <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-500" style="width: {{ $langProgress ?? 0 }}%"></div>
+            </div>
+            <p class="text-xs text-slate-500 text-right">{{ $langProgress ?? 0 }}%</p>
         </div>
-        <p class="text-xs text-slate-500 text-right">{{ $langProgress ?? 0 }}%</p>
-    </div>
-</x-dashboard.action-center>
+    </x-dashboard.action-center>
+</div>
 
 @endsection

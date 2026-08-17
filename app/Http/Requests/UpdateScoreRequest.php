@@ -29,14 +29,14 @@ class UpdateScoreRequest extends FormRequest
             'push_up' => 'nullable|integer|min:0',
             'sit_up' => 'nullable|integer|min:0',
 
-            // Language Assessment Rubric
-            'speaking' => 'nullable|numeric|min:0|max:100',
-            'writing' => 'nullable|numeric|min:0|max:100',
-            'listening' => 'nullable|numeric|min:0|max:100',
-            'reading' => 'nullable|numeric|min:0|max:100',
-            'ethics' => 'nullable|numeric|min:0|max:100',
-            'motivation' => 'nullable|numeric|min:0|max:100',
-            'attendance' => 'nullable|numeric|min:0|max:100',
+            // Language Assessment Rubric (1-5 scale)
+            'speaking' => 'nullable|integer|min:1|max:5',
+            'writing' => 'nullable|integer|min:1|max:5',
+            'listening' => 'nullable|integer|min:1|max:5',
+            'reading' => 'nullable|integer|min:1|max:5',
+            'ethics' => 'nullable|integer|min:1|max:5',
+            'motivation' => 'nullable|integer|min:1|max:5',
+            'attendance' => 'nullable|integer|min:1|max:5',
 
             'Notes' => 'nullable|string',
             'Remarks' => 'nullable|string',

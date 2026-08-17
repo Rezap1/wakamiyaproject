@@ -89,6 +89,16 @@ class AccountController extends Controller
         }
     }
 
+    public function show($id)
+    {
+        $account = $this->accountService->getById($id);
+        if (!$account) {
+            return redirect()->route('accounts.index')->with('error', 'Akun tidak ditemukan.');
+        }
+        $accounts = $this->accountService->getAll()->where('Account_ID', '!=', $id);
+        return view('finance.accounts.edit', compact('account', 'accounts'));
+    }
+
     public function edit($id)
     {
         $account = $this->accountService->getById($id);

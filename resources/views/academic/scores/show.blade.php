@@ -15,7 +15,7 @@
 <div class="max-w-5xl mx-auto space-y-6">
     <x-universal.detail-layout 
         title="{{ $score['Student_Name'] ?? ($score['Student_ID'] ?? 'Siswa') }}" 
-        description="Assessment: {{ $score['Assessment_Title'] ?? ($score['Assessment_ID'] ?? '-') }} | ID Nilai: {{ $score['Score_ID'] }}"
+        description="Assessment: {{ $score['Assessment_Title'] ?? ($score['Assessment_ID'] ?? '-') }} | ID Nilai: {{ $score['Score_ID'] ?? '-' }}"
         status="{{ $statusText }}"
         badgeColor="{{ $statusColor }}"
         :breadcrumbs="['Dasbor' => route('dashboard'), 'Akademik' => '#', 'Nilai' => route('scores.index'), 'Detail' => '#']"
@@ -145,11 +145,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">ID Rekaman Nilai (Primary Key)</p>
-                        <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $score['Score_ID'] }}</p>
+                        <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $score['Score_ID'] ?? '-' }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">ID Penilaian / Assessment</p>
-                        <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $score['Assessment_ID'] }}</p>
+                        <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $score['Assessment_ID'] ?? '-' }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Waktu Pencatatan</p>

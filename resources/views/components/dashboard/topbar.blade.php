@@ -1,5 +1,5 @@
 @props(['userRole', 'header' => 'Dashboard'])
-<header class="h-20 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-6 lg:px-8 sticky top-0 z-40 transition-colors duration-200">
+<header class="hidden lg:flex h-20 bg-white border-b border-slate-200 shadow-sm items-center justify-between px-6 lg:px-8 sticky top-0 z-40 transition-colors duration-200">
     
     <!-- Left Section: Header -->
     <div class="flex items-center gap-4 flex-1">
@@ -200,8 +200,8 @@
         <!-- User Profile -->
         <div class="relative" x-data="{ openProfile: false }">
             <div @click="openProfile = !openProfile" @click.outside="openProfile = false" class="flex items-center gap-3 cursor-pointer group">
-                <div class="h-11 w-11 rounded-full bg-white relative shrink-0 border border-slate-200">
-                    <img src="https://ui-avatars.com/api/?name={{ urlencode(auth()->user()->Username ?? 'U') }}&background=022c43&color=fff&rounded=true" alt="User" class="w-full h-full rounded-full">
+                <div class="h-11 w-11 rounded-full bg-white relative shrink-0">
+                    <x-user-avatar class="w-11 h-11" text-size="text-sm" />
                 </div>
                 <div class="text-left hidden md:block">
                     <p class="text-[15px] font-bold text-slate-800 leading-tight group-hover:text-emerald-600 transition-colors">{{ auth()->user()->Username ?? 'Deri Alamsah' }}</p>

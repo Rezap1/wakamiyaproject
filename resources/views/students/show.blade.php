@@ -17,6 +17,26 @@
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Master' => '#', 'Siswa' => route('students.index'), 'Profil' => '#']"
     >
         <x-slot:actions>
+            @php
+                $gradStatus = strtolower(trim($student['Graduation_Status'] ?? ''));
+                $isGraduated = in_array($gradStatus, ['lulus', 'graduated', 'completed']);
+            @endphp
+            @if(!$isGraduated)
+                <button type="button" onclick="if(confirm('Apakah Anda yakin ingin memproses siswa ini sebagai LULUS dan ALUMNI?')) { document.getElementById('graduationForm').submit(); }" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0112 20.055a11.952 11.952 0 01-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+                    </svg>
+                    Proses Kelulusan
+                </button>
+                <form id="graduationForm" action="{{ route('students.graduate', $student['Student_ID']) }}" method="POST" class="hidden">
+                    @csrf
+                </form>
+            @else
+                <a href="{{ route('alumni.show', $student['Student_ID']) }}" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5">
+                    🎓 Profil Alumni
+                </a>
+            @endif
             <x-universal.action-button action="edit" url="{{ route('students.edit', $student['Student_ID']) }}" />
             @if($isActive)
                 <x-universal.action-button action="delete" url="{{ route('students.destroy', $student['Student_ID']) }}" />

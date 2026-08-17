@@ -26,14 +26,20 @@
     }
 @endphp
 
-<x-dashboard.action-center 
-    title="Dashboard Direktur" 
-    description="Pusat pemantauan eksekutif dan persetujuan (approval) WMS."
-    :kpi="$formattedKpi"
-    :quick-actions="$quickActions"
-    :reminders="array_slice($reminders, 0, 5)"
-    :recent-activities="$recentActivities ?? []"
->
-</x-dashboard.action-center>
+<!-- MOBILE DASHBOARD HERO (100% UNIFIED WMS DESIGN SYSTEM ON MOBILE) -->
+<x-mobile-dashboard-hero user-role="DIRECTOR" />
+
+<!-- DESKTOP DASHBOARD VIEW -->
+<div class="hidden lg:block">
+    <x-dashboard.action-center 
+        title="Dashboard Direktur" 
+        description="Pusat pemantauan eksekutif dan persetujuan (approval) WMS."
+        :kpi="$formattedKpi"
+        :quick-actions="$quickActions"
+        :reminders="array_slice($reminders, 0, 5)"
+        :recent-activities="$recentActivities ?? []"
+    >
+    </x-dashboard.action-center>
+</div>
 
 @endsection

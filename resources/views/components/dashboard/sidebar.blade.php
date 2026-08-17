@@ -17,6 +17,7 @@
         @if($userRole === 'ADMINISTRATOR')
             <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('settings.index') }}" active="{{ request()->routeIs('settings.*') }}" icon="cog">Pengaturan Sistem</x-sidebar.nav-link>
@@ -39,6 +40,7 @@
         @if($userRole === 'ACADEMIC')
             <x-sidebar.nav-link href="{{ route('dashboard.academic') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('students.index') }}" active="{{ request()->routeIs('students.*') }}" icon="academic-cap">Siswa</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('teachers.index') }}" active="{{ request()->routeIs('teachers.*') }}" icon="user-group">Guru</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('programs.index') }}" active="{{ request()->routeIs('programs.*') }}" icon="book-open">Program</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('batches.index') }}" active="{{ request()->routeIs('batches.*') }}" icon="collection">Batch</x-sidebar.nav-link>
@@ -74,6 +76,7 @@
         @if($userRole === 'DIRECTOR')
             <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
         @endif
         
@@ -84,11 +87,13 @@
             <x-sidebar.nav-link href="{{ route('attendances.index') }}" active="{{ request()->routeIs('attendances.*') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('assignments.index') }}" active="{{ request()->routeIs('assignments.*') }}" icon="document-text">Tugas Harian</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('submissions.index') }}" active="{{ request()->routeIs('submissions.*') }}" icon="inbox">Pengumpulan Tugas</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('scores.index') }}" active="{{ request()->routeIs('scores.*') }}" icon="chart-bar">🎓 Nilai</x-sidebar.nav-link>
         @endif
         
         <!-- STUDENT WORKSPACE -->
         @if($userRole === 'STUDENT')
             <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+            <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">📱 Presensi QR</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('student.portal.assignments') }}" active="{{ request()->routeIs('student.portal.assignments*') }}" icon="document-text">Tugas</x-sidebar.nav-link>
             <x-sidebar.nav-link href="{{ route('student.progress') }}" active="{{ request()->routeIs('student.progress') }}" icon="clipboard-check">Nilai</x-sidebar.nav-link>

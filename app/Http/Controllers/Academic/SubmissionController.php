@@ -72,6 +72,13 @@ class SubmissionController extends Controller
         $this->submissionService->create($data);
         return redirect()->route('submissions.index')->with('success', 'Submitted!');
     }
+    public function show(
+        $id,
+        \App\Repositories\GoogleSheets\AssignmentRepository $assignmentRepo,
+        \App\Repositories\GoogleSheets\StudentRepository $studentRepo
+    ) {
+        return $this->edit($id, $assignmentRepo, $studentRepo);
+    }
     public function edit(
         $id,
         \App\Repositories\GoogleSheets\AssignmentRepository $assignmentRepo,
