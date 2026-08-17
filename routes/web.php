@@ -527,13 +527,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/token', [\App\Http\Controllers\Academic\StudentQRAttendanceController::class, 'getDynamicToken'])->name('token');
     });
 
+    // Profile Route
+    Route::get('/profile', [\App\Http\Controllers\Core\ProfileController::class, 'index'])->name('profile.index');
+
     // --- DUMMY ROUTES FOR SCAFFOLDED VIEWS TO PREVENT ROUTE NOT FOUND EXCEPTIONS ---
     $dummyRoutes = [
         
         'activity' => ['index', 'export'],
         'notifications' => ['markRead', 'index', 'show', 'markAllRead', 'archive', 'destroy'],
         'search' => ['index', 'overlay', 'clearHistory'],
-        'profile' => ['index'],
         'templates' => ['index', 'create', 'edit'],
         'pdf' => ['preview', 'download', 'generate'],
         

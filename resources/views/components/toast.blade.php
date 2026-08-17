@@ -77,7 +77,7 @@
         @if(session('warning')) showToast('warning', 'Peringatan', '{{ session('warning') }}'); @endif
         @if(session('info')) showToast('info', 'Informasi', '{{ session('info') }}'); @endif
         
-        @if($errors->any())
+        @if(isset($errors) && $errors->any())
             showToast('error', 'Validasi Gagal', 'Harap periksa kembali inputan Anda.');
         @endif
     });
