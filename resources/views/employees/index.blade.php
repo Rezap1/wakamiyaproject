@@ -37,6 +37,42 @@
         </x-universal.toolbar>
     </x-slot:toolbar>
 
+    @if(($employeeGroups ?? collect())->count() > 0)
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            @foreach($employeeGroups as $group)
+                <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
+                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['subtitle'] }}</p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-black">{{ $group['total'] }} pegawai</span>
+                            <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
+                        </div>
+                    </summary>
+                    <div class="border-t border-slate-100 p-4 bg-slate-50/50">
+                        <div class="flex flex-wrap gap-2 mb-3 text-xs font-bold">
+                            <span class="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Aktif: {{ $group['active'] }}</span>
+                            <span class="px-2 py-1 rounded bg-slate-100 text-slate-600">Nonaktif: {{ $group['inactive'] }}</span>
+                        </div>
+                        <div class="divide-y divide-slate-200 bg-white rounded-lg border border-slate-200 overflow-hidden">
+                            @foreach($group['items'] as $employee)
+                                <a href="{{ route('employees.show', $employee['Employee_ID']) }}" class="flex items-center justify-between gap-3 px-3 py-2 hover:bg-sky-50">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-slate-800 truncate">{{ $employee['Full_Name'] ?? \App\Helpers\UserResolverHelper::getName($employee['User_ID'] ?? '') }}</p>
+                                        <p class="text-[11px] text-slate-500 font-mono">{{ $employee['Employee_Number'] ?? $employee['Employee_ID'] ?? '-' }}</p>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-500 shrink-0">{{ $employee['Position_Name'] ?? '-' }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                </details>
+            @endforeach
+        </div>
+    @endif
+
     <x-universal.data-table :empty="count($employees) === 0" empty-title="Data Karyawan Kosong" empty-description="Belum ada karyawan yang terdaftar.">
         <x-slot:header>
             <th class="px-6 py-4">Karyawan</th>
@@ -88,10 +124,14 @@
             </td>
             <td class="px-6 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
-                    <x-universal.action-button action="detail" url="{{ route('employees.show', $employee['Employee_ID'] ?: '0') }}" />
-                    <x-universal.action-button action="edit" url="{{ route('employees.edit', $employee['Employee_ID'] ?: '0') }}" />
-                    @if(($employee['Is_Active'] ?? 'TRUE') === 'TRUE')
-                        <x-universal.action-button action="delete" url="{{ route('employees.destroy', $employee['Employee_ID'] ?: '0') }}" />
+                    @if(!empty($employee['Employee_ID']))
+                        <x-universal.action-button action="detail" url="{{ route('employees.show', $employee['Employee_ID']) }}" />
+                        <x-universal.action-button action="edit" url="{{ route('employees.edit', $employee['Employee_ID']) }}" />
+                        @if(($employee['Is_Active'] ?? 'TRUE') === 'TRUE')
+                            <x-universal.action-button action="delete" url="{{ route('employees.destroy', $employee['Employee_ID']) }}" />
+                        @endif
+                    @else
+                        <span class="text-xs font-semibold text-slate-400">Tidak tersedia</span>
                     @endif
                 </div>
             </td>

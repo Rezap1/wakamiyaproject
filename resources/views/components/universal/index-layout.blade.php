@@ -11,7 +11,7 @@
             @if(!empty($breadcrumbs))
                 <x-universal.breadcrumb :links="$breadcrumbs" />
             @endif
-            <h1 class="text-2xl font-black text-slate-800 tracking-tight">{{ $title }}</h1>
+            <h1 class="text-2xl font-black text-slate-800 tracking-tight">{!! strip_tags($title) !!}</h1>
             @if($description)
                 <p class="text-sm font-medium text-slate-500 mt-1">{{ $description }}</p>
             @endif

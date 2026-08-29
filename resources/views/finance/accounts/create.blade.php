@@ -1,8 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-    <h2 class="font-bold text-xl text-slate-800 leading-tight">Tambah Master Akun (Chart of Accounts)</h2>
-@endsection
+@section('header', 'Tambah Master Akun')
 
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6" x-data="accountCreateForm()">

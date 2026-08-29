@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use Exception;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class AccountService
 {
@@ -75,6 +76,46 @@ class AccountService
         return null;
     }
 
+    public function getDefaultTransactionAccount()
+    {
+        $assets = collect($this->repository->fetchAll())
+            ->where('Is_Active', '!=', 'FALSE')
+            ->filter(function($acc) {
+                $cat = strtoupper($acc['Account_Category'] ?? '');
+                return str_contains($cat, 'ASSET') || str_contains($cat, 'ASET');
+            });
+            
+        // 1. Try to find main cash account
+        $cashAcc = $assets->first(function($acc) {
+            $name = strtolower($acc['Account_Name'] ?? '');
+            $code = $acc['Account_Code'] ?? '';
+            return str_contains($name, 'kas') || str_contains($name, 'cash') || $code === '101';
+        });
+        
+        if ($cashAcc) {
+            return $this->formatAccountRecord($cashAcc);
+        }
+        
+        // 2. Try to find main bank account
+        $bankAcc = $assets->first(function($acc) {
+            $name = strtolower($acc['Account_Name'] ?? '');
+            $code = $acc['Account_Code'] ?? '';
+            return str_contains($name, 'bank') || str_contains($name, 'bsi') || $code === '102';
+        });
+        
+        if ($bankAcc) {
+            return $this->formatAccountRecord($bankAcc);
+        }
+        
+        // 3. Fallback to any active asset account
+        $fallback = $assets->first();
+        if ($fallback) {
+            return $this->formatAccountRecord($fallback);
+        }
+        
+        return null;
+    }
+
     public function create(array $data)
     {
         $code = trim($data['Account_Code'] ?? '');
@@ -103,25 +144,29 @@ class AccountService
         $data['Account_Category'] = $category;
         $data['Normal_Balance'] = $normalBalance;
         $data['Is_Active'] = 'TRUE';
-        $data['Created_By'] = Auth::id() ?? 'SYSTEM';
+        $data['Created_By'] = \App\Support\ActorIdentity::required();
         $data['Created_At'] = now()->toDateTimeString();
         $data['Updated_At'] = now()->toDateTimeString();
 
         $res = $this->repository->create($data);
+        if ($res === false || $res === null) {
+            throw new Exception("Gagal menyimpan akun {$data['Account_ID']}.");
+        }
         $this->repository->clearCache();
+        $this->clearFinanceCaches();
 
         $this->enterpriseEvent->dispatch(
             'ACCOUNT',
             'CREATE',
             'ACCOUNT',
             $data['Account_ID'],
-            Auth::id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['FINANCE'],
             [],
             $data
         );
 
-        return $this->formatAccountRecord($res);
+        return $this->formatAccountRecord($data);
     }
 
     public function update($id, array $data)
@@ -149,20 +194,24 @@ class AccountService
 
         $data['Updated_At'] = now()->toDateTimeString();
         $res = $this->repository->update($id, $data);
+        if ($res === false || $res === null) {
+            throw new Exception("Gagal memperbarui akun {$id}.");
+        }
         $this->repository->clearCache();
+        $this->clearFinanceCaches();
 
         $this->enterpriseEvent->dispatch(
             'ACCOUNT',
             'UPDATE',
             'ACCOUNT',
             $id,
-            Auth::id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['FINANCE'],
             [],
             $data
         );
 
-        return $this->formatAccountRecord($res);
+        return $this->formatAccountRecord(array_merge($account, $data));
     }
 
     public function delete($id)
@@ -173,19 +222,29 @@ class AccountService
         }
 
         $res = $this->repository->delete($id);
+        if ($res === false || $res === null) {
+            throw new Exception("Gagal menonaktifkan akun {$id}.");
+        }
         $this->repository->clearCache();
+        $this->clearFinanceCaches();
 
         $this->enterpriseEvent->dispatch(
             'ACCOUNT',
             'DELETE',
             'ACCOUNT',
             $id,
-            Auth::id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['FINANCE'],
             [],
             $account
         );
 
         return $res;
+    }
+
+    private function clearFinanceCaches(): void
+    {
+        Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
     }
 }

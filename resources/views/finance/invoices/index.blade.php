@@ -52,6 +52,46 @@
         </x-universal.toolbar>
     </x-slot:toolbar>
 
+    @if(($invoiceGroups ?? collect())->count() > 0)
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+            @foreach($invoiceGroups as $group)
+                @php
+                    $groupBadgeClasses = match($group['id']) {
+                        'OVERDUE' => 'bg-rose-50 text-rose-700',
+                        'Waiting Payment' => 'bg-amber-50 text-amber-700',
+                        'Partial Paid' => 'bg-purple-50 text-purple-700',
+                        'Paid' => 'bg-emerald-50 text-emerald-700',
+                        'Cancelled' => 'bg-slate-100 text-slate-700',
+                        default => 'bg-blue-50 text-blue-700',
+                    };
+                @endphp
+                <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
+                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} tagihan | Total Rp {{ number_format($group['amount'], 0, ',', '.') }}</p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="px-2.5 py-1 rounded-lg {{ $groupBadgeClasses }} text-xs font-black">Sisa Rp {{ number_format($group['remaining'], 0, ',', '.') }}</span>
+                            <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
+                        </div>
+                    </summary>
+                    <div class="border-t border-slate-100 divide-y divide-slate-100">
+                        @foreach($group['items'] as $invoice)
+                            <a href="{{ route('invoices.show', $invoice['Invoice_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $invoice['student_name'] ?? $invoice['Company_Name'] ?? $invoice['Student_ID'] ?? '-' }}</p>
+                                    <p class="text-[11px] text-slate-500 font-mono">{{ $invoice['Invoice_ID'] ?? '-' }} | {{ $invoice['Category'] ?? '-' }}</p>
+                                </div>
+                                <span class="text-sm font-black text-slate-800 shrink-0">Rp {{ number_format((float)($invoice['Remaining_Amount'] ?? $invoice['Amount'] ?? 0), 0, ',', '.') }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                </details>
+            @endforeach
+        </div>
+    @endif
+
     <x-universal.data-table :empty="count($invoices) === 0" empty-title="Data Tagihan Kosong" empty-description="Belum ada data tagihan yang sesuai dengan kriteria.">
         <x-slot:header>
             <th class="px-6 py-4">ID & Pihak Tagihan</th>
@@ -72,12 +112,23 @@
             <tr class="hover:bg-slate-50 transition-colors {{ $status === 'OVERDUE' ? 'bg-rose-50/40' : '' }}">
                 <td class="px-6 py-4">
                     <div class="font-mono font-bold text-slate-800 text-sm">{{ $item['Invoice_ID'] ?? '' }}</div>
-                    <div class="text-xs font-bold text-slate-700 mt-0.5">{{ $item['student_name'] ?? ($item['Company_Name'] ?? '-') }}</div>
-                    <div class="text-[11px] text-slate-500">{{ $item['Student_ID'] ?? ($item['Company_ID'] ?? '-') }}</div>
+                    <div class="text-xs font-black text-slate-800 mt-0.5">{{ $item['student_name'] ?? \App\Helpers\UserResolverHelper::getName($item['Student_ID'] ?? $item['Company_ID'] ?? '') }}</div>
+                    @if(!empty($item['class_name']) && $item['class_name'] !== '-')
+                        <div class="flex items-center gap-1 mt-1 flex-wrap">
+                            <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 inline-flex items-center gap-1">
+                                🏫 {{ $item['class_name'] }}
+                            </span>
+                            @if(!empty($item['batch_name']) && $item['batch_name'] !== '-')
+                                <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 inline-flex items-center gap-1">
+                                    🏷️ Batch {{ $item['batch_name'] }}
+                                </span>
+                            @endif
+                        </div>
+                    @endif
+                    <div class="text-[10px] font-mono text-slate-400 mt-0.5">{{ $item['Student_ID'] ?? ($item['Company_ID'] ?? '-') }}</div>
                 </td>
                 <td class="px-6 py-4">
                     <div class="font-bold text-slate-800 text-sm">{{ $item['Category'] ?? '-' }}</div>
-                    <div class="text-xs text-slate-500 font-medium">{{ trim(($item['class_name'] ?? '') . ' / ' . ($item['batch_name'] ?? ''), ' /') }}</div>
                 </td>
                 <td class="px-6 py-4 text-center font-black text-slate-800 text-sm">
                     Rp {{ number_format($amount, 0, ',', '.') }}

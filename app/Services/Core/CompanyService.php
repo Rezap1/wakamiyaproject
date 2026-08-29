@@ -85,8 +85,8 @@ class CompanyService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -97,7 +97,7 @@ class CompanyService
             'CREATE',
             'COMPANY',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             $mappedData
@@ -137,7 +137,7 @@ class CompanyService
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         // Handle File Uploads
@@ -186,7 +186,7 @@ class CompanyService
             'UPDATE',
             'COMPANY',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             $mappedData
@@ -204,7 +204,7 @@ class CompanyService
             'DELETE',
             'COMPANY',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             []

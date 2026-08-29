@@ -15,8 +15,8 @@ class ScanQRAttendanceRequest extends FormRequest
     {
         return [
             'token' => 'required|string',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
             'device_info' => 'nullable|string|max:255'
         ];
     }

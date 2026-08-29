@@ -8,6 +8,7 @@ use App\Services\Finance\PaymentService;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentRequest;
 use App\Helpers\ReportHelper;
+use App\Helpers\StoragePathHelper;
 use App\Helpers\UserResolverHelper;
 
 class PaymentController extends Controller
@@ -53,7 +54,7 @@ class PaymentController extends Controller
                     $stdName !== '-' ? $stdName : ($row['Student_ID'] ?? '-'), 
                     isset($row['Payment_Date']) ? \Carbon\Carbon::parse($row['Payment_Date'])->format('d M Y') : '-',
                     $row['Payment_Method'] ?? 'Bank Transfer',
-                    'Rp ' . number_format((float)($row['Amount'] ?? 0), 0, ',', '.'),
+                    'Rp ' . number_format((float)($row['Amount_Paid'] ?? $row['Amount'] ?? 0), 0, ',', '.'),
                     $row['Status'] ?? 'VERIFIED'
                 ];
             },
@@ -91,9 +92,26 @@ class PaymentController extends Controller
             return $pay;
         });
 
+        $paymentGroups = $payments
+            ->groupBy(fn ($payment) => trim((string) ($payment['Status'] ?? 'Waiting Verification')) ?: 'Waiting Verification')
+            ->map(function ($group, $status) {
+                return [
+                    'id' => $status,
+                    'title' => $status,
+                    'total' => $group->count(),
+                    'amount' => (float) $group->sum(fn ($payment) => (float) ($payment['Amount_Paid'] ?? $payment['Amount'] ?? 0)),
+                    'items' => $group->sortByDesc('Payment_Date')->values(),
+                ];
+            })
+            ->sortBy(function ($group) {
+                $order = array_search($group['id'], ['Waiting Verification', 'Need Revision', 'Verified', 'Rejected'], true);
+                return $order === false ? 99 : $order;
+            })
+            ->values();
+
         $payments = \App\Helpers\CollectionHelper::paginate($payments, 10)->withQueryString();
 
-        return view('finance.payments.index', compact('payments', 'search'));
+        return view('finance.payments.index', compact('payments', 'paymentGroups', 'search'));
     }
 
     public function create(Request $request)
@@ -111,11 +129,32 @@ class PaymentController extends Controller
 
     public function store(StorePaymentRequest $request)
     {
+        $proofFile = '';
+
         try {
-            $payment = $this->paymentService->create($request->validated());
-            return redirect()->route('payments.show', $payment['Payment_ID'])->with('success', 'Pembayaran berhasil direkam & diverifikasi secara otomatis.');
+            $data = $request->validated();
+            if ($request->hasFile('Proof_File')) {
+                $proofFile = $request->file('Proof_File')->store('payments');
+                $data['Proof_File'] = $proofFile;
+                $data['Proof_Image'] = $data['Proof_File'];
+            }
+
+            $payment = $this->paymentService->create($data);
+            return redirect()->route('payments.show', $payment['Payment_ID'])->with('success', 'Pembayaran berhasil direkam dan menunggu verifikasi.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            if ($proofFile !== '') {
+                try {
+                    $persisted = collect($this->paymentService->getAll())->contains(function ($payment) use ($proofFile) {
+                        return ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile;
+                    });
+                    if (!$persisted) {
+                        \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+                    }
+                } catch (\Throwable $lookupFailure) {
+                    // Preserve the file when persistence cannot be determined safely.
+                }
+            }
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -128,8 +167,12 @@ class PaymentController extends Controller
 
         $payment['student_name'] = UserResolverHelper::getName($payment['Student_ID'] ?? '');
         $payment['Created_By_Name'] = UserResolverHelper::getName($payment['Created_By'] ?? '');
+        $invoice = null;
+        if (!empty($payment['Invoice_ID'])) {
+            $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
+        }
 
-        return view('finance.payments.show', compact('payment'));
+        return view('finance.payments.show', compact('payment', 'invoice'));
     }
 
     public function downloadReceiptPdf($id)
@@ -149,38 +192,52 @@ class PaymentController extends Controller
                 false
             );
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
     public function verifyReceiptPublic($id)
     {
         try {
-            $docData = $this->paymentService->getReceiptDocumentData($id);
+            $docData = $this->paymentService->getReceiptDocumentData($id, true);
             $docData['payment']['student_name'] = UserResolverHelper::getName($docData['payment']['Student_ID'] ?? '');
             return view('finance.payments.verify_receipt_public', ['data' => $docData]);
         } catch (\Exception $e) {
-            abort(404, $e->getMessage());
+            abort(404, $this->safeExceptionMessage($e, 'Bukti pembayaran tidak ditemukan atau tidak tersedia.'));
         }
     }
 
     public function destroy($id)
     {
         try {
-            $this->paymentService->delete($id);
+            $this->paymentService->deletePayment($id);
             return redirect()->route('payments.index')->with('success', 'Pembayaran berhasil dibatalkan.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
-    public function verify($id)
+    public function verify(Request $request, $id)
     {
         try {
-            $this->paymentService->verifyPayment($id);
+            $validated = $request->validate([
+                'status' => 'nullable|in:Verified,Rejected,Need Revision',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
+            $user = auth()->user();
+            $verifiedBy = $user->User_ID ?? $user->Email ?? $user->email ?? null;
+            if (!$verifiedBy) {
+                abort(403, 'Identitas verifikator tidak valid.');
+            }
+
+            $status = $validated['status'] ?? 'Verified';
+            $notes = $validated['notes'] ?? '';
+
+            $this->paymentService->verifyPayment($id, $verifiedBy, $status, $notes);
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diverifikasi.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
@@ -190,16 +247,63 @@ class PaymentController extends Controller
         if (!$payment) {
             return redirect()->route('payments.index')->with('error', 'Pembayaran tidak ditemukan.');
         }
-        return view('finance.payments.show', compact('payment'));
+        $invoice = null;
+        if (!empty($payment['Invoice_ID'])) {
+            $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
+        }
+        return view('finance.payments.show', compact('payment', 'invoice'));
     }
 
     public function update(UpdatePaymentRequest $request, $id)
     {
         try {
-            $this->paymentService->update($id, $request->validated());
+            $data = $request->validated();
+            $user = auth()->user();
+            $verifiedBy = $user->User_ID ?? $user->Email ?? $user->email ?? null;
+            if (!$verifiedBy) {
+                abort(403, 'Identitas verifikator tidak valid.');
+            }
+            $this->paymentService->verifyPayment(
+                $id,
+                $verifiedBy,
+                $data['Status'],
+                $data['Notes'] ?? '',
+                $data['Account_ID'] ?? null
+            );
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diperbarui.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
+    }
+
+    public function downloadProof(Request $request, $id)
+    {
+        $payment = $this->paymentService->getById($id);
+        if (!$payment) {
+            abort(404, 'Bukti pembayaran tidak ditemukan.');
+        }
+
+        $storedPath = $payment['Proof_File'] ?? $payment['Proof_Image'] ?? null;
+        if (empty($storedPath)) {
+            abort(404, 'Bukti pembayaran tidak ditemukan.');
+        }
+        $path = StoragePathHelper::privateFileResponsePath($storedPath);
+        if (!$path) {
+            abort(404, 'File bukti pembayaran tidak ditemukan di server.');
+        }
+
+        if ($request->boolean('inline')) {
+            return response()->file($path);
+        }
+
+        return response()->download($path, $this->downloadFilename('bukti-pembayaran', $id, $path));
+    }
+
+    private function downloadFilename(string $prefix, string $id, string $path): string
+    {
+        $safeId = preg_replace('/[^A-Za-z0-9_-]/', '_', $id);
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+
+        return $prefix . '-' . $safeId . ($extension ? '.' . $extension : '');
     }
 }

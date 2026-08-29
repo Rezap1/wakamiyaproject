@@ -50,13 +50,13 @@ class ScheduleService
 
                 if ($start1 < $end2 && $end1 > $start2) {
                     if ($item['Teacher_ID'] === ($data['Teacher_ID'] ?? '')) {
-                        throw new \Exception('Teacher has a scheduling conflict.');
+                        throw new \Exception('Jadwal pengajar bentrok dengan jadwal lain.');
                     }
                     if ($item['Class_ID'] === ($data['Class_ID'] ?? '')) {
-                        throw new \Exception('Class has a scheduling conflict.');
+                        throw new \Exception('Jadwal kelas bentrok dengan jadwal lain.');
                     }
                     if (!empty($data['Room']) && $item['Room'] === $data['Room']) {
-                        throw new \Exception('Room is already booked for this time.');
+                        throw new \Exception('Ruangan sedang digunakan pada waktu tersebut.');
                     }
                 }
             }

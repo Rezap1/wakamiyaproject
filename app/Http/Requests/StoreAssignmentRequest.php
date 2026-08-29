@@ -23,7 +23,12 @@ class StoreAssignmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'Title' => 'required|string|max:255',
+            'Class_ID' => 'required|string',
+            'Teacher_ID' => 'required|string',
+            'Deadline' => 'required|date',
+            'Status' => 'required|string|in:Published,Closed,Active,Draft,Archived',
+            'Description' => 'nullable|string',
         ];
     }
 }

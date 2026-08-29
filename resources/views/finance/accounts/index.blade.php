@@ -1,8 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-    <h2 class="font-bold text-xl text-slate-800 leading-tight">Master Akun Keuangan (Chart of Accounts)</h2>
-@endsection
+@section('header', 'Master Akun Keuangan')
 
 @section('content')
 <x-universal.index-layout 

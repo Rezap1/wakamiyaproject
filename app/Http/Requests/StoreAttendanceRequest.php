@@ -28,7 +28,7 @@ class StoreAttendanceRequest extends FormRequest
             'Attendance_Date' => 'required|date',
             'students' => 'required|array',
             'students.*.Student_ID' => 'required|string',
-            'students.*.Status' => 'required|in:Hadir,Sakit,Izin,Alpha',
+            'students.*.Status' => 'required|in:Hadir,Terlambat,Sakit,Izin,Alpha,PRESENT,LATE,SICK,PERMITTED,ABSENT',
         
             //
         ];

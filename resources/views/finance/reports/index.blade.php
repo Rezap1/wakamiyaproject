@@ -1,8 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-    <h2 class="font-bold text-xl text-slate-800 leading-tight">Pusat Laporan Keuangan WMS</h2>
-@endsection
+@section('header', 'Pusat Laporan Keuangan')
 
 @section('content')
 <div class="space-y-6">

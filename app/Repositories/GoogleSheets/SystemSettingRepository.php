@@ -14,7 +14,11 @@ class SystemSettingRepository extends BaseSheetRepository implements SystemSetti
     }
 
     public function getAll() { return $this->fetchAll(); }
-    public function getById($id) { return $this->fetchAll()->firstWhere($this->primaryKey, $id); }
+    public function getById($id) {
+        return $this->fetchAll()->first(function($item) use ($id) {
+            return ($item['Setting_ID'] ?? '') === $id || (!empty($item['Setting_Key']) && ($item['Setting_Key'] ?? '') === $id);
+        });
+    }
     public function update($id, array $data) { return $this->updateRow($id, $data); }
     public function clearCache() {
         parent::clearCache();

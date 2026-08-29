@@ -2,8 +2,8 @@
 
 namespace App\Services\HR;
 
-use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\LeaveRepositoryInterface;
 use App\Services\Core\EmployeeService;
 use App\Services\Core\EnterpriseEventService;
 use Illuminate\Support\Facades\Cache;
@@ -13,18 +13,18 @@ use Exception;
 
 class LeaveService
 {
-    protected $attendanceRepo;
+    protected $leaveRepo;
     protected $employeeRepo;
     protected $employeeService;
     protected $enterpriseEvent;
 
     public function __construct(
-        AttendanceRepositoryInterface $attendanceRepo,
+        LeaveRepositoryInterface $leaveRepo,
         EmployeeRepositoryInterface $employeeRepo,
         EmployeeService $employeeService,
         EnterpriseEventService $enterpriseEvent
     ) {
-        $this->attendanceRepo = $attendanceRepo;
+        $this->leaveRepo = $leaveRepo;
         $this->employeeRepo = $employeeRepo;
         $this->employeeService = $employeeService;
         $this->enterpriseEvent = $enterpriseEvent;
@@ -32,20 +32,23 @@ class LeaveService
 
     public function getAllLeaves(): array
     {
-        $leavesList = Cache::get('leave_records_list', []);
-        return array_values($leavesList);
+        return collect($this->leaveRepo->getAll())
+            ->map(fn ($row) => (array) $row)
+            ->values()
+            ->all();
     }
 
     public function getLeaveById(string $leaveId): ?array
     {
-        $leaves = Cache::get('leave_records_list', []);
-        return $leaves[$leaveId] ?? null;
+        return $this->leaveRepo->getById($leaveId);
     }
 
     public function getApprovedLeavesForPeriod(string $employeeId, string $period): int
     {
         $allLeaves = $this->getAllLeaves();
         $approvedDays = 0;
+        $periodStart = Carbon::createFromFormat('Y-m-d', $period . '-01')->startOfDay();
+        $periodEnd = $periodStart->copy()->endOfMonth()->startOfDay();
 
         foreach ($allLeaves as $leave) {
             if (($leave['Employee_ID'] ?? '') !== $employeeId) continue;
@@ -54,10 +57,12 @@ class LeaveService
             $startDate = $leave['Start_Date'] ?? '';
             $endDate = $leave['End_Date'] ?? '';
 
-            if (str_starts_with($startDate, $period) || str_starts_with($endDate, $period)) {
-                $start = Carbon::parse($startDate);
-                $end = Carbon::parse($endDate);
-                $approvedDays += ($start->diffInDays($end) + 1);
+            $start = Carbon::parse($startDate)->startOfDay();
+            $end = Carbon::parse($endDate)->startOfDay();
+            if ($start->lte($periodEnd) && $end->gte($periodStart)) {
+                $overlapStart = $start->gt($periodStart) ? $start : $periodStart;
+                $overlapEnd = $end->lt($periodEnd) ? $end : $periodEnd;
+                $approvedDays += ($overlapStart->diffInDays($overlapEnd) + 1);
             }
         }
 
@@ -114,6 +119,8 @@ class LeaveService
             $leaveId = 'LEV-' . date('Ymd') . '-' . strtoupper(Str::random(6));
             $docNumber = 'DOC-LEV-' . date('Y') . '-' . sprintf("%06d", rand(1, 999999));
 
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
             $record = [
                 'Leave_ID' => $leaveId,
                 'Document_Number' => $docNumber,
@@ -125,13 +132,12 @@ class LeaveService
                 'Duration_Days' => (Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1),
                 'Reason' => $reason,
                 'Status' => 'SUBMITTED',
-                'Submitted_At' => now()->toDateTimeString(),
-                'Created_At' => now()->toDateTimeString()
+                'Submitted_At' => $timestamp,
+                'Created_At' => $timestamp,
+                'Updated_At' => $timestamp,
             ];
 
-            $leavesList = Cache::get('leave_records_list', []);
-            $leavesList[$leaveId] = $record;
-            Cache::forever('leave_records_list', $leavesList);
+            $this->leaveRepo->create($record);
 
             Cache::forget("employee_leave_{$employeeId}");
             Cache::forget('hr_dashboard');
@@ -141,7 +147,7 @@ class LeaveService
                 'CREATE', 
                 'LEAVE', 
                 $leaveId, 
-                auth()->id() ?? 'SYSTEM', 
+                $actorId,
                 ['HR', 'ADMINISTRATOR'], 
                 [$employeeId], 
                 $record
@@ -153,132 +159,159 @@ class LeaveService
 
     public function approveLeave(string $leaveId, string $approver): array
     {
-        $leave = $this->getLeaveById($leaveId);
-        if (!$leave) {
-            throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
-        }
+        return Cache::lock("leave_status_{$leaveId}", 10)->block(3, function () use ($leaveId) {
+            $leave = $this->getLeaveById($leaveId);
+            if (!$leave) {
+                throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
+            }
 
-        $currentStatus = strtoupper(trim($leave['Status'] ?? 'SUBMITTED'));
-        if (in_array($currentStatus, ['APPROVED', 'COMPLETED', 'CANCELLED'])) {
-            throw new Exception("Status cuti saat ini ({$currentStatus}) tidak dapat disetujui lagi.");
-        }
+            $currentStatus = strtoupper(trim($leave['Status'] ?? 'SUBMITTED'));
+            if ($currentStatus !== 'SUBMITTED') {
+                throw new Exception("Status cuti saat ini ({$currentStatus}) tidak dapat disetujui.");
+            }
 
-        $leave['Status'] = 'APPROVED';
-        $leave['Approved_By'] = $approver;
-        $leave['Approved_At'] = now()->toDateTimeString();
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
+            $changes = [
+                'Status' => 'APPROVED',
+                'Approved_By' => $actorId,
+                'Approved_At' => $timestamp,
+                'Updated_At' => $timestamp,
+            ];
+            $this->leaveRepo->update($leaveId, $changes);
+            $leave = array_merge($leave, $changes);
 
-        $leavesList = Cache::get('leave_records_list', []);
-        $leavesList[$leaveId] = $leave;
-        Cache::forever('leave_records_list', $leavesList);
+            Cache::forget("employee_leave_{$leave['Employee_ID']}");
+            Cache::forget('hr_dashboard');
 
-        Cache::forget("employee_leave_{$leave['Employee_ID']}");
-        Cache::forget('hr_dashboard');
+            $this->enterpriseEvent->dispatch(
+                'HR',
+                'UPDATE',
+                'LEAVE',
+                $leaveId,
+                $actorId,
+                ['HR', 'ADMINISTRATOR', 'EMPLOYEE'],
+                [$leave['Employee_ID']],
+                ['Status' => 'APPROVED', 'Approved_By' => $actorId]
+            );
 
-        $this->enterpriseEvent->dispatch(
-            'HR', 
-            'UPDATE', 
-            'LEAVE', 
-            $leaveId, 
-            auth()->id() ?? 'SYSTEM', 
-            ['HR', 'ADMINISTRATOR', 'EMPLOYEE'], 
-            [$leave['Employee_ID']], 
-            ['Status' => 'APPROVED', 'Approved_By' => $approver]
-        );
-
-        return $leave;
+            return $leave;
+        });
     }
 
     public function rejectLeave(string $leaveId, string $approver, ?string $reason = null): array
     {
-        $leave = $this->getLeaveById($leaveId);
-        if (!$leave) {
-            throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
-        }
+        return Cache::lock("leave_status_{$leaveId}", 10)->block(3, function () use ($leaveId, $reason) {
+            $leave = $this->getLeaveById($leaveId);
+            if (!$leave) {
+                throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
+            }
 
-        $leave['Status'] = 'REJECTED';
-        $leave['Rejected_By'] = $approver;
-        $leave['Rejection_Reason'] = $reason ?? 'Tidak disetujui atasan.';
-        $leave['Rejected_At'] = now()->toDateTimeString();
+            $currentStatus = strtoupper(trim($leave['Status'] ?? 'SUBMITTED'));
+            if ($currentStatus !== 'SUBMITTED') {
+                throw new Exception("Status cuti saat ini ({$currentStatus}) tidak dapat ditolak.");
+            }
 
-        $leavesList = Cache::get('leave_records_list', []);
-        $leavesList[$leaveId] = $leave;
-        Cache::forever('leave_records_list', $leavesList);
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
+            $changes = [
+                'Status' => 'REJECTED',
+                'Rejected_By' => $actorId,
+                'Rejection_Reason' => $reason ?? 'Tidak disetujui atasan.',
+                'Rejected_At' => $timestamp,
+                'Updated_At' => $timestamp,
+            ];
+            $this->leaveRepo->update($leaveId, $changes);
+            $leave = array_merge($leave, $changes);
 
-        Cache::forget("employee_leave_{$leave['Employee_ID']}");
-        Cache::forget('hr_dashboard');
+            Cache::forget("employee_leave_{$leave['Employee_ID']}");
+            Cache::forget('hr_dashboard');
 
-        $this->enterpriseEvent->dispatch(
-            'HR', 
-            'UPDATE', 
-            'LEAVE', 
-            $leaveId, 
-            auth()->id() ?? 'SYSTEM', 
-            ['HR', 'EMPLOYEE'], 
-            [$leave['Employee_ID']], 
-            ['Status' => 'REJECTED', 'Reason' => $reason]
-        );
+            $this->enterpriseEvent->dispatch(
+                'HR',
+                'UPDATE',
+                'LEAVE',
+                $leaveId,
+                $actorId,
+                ['HR', 'EMPLOYEE'],
+                [$leave['Employee_ID']],
+                ['Status' => 'REJECTED', 'Reason' => $reason]
+            );
 
-        return $leave;
+            return $leave;
+        });
     }
 
     public function cancelLeave(string $leaveId, string $user): array
     {
-        $leave = $this->getLeaveById($leaveId);
-        if (!$leave) {
-            throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
-        }
+        return Cache::lock("leave_status_{$leaveId}", 10)->block(3, function () use ($leaveId) {
+            $leave = $this->getLeaveById($leaveId);
+            if (!$leave) {
+                throw new Exception("Pengajuan cuti #{$leaveId} tidak ditemukan.");
+            }
 
-        if (in_array(strtoupper($leave['Status'] ?? ''), ['COMPLETED', 'PAID'])) {
-            throw new Exception("Pengajuan cuti yang telah selesai tidak dapat dibatalkan.");
-        }
+            $currentStatus = strtoupper(trim($leave['Status'] ?? 'SUBMITTED'));
+            if ($currentStatus !== 'SUBMITTED') {
+                throw new Exception("Status cuti saat ini ({$currentStatus}) tidak dapat dibatalkan.");
+            }
 
-        $leave['Status'] = 'CANCELLED';
-        $leave['Cancelled_By'] = $user;
-        $leave['Cancelled_At'] = now()->toDateTimeString();
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
+            $changes = [
+                'Status' => 'CANCELLED',
+                'Cancelled_By' => $actorId,
+                'Cancelled_At' => $timestamp,
+                'Updated_At' => $timestamp,
+            ];
+            $this->leaveRepo->update($leaveId, $changes);
+            $leave = array_merge($leave, $changes);
 
-        $leavesList = Cache::get('leave_records_list', []);
-        $leavesList[$leaveId] = $leave;
-        Cache::forever('leave_records_list', $leavesList);
+            Cache::forget("employee_leave_{$leave['Employee_ID']}");
+            Cache::forget('hr_dashboard');
 
-        Cache::forget("employee_leave_{$leave['Employee_ID']}");
-        Cache::forget('hr_dashboard');
+            $this->enterpriseEvent->dispatch(
+                'HR',
+                'UPDATE',
+                'LEAVE',
+                $leaveId,
+                $actorId,
+                ['HR', 'EMPLOYEE'],
+                [$leave['Employee_ID']],
+                ['Status' => 'CANCELLED']
+            );
 
-        $this->enterpriseEvent->dispatch(
-            'HR', 
-            'UPDATE', 
-            'LEAVE', 
-            $leaveId, 
-            auth()->id() ?? 'SYSTEM', 
-            ['HR', 'EMPLOYEE'], 
-            [$leave['Employee_ID']], 
-            ['Status' => 'CANCELLED']
-        );
-
-        return $leave;
+            return $leave;
+        });
     }
 
-    public function getLeaveDocumentData(string $leaveId): array
+    public function getLeaveDocumentData(string $leaveId, bool $allowPublicVerification = false): array
     {
         $leave = $this->getLeaveById($leaveId);
         if (!$leave) {
             throw new Exception("Dokumen Cuti #{$leaveId} tidak ditemukan.");
         }
 
-        // IDOR Protection for Student & Employee Users
+        // Public access is reserved for the signed verification endpoint.
         $user = auth()->user();
-        if ($user && ($user->Role ?? '') === 'STUDENT') {
-            throw new Exception("Akses Ditolak: Siswa tidak memiliki akses ke dokumen cuti HR.");
-        }
-        if ($user && in_array(strtoupper($user->Role ?? ''), ['TEACHER', 'EMPLOYEE'])) {
-            $emp = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$emp || ($leave['Employee_ID'] ?? '') !== ($emp['Employee_ID'] ?? '')) {
-                throw new Exception("Akses Ditolak: Dokumen cuti #{$leaveId} bukan milik akun Anda.");
+        if (!$allowPublicVerification) {
+            if (!$user) {
+                throw new Exception("Akses Ditolak: Identitas pengguna tidak dapat dipastikan.");
+            }
+
+            $role = strtoupper(trim((string) ($user->Role ?? '')));
+            if (in_array($role, ['TEACHER', 'EMPLOYEE'], true)) {
+                $emp = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
+                if (!$emp || ($leave['Employee_ID'] ?? '') !== ($emp['Employee_ID'] ?? '')) {
+                    throw new Exception("Akses Ditolak: Dokumen cuti #{$leaveId} bukan milik akun Anda.");
+                }
+            } elseif (!in_array($role, ['ADMINISTRATOR', 'HR'], true)) {
+                throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses dokumen cuti.");
             }
         }
 
         $employee = $this->employeeRepo->findById($leave['Employee_ID'] ?? '') ?? [];
 
-        $verificationUrl = route('leaves.verify-public', $leaveId);
+        $verificationUrl = \App\Helpers\PublicVerificationUrl::make('leaves.verify-public', $leaveId);
 
         $qrCodeSvg = null;
         if (class_exists('\SimpleSoftwareIO\QrCode\Facades\QrCode')) {

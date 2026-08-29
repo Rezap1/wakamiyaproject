@@ -103,6 +103,9 @@ class StudentService
         if (!$user) {
             throw new Exception("User tidak ditemukan.");
         }
+        if (!$this->userHasRole($user, 'STUDENT')) {
+            throw new Exception("Akun pengguna yang dipilih bukan akun siswa.");
+        }
 
         $allStudents = $this->studentRepository->fetchAll();
         $existingUser = $allStudents->firstWhere('User_ID', $data['User_ID']);
@@ -120,8 +123,8 @@ class StudentService
             'Birth_Place' => $data['Birth_Place'] ?? '',
             'Birth_Date' => $data['Birth_Date'] ?? '',
             'National_ID' => $data['National_ID'] ?? '',
-            'Phone_Number' => $user['Phone_Number'] ?? '',
-            'Email' => $user['Email'] ?? '',
+            'Phone_Number' => $this->firstFilled($data['Phone_Number'] ?? null, $user['Phone_Number'] ?? null),
+            'Email' => $this->firstFilled($data['Email'] ?? null, $user['Email'] ?? null),
             'Address' => $data['Address'] ?? '',
             'Education' => $data['Education'],
             'Program_ID' => $data['Program_ID'],
@@ -132,8 +135,8 @@ class StudentService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -144,11 +147,45 @@ class StudentService
             'CREATE',
             'STUDENT',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
         );
+
+        // --- AUTOMATIC INVOICE GENERATION ---
+        try {
+            $settingService = app(\App\Services\Core\SystemSettingService::class);
+            $invoiceService = app(\App\Services\Finance\InvoiceService::class);
+
+            // Get default tuition fee from settings (Finance category)
+            $defaultTuitionFee = $settingService->getDefaultTuitionFee();
+
+            if ($defaultTuitionFee > 0) {
+                $invoiceData = [
+                    'Invoice_Type' => 'STUDENT',
+                    'Student_ID' => $newId,
+                    'Category' => 'Biaya Pendidikan',
+                    'Amount' => $defaultTuitionFee,
+                    'Due_Date' => \Carbon\Carbon::parse($data['Registration_Date'] ?? now())->addDays(30)->format('Y-m-d'),
+                    'Description' => 'Tagihan biaya pendidikan awal siswa (Otomatis dari Sistem)',
+                    'items' => [
+                        [
+                            'description' => 'Biaya Pendidikan Pokok',
+                            'qty' => 1,
+                            'unit_price' => $defaultTuitionFee
+                        ]
+                    ]
+                ];
+
+                $invoice = $invoiceService->create($invoiceData);
+                // Publish the invoice to set it to 'Waiting Payment'
+                $invoiceService->publish($invoice['Invoice_ID']);
+            }
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to generate default tuition invoice for student {$newId}: " . $e->getMessage());
+        }
 
         return $mappedData;
     }
@@ -181,23 +218,10 @@ class StudentService
             }
         }
 
-        if (isset($data['Batch_ID']) && $data['Batch_ID'] !== $student['Batch_ID']) {
-            $batch = $this->batchRepository->findById($data['Batch_ID']);
-            if (!$batch || ($batch['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                throw new Exception("Angkatan tidak valid atau sedang tidak aktif.");
-            }
-        }
-
-        if (isset($data['Class_ID']) && $data['Class_ID'] !== $student['Class_ID']) {
-            $class = $this->classRepository->findById($data['Class_ID']);
-            if (!$class || ($class['Is_Active'] ?? 'TRUE') === 'FALSE') {
-                throw new Exception("Kelas tidak valid atau sedang tidak aktif.");
-            }
-        }
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         $userService = app(\App\Services\Core\UserService::class);
@@ -205,9 +229,12 @@ class StudentService
         if ($userId) {
             $user = $userService->getUserById($userId);
             if ($user) {
+                if (!$this->userHasRole($user, 'STUDENT')) {
+                    throw new Exception("Akun pengguna yang dipilih bukan akun siswa.");
+                }
                 $mappedData['Full_Name'] = $user['Full_Name'];
-                $mappedData['Phone_Number'] = $user['Phone_Number'] ?? '';
-                $mappedData['Email'] = $user['Email'] ?? '';
+                $mappedData['Phone_Number'] = $this->firstFilled($data['Phone_Number'] ?? null, $user['Phone_Number'] ?? null, $student['Phone_Number'] ?? null);
+                $mappedData['Email'] = $this->firstFilled($data['Email'] ?? null, $user['Email'] ?? null, $student['Email'] ?? null);
             }
         }
         
@@ -218,7 +245,7 @@ class StudentService
         $allowedFields = [
             'Student_Number', 'Registration_Date', 'Gender',
             'Birth_Place', 'Birth_Date', 'National_ID',
-            'Address', 'Education', 'Program_ID', 'Class_ID', 'Batch_ID',
+            'Address', 'Education', 'Program_ID',
             'Enrollment_Status', 'Graduation_Status', 'Is_Active', 'Notes'
         ];
 
@@ -253,7 +280,7 @@ class StudentService
                     $id,
                     ['student' => $res, 'program' => $program, 'certificate' => ['Issue_Date' => now()->format('Y-m-d')]],
                     'pdf.certificate',
-                    auth()->user()->email ?? 'System'
+                    \App\Support\ActorIdentity::required()
                 );
 
                 // 2. Generate Academic Report
@@ -263,7 +290,7 @@ class StudentService
                     $id,
                     ['student' => $res, 'program' => $program, 'scores' => $scores],
                     'pdf.academic_report',
-                    auth()->user()->email ?? 'System'
+                    \App\Support\ActorIdentity::required()
                 );
             }
         } catch (\Exception $e) {
@@ -275,7 +302,7 @@ class StudentService
             'UPDATE',
             'STUDENT',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -313,7 +340,7 @@ class StudentService
             'DELETE',
             'STUDENT',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             []
@@ -340,6 +367,24 @@ class StudentService
         })->values();
     }
 
+    private function firstFilled(...$values): string
+    {
+        foreach ($values as $value) {
+            $normalized = trim((string) ($value ?? ''));
+            if ($normalized !== '') {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
+    }
+
     public function processGraduation($id, array $additionalData = [])
     {
         $student = $this->getStudentById($id);
@@ -351,7 +396,7 @@ class StudentService
             'Graduation_Status' => 'Lulus',
             'Enrollment_Status' => 'Alumni',
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM'
+            'Updated_By' => \App\Support\ActorIdentity::required()
         ]);
 
         return $this->updateStudent($id, $updatePayload);

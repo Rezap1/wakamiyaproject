@@ -11,6 +11,12 @@ class StoreInvoiceRequest extends FormRequest
         return true;
     }
 
+    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
+    {
+        \Illuminate\Support\Facades\Log::error('Invoice Validation Failed: ' . json_encode($validator->errors()->toArray()));
+        parent::failedValidation($validator);
+    }
+
     public function rules(): array
     {
         return [

@@ -5,6 +5,7 @@ namespace App\Services\Core;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use Exception;
 
@@ -13,17 +14,20 @@ class BatchService
     protected $batchRepository;
     protected $programRepository;
     protected $studentRepository;
+    protected $classRepository;
     protected $enterpriseEvent;
 
     public function __construct(
         BatchRepositoryInterface $batchRepository,
         ProgramRepositoryInterface $programRepository,
         StudentRepositoryInterface $studentRepository,
+        ClassRepositoryInterface $classRepository,
         EnterpriseEventService $enterpriseEvent
     ) {
         $this->batchRepository = $batchRepository;
         $this->programRepository = $programRepository;
         $this->studentRepository = $studentRepository;
+        $this->classRepository = $classRepository;
         $this->enterpriseEvent = $enterpriseEvent;
     }
 
@@ -72,8 +76,8 @@ class BatchService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -84,7 +88,7 @@ class BatchService
             'CREATE',
             'BATCH',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -129,7 +133,7 @@ class BatchService
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         $allowedFields = [
@@ -150,7 +154,7 @@ class BatchService
             'UPDATE',
             'BATCH',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -162,11 +166,22 @@ class BatchService
     public function deleteBatch($id)
     {
         // Soft Delete Protection
-        $students = $this->studentRepository->fetchAll();
-        $relatedStudentsCount = $students->where('Batch_ID', $id)->count();
+        $students = collect($this->studentRepository->fetchAll());
+        $relatedStudentsCount = $students->where('Batch_ID', $id)->filter(function($s) {
+            return ($s['Is_Active'] ?? 'TRUE') !== 'FALSE';
+        })->count();
 
         if ($relatedStudentsCount > 0) {
-            throw new Exception("Batch ini masih digunakan oleh {$relatedStudentsCount} data Siswa. Silakan ubah status menjadi Inactive.");
+            throw new Exception("Batch tidak dapat dihapus karena masih digunakan oleh siswa.");
+        }
+        
+        $classes = collect($this->classRepository->fetchAll());
+        $relatedClassesCount = $classes->where('Batch_ID', $id)->filter(function($c) {
+            return ($c['Is_Active'] ?? 'TRUE') !== 'FALSE';
+        })->count();
+        
+        if ($relatedClassesCount > 0) {
+            throw new Exception("Batch tidak dapat dihapus karena masih memiliki kelas aktif.");
         }
 
         $res = $this->batchRepository->delete($id);
@@ -176,7 +191,7 @@ class BatchService
             'DELETE',
             'BATCH',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             []

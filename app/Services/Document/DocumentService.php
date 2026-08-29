@@ -4,6 +4,7 @@ namespace App\Services\Document;
 use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
 use App\Interfaces\GoogleSheets\DocumentTemplateRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
+use App\Support\ActorIdentity;
 use Illuminate\Support\Facades\Auth;
 
 class DocumentService
@@ -66,6 +67,7 @@ class DocumentService
 
     public function GenerateDocument(array $data)
     {
+        $data['Generated_By'] = ActorIdentity::resolve($data['Generated_By'] ?? null);
         $metadata = $this->GenerateDocumentMetadata($data);
         $res = $this->docRepo->create($metadata);
         $this->docRepo->clearCache();
@@ -75,7 +77,7 @@ class DocumentService
                 'GENERATE',
                 'DOCUMENT',
                 $metadata['Document_ID'] ?? 'UNKNOWN',
-                Auth::id() ?? 0,
+                ActorIdentity::required(),
                 ['ADMINISTRATOR'],
                 [],
                 []
@@ -108,7 +110,9 @@ class DocumentService
         return [
             'document' => $doc,
             'template' => $template,
-            'html' => $template ? "<h1>Preview of {$template['Template_Name']}</h1><p>Doc Number: {$doc['Document_Number']}</p>" : "<h1>No Template Assigned</h1>"
+            'html' => $template
+                ? '<h1>Preview of ' . e($template['Template_Name'] ?? '-') . '</h1><p>Doc Number: ' . e($doc['Document_Number'] ?? '-') . '</p>'
+                : '<h1>No Template Assigned</h1>'
         ];
     }
 
@@ -126,6 +130,7 @@ class DocumentService
 
     public function ArchiveDocument($id)
     {
+        $actorId = ActorIdentity::required();
         $res = $this->docRepo->update($id, ['Status' => 'Archived', 'Updated_At' => now()->toDateTimeString()]);
         $this->docRepo->clearCache();
         try { 
@@ -134,7 +139,7 @@ class DocumentService
                 'ARCHIVE',
                 'DOCUMENT',
                 $id,
-                Auth::id() ?? 0,
+                $actorId,
                 ['ADMINISTRATOR'],
                 [],
                 []
@@ -145,6 +150,7 @@ class DocumentService
 
     public function PublishDocument($id)
     {
+        $actorId = ActorIdentity::required();
         $res = $this->docRepo->update($id, ['Status' => 'Published', 'Updated_At' => now()->toDateTimeString()]);
         $this->docRepo->clearCache();
         try { 
@@ -153,7 +159,7 @@ class DocumentService
                 'PUBLISH',
                 'DOCUMENT',
                 $id,
-                Auth::id() ?? 0,
+                $actorId,
                 ['ADMINISTRATOR'],
                 [],
                 []

@@ -56,8 +56,8 @@ class ProgramService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -68,7 +68,7 @@ class ProgramService
             'CREATE',
             'PROGRAM',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -100,7 +100,7 @@ class ProgramService
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         $allowedFields = [
@@ -121,7 +121,7 @@ class ProgramService
             'UPDATE',
             'PROGRAM',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -147,7 +147,7 @@ class ProgramService
             'DELETE',
             'PROGRAM',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             []

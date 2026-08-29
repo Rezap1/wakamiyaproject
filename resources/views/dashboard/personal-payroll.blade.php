@@ -52,7 +52,9 @@
                                     @if(!empty($payroll['Payment_Proof']))
                                         @php 
                                             $isUrl = str_starts_with($payroll['Payment_Proof'], 'http');
-                                            $proofUrl = $isUrl ? $payroll['Payment_Proof'] : asset($payroll['Payment_Proof']);
+                                            $proofUrl = $isUrl ? $payroll['Payment_Proof'] : route('dashboard.personal-payroll.proof', ['id' => $payroll['Payroll_ID'], 'inline' => 1]);
+                                            $proofDownloadUrl = $isUrl ? $payroll['Payment_Proof'] : route('dashboard.personal-payroll.proof', $payroll['Payroll_ID']);
+                                            $proofPath = strtolower($payroll['Payment_Proof']);
                                         @endphp
                                         <div x-data="{ openImageModal: false }" class="inline">
                                             <button @click="openImageModal = true" type="button" class="px-3 py-1.5 bg-blue-100 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-200 transition-colors flex items-center">
@@ -76,7 +78,7 @@
                                                     
                                                     <!-- Image Container -->
                                                     <div x-data="{ isZoomed: false }" class="overflow-auto p-4 flex-1 flex items-center justify-center bg-slate-200/50" :class="isZoomed ? 'cursor-zoom-out items-start justify-start' : 'cursor-zoom-in'" @click="isZoomed = !isZoomed">
-                                                        @if(str_ends_with(strtolower($proofUrl), '.pdf'))
+                                                        @if(str_ends_with($proofPath, '.pdf'))
                                                             <iframe src="{{ $proofUrl }}" class="w-full h-[60vh] rounded-lg border border-slate-300" @click.stop></iframe>
                                                         @else
                                                             <img src="{{ $proofUrl }}" alt="Bukti Transfer" class="rounded-lg shadow-sm border border-slate-200 transition-all duration-300" :class="isZoomed ? 'w-full max-w-none h-auto min-w-[600px]' : 'max-w-full max-h-[60vh] object-contain'">
@@ -89,7 +91,7 @@
                                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                                                             Kembali
                                                         </button>
-                                                        <a href="{{ $proofUrl }}" download class="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm">
+                                                        <a href="{{ $proofDownloadUrl }}" download class="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm">
                                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                                             Unduh
                                                         </a>

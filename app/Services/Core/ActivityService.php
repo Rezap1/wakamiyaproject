@@ -9,10 +9,10 @@ class ActivityService
     protected $repo;
     
     protected $moduleWhitelist = [
-        'HR' => ['Employee', 'Department', 'Position'],
-        'ACADEMIC' => ['Program', 'Batch', 'Class', 'Teacher', 'Student', 'Subject', 'Schedule', 'Assignment', 'Submission', 'Attendance', 'Score', 'Announcement'],
-        'MARKETING' => ['Company', 'JobOrder', 'Application', 'Interview'],
-        'FINANCE' => ['Finance', 'Payment', 'Invoice'],
+        'HR' => ['EMPLOYEE', 'DEPARTMENT', 'POSITION', 'HR', 'PAYROLL', 'LEAVE', 'OVERTIME', 'ATTENDANCE'],
+        'ACADEMIC' => ['PROGRAM', 'BATCH', 'CLASS', 'TEACHER', 'STUDENT', 'SUBJECT', 'SCHEDULE', 'ASSIGNMENT', 'SUBMISSION', 'ATTENDANCE', 'SCORE', 'ANNOUNCEMENT', 'ACADEMIC'],
+        'MARKETING' => ['COMPANY', 'JOBORDER', 'APPLICATION', 'INTERVIEW', 'MARKETING'],
+        'FINANCE' => ['FINANCE', 'FINANCE_TRANSACTION', 'PAYMENT', 'INVOICE', 'ACCOUNT'],
     ];
 
     public function __construct(ActivityLogRepositoryInterface $repo)
@@ -22,6 +22,8 @@ class ActivityService
 
     public function getActivities($role, $userId, $filters = [])
     {
+        $role = strtoupper(trim((string) $role));
+
         // 1. Generate Cache Key based on Role, User, and Filters
         $cacheKey = "wms_activity_{$role}_{$userId}_" . md5(json_encode($filters));
         
@@ -32,12 +34,12 @@ class ActivityService
             
             // 3. RBAC Filtering
             $filteredLogs = $allLogs->filter(function($log) use ($role, $userId) {
-                if (in_array($role, ['ADMINISTRATOR', 'DIRECTOR'])) return true;
+                if (in_array($role, ['MASTER', 'ADMINISTRATOR', 'DIRECTOR'], true)) return true;
                 if (in_array($role, ['TEACHER', 'STUDENT'])) return ($log['User_ID'] ?? '') === $userId;
                 
                 // Whitelist check
                 $allowedModules = $this->moduleWhitelist[$role] ?? [];
-                return in_array($log['Module'] ?? '', $allowedModules);
+                return in_array(strtoupper(trim((string) ($log['Module'] ?? ''))), $allowedModules, true);
             });
             
             // 4. Apply extra filters (from UI)

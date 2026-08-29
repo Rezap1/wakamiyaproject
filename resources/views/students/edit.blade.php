@@ -4,13 +4,26 @@
 <div class="max-w-4xl mx-auto">
     @php
         $userOptions = [];
+        $userContactData = [];
         foreach($users as $user) {
             $roleId = $user['Role_ID'] ?? '';
             $roleName = \App\Helpers\UserResolverHelper::getRoleName($roleId);
             $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Peran: ' . $roleName;
+            $userContactData[$user['User_ID']] = [
+                'name' => $user['Full_Name'] ?? $user['Username'] ?? '',
+                'email' => $user['Email'] ?? '',
+                'phone' => $user['Phone_Number'] ?? '',
+                'role' => $roleName,
+            ];
         }
         if(isset($student['User_ID']) && !collect($users)->contains('User_ID', $student['User_ID'])) {
             $userOptions[$student['User_ID']] = $student['Full_Name'] . ' (' . ($student['Email'] ?? '') . ')';
+            $userContactData[$student['User_ID']] = [
+                'name' => $student['Full_Name'] ?? '',
+                'email' => $student['Email'] ?? '',
+                'phone' => $student['Phone_Number'] ?? '',
+                'role' => 'STUDENT',
+            ];
         }
 
         $programOptions = [];
@@ -23,8 +36,9 @@
         action="{{ route('students.update', $student['Student_ID']) }}" 
         method="PUT"
         title="Formulir Pembaruan Data Siswa" 
-        description="Mengubah profil siswa: {{ $student['Student_ID'] }}"
-        buttonText="Perbarui Profil Siswa"
+        description="Edit data pribadi, kontak, dan penempatan akademik siswa."
+        buttonText="Simpan Perubahan"
+        :has-files="true"
     >
         <div class="space-y-8">
             <!-- Section 1: Akademik & Penempatan -->
@@ -119,6 +133,22 @@
                             :options="$userOptions"
                             value="{{ $student['User_ID'] ?? '' }}"
                         />
+                        <div id="selectedUserContact" class="rounded-2xl border border-sky-100 bg-sky-50/70 p-4 text-sm">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Nama Akun</p>
+                                    <p id="selectedUserName" class="mt-1 font-bold text-slate-800">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Email</p>
+                                    <p id="selectedUserEmail" class="mt-1 font-bold text-slate-800 break-all">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Nomor HP</p>
+                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">-</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <x-universal.select 
@@ -141,6 +171,7 @@
                         type="date"
                         value="{{ $student['Birth_Date'] ?? '' }}"
                     />
+
                 </div>
             </div>
 
@@ -175,6 +206,21 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Section 4: Data Tambahan -->
+            <div>
+                <h3 class="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2 mt-8">Data Tambahan</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="md:col-span-2">
+                        <x-universal.input 
+                            name="Photo" 
+                            label="Ganti Pas Foto Siswa (Opsional)" 
+                            type="file"
+                            helper="Unggah file baru (JPG/PNG) jika ingin mengganti foto saat ini. Foto ini juga akan otomatis dijadikan foto profil akun Siswa."
+                        />
+                    </div>
+                </div>
+            </div>
         </div>
     </x-universal.form>
 </div>
@@ -184,6 +230,12 @@
         const programSelect = document.getElementById('Program_ID');
         const batchSelect = document.getElementById('Batch_ID');
         const classSelect = document.getElementById('Class_ID');
+        const userSelect = document.getElementById('User_ID');
+        const userContactData = @json($userContactData);
+        const contactCard = document.getElementById('selectedUserContact');
+        const contactName = document.getElementById('selectedUserName');
+        const contactEmail = document.getElementById('selectedUserEmail');
+        const contactPhone = document.getElementById('selectedUserPhone');
         
         const batchOptions = batchSelect.querySelectorAll('option[data-program]');
         const classOptions = classSelect.querySelectorAll('option[data-batch]');
@@ -237,6 +289,7 @@
 
         programSelect.addEventListener('change', filterBatches);
         batchSelect.addEventListener('change', filterClasses);
+        userSelect.addEventListener('change', updateUserContactPreview);
         
         if (programSelect.value) {
             filterBatches();
@@ -247,6 +300,21 @@
                     classSelect.value = currentClassId;
                 }
             }
+        }
+
+        updateUserContactPreview();
+
+        function updateUserContactPreview() {
+            const user = userContactData[userSelect.value];
+            if (!user) {
+                contactCard.classList.add('hidden');
+                return;
+            }
+
+            contactName.textContent = user.name || '-';
+            contactEmail.textContent = user.email || '-';
+            contactPhone.textContent = user.phone || '-';
+            contactCard.classList.remove('hidden');
         }
     });
 </script>

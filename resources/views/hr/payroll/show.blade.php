@@ -3,6 +3,8 @@
 @section('content')
 
 @php
+    $currentRoleName = strtoupper(\App\Helpers\UserResolverHelper::getRoleName(auth()->user()->Role_ID ?? ''));
+    $payrollDashboardUrl = $currentRoleName === 'FINANCE' ? route('dashboard.finance') : route('dashboard.hr');
     $status = $payroll['Status'] ?? 'Draft';
     $badgeColor = match($status) {
         'Paid', 'Closed' => 'green',
@@ -20,12 +22,18 @@
         description="Pegawai: {{ $docData['employee']['Full_Name'] ?? $payroll['Employee_ID'] }} ({{ $payroll['Employee_ID'] }})"
         status="{{ $status }}"
         badgeColor="{{ $badgeColor }}"
-        :breadcrumbs="['Dasbor' => route('dashboard.hr'), 'HR' => '#', 'Penggajian' => route('payrolls.index'), 'Detail' => '#']"
+        :breadcrumbs="['Dasbor' => $payrollDashboardUrl, 'HR' => '#', 'Penggajian' => route('payrolls.index'), 'Detail' => '#']"
     >
         <x-slot:actions>
             <a href="{{ route('payrolls.pdf', $payroll['Payroll_ID']) }}" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center gap-1.5">
                 📄 PDF Slip Gaji Resmi
             </a>
+
+            @if(!empty($payroll['Payment_Proof']))
+                <a href="{{ route('payrolls.proof', $payroll['Payroll_ID']) }}" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold text-xs border border-blue-200 transition-colors flex items-center gap-1.5">
+                    Download Bukti Transfer
+                </a>
+            @endif
 
             @if($status === 'Draft' || $status === 'Calculated')
                 <form action="{{ route('payrolls.submit', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Ajukan payroll ini untuk persetujuan?');" class="inline">

@@ -5,18 +5,19 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Core\ActivityService;
 use App\Services\Core\RoleService;
+use App\Helpers\ReportHelper;
 
 class ActivityController extends Controller
 {
     use \App\Traits\Exportable;
 
-    protected $exportDateField = 'Created_At';
+    protected $exportDateField = 'Timestamp';
 
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
 
         $user = auth()->user();
-        $userId = $user->Employee_ID ?? $user->User_ID ?? 'System';
+        $userId = $user->Employee_ID ?? $user->User_ID ?? \App\Support\ActorIdentity::required();
         $roleData = $this->roleService->getRoleById($user->Role_ID ?? '');
         $roleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
 
@@ -93,9 +94,10 @@ class ActivityController extends Controller
 
         $callback = function() use($activities) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Description', 'IP Address']);
+            $sanitize = [ReportHelper::class, 'sanitizeCsvCell'];
+            fputcsv($file, array_map($sanitize, ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Description', 'IP Address']));
             foreach ($activities as $a) {
-                fputcsv($file, [
+                fputcsv($file, array_map($sanitize, [
                     $a['Timestamp'] ?? '',
                     $a['User_ID'] ?? '',
                     $a['Role'] ?? '',
@@ -103,7 +105,7 @@ class ActivityController extends Controller
                     $a['Action'] ?? '',
                     $a['Description'] ?? '',
                     $a['IP_Address'] ?? ''
-                ]);
+                ]));
             }
             fclose($file);
         };

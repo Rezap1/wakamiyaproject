@@ -14,7 +14,7 @@
             : asset($u->Profile_Photo);
     } elseif ($userId) {
         $cacheKey = 'user_photo_' . $userId;
-        $photoUrl = \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($userId) {
+        $photoUrl = \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($userId, $u) {
             // 1. Try finding Employee_ID by User_ID in EmployeeRepository
             try {
                 $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
@@ -31,7 +31,16 @@
             // 2. Try finding Student_ID by User_ID in StudentRepository
             try {
                 $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
-                $student = collect($studentRepo->fetchAll())->firstWhere('User_ID', $userId);
+                $students = $studentRepo->fetchAll();
+                $student = collect($students)->firstWhere('User_ID', $userId);
+                
+                if (!$student) {
+                    $studentName = $u->Full_Name ?? $u->Username ?? $u->Name ?? null;
+                    if ($studentName) {
+                        $student = collect($students)->firstWhere('Full_Name', $studentName);
+                    }
+                }
+
                 if ($student && !empty($student['Student_ID'])) {
                     $files = glob(storage_path('app/public/profiles/student_' . $student['Student_ID'] . '.*'));
                     if (!empty($files) && file_exists(public_path('storage/profiles/' . basename($files[0])))) {
@@ -46,8 +55,10 @@
                 return asset('storage/profiles/' . basename($userFiles[0]));
             }
 
-            return null;
+            return '';
         });
+
+        $photoUrl = $photoUrl ?: null;
     }
 
     // Dynamic Initials Fallback (Never Hardcoded DE)

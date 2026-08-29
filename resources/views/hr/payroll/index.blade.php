@@ -2,10 +2,15 @@
 @section('header', 'Penggajian Pegawai & Slip Gaji')
 @section('content')
 
+@php
+    $currentRoleName = strtoupper(\App\Helpers\UserResolverHelper::getRoleName(auth()->user()->Role_ID ?? ''));
+    $payrollDashboardUrl = $currentRoleName === 'FINANCE' ? route('dashboard.finance') : route('dashboard.hr');
+@endphp
+
 <x-universal.index-layout 
     title="Manajemen Penggajian (HR Payroll Engine)" 
     description="Kelola gaji pegawai, integrasi presensi QR Phase F, kalkulasi deterministik server-side, dan slip gaji PDF resmi."
-    :breadcrumbs="['Dasbor' => route('dashboard.hr'), 'HR' => '#', 'Penggajian' => route('payrolls.index')]"
+    :breadcrumbs="['Dasbor' => $payrollDashboardUrl, 'HR' => '#', 'Penggajian' => route('payrolls.index')]"
     add-action="{{ route('payrolls.create') }}"
     add-text="Buat Payroll Pegawai"
 >
@@ -22,7 +27,7 @@
             />
 
             <!-- BATCH PAYROLL GENERATION CARD -->
-            @if(in_array(strtoupper(auth()->user()->Role ?? ''), ['ADMINISTRATOR', 'HR']))
+            @if(in_array($currentRoleName, ['ADMINISTRATOR', 'HR', 'MASTER'], true))
                 <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Generate Batch Payroll Massal</h4>

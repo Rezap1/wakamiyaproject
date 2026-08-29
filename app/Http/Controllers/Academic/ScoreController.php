@@ -40,23 +40,17 @@ class ScoreController extends Controller
                 $details = $this->scoreService->parseEvaluationDetails($row);
                 $metricSummary = '-';
                 
-                if ($category === 'SPORTS') {
-                    $metricSummary = sprintf("Lari: %skm/%s m, PushUp: %s, SitUp: %s", 
-                        $details['running_distance'] ?? 0, 
-                        $details['running_time'] ?? 0, 
-                        $details['push_up'] ?? 0, 
-                        $details['sit_up'] ?? 0
-                    );
-                } elseif ($category === 'LANGUAGE') {
-                    $metricSummary = sprintf("Spk: %s, Wrt: %s, Lst: %s, Rdg: %s, Eth: %s, Mtv: %s, Att: %s", 
-                        $details['speaking'] ?? 0,
-                        $details['writing'] ?? 0,
-                        $details['listening'] ?? 0,
-                        $details['reading'] ?? 0,
-                        $details['ethics'] ?? 0,
-                        $details['motivation'] ?? 0,
-                        $details['attendance'] ?? 0
-                    );
+                if (!empty($details) && count($details) > 1) { // more than just 'category'
+                    $summaryArr = [];
+                    foreach ($details as $k => $v) {
+                        if (in_array(strtolower($k), ['category', 'notes', 'subject_id'])) continue;
+                        $summaryArr[] = ucfirst(str_replace('_', ' ', $k)) . ": " . $v;
+                    }
+                    if (!empty($summaryArr)) {
+                        $metricSummary = implode(', ', $summaryArr);
+                    } else {
+                        $metricSummary = $details['notes'] ?? $row['Remarks'] ?? '-';
+                    }
                 } else {
                     $metricSummary = $details['notes'] ?? $row['Remarks'] ?? '-';
                 }
@@ -82,6 +76,19 @@ class ScoreController extends Controller
     public function __construct(ScoreService $scoreService)
     {
         $this->scoreService = $scoreService;
+    }
+
+    private function resolveCurrentTeacherId(): ?string
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return null;
+        }
+
+        $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
+        $teacher = collect($teacherRepo->fetchAll())->firstWhere('User_ID', $user->User_ID ?? '');
+
+        return $teacher['Teacher_ID'] ?? null;
     }
 
     public function index(Request $request)
@@ -119,9 +126,28 @@ class ScoreController extends Controller
             $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Assessment_Title', 'Assessment_Category', 'Score_Value']);
         }
 
+        $scoreGroups = $scores
+            ->groupBy(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? 'GENERAL'))))
+            ->map(function ($group, $category) {
+                $numericScores = $group->map(fn ($score) => $score['Score'] ?? $score['Score_Value'] ?? null)->filter(fn ($value) => is_numeric($value));
+
+                return [
+                    'id' => $category,
+                    'title' => $category,
+                    'total' => $group->count(),
+                    'average' => $numericScores->count() > 0 ? round($numericScores->avg(), 1) : null,
+                    'items' => $group->sortBy('Student_Name')->values(),
+                ];
+            })
+            ->sortBy('title')
+            ->values();
+
         $scores = \App\Helpers\CollectionHelper::paginate($scores, 10)->withQueryString();
         
-        return view('academic.scores.index', compact('scores'));
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
+        $assessmentConfigs = collect($assessmentConfigService->getActiveCategories())->keyBy('Category_ID')->toArray();
+        
+        return view('academic.scores.index', compact('scores', 'scoreGroups', 'assessmentConfigs'));
     }
 
     public function create(
@@ -135,7 +161,7 @@ class ScoreController extends Controller
         
         // H8.21: Teacher scope authorization
         if ($userRole === 'TEACHER') {
-            $teacherId = $user->Employee_ID ?? null;
+            $teacherId = $this->resolveCurrentTeacherId();
             if ($teacherId) {
                 $scopedStudents = $this->scoreService->getStudentsInTeacherScope($teacherId);
                 $students = collect($scopedStudents);
@@ -161,7 +187,7 @@ class ScoreController extends Controller
             
             // H8.21: Server-side teacher scope authorization
             if ($userRole === 'TEACHER') {
-                $teacherId = $user->Employee_ID ?? null;
+                $teacherId = $this->resolveCurrentTeacherId();
                 if (!$teacherId || !$this->scoreService->isStudentInTeacherScope($validated['Student_ID'], $teacherId)) {
                     return back()->withErrors(['error' => 'Anda tidak memiliki izin untuk menilai siswa ini.'])->withInput();
                 }
@@ -182,7 +208,7 @@ class ScoreController extends Controller
             $this->scoreService->create($validated);
             return redirect()->route('scores.index')->with('success', 'Nilai berhasil dicatat dan dipublikasikan.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -234,7 +260,7 @@ class ScoreController extends Controller
             $this->scoreService->update($id, $request->validated());
             return redirect()->route('scores.index')->with('success', 'Nilai berhasil diperbarui.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -244,42 +270,48 @@ class ScoreController extends Controller
             $this->scoreService->delete($id);
             return redirect()->route('scores.index')->with('success', 'Data nilai berhasil dihapus.');
         } catch (\Exception $e) {
-            return redirect()->route('scores.index')->with('error', 'Gagal menghapus data nilai: ' . $e->getMessage());
+            return redirect()->route('scores.index')->with('error', 'Gagal menghapus data nilai: ' . $this->safeExceptionMessage($e));
         }
     }
 
     public function exportCSV()
     {
         $scores = $this->scoreService->getAll();
-        $csv = "Score_ID,Student_ID,Assessment_Category,Assessment_ID,Score,Grade,Status,Evaluation_Details_Summary\n";
+        $file = fopen('php://temp', 'r+');
+        $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
+
+        fputcsv($file, array_map($sanitize, [
+            'Score_ID',
+            'Student_ID',
+            'Assessment_Category',
+            'Assessment_ID',
+            'Score',
+            'Grade',
+            'Status',
+            'Evaluation_Details_Summary',
+        ]));
         
         foreach ($scores as $s) {
             $category = strtoupper($s['Assessment_Category'] ?? 'GENERAL');
             $details = $this->scoreService->parseEvaluationDetails($s);
             $summary = '-';
             
-            if ($category === 'SPORTS') {
-                $summary = sprintf("Lari: %skm/%sm; PushUp: %s; SitUp: %s", 
-                    $details['running_distance'] ?? 0, 
-                    $details['running_time'] ?? 0, 
-                    $details['push_up'] ?? 0, 
-                    $details['sit_up'] ?? 0
-                );
-            } elseif ($category === 'LANGUAGE') {
-                $summary = sprintf("Speaking: %s; Writing: %s; Listening: %s; Reading: %s; Ethics: %s; Motivation: %s; Attendance: %s", 
-                    $details['speaking'] ?? 0,
-                    $details['writing'] ?? 0,
-                    $details['listening'] ?? 0,
-                    $details['reading'] ?? 0,
-                    $details['ethics'] ?? 0,
-                    $details['motivation'] ?? 0,
-                    $details['attendance'] ?? 0
-                );
+            if (!empty($details) && count($details) > 1) { // more than just 'category'
+                $metricSummary = [];
+                foreach ($details as $k => $v) {
+                    if (in_array(strtolower($k), ['category', 'notes', 'subject_id'])) continue;
+                    $metricSummary[] = ucfirst(str_replace('_', ' ', $k)) . ": " . $v;
+                }
+                if (!empty($metricSummary)) {
+                    $summary = implode("; ", $metricSummary);
+                } else {
+                    $summary = str_replace([",", "\n", "\r"], [" ", " ", " "], $details['notes'] ?? $s['Remarks'] ?? '');
+                }
             } else {
                 $summary = str_replace([",", "\n", "\r"], [" ", " ", " "], $details['notes'] ?? $s['Remarks'] ?? '');
             }
 
-            $csv .= sprintf("%s,%s,%s,%s,%s,%s,%s,\"%s\"\n",
+            fputcsv($file, array_map($sanitize, [
                 $s['Score_ID'] ?? '',
                 $s['Student_ID'] ?? '',
                 $category,
@@ -287,9 +319,13 @@ class ScoreController extends Controller
                 $s['Score'] ?? $s['Score_Value'] ?? '',
                 $s['Grade'] ?? '',
                 $s['Status'] ?? '',
-                $summary
-            );
+                $summary,
+            ]));
         }
+
+        rewind($file);
+        $csv = stream_get_contents($file);
+        fclose($file);
 
         return response($csv)->header('Content-Type', 'text/csv')->header('Content-Disposition', 'attachment; filename="scores_export.csv"');
     }

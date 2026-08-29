@@ -69,7 +69,7 @@
                 </td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-1.5">
-                        <a href="{{ route('hr.overtimes.pdf', $item['Overtime_ID']) }}" target="_blank" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1" title="Unduh Surat Lembur PDF Resmi">
+                        <a href="{{ route('overtimes.pdf', $item['Overtime_ID']) }}" target="_blank" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1" title="Unduh Surat Lembur PDF Resmi">
                             📄 PDF
                         </a>
                         <x-universal.action-button action="detail" url="{{ route('hr.overtimes.show', $item['Overtime_ID']) }}" />

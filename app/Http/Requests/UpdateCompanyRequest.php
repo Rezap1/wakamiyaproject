@@ -63,9 +63,9 @@ class UpdateCompanyRequest extends FormRequest
             'Email' => 'nullable|email|max:150',
             'Website' => 'nullable|url|max:255',
             'Director_Name' => 'nullable|string|max:150',
-            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'remove_logo' => 'nullable|in:0,1',
-            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'remove_stamp' => 'nullable|in:0,1',
             'Is_Active' => 'required|in:TRUE,FALSE',
             'Notes' => 'nullable|string'

@@ -41,7 +41,7 @@
                         <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-slate-100 text-slate-700">{{ $status }}</span>
                     @endif
 
-                    <a href="{{ route('invoices.export-pdf', ['id' => $invoice['Invoice_ID']]) }}" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1">
+                    <a href="{{ route('student.billing.invoice-pdf', $invoice['Invoice_ID']) }}" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1">
                         📄 <span>Download PDF</span>
                     </a>
                 </div>
@@ -103,11 +103,18 @@
                                 <span class="px-2 py-0.5 text-[10px] font-bold rounded {{ ($pay['Status'] ?? '') === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
                                     {{ $pay['Status'] ?? 'Waiting Verification' }}
                                 </span>
-                                @if(($pay['Status'] ?? '') === 'Verified')
-                                    <a href="{{ route('payments.receipt', $pay['Payment_ID']) }}" target="_blank" class="text-xs font-bold text-blue-600 hover:underline">
-                                        📄 Kuitansi PDF
-                                    </a>
-                                @endif
+                                <div class="flex items-center gap-2">
+                                    @if(!empty($pay['Proof_File']) || !empty($pay['Proof_Image']))
+                                        <a href="{{ route('student.billing.payment-proof', $pay['Payment_ID']) }}" class="text-xs font-bold text-slate-700 hover:underline">
+                                            Bukti
+                                        </a>
+                                    @endif
+                                    @if(($pay['Status'] ?? '') === 'Verified')
+                                        <a href="{{ route('payments.receipt', $pay['Payment_ID']) }}" target="_blank" class="text-xs font-bold text-blue-600 hover:underline">
+                                            📄 Kuitansi PDF
+                                        </a>
+                                    @endif
+                                </div>
                             </div>
                         </div>
                     @empty

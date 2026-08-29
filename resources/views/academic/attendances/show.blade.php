@@ -12,22 +12,26 @@
         default => 'slate',
     };
     $statusText = $attendance['Status'] ?? 'Present';
+    $targetId = $attendance['Student_ID'] ?? $attendance['Employee_ID'] ?? 'Pengguna Tidak Diketahui';
+    $attendanceId = $attendance['Attendance_ID'] ?? '-';
     
     $tab = request('tab', 'informasi');
 @endphp
 
 <x-universal.detail-layout 
-    title="{{ $attendance['Student_ID'] ?? 'Pengguna Tidak Diketahui' }}" 
-    subtitle="ID Kehadiran: {{ $attendance['Attendance_ID'] ?? 'ATD-10294' }} | {{ isset($attendance['Student_ID']) ? 'Siswa' : 'Karyawan' }}"
+    title="{{ $targetId }}" 
+    subtitle="ID Kehadiran: {{ $attendanceId }} | {{ isset($attendance['Student_ID']) ? 'Siswa' : 'Karyawan' }}"
     status="{{ $statusText }}"
     statusColor="{{ $badgeColor }}"
-    avatarInitials="{{ substr($attendance['Student_ID'] ?? 'U', 0, 1) }}"
+    avatarInitials="{{ substr($targetId, 0, 1) }}"
     activeTab="{{ $tab }}"
     :breadcrumbs="['Dashboard' => route('dashboard'), 'Kehadiran' => route('attendances.index'), 'Detail' => '#']"
 >
     
     <x-slot:headerActions>
-        <x-universal.action-button action="edit" url="{{ route('attendances.edit', $attendance['Attendance_ID'] ?? 1) }}" />
+        @if(!empty($attendance['Attendance_ID']))
+            <x-universal.action-button action="edit" url="{{ route('attendances.edit', $attendance['Attendance_ID']) }}" />
+        @endif
     </x-slot:headerActions>
 
     <x-slot:sidebarContent>
@@ -54,11 +58,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase">Check In (Time In)</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">08:00 AM</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ $attendance['Check_In_Time'] ?? '-' }}</p>
                     </div>
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase">Check Out (Time Out)</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">05:00 PM</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ $attendance['Check_Out_Time'] ?? '-' }}</p>
                     </div>
                     <div class="sm:col-span-2">
                         <p class="text-xs font-bold text-slate-400 uppercase">Catatan</p>

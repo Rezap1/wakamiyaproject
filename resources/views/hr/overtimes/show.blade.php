@@ -21,11 +21,11 @@
         :breadcrumbs="['Dasbor' => route('dashboard.hr'), 'HR' => '#', 'Pengajuan Lembur' => route('hr.overtimes.index'), 'Detail' => '#']"
     >
         <x-slot:actions>
-            <a href="{{ route('hr.overtimes.pdf', $overtime['Overtime_ID']) }}" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center gap-1.5">
+            <a href="{{ route('overtimes.pdf', $overtime['Overtime_ID']) }}" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center gap-1.5">
                 📄 PDF Surat Lembur Resmi
             </a>
 
-            @if(in_array(strtoupper(auth()->user()->Role ?? ''), ['ADMINISTRATOR', 'HR', 'DIRECTOR']) && strtoupper($status) === 'SUBMITTED')
+            @if(in_array(strtoupper(auth()->user()->Role ?? ''), ['ADMINISTRATOR', 'HR', 'DIRECTOR', 'MASTER']) && strtoupper($status) === 'SUBMITTED')
                 <form action="{{ route('hr.overtimes.approve', $overtime['Overtime_ID']) }}" method="POST" onsubmit="return confirm('Setujui pengajuan lembur ini?');" class="inline">
                     @csrf
                     <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-colors">

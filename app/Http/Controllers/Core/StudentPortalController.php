@@ -14,7 +14,7 @@ class StudentPortalController extends Controller
     protected $studentService;
 
     public function __construct(
-        AssignmentService $assignmentService, 
+        AssignmentService $assignmentService,
         StudentService $studentService
     ) {
         $this->assignmentService = $assignmentService;
@@ -23,14 +23,24 @@ class StudentPortalController extends Controller
 
     public function assignments()
     {
-        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : 'U-002'; // fallback for testing
+        $user = Auth::user();
+        if (!$user) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
+        $userId = $user->User_ID ?? Auth::id();
         $student = collect($this->studentService->getAllStudents())->firstWhere('User_ID', $userId);
-        
+        if (!$student) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
         $assignments = [];
         if ($student && !empty($student['Class_ID'])) {
             $allAssignments = collect($this->assignmentService->getAll());
             $assignments = $allAssignments->filter(function($item) use ($student) {
-                return ($item['Class_ID'] ?? '') == $student['Class_ID'];
+                $status = strtoupper(trim(!empty($item['Status']) ? $item['Status'] : 'PUBLISHED'));
+                return ($item['Class_ID'] ?? '') == $student['Class_ID']
+                    && $status === 'PUBLISHED';
             })->values();
         }
 
@@ -43,75 +53,57 @@ class StudentPortalController extends Controller
         if (!$assignment) {
             return redirect()->route('student.portal.assignments')->withErrors(['error' => 'Tugas tidak ditemukan.']);
         }
-        
-        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : '';
+
+        $user = Auth::user();
+        $userId = $user ? ($user->User_ID ?? Auth::id()) : '';
         $student = collect($this->studentService->getAllStudents())->firstWhere('User_ID', $userId);
-        
-        $submissionRepo = app(\App\Interfaces\GoogleSheets\SubmissionRepositoryInterface::class);
-        $submissions = collect($submissionRepo->fetchAll());
-        $mySubmission = $submissions->filter(function($s) use ($id, $student) {
-            return ($s['Assignment_ID'] ?? '') === $id && ($s['Student_ID'] ?? '') === ($student['Student_ID'] ?? '');
-        })->first();
 
-        return view('student.portal.assignment_show', compact('assignment', 'mySubmission'));
-    }
-
-    public function uploadSubmission(Request $request, $assignmentId)
-    {
-        $request->validate([
-            'file' => 'required|file|max:10240',
-            'comments' => 'nullable|string'
-        ]);
-
-        try {
-            $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : '';
-            $student = collect($this->studentService->getAllStudents())->firstWhere('User_ID', $userId);
-            if (!$student) throw new \Exception('Data siswa tidak valid.');
-
-            $file = $request->file('file');
-            $filename = 'sub_' . $assignmentId . '_' . $student['Student_ID'] . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $file->storeAs('submissions', $filename, 'public');
-            $filePath = 'storage/submissions/' . $filename;
-
-            $submissionRepo = app(\App\Interfaces\GoogleSheets\SubmissionRepositoryInterface::class);
-            
-            $data = [
-                'Submission_ID' => $submissionRepo->generateNewId('SUB', 6),
-                'Assignment_ID' => $assignmentId,
-                'Student_ID' => $student['Student_ID'],
-                'Submission_Date' => now()->toDateTimeString(),
-                'File_URL' => '/' . $filePath,
-                'Comment' => $request->comments ?? '',
-                'Grade_Received' => '',
-                'Feedback' => '',
-                'Status' => 'Submitted',
-                'Created_At' => now()->toDateTimeString(),
-            ];
-
-            $submissionRepo->create($data);
-            $submissionRepo->clearCache();
-
-            return back()->with('success', 'Tugas berhasil diunggah.');
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+        if (!$student || ($student['Class_ID'] ?? '') !== ($assignment['Class_ID'] ?? '')) {
+            abort(403, 'Tugas ini bukan untuk kelas Anda.');
         }
+
+        $status = strtoupper(trim(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED'));
+        if ($status !== 'PUBLISHED') {
+            abort(404, 'Tugas tidak ditemukan.');
+        }
+
+        return view('student.portal.assignment_show', compact('assignment'));
     }
 
     public function materials()
     {
-        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : '';
+        $user = Auth::user();
+        if (!$user) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
+        $userId = $user->User_ID ?? Auth::id();
         $student = collect($this->studentService->getAllStudents())->firstWhere('User_ID', $userId);
+        if (!$student) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
         $classId = $student['Class_ID'] ?? null;
 
         // Fetch announcements as materials
         $announcementService = app(\App\Services\Academic\AnnouncementService::class);
         $announcements = $announcementService->getActiveAnnouncements('STUDENT', $classId);
 
-        // Fetch subjects for this student's class
         $subjects = collect([]);
         if ($classId) {
+            $scheduleService = app(\App\Services\Academic\ScheduleService::class);
             $subjectService = app(\App\Services\Academic\SubjectService::class);
-            $subjects = $subjectService->getAll();
+            $subjectIds = collect($scheduleService->getAll())
+                ->where('Class_ID', $classId)
+                ->pluck('Subject_ID')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $subjects = collect($subjectService->getAll())
+                ->whereIn('Subject_ID', $subjectIds)
+                ->values();
         }
 
         return view('student.portal.materials', compact('announcements', 'subjects'));

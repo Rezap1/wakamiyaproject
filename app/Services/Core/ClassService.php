@@ -92,8 +92,8 @@ class ClassService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -104,7 +104,7 @@ class ClassService
             'CREATE',
             'CLASS',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -160,7 +160,7 @@ class ClassService
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         $allowedFields = [
@@ -182,7 +182,7 @@ class ClassService
             'UPDATE',
             'CLASS',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             $mappedData
@@ -208,7 +208,7 @@ class ClassService
             'DELETE',
             'CLASS',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'ACADEMIC'],
             [],
             []

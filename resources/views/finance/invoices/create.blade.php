@@ -1,12 +1,49 @@
 @extends('layouts.app')
 @section('header', 'Buat Tagihan & Invoice')
 @section('content')
+
+@php
+    $categories = $categories ?? [
+        'Biaya Pendidikan',
+        'Medical',
+        'JFT',
+        'JLPT',
+        'Dormitory',
+        'Air Ticket',
+        'Administration',
+        'SSW',
+        'Equipment',
+        'Other'
+    ];
+    $defaultDueDays = $defaultDueDays ?? 14;
+    $defaultTuitionFee = $defaultTuitionFee ?? 7500000;
+@endphp
+
 <div class="space-y-6" x-data="invoiceForm()">
     <x-page-header title="Tagihan Baru" description="Buat tagihan baru dengan rincian komponen biaya (Itemized Billing)." :breadcrumbs="['Dasbor' => route('dashboard.finance'), 'Keuangan' => '#', 'Tagihan' => route('invoices.index'), 'Buat Tagihan' => '#']" />
     
     <form action="{{ route('invoices.store') }}" method="POST">
         @csrf
         <input type="hidden" name="Invoice_Type" value="STUDENT">
+
+        @if ($errors->any())
+            <div class="mb-6 bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-rose-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-bold text-rose-800">Terdapat Kesalahan Validasi:</h3>
+                        <ul class="mt-2 text-sm text-rose-700 list-disc list-inside">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden space-y-6 p-6">
             
             <div class="border-b border-slate-100 pb-4">
@@ -61,7 +98,7 @@
                                         class="px-3 py-2 cursor-pointer rounded-lg transition-colors hover:bg-emerald-50 hover:text-emerald-700"
                                         :class="{'bg-emerald-50 text-emerald-700 font-bold': studentId === s.Student_ID, 'text-slate-700': studentId !== s.Student_ID}"
                                     >
-                                        <span x-text="s.Full_Name + ' (' + (s.Student_Number || '-') + ')'"></span>
+                                        <span x-text="s.Full_Name + (s.class_name && s.class_name !== '-' ? ' — Kelas: ' + s.class_name : '') + (s.batch_name && s.batch_name !== '-' ? ' (Batch: ' + s.batch_name + ')' : '')"></span>
                                     </li>
                                 </template>
                             </ul>
@@ -81,7 +118,7 @@
                 </div>
                 <div>
                     <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Tanggal Jatuh Tempo <span class="text-rose-500 font-black">*</span></label>
-                    <input type="date" name="Due_Date" class="block w-full text-[13px] rounded-xl bg-white border-slate-200 text-slate-800 focus:ring-2 focus:border-emerald-500 px-4 py-2.5 shadow-sm" value="{{ date('Y-m-d', strtotime('+14 days')) }}" required>
+                    <input type="date" name="Due_Date" class="block w-full text-[13px] rounded-xl bg-white border-slate-200 text-slate-800 focus:ring-2 focus:border-emerald-500 px-4 py-2.5 shadow-sm" value="{{ now()->addDays($defaultDueDays)->format('Y-m-d') }}" required>
                 </div>
             </div>
 
@@ -179,7 +216,7 @@
             selectedClass: '',
             students: @json($students->values()),
             items: [
-                { description: 'SPP Bulan Ini', qty: 1, unit_price: 500000, discount: 0, tax: 0 }
+                { description: 'Biaya Pendidikan', qty: 1, unit_price: {{ (float) $defaultTuitionFee }}, discount: 0, tax: 0 }
             ],
 
             addItem() {
@@ -225,7 +262,13 @@
             get selectedStudentName() {
                 if (!this.studentId) return '-- Pilih Siswa Target --';
                 let s = this.students.find(s => s.Student_ID === this.studentId);
-                return s ? s.Full_Name + ' (' + (s.Student_Number || '-') + ')' : '-- Pilih Siswa Target --';
+                if (!s) return '-- Pilih Siswa Target --';
+                let label = s.Full_Name;
+                let details = [];
+                if (s.class_name && s.class_name !== '-') details.push('Kelas: ' + s.class_name);
+                if (s.batch_name && s.batch_name !== '-') details.push('Batch: ' + s.batch_name);
+                if (details.length > 0) label += ' (' + details.join(' | ') + ')';
+                return label;
             },
 
             selectStudent(id) {

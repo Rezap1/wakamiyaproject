@@ -113,7 +113,7 @@ class CompanyController extends Controller
             return redirect()->route('companies.index')->with('success', 'Data Perusahaan berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating company: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -170,7 +170,7 @@ class CompanyController extends Controller
             return redirect()->route('companies.index')->with('success', 'Profil perusahaan berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating company: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 

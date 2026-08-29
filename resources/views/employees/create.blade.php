@@ -6,6 +6,7 @@
 <div class="max-w-4xl mx-auto">
     @php
         $userOptions = [];
+        $userContactData = [];
         foreach($users as $user) {
             $roleId = $user['Role_ID'] ?? '';
             $roleName = \App\Helpers\UserResolverHelper::getRoleName($roleId);
@@ -13,6 +14,12 @@
                 continue;
             }
             $userOptions[$user['User_ID']] = $user['Full_Name'] . ' (' . $user['Email'] . ') - Peran: ' . $roleName;
+            $userContactData[$user['User_ID']] = [
+                'name' => $user['Full_Name'] ?? $user['Username'] ?? '',
+                'email' => $user['Email'] ?? '',
+                'phone' => $user['Phone_Number'] ?? '',
+                'role' => $roleName,
+            ];
         }
         
         $deptOptions = [];
@@ -56,6 +63,22 @@
                             :options="$userOptions"
                             value=""
                         />
+                        <div id="selectedUserContact" class="hidden rounded-2xl border border-sky-100 bg-sky-50/70 p-4 text-sm">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Nama Akun</p>
+                                    <p id="selectedUserName" class="mt-1 font-bold text-slate-800">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Email</p>
+                                    <p id="selectedUserEmail" class="mt-1 font-bold text-slate-800 break-all">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-slate-400">Nomor HP</p>
+                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">-</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <x-universal.input 
                         name="National_ID" 
@@ -183,8 +206,14 @@
     document.addEventListener('DOMContentLoaded', function() {
         const deptSelect = document.getElementById('Department_ID');
         const posSelect = document.getElementById('Position_ID');
+        const userSelect = document.getElementById('User_ID');
         const posOptions = Array.from(posSelect.options);
         const oldPosId = "{{ old('Position_ID') }}";
+        const userContactData = @json($userContactData);
+        const contactCard = document.getElementById('selectedUserContact');
+        const contactName = document.getElementById('selectedUserName');
+        const contactEmail = document.getElementById('selectedUserEmail');
+        const contactPhone = document.getElementById('selectedUserPhone');
 
         function filterPositions() {
             const selectedDept = deptSelect.value;
@@ -223,9 +252,25 @@
         }
 
         deptSelect.addEventListener('change', filterPositions);
+        userSelect.addEventListener('change', updateUserContactPreview);
         
         if (deptSelect.value) {
             filterPositions();
+        }
+
+        updateUserContactPreview();
+
+        function updateUserContactPreview() {
+            const user = userContactData[userSelect.value];
+            if (!user) {
+                contactCard.classList.add('hidden');
+                return;
+            }
+
+            contactName.textContent = user.name || '-';
+            contactEmail.textContent = user.email || '-';
+            contactPhone.textContent = user.phone || '-';
+            contactCard.classList.remove('hidden');
         }
     });
 

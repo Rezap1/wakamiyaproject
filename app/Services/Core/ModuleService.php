@@ -51,8 +51,8 @@ class ModuleService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -63,7 +63,7 @@ class ModuleService
             'CREATE',
             'MODULE',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             $mappedData
@@ -76,7 +76,7 @@ class ModuleService
     {
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         if (isset($data['Module_Name'])) $mappedData['Module_Name'] = $data['Module_Name'];
@@ -93,7 +93,7 @@ class ModuleService
             'UPDATE',
             'MODULE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             $mappedData
@@ -111,7 +111,7 @@ class ModuleService
             'DELETE',
             'MODULE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
             []

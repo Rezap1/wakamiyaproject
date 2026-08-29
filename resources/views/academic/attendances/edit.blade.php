@@ -1,9 +1,12 @@
 @extends('layouts.app')
 @section('header', 'Edit Kehadiran')
 @section('content')
+@php
+    $normalizedStatus = \App\Helpers\AttendanceStatusHelper::normalize($attendance['Status'] ?? 'PRESENT');
+@endphp
 <div class="max-w-4xl mx-auto">
     <x-universal.form 
-        action="{{ route('attendances.update', $attendance['Attendance_ID'] ?? 1) }}" 
+        action="{{ route('attendances.update', $attendance['Attendance_ID'] ?? '') }}" 
         method="PUT"
         title="Edit Kehadiran" 
         description="Perbarui data kehadiran."
@@ -16,7 +19,7 @@
                     <x-universal.input 
                         name="Student_ID" 
                         label="Target Pengguna" 
-                        value="{{ $attendance['Student_ID'] ?? 'John Doe' }}"
+                        value="{{ $attendance['Student_ID'] ?? $attendance['Employee_ID'] ?? '' }}"
                         readonly
                     />
 
@@ -31,15 +34,22 @@
                     <x-universal.select 
                         name="Status" 
                         label="Status" 
-                        :options="['Present' => 'Present', 'Late' => 'Late', 'Sick' => 'Sick', 'Leave' => 'Leave', 'Absent' => 'Absent']"
-                        value="{{ $attendance['Status'] ?? 'Present' }}"
+                        :options="['PRESENT' => 'Hadir', 'LATE' => 'Terlambat', 'SICK' => 'Sakit', 'PERMITTED' => 'Izin', 'ABSENT' => 'Alpa']"
+                        value="{{ $normalizedStatus }}"
                     />
 
                     <x-universal.input 
-                        name="Time_In" 
+                        name="Check_In_Time" 
                         label="Waktu Masuk" 
                         type="time"
-                        value="08:00"
+                        value="{{ $attendance['Check_In_Time'] ?? '08:00' }}"
+                    />
+
+                    <x-universal.input 
+                        name="Check_Out_Time" 
+                        label="Waktu Keluar" 
+                        type="time"
+                        value="{{ $attendance['Check_Out_Time'] ?? '17:00' }}"
                     />
 
                     <div class="md:col-span-2">

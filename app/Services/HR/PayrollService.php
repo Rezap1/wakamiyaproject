@@ -126,13 +126,13 @@ class PayrollService
                 'CREATE', 
                 'PAYROLL', 
                 $payrollId, 
-                auth()->id() ?? 'SYSTEM', 
+                \App\Support\ActorIdentity::required(), 
                 ['HR', 'FINANCE'], 
                 [$employeeId], 
                 ['Period' => $period, 'Net_Salary' => $calc['net_salary']]
             );
 
-            return $res;
+            return $record;
         });
     }
 
@@ -174,11 +174,14 @@ class PayrollService
         }
 
         $currentStatus = trim($payroll['Status'] ?? 'Draft');
+        $this->assertValidStatusTransition($currentStatus, $status, $id);
 
         // State Machine Validations
         if (in_array(strtolower($currentStatus), ['closed', 'paid']) && strtolower($status) !== 'closed') {
             throw new Exception("Payroll yang sudah lunas (Paid) atau ditutup (Closed) tidak dapat diubah statusnya.");
         }
+
+        $actorId = \App\Support\ActorIdentity::required();
 
         $data = [
             'Status' => $status,
@@ -186,15 +189,26 @@ class PayrollService
         ];
 
         if ($status === 'Approved') {
-            $data['Approved_By'] = $user;
+            $data['Approved_By'] = $actorId;
             $data['Approved_Date'] = now()->toDateTimeString();
-            
-            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, auth()->id() ?? 'SYSTEM', ['HR', 'FINANCE'], [], ['Status' => 'Approved']);
         } elseif ($status === 'Paid') {
             $data['Paid_Date'] = now()->toDateTimeString();
             if ($paymentProof) $data['Payment_Proof'] = $paymentProof;
             if ($notes) $data['Notes'] = $notes;
+        }
 
+        $res = $this->payrollRepo->update($id, $data);
+        if (!$res) {
+            throw new Exception("Gagal menyimpan perubahan status Payroll #{$id}.");
+        }
+        $this->payrollRepo->clearCache();
+        Cache::forget('hr_dashboard');
+        Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
+
+        $persistedPayroll = array_merge($payroll, $data);
+
+        if ($status === 'Paid') {
             // Idempotent Finance Ledger Integration (Phase D Integration)
             try {
                 $transRepo = app(\App\Interfaces\GoogleSheets\TransactionRepositoryInterface::class);
@@ -227,6 +241,7 @@ class PayrollService
                 }
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Phase D Ledger Integration Error for Payroll {$id}: " . $e->getMessage());
+                throw new Exception("Status payroll tersimpan, tetapi sinkronisasi ledger gagal. Ulangi proses untuk rekonsiliasi.", 0, $e);
             }
 
             // Generate Official PDF Payslip
@@ -234,50 +249,80 @@ class PayrollService
                 $docAutomation = app(\App\Services\Core\DocumentAutomationService::class);
                 $employee = $this->employeeRepo->findById($payroll['Employee_ID'] ?? '') ?? [];
                 
-                $docAutomation->generateDocument(
+                $generatedDocument = $docAutomation->generateDocument(
                     'Payroll',
                     'Payroll',
                     $id,
-                    ['payroll' => $payroll, 'employee' => $employee],
+                    ['payroll' => $persistedPayroll, 'employee' => $employee],
                     'pdf.official_payslip',
-                    auth()->user()->email ?? 'System'
+                    $actorId
                 );
+                if (!$generatedDocument) {
+                    throw new Exception('Generator dokumen tidak mengembalikan hasil tersimpan.');
+                }
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Failed to generate PDF Payslip for Payroll {$id}: " . $e->getMessage());
+                throw new Exception("Status payroll tersimpan, tetapi slip gaji gagal dibuat. Ulangi proses untuk rekonsiliasi.", 0, $e);
             }
 
-            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, auth()->id() ?? 'SYSTEM', ['HR', 'FINANCE', 'EMPLOYEE'], [$payroll['Employee_ID'] ?? ''], ['Status' => 'Paid']);
+            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, $actorId, ['HR', 'FINANCE', 'EMPLOYEE'], [$payroll['Employee_ID'] ?? ''], ['Status' => 'Paid']);
+        } elseif ($status === 'Approved') {
+            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, $actorId, ['HR', 'FINANCE'], [], ['Status' => 'Approved']);
         } elseif ($status === 'Rejected') {
-            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, auth()->id() ?? 'SYSTEM', ['HR'], [], ['Status' => 'Rejected']);
+            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, $actorId, ['HR'], [], ['Status' => 'Rejected']);
         } else {
-            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, auth()->id() ?? 'SYSTEM', ['HR'], [], ['Status' => $status]);
+            $this->enterpriseEvent->dispatch('HR', 'UPDATE', 'PAYROLL', $id, $actorId, ['HR'], [], ['Status' => $status]);
         }
-
-        $res = $this->payrollRepo->update($id, $data);
-        $this->payrollRepo->clearCache();
-        Cache::forget('hr_dashboard');
-        Cache::forget('finance_dashboard');
 
         return $res;
     }
 
-    public function getPayslipDocumentData(string $payrollId): array
+    private function assertValidStatusTransition(string $currentStatus, string $targetStatus, string $payrollId): void
+    {
+        $current = strtolower(trim($currentStatus ?: 'Draft'));
+        $target = strtolower(trim($targetStatus));
+
+        if ($current === $target) {
+            return;
+        }
+
+        $allowed = [
+            'draft' => ['waiting approval'],
+            'waiting approval' => ['approved', 'rejected'],
+            'approved' => ['paid', 'rejected'],
+            'rejected' => ['draft', 'waiting approval'],
+            'paid' => ['closed'],
+            'closed' => [],
+        ];
+
+        if (!array_key_exists($current, $allowed) || !in_array($target, $allowed[$current], true)) {
+            throw new Exception("Transisi status payroll #{$payrollId} dari {$currentStatus} ke {$targetStatus} tidak valid.");
+        }
+    }
+
+    public function getPayslipDocumentData(string $payrollId, bool $allowPublicVerification = false): array
     {
         $payroll = $this->getById($payrollId);
         if (!$payroll) {
             throw new Exception("Dokumen Slip Gaji #{$payrollId} tidak ditemukan.");
         }
 
-        // Server-Side IDOR Security Validation for Employee Users
+        // Server-side ownership enforcement. Public access must be explicitly requested
+        // by the signed verification endpoint.
         $user = auth()->user();
-        if ($user && ($user->Role ?? '') === 'STUDENT') {
-            throw new Exception("Akses Ditolak: Siswa tidak diizinkan mengakses data penggajian.");
-        }
+        if (!$allowPublicVerification) {
+            if (!$user) {
+                throw new Exception("Akses Ditolak: Identitas pengguna tidak dapat dipastikan.");
+            }
 
-        if ($user && in_array(strtoupper($user->Role ?? ''), ['TEACHER', 'EMPLOYEE'])) {
-            $employee = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$employee || ($payroll['Employee_ID'] ?? '') !== $employee['Employee_ID']) {
-                throw new Exception("Akses Ditolak: Slip gaji #{$payrollId} bukan milik akun Anda.");
+            $role = strtoupper(trim((string) ($user->Role ?? '')));
+            if (in_array($role, ['TEACHER', 'EMPLOYEE'], true)) {
+                $employee = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
+                if (!$employee || ($payroll['Employee_ID'] ?? '') !== ($employee['Employee_ID'] ?? '')) {
+                    throw new Exception("Akses Ditolak: Slip gaji #{$payrollId} bukan milik akun Anda.");
+                }
+            } elseif (!in_array($role, ['ADMINISTRATOR', 'HR', 'FINANCE'], true)) {
+                throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses data penggajian.");
             }
         }
 
@@ -297,7 +342,7 @@ class PayrollService
             }
         }
 
-        $verificationUrl = route('payrolls.verify-public', $payrollId);
+        $verificationUrl = \App\Helpers\PublicVerificationUrl::make('payrolls.verify-public', $payrollId);
 
         $qrCodeSvg = null;
         if (class_exists('\SimpleSoftwareIO\QrCode\Facades\QrCode')) {
@@ -337,7 +382,7 @@ class PayrollService
         $res = $this->payrollRepo->delete($id);
         $this->payrollRepo->clearCache();
         
-        $this->enterpriseEvent->dispatch('HR', 'DELETE', 'PAYROLL', $id, auth()->id() ?? 'SYSTEM', ['HR'], [], []);
+        $this->enterpriseEvent->dispatch('HR', 'DELETE', 'PAYROLL', $id, \App\Support\ActorIdentity::required(), ['HR'], [], []);
         return $res;
     }
 }

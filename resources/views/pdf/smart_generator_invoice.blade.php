@@ -263,7 +263,7 @@
         <tr>
             <td style="width: 55%; vertical-align: top;">
                 <div class="meta-label">DITUJUAN KEPADA KLIEN:</div>
-                <div class="meta-val-title">{{ $data['client_name'] ?? 'Rifai Sholikhin' }}</div>
+                <div class="meta-val-title">{{ $data['client_name'] ?? '-' }}</div>
                 <div style="font-size: 10.5px; color: #1e293b; font-weight: 600; margin-top: 3px; line-height: 1.4;">
                     {!! nl2br(e($data['client_address'] ?? 'Ds. Sukareja Blok.Karanganyar RT.07/RW 03 Kec.Balongan Kab.Indramayu')) !!}
                     @if(!empty($data['client_email']))

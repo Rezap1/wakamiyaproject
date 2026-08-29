@@ -35,7 +35,7 @@ class ReportController extends Controller
             
             return view('finance.reports.cash_flow', array_merge($data, compact('startDate', 'endDate', 'accountId', 'category')));
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 

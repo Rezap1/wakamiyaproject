@@ -9,6 +9,7 @@ use App\Services\Finance\PaymentService;
 use App\Services\Core\StudentService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use App\Services\Attendance\AttendanceRequestService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -22,6 +23,7 @@ class StudentDashboardService
     protected $studentService;
     protected $activityLogService;
     protected $notificationService;
+    protected $attendanceRequestService;
 
     public function __construct(
         ScoreService $scoreService,
@@ -31,7 +33,8 @@ class StudentDashboardService
         PaymentService $paymentService,
         StudentService $studentService,
         ActivityLogService $activityLogService,
-        NotificationService $notificationService
+        NotificationService $notificationService,
+        AttendanceRequestService $attendanceRequestService
     ) {
         $this->scoreService = $scoreService;
         $this->scheduleService = $scheduleService;
@@ -41,16 +44,26 @@ class StudentDashboardService
         $this->studentService = $studentService;
         $this->activityLogService = $activityLogService;
         $this->notificationService = $notificationService;
+        $this->attendanceRequestService = $attendanceRequestService;
     }
 
     public function getDashboardData()
     {
-        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : 'U-001';
+        $user = Auth::user();
+        if (!$user) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
+        $userId = $user->User_ID ?? Auth::id();
 
         // === Resolve Student ID (fetch once) ===
         $allStudents = collect($this->studentService->getAllStudents());
         $student = $allStudents->firstWhere('User_ID', $userId);
-        $studentId = $student['Student_ID'] ?? null;
+        if (!$student || empty($student['Student_ID'])) {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
+
+        $studentId = $student['Student_ID'];
         $studentClassId = $student['Class_ID'] ?? null;
 
         // === Fetch data ONCE ===
@@ -72,7 +85,7 @@ class StudentDashboardService
             ? $allSchedules->where('Class_ID', $studentClassId)
             : collect([]);
         $todayClasses = $mySchedules->filter(function ($s) use ($todayIndo) {
-            return strtolower($s['Day'] ?? $s['Day_Of_Week'] ?? '') === strtolower($todayIndo);
+            $day = strtolower($s['Day'] ?? $s['Day_Of_Week'] ?? ''); return $day === strtolower($todayIndo) || $day === strtolower(date('l'));
         })->map(function ($s) {
             return [
                 'time'    => ($s['Start_Time'] ?? '') . ' - ' . ($s['End_Time'] ?? ''),
@@ -83,14 +96,17 @@ class StudentDashboardService
         $todayClassCount = count($todayClasses);
 
         // === Outstanding Bills ===
-        $outstandingBills = $myInvoices->whereIn('Status', ['Waiting Payment', 'Partial Paid']);
-        $totalOutstanding = $outstandingBills->sum('Amount');
+        $outstandingBills = $myInvoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
+        $totalOutstanding = $outstandingBills->sum('Remaining_Amount');
         $latestInvoice = $outstandingBills->sortByDesc('Created_At')->first();
 
         // === Payment Progress ===
-        $totalPaid = $myPayments->where('Status', 'Verified')->sum('Amount_Paid');
-        $totalBilled = $myInvoices->sum('Amount');
-        $paymentProgress = $totalBilled > 0 ? min(100, round(($totalPaid / $totalBilled) * 100)) : ($totalPaid > 0 ? 100 : 0);
+        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary($studentId);
+        $totalPaid = $educationSummary['education_paid'];
+        $totalBilled = $educationSummary['tuition_fee'];
+        $sisaTagihan = $educationSummary['remaining_to_pay'];
+        $statusPembayaran = $sisaTagihan <= 0 ? 'LUNAS' : 'BELUM LUNAS';
+        $paymentProgress = $educationSummary['progress'];
 
         $lastPayment = $myPayments->where('Status', 'Verified')->sortByDesc('Payment_Date')->first();
         $nextDueDate = $outstandingBills->whereNotNull('Due_Date')->sortBy('Due_Date')->first();
@@ -105,7 +121,7 @@ class StudentDashboardService
 
         // === Attendance Percentage ===
         $totalMyAttendance = $myAttendances->count();
-        $presentCount = $myAttendances->whereIn('Status', ['Present', 'Late'])->count();
+        $presentCount = $myAttendances->filter(function($a) { return in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'LATE', 'HADIR', 'TERLAMBAT']); })->count();
         $attendancePercentage = $totalMyAttendance > 0 ? round(($presentCount / $totalMyAttendance) * 100) : 0;
 
         // === Certificate Status ===
@@ -129,13 +145,26 @@ class StudentDashboardService
             ];
         })->take(4)->toArray();
 
+        // === Attendance Requests KPI ===
+        $myRequests = $this->attendanceRequestService->getStudentRequests($studentId);
+        $requestPendingCount = $myRequests->where('Status', 'PENDING')->count();
+        $requestApprovedCount = $myRequests->where('Status', 'APPROVED')->count();
+        $requestRejectedCount = $myRequests->where('Status', 'REJECTED')->count();
+
         // === KPI ===
         $kpi = [
             'today_class'           => $todayClassCount,
+            'total_tagihan'         => $totalBilled,
+            'tagihan_dibayar'       => $totalPaid,
+            'sisa_tagihan'          => $sisaTagihan,
+            'status_pembayaran'     => $statusPembayaran,
             'outstanding_bills'     => $totalOutstanding,
             'latest_score'          => $latestScore['Score'] ?? $latestScore['Score_Value'] ?? 0,
             'attendance_percentage' => $attendancePercentage . '%',
             'certificate_status'    => $certificateStatus,
+            'request_pending'       => $requestPendingCount,
+            'request_approved'      => $requestApprovedCount,
+            'request_rejected'      => $requestRejectedCount,
         ];
 
         // === Reminders (data riil) ===
@@ -166,12 +195,18 @@ class StudentDashboardService
         }
 
         // === Assignments ===
+        $pendingAssignmentsCount = 0;
         try {
             $assignmentService = app(\App\Services\Core\AssignmentService::class);
             $allAssignments = collect($assignmentService->getAll());
-            $myAssignments = $allAssignments->filter(function($item) use ($studentClassId) {
-                return ($item['Class_ID'] ?? '') == $studentClassId;
-            })->sortBy('Deadline')->take(5);
+
+            $publishedAssignments = $allAssignments->filter(function($item) use ($studentClassId) {
+                $status = strtoupper(!empty($item['Status']) ? $item['Status'] : 'PUBLISHED');
+                return ($item['Class_ID'] ?? '') == $studentClassId && $status === 'PUBLISHED';
+            });
+
+            $myAssignments = $publishedAssignments->sortBy('Deadline')->take(5);
+            $pendingAssignmentsCount = $publishedAssignments->count();
 
             foreach($myAssignments as $assignment) {
                 $reminders[] = [
@@ -183,6 +218,7 @@ class StudentDashboardService
         } catch (\Exception $e) {
             // Ignore if AssignmentService is not available
         }
+        $kpi['pending_assignments'] = $pendingAssignmentsCount;
 
         // === Recent Activity (Student's own, max 10) ===
         $myInvoiceIds = $myInvoices->pluck('Invoice_ID')->toArray();
@@ -209,13 +245,13 @@ class StudentDashboardService
             }
         }
 
-        return compact(
-            'kpi', 'todayClasses', 'myScores', 'langProgress', 'internals',
-            'totalOutstanding', 'latestInvoice', 'outstandingBills',
-            'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
-            'attendancePercentage', 'certificateStatus',
-            'reminders', 'recentActivities', 'unreadNotifications'
-        );
+            return compact(
+                'kpi', 'todayClasses', 'myScores', 'langProgress', 'internals',
+                'totalOutstanding', 'latestInvoice', 'outstandingBills',
+                'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
+                'attendancePercentage', 'certificateStatus',
+                'reminders', 'recentActivities', 'unreadNotifications'
+            );
     }
 
     private function getTodayIndo()

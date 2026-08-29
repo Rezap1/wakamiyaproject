@@ -9,6 +9,7 @@ use App\Http\Requests\StoreInvoiceRequest;
 use App\Http\Requests\UpdateInvoiceRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\UserResolverHelper;
+use App\Services\Core\SystemSettingService;
 
 class InvoiceController extends Controller
 {
@@ -83,21 +84,69 @@ class InvoiceController extends Controller
         }
 
         $invoices = $invoices->map(function($inv) {
-            $inv['student_name'] = UserResolverHelper::getName($inv['Student_ID'] ?? '');
+            $stdDetail = UserResolverHelper::getStudentDetail($inv['Student_ID'] ?? '');
+            $inv['student_name'] = $stdDetail['name'];
+            $inv['class_name'] = $stdDetail['class_name'];
+            $inv['batch_name'] = $stdDetail['batch_name'];
+            $inv['student_formatted'] = $stdDetail['formatted'];
             $inv['Created_By_Name'] = UserResolverHelper::getName($inv['Created_By'] ?? '');
             return $inv;
         });
+
+        $invoiceGroups = $invoices
+            ->groupBy(fn ($invoice) => trim((string) ($invoice['Status'] ?? 'Draft')) ?: 'Draft')
+            ->map(function ($group, $status) {
+                return [
+                    'id' => $status,
+                    'title' => $status,
+                    'total' => $group->count(),
+                    'amount' => (float) $group->sum(fn ($invoice) => (float) ($invoice['Grand_Total'] ?? $invoice['Amount'] ?? 0)),
+                    'remaining' => (float) $group->sum(fn ($invoice) => (float) ($invoice['Remaining_Amount'] ?? $invoice['Amount'] ?? 0)),
+                    'items' => $group->sortByDesc('Due_Date')->values(),
+                ];
+            })
+            ->sortBy(function ($group) {
+                $order = array_search($group['id'], ['OVERDUE', 'Waiting Payment', 'Partial Paid', 'Draft', 'Paid', 'Cancelled'], true);
+                return $order === false ? 99 : $order;
+            })
+            ->values();
         
         $invoices = \App\Helpers\CollectionHelper::paginate($invoices, 10)->withQueryString();
 
-        return view('finance.invoices.index', compact('invoices', 'type', 'statusFilter', 'search'));
+        return view('finance.invoices.index', compact('invoices', 'invoiceGroups', 'type', 'statusFilter', 'search'));
     }
 
     public function create()
     {
         $students = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll();
         $companies = app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll();
-        return view('finance.invoices.create', compact('students', 'companies'));
+        $classes = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll();
+        $batches = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->fetchAll();
+
+        $classesMap = collect($classes)->keyBy('Class_ID');
+        $batchesMap = collect($batches)->keyBy('Batch_ID');
+        $students = collect($students)->map(function($s) use ($classesMap, $batchesMap) {
+            $cId = $s['Class_ID'] ?? '';
+            $bId = $s['Batch_ID'] ?? '';
+            $s['class_name'] = isset($classesMap[$cId]) ? ($classesMap[$cId]['Class_Name'] ?? $classesMap[$cId]['Class_Code'] ?? '-') : '-';
+            $s['batch_name'] = isset($batchesMap[$bId]) ? ($batchesMap[$bId]['Batch_Name'] ?? $batchesMap[$bId]['Batch_Code'] ?? '-') : '-';
+            return $s;
+        });
+
+        $settingService = app(SystemSettingService::class);
+        $categories = $settingService->getInvoiceCategories();
+        $defaultDueDays = max(1, (int) $settingService->get('INVOICE_DUE_DAYS', 14));
+        $defaultTuitionFee = $settingService->getDefaultTuitionFee();
+
+        return view('finance.invoices.create', compact(
+            'students',
+            'companies',
+            'classes',
+            'batches',
+            'categories',
+            'defaultDueDays',
+            'defaultTuitionFee'
+        ));
     }
 
     public function store(StoreInvoiceRequest $request)
@@ -106,7 +155,7 @@ class InvoiceController extends Controller
             $invoice = $this->invoiceService->create($request->validated());
             return redirect()->route('invoices.show', $invoice['Invoice_ID'])->with('success', 'Invoice tagihan berhasil dibuat sebagai Draft.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -117,7 +166,11 @@ class InvoiceController extends Controller
             return redirect()->route('invoices.index')->with('error', 'Invoice tidak ditemukan.');
         }
 
-        $invoice['student_name'] = UserResolverHelper::getName($invoice['Student_ID'] ?? '');
+        $stdDetail = UserResolverHelper::getStudentDetail($invoice['Student_ID'] ?? '');
+        $invoice['student_name'] = $stdDetail['name'];
+        $invoice['class_name'] = $stdDetail['class_name'];
+        $invoice['batch_name'] = $stdDetail['batch_name'];
+        $invoice['student_formatted'] = $stdDetail['formatted'];
         $invoice['Created_By_Name'] = UserResolverHelper::getName($invoice['Created_By'] ?? '');
 
         $payments = app(\App\Services\Finance\PaymentService::class)->getAll()
@@ -149,7 +202,7 @@ class InvoiceController extends Controller
             $this->invoiceService->update($id, $request->validated());
             return redirect()->route('invoices.show', $id)->with('success', 'Invoice tagihan berhasil diperbarui.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -159,7 +212,7 @@ class InvoiceController extends Controller
             $this->invoiceService->delete($id);
             return redirect()->route('invoices.index')->with('success', 'Invoice tagihan dibatalkan/dihapus.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
@@ -180,7 +233,7 @@ class InvoiceController extends Controller
                 false
             );
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
@@ -192,31 +245,82 @@ class InvoiceController extends Controller
     public function verifyInvoicePublic($id)
     {
         try {
-            $docData = $this->invoiceService->getInvoiceDocumentData($id);
+            $docData = $this->invoiceService->getInvoiceDocumentData($id, true);
             $docData['invoice']['student_name'] = UserResolverHelper::getName($docData['invoice']['Student_ID'] ?? '');
             return view('finance.invoices.verify_invoice_public', ['data' => $docData]);
         } catch (\Exception $e) {
-            abort(404, $e->getMessage());
+            abort(404, $this->safeExceptionMessage($e, 'Invoice tidak ditemukan atau tidak tersedia.'));
         }
     }
 
     public function publish($id)
     {
         try {
-            $this->invoiceService->update($id, ['Status' => 'UNPAID']);
-            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dipublikasikan (Status: UNPAID).');
+            $this->invoiceService->publish($id);
+            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil diterbitkan (Status: Waiting Payment).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
     public function cancel($id)
     {
         try {
-            $this->invoiceService->update($id, ['Status' => 'CANCELLED']);
-            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dibatalkan (Status: CANCELLED).');
+            $this->invoiceService->cancel($id);
+            return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dibatalkan (Status: Cancelled).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
+        }
+    }
+
+    public function notify(Request $request, $id)
+    {
+        try {
+            $invoice = $this->invoiceService->getById($id);
+            if (!$invoice) {
+                return back()->with('error', 'Invoice tidak ditemukan.');
+            }
+
+            $message = $request->input('message', 'Pengingat pembayaran tagihan WMS.');
+            $studentId = $invoice['Student_ID'] ?? null;
+            if (($invoice['Invoice_Type'] ?? 'STUDENT') !== 'STUDENT' || empty($studentId)) {
+                return back()->with('error', 'Pengingat pembayaran hanya dapat dikirim untuk invoice siswa yang memiliki Student_ID.');
+            }
+
+            // Create notification record using Service to ensure cache clearing
+            try {
+                $notifService = app(\App\Services\Core\NotificationService::class);
+                $notifService->CreateNotification([
+                    'Notification_ID' => uniqid('NTF_'),
+                    'User_ID'         => $studentId,
+                    'Title'           => 'Pengingat Pembayaran Tagihan',
+                    'Message'         => $message,
+                    'Notification_Type'=> 'BILLING_REMINDER',
+                    'Priority'        => 'High',
+                    'Is_Read'         => 'FALSE',
+                    'Created_At'      => now()->toDateTimeString()
+                ]);
+            } catch (\Exception $e) {}
+
+            // Dispatch Enterprise Event
+            try {
+                $enterpriseEvent = app(\App\Services\Core\EnterpriseEventService::class);
+                $enterpriseEvent->dispatch(
+                    'FINANCE',
+                    'NOTIFY',
+                    'INVOICE',
+                    $id,
+                    \App\Support\ActorIdentity::required(),
+                    ['STUDENT', 'FINANCE'],
+                    array_filter([$studentId]),
+                    ['Message' => $message, 'Amount' => $invoice['Amount'] ?? 0]
+                );
+            } catch (\Exception $e) {}
+
+            return redirect()->route('invoices.index')->with('success', "Pengingat penagihan untuk invoice #{$id} berhasil dikirim.");
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Gagal mengirim pengingat: ' . $this->safeExceptionMessage($e)]);
         }
     }
 }
+

@@ -1,29 +1,28 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <div class="flex items-center gap-2">
-                    <a href="{{ route('alumni.index') }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
-                        &larr; Kembali ke Daftar Alumni
-                    </a>
-                </div>
-                <h2 class="font-bold text-2xl text-slate-800 leading-tight mt-1">
-                    Profil Alumni: {{ $student['Full_Name'] }}
-                </h2>
-                <p class="text-sm text-slate-500 font-mono">ID: {{ $student['Student_ID'] }} | NIS: {{ $student['Student_Number'] ?? '-' }}</p>
+@extends('layouts.app')
+@section('header', 'Detail Profil Alumni')
+@section('content')
+<div class="space-y-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('alumni.index') }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                    &larr; Kembali ke Daftar Alumni
+                </a>
             </div>
-            <div class="flex items-center gap-3">
-                <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm flex items-center gap-1">
-                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
-                    Status: {{ $student['Graduation_Status'] ?? 'LULUS' }}
-                </span>
-            </div>
+            <h2 class="font-bold text-2xl text-slate-800 leading-tight mt-1">
+                Profil Alumni: {{ $student['Full_Name'] }}
+            </h2>
+            <p class="text-sm text-slate-500 font-mono">ID: {{ $student['Student_ID'] }} | NIS: {{ $student['Student_Number'] ?? '-' }}</p>
         </div>
-    </x-slot>
-
-    <div class="py-6 space-y-6">
+        <div class="flex items-center gap-3">
+            <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm flex items-center gap-1">
+                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Status: {{ $student['Graduation_Status'] ?? 'LULUS' }}
+            </span>
+        </div>
+    </div>
         <!-- Overview Grid -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Main Info Card -->
@@ -164,4 +163,4 @@
             </div>
         </div>
     </div>
-</x-app-layout>
+@endsection

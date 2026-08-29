@@ -157,7 +157,7 @@ class ClassController extends Controller
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
             $activeBatches = $batches->where('Is_Active', 'TRUE')->values();
 
-            return view('classes.index', [
+            return view('academic.classes.index', [
                 'classes' => $classesPaginated,
                 'programs' => $activePrograms,
                 'batches' => $activeBatches
@@ -175,7 +175,7 @@ class ClassController extends Controller
             $batches = $this->batchService->getAllBatches()->where('Is_Active', 'TRUE')->values();
             $teachers = $this->teacherService->getAllTeachers()->where('Is_Active', 'TRUE')->values();
             
-            return view('classes.create', compact('programs', 'batches', 'teachers'));
+            return view('academic.classes.create', compact('programs', 'batches', 'teachers'));
         } catch (\Exception $e) {
             Log::error('Error loading create class form: ' . $e->getMessage());
             return redirect()->route('classes.index')->with('error', 'Gagal memuat form pendaftaran kelas.');
@@ -191,7 +191,7 @@ class ClassController extends Controller
             return redirect()->route('classes.index')->with('success', 'Kelas berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating class: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -211,7 +211,7 @@ class ClassController extends Controller
             $class['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Angkatan Tidak Ditemukan';
             $class['Teacher_Name'] = $teacher ? $teacher['Full_Name'] : 'Wali Kelas Tidak Ditemukan';
 
-            return view('classes.show', compact('class'));
+            return view('academic.classes.show', compact('class'));
         } catch (\Exception $e) {
             Log::error('Error showing class: ' . $e->getMessage());
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat memuat data kelas.');
@@ -246,7 +246,7 @@ class ClassController extends Controller
                 $teachers->push($currentTeacher);
             }
 
-            return view('classes.edit', compact('class', 'programs', 'batches', 'teachers'));
+            return view('academic.classes.edit', compact('class', 'programs', 'batches', 'teachers'));
         } catch (\Exception $e) {
             Log::error('Error editing class: ' . $e->getMessage());
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat memuat form edit kelas.');
@@ -267,7 +267,7 @@ class ClassController extends Controller
             return redirect()->route('classes.index')->with('success', 'Data kelas berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating class: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -291,8 +291,28 @@ class ClassController extends Controller
     public function getStudents($id, \App\Services\Core\StudentService $studentService)
     {
         try {
-            $students = $studentService->getAllStudents();
             $requestedClassId = SheetValue::id($id);
+            $user = auth()->user();
+            $roleService = app(\App\Services\Core\RoleService::class);
+            $role = collect($roleService->getAllRoles())->firstWhere('Role_ID', $user->Role_ID ?? '');
+            $roleName = strtoupper(trim((string) ($role['Role_Name'] ?? $user->Role ?? session('role') ?? '')));
+
+            if (str_contains($roleName, 'TEACHER') || str_contains($roleName, 'GURU')) {
+                $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
+                $teacher = collect($teacherRepo->fetchAll())->firstWhere('User_ID', $user->User_ID ?? '');
+                if (!$teacher || empty($teacher['Teacher_ID'])) {
+                    return response()->json(['error' => 'Profil pengajar tidak ditemukan.'], 403);
+                }
+
+                $scheduleService = app(\App\Services\Academic\ScheduleService::class);
+                $mySchedules = collect($scheduleService->getAll())->where('Teacher_ID', $teacher['Teacher_ID']);
+                $myClassIds = $mySchedules->pluck('Class_ID')->filter()->unique()->toArray();
+                if (!in_array($requestedClassId, $myClassIds)) {
+                    return response()->json(['error' => 'Akses Ditolak: Kelas di luar wewenang Anda.'], 403);
+                }
+            }
+
+            $students = $studentService->getAllStudents();
             $classStudents = $students
                 ->filter(fn ($student) => SheetValue::isActive($student))
                 ->filter(fn ($student) => SheetValue::id($student['Class_ID'] ?? '') === $requestedClassId)

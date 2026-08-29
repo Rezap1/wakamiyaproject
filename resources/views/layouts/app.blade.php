@@ -3,11 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Manajemen WAKAMIYA V1.0</title>
+    <title>{{ $companyProfile['company']['name'] ?? 'WAKAMIYA MANAGEMENT SYSTEM' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
+        :root {
+            --color-primary: {{ $themeTokens['primary'] ?? '#38BDF8' }};
+            --color-secondary: {{ $themeTokens['secondary'] ?? '#0F172A' }};
+            --color-sidebar-bg: {{ $themeTokens['sidebar_bg'] ?? '#111827' }};
+            --color-sidebar-text: {{ $themeTokens['sidebar_text'] ?? '#94A3B8' }};
+            --color-sidebar-active-bg: {{ $themeTokens['sidebar_active_bg'] ?? '#1E293B' }};
+            --color-sidebar-active: {{ $themeTokens['sidebar_active'] ?? '#38BDF8' }};
+            --color-topbar-bg: {{ $themeTokens['topbar_bg'] ?? '#FFFFFF' }};
+            --color-page-bg: {{ $themeTokens['page_bg'] ?? '#E2E8F0' }};
+            --color-card-bg: {{ $themeTokens['card_bg'] ?? '#FFFFFF' }};
+        }
         body { font-family: 'Inter', sans-serif; }
         
         /* Dark Scrollbar for Sidebar */
@@ -31,7 +42,7 @@
         localStorage.setItem('color-theme', 'light');
     </script>
 </head>
-<body class="text-slate-800 bg-gray-300 antialiased selection:bg-blue-600 selection:text-white">
+<body style="background-color: var(--color-page-bg, #E2E8F0);" class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
 
     <div class="flex h-screen overflow-hidden">
         

@@ -52,12 +52,12 @@
                     value="{{ old('Type', $transaction['Type'] ?? '') }}" 
                 />
 
-                <x-universal.select 
+                <x-universal.input
                     name="Category" 
-                    label="Kategori" 
+                    label="Nama Pemasukan/Pengeluaran"
                     :required="true"
-                    :options="array_combine($categories, $categories)"
                     value="{{ old('Category', $transaction['Category'] ?? '') }}" 
+                    placeholder="Contoh: Beli ATK, Sewa Gedung, Donasi, Pembayaran SPP"
                 />
 
                 <x-universal.input 

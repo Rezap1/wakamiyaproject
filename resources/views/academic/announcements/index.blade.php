@@ -10,10 +10,11 @@
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Academic' => '#', 'Announcement' => route('announcements.index')]"
     >
         <x-slot:actions>
+            <x-universal.multi-export route-prefix="announcements" />
             <x-button as="a" href="{{ route('announcements.index') }}" variant="secondary" title="Refresh Data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </x-button>
-            @if(in_array($userRole ?? 'ADMINISTRATOR', ['ADMINISTRATOR', 'ACADEMIC']))
+            @if(in_array($userRole ?? 'ADMINISTRATOR', ['ADMINISTRATOR', 'ACADEMIC', 'MASTER']))
                 <x-button as="a" href="{{ route('announcements.create') }}" variant="primary">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                     Buat Pengumuman Baru
@@ -70,7 +71,7 @@
                      data-search="{{ strtolower(($ann['Title'] ?? '').($ann['Content'] ?? '')) }}"
                      data-target="{{ $ann['Target_Role'] ?? 'ALL' }}">
                      
-                    @if(in_array($userRole ?? 'ADMINISTRATOR', ['ADMINISTRATOR', 'ACADEMIC']))
+                    @if(in_array($userRole ?? 'ADMINISTRATOR', ['ADMINISTRATOR', 'ACADEMIC', 'MASTER']))
                         <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                             <a href="{{ route('announcements.edit', $ann['Announcement_ID']) }}" class="p-2 bg-white text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg shadow-sm border border-slate-200 block transition-colors" title="Edit Pengumuman">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>

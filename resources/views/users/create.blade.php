@@ -65,7 +65,7 @@
                 placeholder="Minimal 8 karakter"
             />
             
-            <x-universal.searchable-select 
+            <x-universal.select 
                 name="Role_ID" 
                 label="Peran (Role)" 
                 :required="true"

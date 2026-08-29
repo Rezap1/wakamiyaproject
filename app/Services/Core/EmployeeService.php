@@ -141,18 +141,31 @@ class EmployeeService
             try {
                 $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
                 $user = $userRepo->findById($data['User_ID']);
-                if ($user) {
-                    if (empty($data['Full_Name'])) {
-                        $data['Full_Name'] = $user['Full_Name'] ?? $user['Username'] ?? '';
-                    }
-                    if (empty($data['Email'])) {
-                        $data['Email'] = $user['Email'] ?? '';
-                    }
-                    if (empty($data['Phone_Number'])) {
-                        $data['Phone_Number'] = $user['Phone_Number'] ?? '';
-                    }
+                if (!$user) {
+                    throw new \Exception("User tidak ditemukan.");
                 }
-            } catch (\Exception $e) {}
+                if ($this->userHasRole($user, 'STUDENT')) {
+                    throw new \Exception("Akun siswa tidak dapat digunakan sebagai profil karyawan.");
+                }
+
+                $existingEmployee = collect($this->employeeRepository->fetchAll())
+                    ->firstWhere('User_ID', $data['User_ID']);
+                if ($existingEmployee) {
+                    throw new \Exception("User ini sudah terdaftar sebagai karyawan.");
+                }
+
+                if (empty($data['Full_Name'])) {
+                    $data['Full_Name'] = $user['Full_Name'] ?? $user['Username'] ?? '';
+                }
+                if (empty($data['Email'])) {
+                    $data['Email'] = $user['Email'] ?? '';
+                }
+                if (empty($data['Phone_Number'])) {
+                    $data['Phone_Number'] = $user['Phone_Number'] ?? '';
+                }
+            } catch (\Exception $e) {
+                throw $e;
+            }
         }
 
         if (empty($data['Full_Name']) && !empty($data['User_ID'])) {
@@ -179,6 +192,7 @@ class EmployeeService
         unset($data['Profile_Photo']);
 
         $res = $this->employeeRepository->create($data);
+        $this->syncUserEmployeeLink($data['User_ID'] ?? '', $data['Employee_ID']);
         $this->employeeRepository->clearCache();
         if (class_exists('App\Helpers\UserResolverHelper')) {
             \App\Helpers\UserResolverHelper::clearCache();
@@ -189,7 +203,7 @@ class EmployeeService
             'CREATE',
             'EMPLOYEE',
             $data['Employee_ID'],
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['HR', 'ADMINISTRATOR'],
             [$data['Employee_ID']],
             $data
@@ -202,6 +216,35 @@ class EmployeeService
     {
         $data['Updated_At'] = now()->toDateTimeString();
 
+        $employee = $this->getEmployeeById($id);
+        if (!$employee) {
+            throw new \Exception("Karyawan #{$id} tidak ditemukan.");
+        }
+
+        $userId = $data['User_ID'] ?? ($employee['User_ID'] ?? '');
+        if (!empty($userId)) {
+            $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
+            $user = $userRepo->findById($userId);
+            if (!$user) {
+                throw new \Exception("User tidak ditemukan.");
+            }
+            if ($this->userHasRole($user, 'STUDENT')) {
+                throw new \Exception("Akun siswa tidak dapat digunakan sebagai profil karyawan.");
+            }
+
+            $duplicate = collect($this->employeeRepository->fetchAll())
+                ->first(function ($row) use ($id, $userId) {
+                    return ($row['Employee_ID'] ?? '') !== $id && ($row['User_ID'] ?? '') === $userId;
+                });
+            if ($duplicate) {
+                throw new \Exception("User ini sudah terdaftar sebagai karyawan lain.");
+            }
+
+            $data['Full_Name'] = $user['Full_Name'] ?? $user['Username'] ?? ($employee['Full_Name'] ?? '');
+            $data['Email'] = $user['Email'] ?? ($employee['Email'] ?? '');
+            $data['Phone_Number'] = $user['Phone_Number'] ?? ($employee['Phone_Number'] ?? '');
+        }
+
         if (isset($data['Profile_Photo']) && $data['Profile_Photo'] instanceof \Illuminate\Http\UploadedFile) {
             $savedPath = $this->saveProfilePhoto($id, $data['Profile_Photo']);
             $data['Profile_Photo'] = $savedPath;
@@ -210,6 +253,11 @@ class EmployeeService
         unset($data['Profile_Photo']);
 
         $res = $this->employeeRepository->updateRow($id, $data);
+        $this->syncUserEmployeeLink($userId, $id);
+        $oldUserId = $employee['User_ID'] ?? '';
+        if (!empty($oldUserId) && $oldUserId !== $userId) {
+            $this->syncUserEmployeeLink($oldUserId, '');
+        }
         $this->employeeRepository->clearCache();
         if (class_exists('App\Helpers\UserResolverHelper')) {
             \App\Helpers\UserResolverHelper::clearCache();
@@ -220,7 +268,7 @@ class EmployeeService
             'UPDATE',
             'EMPLOYEE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['HR', 'ADMINISTRATOR'],
             [$id],
             $data
@@ -261,7 +309,7 @@ class EmployeeService
             'DELETE',
             'EMPLOYEE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['HR', 'ADMINISTRATOR'],
             [$id],
             ['Status' => 'DELETED']
@@ -282,7 +330,7 @@ class EmployeeService
             'SEND_EMAIL',
             'EMPLOYEE_DATA',
             $id,
-            $sender->User_ID ?? 'SYSTEM',
+            $sender->User_ID ?? \App\Support\ActorIdentity::required(),
             ['HR', 'ADMINISTRATOR'],
             [$id],
             ['Target_Email' => $email]
@@ -344,7 +392,7 @@ class EmployeeService
             'UPDATE', 
             'EMPLOYEE_LIFECYCLE', 
             $employeeId, 
-            auth()->id() ?? 'SYSTEM', 
+            \App\Support\ActorIdentity::required(), 
             ['HR', 'ADMINISTRATOR'], 
             [$employeeId], 
             ['Status' => $upperStatus, 'Notes' => $notes]
@@ -431,5 +479,29 @@ class EmployeeService
     {
         if (strlen($account) <= 4) return '****';
         return '******' . substr($account, -4);
+    }
+
+    private function syncUserEmployeeLink(string $userId, string $employeeId): void
+    {
+        if (empty($userId)) {
+            return;
+        }
+
+        try {
+            $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
+            $userRepo->update($userId, [
+                'Employee_ID' => $employeeId,
+                'Updated_At' => now()->toDateTimeString(),
+                'Updated_By' => \App\Support\ActorIdentity::required(),
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Failed to sync Employee_ID {$employeeId} to user {$userId}: " . $e->getMessage());
+        }
+    }
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
     }
 }

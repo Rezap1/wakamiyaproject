@@ -2,6 +2,8 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\AuditLogRepositoryInterface;
+use App\Support\ActorIdentity;
+use Illuminate\Auth\Access\AuthorizationException;
 
 class AuditLogService
 {
@@ -15,15 +17,16 @@ class AuditLogService
     public function getAll() { return $this->repo->getAll(); }
     public function getById($id) { return $this->repo->getById($id); }
 
-    public function log($module, $action, $referenceType, $referenceId, $oldValue = null, $newValue = null)
+    public function log($module, $action, $referenceType, $referenceId, $oldValue = null, $newValue = null, $actor = null)
     {
         try {
             $user = auth()->user();
+            $actorId = ActorIdentity::resolve($actor);
             $data = [
                 'Audit_ID' => uniqid('AUD_'),
-                'User_ID' => $user->email ?? ($user->User_ID ?? 'System'),
-                'Role' => session('role') ?? 'System',
-                'Department' => $user->Department ?? 'System',
+                'User_ID' => $actorId,
+                'Role' => session('role') ?? ($user->Role ?? ''),
+                'Department' => $user->Department ?? '',
                 'Module' => $module,
                 'Reference_Type' => $referenceType,
                 'Reference_ID' => $referenceId,
@@ -42,6 +45,8 @@ class AuditLogService
             $res = $this->repo->create($data);
             $this->repo->clearCache();
             return $res;
+        } catch (AuthorizationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             // Silently fail so audit logging doesn't crash the main transaction
             return false;

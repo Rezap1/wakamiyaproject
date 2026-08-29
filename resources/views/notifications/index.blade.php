@@ -2,15 +2,16 @@
 @section('header', 'Pusat Notifikasi')
 @section('content')
 <div class="space-y-6 max-w-5xl mx-auto">
-    <x-page-header title="Pusat Notifikasi" description="Lihat dan kelola semua notifikasi Anda." :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Notifikasi' => '#']">
+    <x-page-header title="Pusat Notifikasi" description="Lihat dan kelola semua notifikasi Anda." :breadcrumbs="['Dasbor' => route('dashboard'), 'Notifikasi' => '#']">
         <x-slot:actions>
+            <x-universal.multi-export route-prefix="notifications" />
             <form action="{{ route('notifications.markAllRead') }}" method="POST">
                 @csrf
                 <button type="submit" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50">Tandai Semua Telah Dibaca</button>
             </form>
         </x-slot:actions>
     </x-page-header>
-    
+
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="divide-y divide-slate-50">
             @forelse($notifications as $notif)
@@ -54,6 +55,12 @@
             @endforelse
         </div>
     </div>
+
+    @if(method_exists($notifications, 'links'))
+        <div>
+            {{ $notifications->links() }}
+        </div>
+    @endif
 </div>
 @endsection
 

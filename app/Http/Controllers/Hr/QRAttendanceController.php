@@ -33,7 +33,9 @@ class QRAttendanceController extends Controller
             return redirect()->route('hr.attendance.qr.display', $session['Session_ID'])
                 ->with('success', "Sesi presensi QR #{$session['Session_ID']} berhasil dibuka.");
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors([
+                'error' => $this->safeExceptionMessage($e, 'Sesi presensi QR tidak dapat dibuat.'),
+            ])->withInput();
         }
     }
 
@@ -58,7 +60,7 @@ class QRAttendanceController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => $this->safeExceptionMessage($e, 'Token QR tidak dapat dibuat.')
             ], 400);
         }
     }
@@ -75,22 +77,26 @@ class QRAttendanceController extends Controller
     public function scan(ScanQRAttendanceRequest $request)
     {
         try {
-            $token = $request->input('token');
-            $deviceInfo = $request->input('device_info');
-            $lat = $request->filled('latitude') ? (float) $request->input('latitude') : null;
-            $lon = $request->filled('longitude') ? (float) $request->input('longitude') : null;
+            $validated = $request->validated();
+            $token = $validated['token'];
+            $deviceInfo = $validated['device_info'] ?? null;
+            $lat = (float) $validated['latitude'];
+            $lon = (float) $validated['longitude'];
             
             $result = $this->qrService->processScan($token, $deviceInfo, $lat, $lon);
+            $statusLabel = ($result['status'] === 'PRESENT')
+                ? 'Tepat Waktu'
+                : 'Terlambat ' . ($result['late_minutes'] ?? 0) . ' Menit';
 
             return response()->json([
                 'success' => true,
-                'message' => "Presensi Berhasil Recorded! (" . ($result['status'] === 'PRESENT' ? 'Tepat Waktu' : 'Terlambat ' . $result['late_minutes'] . ' Menit') . ")",
+                'message' => "Presensi Berhasil Dicatat! ({$statusLabel})",
                 'data' => $result
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => $this->safeExceptionMessage($e, 'Presensi QR tidak dapat diproses.')
             ], 422);
         }
     }
@@ -101,7 +107,9 @@ class QRAttendanceController extends Controller
             $this->qrService->closeSession($sessionId);
             return redirect()->route('hr.attendance.qr.index')->with('success', "Sesi presensi QR #{$sessionId} telah ditutup.");
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors([
+                'error' => $this->safeExceptionMessage($e, 'Sesi presensi QR tidak dapat ditutup.'),
+            ]);
         }
     }
 
@@ -116,7 +124,7 @@ class QRAttendanceController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => $this->safeExceptionMessage($e, 'Ringkasan sesi QR tidak dapat dimuat.')
             ], 400);
         }
     }

@@ -27,13 +27,13 @@ class PdfController extends Controller
     public function generate(Request $request, $id)
     {
         try {
-            $userEmail = auth()->user()->email ?? (auth()->user()->User_ID ?? 'user@example.com');
+            $userEmail = $this->authenticatedActor();
             $role = session('role') ?? 'GUEST';
             
             $this->pdfService->GenerateDocumentFile($id, $userEmail, $role);
             return back()->with('success', 'PDF Document successfully generated and signed.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
@@ -52,5 +52,16 @@ class PdfController extends Controller
     {
         // URL for QR scanning verification
         return view('document.pdf.verify', ['code' => $verificationCode]);
+    }
+
+    private function authenticatedActor(): string
+    {
+        $user = auth()->user();
+        $actor = $user->User_ID ?? $user->Email ?? $user->email ?? null;
+        if (!$actor) {
+            abort(403, 'Identitas pengguna tidak valid.');
+        }
+
+        return (string) $actor;
     }
 }

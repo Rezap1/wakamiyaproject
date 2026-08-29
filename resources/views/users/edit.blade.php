@@ -33,19 +33,22 @@
                 label="Username" 
                 :required="true"
                 value="{{ $user['Username'] ?? '' }}"
+                placeholder="Contoh: budi.santoso"
             />
             
             <x-universal.input 
                 name="Full_Name" 
                 label="Nama Lengkap" 
                 :required="true"
-                value="{{ $user['Full_Name'] ?? '' }}"
+                value="{{ $user['Full_Name'] ?? $user['Name'] ?? '' }}"
+                placeholder="Contoh: Budi Santoso"
             />
             
             <x-universal.input 
                 name="Phone_Number" 
                 label="Nomor HP" 
                 value="{{ $user['Phone_Number'] ?? '' }}"
+                placeholder="Contoh: 081234567890"
             />
             
             <x-universal.input 
@@ -54,6 +57,7 @@
                 type="email"
                 :required="true"
                 value="{{ $user['Email'] ?? '' }}"
+                placeholder="Contoh: budi@wakamiya.co.id"
             />
             
             <x-universal.input 
@@ -64,7 +68,7 @@
                 helper="Hanya isi jika ingin mereset kata sandi (min 8 karakter)."
             />
             
-            <x-universal.searchable-select 
+            <x-universal.select 
                 name="Role_ID" 
                 label="Peran (Role)" 
                 :required="true"
@@ -76,6 +80,7 @@
                 name="Employee_ID" 
                 label="ID Karyawan" 
                 value="{{ $user['Employee_ID'] ?? '' }}"
+                placeholder="Contoh: EMP000001"
                 helper="Biarkan kosong jika pengguna bukan karyawan."
             />
             

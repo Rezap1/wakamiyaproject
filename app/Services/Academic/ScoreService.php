@@ -70,81 +70,46 @@ class ScoreService
     public function processEvaluationDetails(array $data): array
     {
         $category = strtoupper(trim($data['Assessment_Category'] ?? 'GENERAL'));
-        if (!in_array($category, ['GENERAL', 'SPORTS', 'LANGUAGE'])) {
-            $category = 'GENERAL';
-        }
-
+        
         $details = ['category' => strtolower($category)];
         $notes = $data['Notes'] ?? $data['Remarks'] ?? '';
+        $details['notes'] = $notes;
 
-        if ($category === 'SPORTS') {
-            $distance = (float) ($data['running_distance'] ?? 0);
-            $time = (float) ($data['running_time'] ?? 0);
-            $pushUp = (int) ($data['push_up'] ?? 0);
-            $sitUp = (int) ($data['sit_up'] ?? 0);
+        $reservedKeys = [
+            '_token', 'Student_ID', 'Assessment_Category', 'Date', 'Notes', 'Remarks', 
+            '_method', 'Score_ID', 'Score_Value', 'Score', 'Subject_ID', 'Assessment_ID', 'Assessment_Date', 'Teacher_ID'
+        ];
 
-            if ($distance < 0 || $time < 0 || $pushUp < 0 || $sitUp < 0) {
-                throw new Exception("Metrik evaluasi olahraga tidak valid (harus angka non-negatif).");
-            }
-
-            $details['running_distance'] = $distance;
-            $details['running_time'] = $time;
-            $details['push_up'] = $pushUp;
-            $details['sit_up'] = $sitUp;
-            $details['notes'] = $notes;
-
-            $scoreVal = (float) ($data['Score_Value'] ?? $data['Score'] ?? 0);
-            if ($scoreVal <= 0) {
-                $distScore = min(100, ($distance / 5) * 100 * 0.3);
-                $pushScore = min(100, ($pushUp / 30) * 100 * 0.35);
-                $sitScore = min(100, ($sitUp / 30) * 100 * 0.35);
-                $scoreVal = round($distScore + $pushScore + $sitScore);
-                if ($scoreVal > 100) $scoreVal = 100;
-            }
-
-        } elseif ($category === 'LANGUAGE') {
-            // H8.21: Language uses 1-5 scale
-            $speaking = (int) ($data['speaking'] ?? 0);
-            $writing = (int) ($data['writing'] ?? 0);
-            $listening = (int) ($data['listening'] ?? 0);
-            $reading = (int) ($data['reading'] ?? 0);
-            $ethics = (int) ($data['ethics'] ?? 0);
-            $motivation = (int) ($data['motivation'] ?? 0);
-            $attendance = (int) ($data['attendance'] ?? 0);
-
-            $rubrics = [
-                'speaking' => $speaking, 
-                'writing' => $writing, 
-                'listening' => $listening, 
-                'reading' => $reading, 
-                'ethics' => $ethics, 
-                'motivation' => $motivation, 
-                'attendance' => $attendance
-            ];
-
-            foreach ($rubrics as $key => $val) {
-                if ($val < 1 || $val > 5) {
-                    throw new Exception("Rubrik bahasa '{$key}' harus berada dalam skala 1-5.");
+        foreach ($data as $key => $val) {
+            if (!in_array($key, $reservedKeys) && $val !== '' && $val !== null) {
+                // Parse numeric strings if they look like numbers
+                if (is_numeric($val)) {
+                    $details[$key] = strpos((string)$val, '.') !== false ? (float)$val : (int)$val;
+                } else {
+                    $details[$key] = $val;
                 }
-                $details[$key] = $val;
             }
-
-            $details['notes'] = $notes;
-            // Convert 1-5 average to 0-100 scale for composite score
-            $avgScale = array_sum($rubrics) / count($rubrics);
-            $scoreVal = round(($avgScale / 5) * 100);
-
-        } else {
-            // GENERAL ACADEMIC SCORE (Ujian Bab)
-            $scoreVal = (float) ($data['Score_Value'] ?? $data['Score'] ?? 0);
-            if ($scoreVal < 1 || $scoreVal > 100) {
-                throw new Exception("Nilai Ujian Bab harus berada di antara 1 dan 100.");
-            }
-            $details['subject_id'] = $data['Subject_ID'] ?? '';
-            $details['notes'] = $notes;
         }
 
-        if ($scoreVal < 0 || $scoreVal > 100) {
+        // If Score_Value or Score is passed, use it. Otherwise leave it null for aspectual assessments.
+        $scoreVal = null;
+        if (isset($data['Score_Value']) && $data['Score_Value'] !== '') {
+            $scoreVal = (float) $data['Score_Value'];
+        } elseif (isset($data['Score']) && $data['Score'] !== '') {
+            $scoreVal = (float) $data['Score'];
+        }
+
+        if ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes']))) {
+             if ($scoreVal === null) {
+                  $scoreVal = 0.0; // Fallback
+             }
+             if ($scoreVal < 1 || $scoreVal > 100) {
+                 throw new Exception("Nilai Ujian Bab harus berada di antara 1 dan 100.");
+             }
+             $details['subject_id'] = $data['Subject_ID'] ?? '';
+        }
+
+        if ($scoreVal !== null && ($scoreVal < 0 || $scoreVal > 100)) {
             throw new Exception("Nilai akhir harus berada di antara 0 dan 100.");
         }
 
@@ -165,14 +130,21 @@ class ScoreService
         }
         
         $scoreVal = $evalResult['score_value'];
-        $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
         
         $data['Assessment_Category'] = $evalResult['category'];
-        $data['Score'] = $scoreVal;
-        $data['Score_Value'] = $scoreVal;
+        $data['Score'] = $scoreVal ?? '';
+        $data['Score_Value'] = $scoreVal ?? '';
         $data['Evaluation_Details'] = $evalResult['evaluation_details'];
-        $data['Grade'] = $gradeResult['grade'];
-        $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
+        
+        if ($scoreVal !== null) {
+            $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
+            $data['Grade'] = $gradeResult['grade'];
+            $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
+        } else {
+            $data['Grade'] = '';
+            $data['Status'] = 'COMPLETED';
+        }
+        
         $data['Remarks'] = $data['Notes'] ?? ($data['Remarks'] ?? '');
         $data['Created_At'] = now()->toDateTimeString();
 
@@ -184,8 +156,8 @@ class ScoreService
             'ACADEMIC',
             'PUBLISH',
             'SCORE',
-            $res['Score_ID'] ?? $data['Score_ID'],
-            \Illuminate\Support\Facades\Auth::id() ?? 'SYSTEM',
+            $data['Score_ID'],
+            \App\Support\ActorIdentity::required(),
             ['ACADEMIC'],
             [$data['Student_ID']],
             $data
@@ -210,14 +182,21 @@ class ScoreService
 
         $evalResult = $this->processEvaluationDetails(array_merge($existing, $data));
         $scoreVal = $evalResult['score_value'];
-        $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
 
         $data['Assessment_Category'] = $evalResult['category'];
-        $data['Score'] = $scoreVal;
-        $data['Score_Value'] = $scoreVal;
+        $data['Score'] = $scoreVal ?? '';
+        $data['Score_Value'] = $scoreVal ?? '';
         $data['Evaluation_Details'] = $evalResult['evaluation_details'];
-        $data['Grade'] = $gradeResult['grade'];
-        $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
+        
+        if ($scoreVal !== null) {
+            $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
+            $data['Grade'] = $gradeResult['grade'];
+            $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
+        } else {
+            $data['Grade'] = '';
+            $data['Status'] = 'COMPLETED';
+        }
+        
         $data['Remarks'] = $data['Notes'] ?? ($data['Remarks'] ?? ($existing['Remarks'] ?? ''));
         $data['Updated_At'] = now()->toDateTimeString();
 
@@ -231,7 +210,7 @@ class ScoreService
             'UPDATE',
             'SCORE',
             $id,
-            \Illuminate\Support\Facades\Auth::id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ACADEMIC'],
             $studentId ? [$studentId] : [],
             $data
@@ -253,7 +232,7 @@ class ScoreService
             'DELETE',
             'SCORE',
             $id,
-            \Illuminate\Support\Facades\Auth::id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ACADEMIC'],
             $studentId ? [$studentId] : [],
             []
@@ -291,9 +270,7 @@ class ScoreService
         $classIds = array_unique(array_merge($classIds, $homeroomClassIds));
         
         if (empty($classIds)) {
-            // Fallback: return students from MASTER_STUDENT with matching Class_ID
-            $allStudents = $this->studentRepository->fetchAll();
-            return $allStudents->toArray();
+            return [];
         }
         
         $enrollments = $enrollmentRepo->fetchAll();

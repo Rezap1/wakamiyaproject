@@ -18,11 +18,7 @@ class StudentDashboardController extends Controller
 
     public function index()
     {
-        $userId = Auth::check() ? (Auth::user()->User_ID ?? Auth::id()) : 'U-001';
-        
-        $data = Cache::remember('dashboard_student_' . $userId, 300, function() {
-            return $this->dashboardService->getDashboardData();
-        });
+        $data = $this->dashboardService->getDashboardData();
 
         return view('dashboard.student', $data);
     }

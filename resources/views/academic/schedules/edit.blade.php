@@ -28,7 +28,7 @@
     $ayOptions = [];
     if(isset($academicYears)) {
         foreach($academicYears as $ay) {
-            $ayOptions[$ay['Academic_Year_ID'] ?? ''] = ($ay['Year_Name'] ?? 'Unknown') . ' - ' . ($ay['Term'] ?? '');
+            $ayOptions[$ay['Academic_Year_ID'] ?? ''] = ($ay['Name'] ?? 'Unknown') . ' - ' . ($ay['Semester'] ?? '');
         }
     }
 @endphp
@@ -60,7 +60,7 @@
             @method('PUT')
             
             <div class="px-6 md:px-12">
-                <x-form-section title="Informasi Jadwal" description="Tautkan kelas, subject, dan pengajar.">
+                <x-form-section title="Informasi Jadwal" description="Tautkan kelas, materi, dan pengajar.">
                     <div>
                         <x-universal.searchable-select 
                             name="Class_ID" 
@@ -72,19 +72,37 @@
                     </div>
 
                     <div>
-                        <x-universal.searchable-select 
-                            name="Subject_ID" 
-                            label="Mata Pelajaran" 
-                            :options="$subjectOptions" 
-                            :required="true" 
-                            value="{{ old('Subject_ID', $schedule['Subject_ID'] ?? '') }}" 
-                        />
+                        @if(empty($subjectOptions))
+                            <x-universal.select 
+                                name="Subject_ID" 
+                                label="Materi" 
+                                :options="['' => 'Belum ada Materi tersedia']"
+                                :disabled="true"
+                                :required="true"
+                            />
+                        @else
+                            <x-universal.searchable-select 
+                                name="Subject_ID" 
+                                label="Materi" 
+                                :options="$subjectOptions" 
+                                :required="true" 
+                                value="{{ old('Subject_ID', $schedule['Subject_ID'] ?? '') }}" 
+                            />
+                        @endif
                     </div>
 
                     <div>
                         @if(!empty($currentTeacherId))
                             <x-input name="Teacher_ID_Display" label="Pengajar" value="{{ $teacherOptions[$currentTeacherId] ?? $currentTeacherId }}" readonly class="bg-slate-100 cursor-not-allowed" />
                             <input type="hidden" name="Teacher_ID" value="{{ $currentTeacherId }}">
+                        @elseif(empty($teacherOptions))
+                            <x-universal.select 
+                                name="Teacher_ID" 
+                                label="Pengajar" 
+                                :options="['' => 'Belum ada Pengajar tersedia']"
+                                :disabled="true"
+                                :required="true"
+                            />
                         @else
                             <x-universal.searchable-select 
                                 name="Teacher_ID" 
@@ -96,15 +114,23 @@
                         @endif
                     </div>
 
-                    <div>
-                        <x-universal.searchable-select 
-                            name="Academic_Year_ID" 
-                            label="Tahun Ajaran" 
-                            :options="$ayOptions" 
-                            :required="true" 
-                            value="{{ old('Academic_Year_ID', $schedule['Academic_Year_ID'] ?? '') }}" 
-                        />
-                    </div>
+                    @if(count($ayOptions) === 1)
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tahun Ajaran <span class="text-red-500">*</span></label>
+                            <input type="text" readonly value="{{ reset($ayOptions) }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <input type="hidden" name="Academic_Year_ID" value="{{ array_key_first($ayOptions) }}">
+                        </div>
+                    @else
+                        <div>
+                            <x-universal.searchable-select 
+                                name="Academic_Year_ID" 
+                                label="Tahun Ajaran" 
+                                :options="$ayOptions" 
+                                :required="true" 
+                                value="{{ old('Academic_Year_ID', $schedule['Academic_Year_ID'] ?? '') }}" 
+                            />
+                        </div>
+                    @endif
 
                     <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>

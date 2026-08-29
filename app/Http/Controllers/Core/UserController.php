@@ -44,7 +44,8 @@ class UserController extends Controller
     public function create()
     {
         $roles = $this->roleService->getAllRoles();
-        return view('users.create', compact('roles'));
+        $nextUserId = $this->userService->getNextUserId();
+        return view('users.create', compact('roles', 'nextUserId'));
     }
 
     public function store(StoreUserRequest $request)
@@ -68,7 +69,7 @@ class UserController extends Controller
 
             return redirect()->route('users.index')->with('success', 'Data pengguna berhasil ditambahkan.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal menyimpan data ke Spreadsheet: ' . $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => 'Gagal menyimpan data ke Spreadsheet: ' . $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -112,7 +113,7 @@ class UserController extends Controller
 
             return redirect()->route('users.index')->with('success', 'Data pengguna berhasil diperbarui.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal mengupdate data di Spreadsheet: ' . $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => 'Gagal mengupdate data di Spreadsheet: ' . $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -124,12 +125,12 @@ class UserController extends Controller
                 return back()->withErrors(['error' => 'Pengguna tidak ditemukan.']);
             }
 
-            // Soft delete
+            // Cascade hard delete all owned user data before removing the account.
             $this->userService->deleteUser($id);
 
             return redirect()->route('users.index')->with('success', 'Pengguna berhasil dihapus (Hard Delete).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $this->safeExceptionMessage($e)]);
         }
     }
 

@@ -5,6 +5,7 @@ namespace App\Services\Core;
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use App\Support\ActorIdentity;
 
 
 class ActivityLogService
@@ -24,7 +25,7 @@ class ActivityLogService
     public function log(string $module, string $action, string $description, $oldValue = null, $newValue = null, string $ipAddress = null, string $userAgent = null)
     {
         return $this->logAction(
-            auth()->user()->User_ID ?? 'SYSTEM',
+            ActorIdentity::required(),
             $action,
             $module,
             $description,

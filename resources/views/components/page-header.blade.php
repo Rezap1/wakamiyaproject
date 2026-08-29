@@ -22,7 +22,7 @@
         </nav>
         @endif
         
-        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{{ $title }}</h1>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{!! strip_tags($title) !!}</h1>
         @if($description)
             <p class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{{ $description }}</p>
         @endif

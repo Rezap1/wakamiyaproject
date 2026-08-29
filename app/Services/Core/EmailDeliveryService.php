@@ -17,26 +17,79 @@ class EmailDeliveryService
     }
 
     /**
+     * Dynamically apply current Email Delivery Connection config to Laravel Mail.
+     */
+    public function applyDynamicMailConfig(): array
+    {
+        $config = $this->settingService->getEmailDeliveryConfig();
+        $provider = $config['provider'];
+
+        $encryptedPayload = $this->settingService->get('SET_EMAIL_CREDENTIAL_DATA', $this->settingService->get('EMAIL_CREDENTIAL_DATA', null));
+        $credentials = [];
+        if ($encryptedPayload) {
+            try {
+                $decrypted = \Illuminate\Support\Facades\Crypt::decryptString($encryptedPayload);
+                $credentials = json_decode($decrypted, true) ?: [];
+            } catch (\Throwable $e) {
+                $credentials = [];
+            }
+        }
+
+        $currentDriver = config('mail.default');
+        $targetDriver = ($currentDriver === 'array' || app()->environment('testing')) ? 'array' : 'smtp';
+
+        if ($provider === 'smtp' && !empty($credentials)) {
+            config([
+                'mail.default' => $targetDriver,
+                'mail.mailers.smtp.host' => $credentials['host'] ?? config('mail.mailers.smtp.host', '127.0.0.1'),
+                'mail.mailers.smtp.port' => (int)($credentials['port'] ?? config('mail.mailers.smtp.port', 587)),
+                'mail.mailers.smtp.encryption' => (isset($credentials['encryption']) && strtolower($credentials['encryption']) !== 'none') ? strtolower($credentials['encryption']) : null,
+                'mail.mailers.smtp.username' => $credentials['username'] ?? config('mail.mailers.smtp.username'),
+                'mail.mailers.smtp.password' => $credentials['password'] ?? config('mail.mailers.smtp.password'),
+                'mail.from.address' => $config['from_address'],
+                'mail.from.name' => $config['from_name'],
+            ]);
+        } elseif (in_array($provider, ['google', 'microsoft']) && !empty($credentials)) {
+            $smtpHost = ($provider === 'google') ? 'smtp.gmail.com' : 'smtp.office365.com';
+            config([
+                'mail.default' => $targetDriver,
+                'mail.mailers.smtp.host' => $smtpHost,
+                'mail.mailers.smtp.port' => 587,
+                'mail.mailers.smtp.encryption' => 'tls',
+                'mail.mailers.smtp.username' => $config['from_address'],
+                'mail.mailers.smtp.password' => $credentials['access_token'] ?? ($credentials['password'] ?? ''),
+                'mail.from.address' => $config['from_address'],
+                'mail.from.name' => $config['from_name'],
+            ]);
+        } else {
+            config([
+                'mail.from.address' => $config['from_address'],
+                'mail.from.name' => $config['from_name'],
+            ]);
+        }
+
+        try {
+            Mail::alwaysFrom($config['from_address'], $config['from_name']);
+        } catch (\Throwable $e) {
+            // Ignore if method unavailable
+        }
+
+        return $config;
+    }
+
+    /**
      * Get configured sender address and name.
      */
     public function getSenderConfig(): array
     {
-        $company = $this->settingService->getCompanyProfile();
-        
-        $fromAddress = $this->settingService->get(
-            'EMAIL_FROM_ADDRESS', 
-            $company['company']['email'] ?? config('mail.from.address', 'admin@wakamiya.ac.id')
-        );
-
-        $fromName = $this->settingService->get(
-            'EMAIL_FROM_NAME', 
-            $company['company']['name'] ?? config('mail.from.name', 'WAKAMIYA MANAGEMENT SYSTEM')
-        );
+        $config = $this->applyDynamicMailConfig();
 
         return [
-            'from_address' => $fromAddress ?: 'admin@wakamiya.ac.id',
-            'from_name' => $fromName ?: 'WAKAMIYA MANAGEMENT SYSTEM',
-            'status' => '🟢 Email Sender Configured'
+            'from_address' => $config['from_address'] ?: 'hr@wakamiya.ac.id',
+            'from_name' => $config['from_name'] ?: 'WAKAMIYA MANAGEMENT SYSTEM',
+            'reply_to' => $config['reply_to'] ?: $config['from_address'],
+            'provider' => $config['provider'],
+            'status' => $config['is_healthy'] ? '🟢 Connected' : '🔴 Disconnected',
         ];
     }
 
@@ -72,15 +125,19 @@ class EmailDeliveryService
 
             return [
                 'success' => true,
-                'message' => "Email delivery test berhasil diproses untuk {$recipientEmail}.",
+                'message' => "Email delivery test berhasil dikirim ke {$recipientEmail}.",
                 'recipient' => $recipientEmail,
-                'sender' => $sender
+                'sender' => [
+                    'from_address' => $sender['from_address'],
+                    'from_name' => $sender['from_name']
+                ]
             ];
         } catch (\Throwable $e) {
+            // Log error without exposing raw credentials
             Log::error('EmailDeliveryService Test Error: ' . $e->getMessage());
             return [
                 'success' => false,
-                'message' => 'Gagal dispatch test email: ' . $e->getMessage()
+                'message' => 'Gagal mengirim email percobaan. Silakan periksa konfigurasi email atau hubungi administrator.'
             ];
         }
     }
@@ -151,7 +208,7 @@ class EmailDeliveryService
             Log::error('EmailDeliveryService Document Error: ' . $e->getMessage());
             return [
                 'success' => false,
-                'message' => 'Gagal mengirim email dokumen: ' . $e->getMessage()
+                'message' => 'Gagal mengirim email dokumen. Silakan periksa konfigurasi email atau hubungi administrator.'
             ];
         }
     }

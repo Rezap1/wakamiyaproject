@@ -20,6 +20,13 @@ class RoleService
 
     public function getRoleById($id)
     {
+        if (strtoupper($id) === 'MASTER') {
+            return [
+                'Role_ID' => 'MASTER',
+                'Role_Name' => 'MASTER',
+                'Is_Active' => 'TRUE'
+            ];
+        }
         return $this->roleRepository->findById($id);
     }
 

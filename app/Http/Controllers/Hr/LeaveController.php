@@ -84,7 +84,7 @@ class LeaveController extends Controller
             return redirect()->route('hr.leaves.show', $leave['Leave_ID'])
                 ->with('success', 'Pengajuan cuti berhasil dikirim.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -96,41 +96,49 @@ class LeaveController extends Controller
             $docData['leave']['Approved_By_Name'] = UserResolverHelper::getName($docData['leave']['Approved_By'] ?? '');
             return view('hr.leaves.show', ['leave' => $docData['leave'], 'docData' => $docData]);
         } catch (\Exception $e) {
-            return redirect()->route('hr.leaves.index')->with('error', $e->getMessage());
+            return redirect()->route('hr.leaves.index')->with('error', $this->safeExceptionMessage($e));
         }
     }
 
     public function approve($id)
     {
         try {
-            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
+            $user = auth()->user();
+            $approver = $user->Email ?? $user->email ?? $user->Username ?? $user->User_ID ?? null;
+            if (!$approver) {
+                abort(403, 'Identitas approver tidak valid.');
+            }
             $this->leaveService->approveLeave($id, $approver);
             return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti disetujui (Approved).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
     public function reject(Request $request, $id)
     {
         try {
-            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
+            $user = auth()->user();
+            $approver = $user->Email ?? $user->email ?? $user->Username ?? $user->User_ID ?? null;
+            if (!$approver) {
+                abort(403, 'Identitas approver tidak valid.');
+            }
             $reason = $request->input('reason');
             $this->leaveService->rejectLeave($id, $approver, $reason);
             return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti ditolak (Rejected).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
     public function cancel($id)
     {
         try {
-            $user = auth()->user()->Email ?? 'User';
+            $user = $this->authenticatedActor();
             $this->leaveService->cancelLeave($id, $user);
             return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti dibatalkan (Cancelled).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
@@ -151,19 +159,30 @@ class LeaveController extends Controller
                 false
             );
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
     public function verifyLeavePublic($id)
     {
         try {
-            $docData = $this->leaveService->getLeaveDocumentData($id);
+            $docData = $this->leaveService->getLeaveDocumentData($id, true);
             $docData['leave']['Employee_Name'] = UserResolverHelper::getName($docData['leave']['Employee_ID'] ?? '');
             $docData['leave']['Approved_By'] = UserResolverHelper::getName($docData['leave']['Approved_By'] ?? '');
             return view('hr.leaves.verify_leave_public', ['data' => $docData]);
         } catch (\Exception $e) {
-            abort(404, $e->getMessage());
+            abort(404, $this->safeExceptionMessage($e, 'Dokumen cuti tidak ditemukan atau tidak tersedia.'));
         }
+    }
+
+    private function authenticatedActor(): string
+    {
+        $user = auth()->user();
+        $actor = $user->User_ID ?? $user->Email ?? $user->email ?? null;
+        if (!$actor) {
+            abort(403, 'Identitas pengguna tidak valid.');
+        }
+
+        return $actor;
     }
 }

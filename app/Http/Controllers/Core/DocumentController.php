@@ -65,11 +65,11 @@ class DocumentController extends Controller
     {
         try {
             $data = $request->except('_token');
-            $data['Generated_By'] = auth()->user()->email ?? 'System';
+            $data['Generated_By'] = $this->authenticatedActor();
             $this->docService->GenerateDocument($data);
             return redirect()->route('documents.index')->with('success', 'Document generated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -96,5 +96,16 @@ class DocumentController extends Controller
     {
         $this->docService->ArchiveDocument($id);
         return redirect()->route('documents.index')->with('success', 'Document archived.');
+    }
+
+    private function authenticatedActor(): string
+    {
+        $user = auth()->user();
+        $actor = $user->User_ID ?? $user->Email ?? $user->email ?? null;
+        if (!$actor) {
+            abort(403, 'Identitas pengguna tidak valid.');
+        }
+
+        return (string) $actor;
     }
 }

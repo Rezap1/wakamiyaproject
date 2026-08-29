@@ -27,7 +27,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email' => ['required', 'email'],
+            'login' => ['required', 'string'],
             'password' => ['required'],
         ]);
 
@@ -36,14 +36,14 @@ class AuthController extends Controller
             
             // Log successful login
             $this->enterpriseEvent->dispatch(
-                'SYSTEM',
+                'UNAUTHENTICATED:' . strtolower($credentials['login']),
                 'LOGIN',
                 'AUTH',
                 'LOGIN',
                 Auth::id(),
                 [],
                 [],
-                ['description' => 'Pengguna berhasil login']
+                ['description' => 'Pengguna berhasil login via ' . $credentials['login']]
             );
 
             // Get role to redirect
@@ -55,7 +55,7 @@ class AuthController extends Controller
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                return redirect()->route('login')->withErrors(['email' => 'Akun Anda menggunakan Role yang tidak valid atau sedang dihapus.']);
+                return redirect()->route('login')->withErrors(['login' => 'Akun Anda menggunakan Role yang tidak valid atau sedang dihapus.']);
             }
             
             $roleName = strtolower(trim($role['Role_Name'] ?? ''));
@@ -87,16 +87,16 @@ class AuthController extends Controller
                 'FAILED_LOGIN',
                 'AUTH',
                 'FAILED_LOGIN',
-                'SYSTEM',
+                'UNAUTHENTICATED:' . strtolower($credentials['login']),
                 [],
                 [],
-                ['email' => $credentials['email']]
+                ['login' => $credentials['login']]
             );
         } catch (\Exception $e) {}
 
         return back()->withErrors([
-            'email' => __('auth.failed'),
-        ])->onlyInput('email');
+            'login' => __('auth.failed'),
+        ])->onlyInput('login');
     }
 
     public function logout(Request $request)

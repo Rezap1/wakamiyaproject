@@ -46,6 +46,42 @@
         </x-universal.toolbar>
     </x-slot:toolbar>
 
+    @if(($studentGroups ?? collect())->count() > 0)
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            @foreach($studentGroups as $group)
+                <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
+                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['subtitle'] }}</p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-black">{{ $group['total'] }} siswa</span>
+                            <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
+                        </div>
+                    </summary>
+                    <div class="border-t border-slate-100 p-4 bg-slate-50/50">
+                        <div class="flex flex-wrap gap-2 mb-3 text-xs font-bold">
+                            <span class="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Aktif: {{ $group['active'] }}</span>
+                            <span class="px-2 py-1 rounded bg-slate-100 text-slate-600">Nonaktif: {{ $group['inactive'] }}</span>
+                        </div>
+                        <div class="divide-y divide-slate-200 bg-white rounded-lg border border-slate-200 overflow-hidden">
+                            @foreach($group['items'] as $student)
+                                <a href="{{ route('students.show', $student['Student_ID']) }}" class="flex items-center justify-between gap-3 px-3 py-2 hover:bg-indigo-50">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-slate-800 truncate">{{ $student['Full_Name'] ?? '-' }}</p>
+                                        <p class="text-[11px] text-slate-500 font-mono">{{ $student['Student_Number'] ?? $student['Student_ID'] ?? '-' }}</p>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-500 shrink-0">{{ $student['Enrollment_Status'] ?? '-' }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                </details>
+            @endforeach
+        </div>
+    @endif
+
     <x-universal.data-table :empty="count($students) === 0" empty-title="Data Siswa Kosong" empty-description="Belum ada siswa yang terdaftar.">
         <x-slot:header>
             <th class="px-6 py-4">Identitas Siswa</th>

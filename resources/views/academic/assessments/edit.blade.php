@@ -11,7 +11,7 @@
 
 <div class="max-w-4xl mx-auto">
     <x-universal.form 
-        action="{{ route('assessments.update', $assessment['Assessment_ID'] ?? 1) }}" 
+        action="{{ route('assessments.update', $assessment['Assessment_ID'] ?? '') }}" 
         method="PUT"
         title="Edit Penilaian" 
         description="Perbarui konfigurasi penilaian."

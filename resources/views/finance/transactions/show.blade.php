@@ -1,11 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-slate-800 leading-tight">Detail Transaksi</h2>
-            <a href="{{ route('transactions.index') }}" class="text-blue-600 hover:underline">Kembali</a>
-        </div>
-@endsection
+@section('header', 'Detail Transaksi')
 
 @section('content')
     <div class="py-12">
@@ -27,7 +22,7 @@
                     </div>
                     <div>
                         <p class="text-sm text-gray-500">Tipe Transaksi</p>
-                        <p class="font-bold {{ ($transaction['Type'] ?? '') == 'Income' ? 'text-green-600' : 'text-red-600' }}">{{ $transaction['Type'] ?? '-' }}</p>
+                        <p class="font-bold {{ strcasecmp($transaction['Type'] ?? '', 'Income') === 0 ? 'text-green-600' : 'text-red-600' }}">{{ $transaction['Type'] ?? '-' }}</p>
                     </div>
                     <div>
                         <p class="text-sm text-gray-500">Kategori</p>

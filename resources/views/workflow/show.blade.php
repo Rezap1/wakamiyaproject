@@ -69,26 +69,26 @@
 
         <!-- Sidebar / Actions -->
         <div class="space-y-6">
-            @if(($approval['Status'] ?? '') === 'Waiting Approval' && ($approval['Current_Approver'] ?? '') === (session('role') ?? 'GUEST'))
+            @if(($approval['Status'] ?? '') === 'Waiting Approval' && (($currentRole ?? '') === 'ADMINISTRATOR' || strtoupper($approval['Current_Approver'] ?? '') === ($currentRole ?? '')))
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 class="font-bold text-slate-800 mb-4">Tindakan Diperlukan</h3>
                 
-                <form action="{{ route('approvals.approve', $approval['Approval_ID']) }}" method="POST" class="mb-3">
+                <form action="{{ route('approvals.approve', $approval['Approval_ID']) }}" method="POST" class="mb-3" onsubmit="return confirm('Setujui permintaan ini?');">
                     @csrf
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Keterangan (Opsional)</label>
                         <textarea name="remarks" rows="2" class="w-full text-sm rounded-lg border-slate-200 focus:border-blue-500 focus:ring-blue-500" placeholder="Tambahkan catatan persetujuan..."></textarea>
                     </div>
-                    <button type="submit" class="w-full py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-bold rounded-xl text-sm border border-emerald-200 transition-colors shadow-sm" onsubmit="return confirm('Setujui permintaan ini?');">Setujui Permintaan</button>
+                    <button type="submit" class="w-full py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-bold rounded-xl text-sm border border-emerald-200 transition-colors shadow-sm">Setujui Permintaan</button>
                 </form>
 
-                <form action="{{ route('approvals.reject', $approval['Approval_ID']) }}" method="POST">
+                <form action="{{ route('approvals.reject', $approval['Approval_ID']) }}" method="POST" onsubmit="return confirm('Tolak permintaan ini?');">
                     @csrf
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Alasan Penolakan</label>
                         <textarea name="remarks" rows="2" class="w-full text-sm rounded-lg border-slate-200 focus:border-red-500 focus:ring-red-500" placeholder="Mengapa ini ditolak?" required></textarea>
                     </div>
-                    <button type="submit" class="w-full py-2.5 bg-white text-red-600 hover:bg-red-50 font-bold rounded-xl text-sm border border-red-200 transition-colors" onsubmit="return confirm('Tolak permintaan ini?');">Tolak Permintaan</button>
+                    <button type="submit" class="w-full py-2.5 bg-white text-red-600 hover:bg-red-50 font-bold rounded-xl text-sm border border-red-200 transition-colors">Tolak Permintaan</button>
                 </form>
             </div>
             @endif

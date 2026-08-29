@@ -17,7 +17,7 @@ class TemplateService
     public function create(array $data) {
         $data['Template_ID'] = uniqid('TPL_');
         $data['Created_At'] = now()->toDateTimeString();
-        $data['Status'] = 'Active';
+        $data['Status'] = $data['Status'] ?? 'Active';
         $res = $this->repo->create($data);
         $this->repo->clearCache();
         return $res;

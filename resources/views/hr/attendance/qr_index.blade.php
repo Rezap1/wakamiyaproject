@@ -32,8 +32,10 @@
                         <input type="time" name="End_Time" class="w-full text-xs rounded-xl border-slate-200 focus:ring-blue-500 p-2.5" value="17:00" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Grace Period Terlambat (Menit)</label>
-                        <input type="number" name="Grace_Period" class="w-full text-xs rounded-xl border-slate-200 focus:ring-blue-500 p-2.5" value="15" min="0" max="120">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Grace Period Terlambat</label>
+                        <div class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 p-2.5 font-bold">
+                            30 Menit
+                        </div>
                     </div>
                     <div class="md:col-span-3">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
@@ -60,6 +62,13 @@
             @foreach($sessions as $s)
                 @php
                     $isClosed = ($s['Status'] ?? '') === 'CLOSED';
+                    $sessionDate = $s['Date'] ?? date('Y-m-d');
+                    $startAt = \Carbon\Carbon::parse($sessionDate . ' ' . ($s['Start_Time'] ?? '08:00'));
+                    $endAt = \Carbon\Carbon::parse($sessionDate . ' ' . ($s['End_Time'] ?? '17:00'));
+                    $now = now();
+                    $isScheduled = !$isClosed && $now->lt($startAt);
+                    $isExpired = !$isClosed && $now->gt($endAt);
+                    $isOpen = !$isClosed && !$isScheduled && !$isExpired;
                 @endphp
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-4">
@@ -69,12 +78,17 @@
                     <td class="px-6 py-4 text-center">
                         <div class="font-bold text-slate-800 text-xs">{{ !empty($s['Date']) ? \Carbon\Carbon::parse($s['Date'])->format('d M Y') : '-' }}</div>
                         <div class="text-[11px] text-slate-500 font-mono">{{ $s['Start_Time'] ?? '08:00' }} - {{ $s['End_Time'] ?? '17:00' }} WIB</div>
+                        @if($isScheduled)
+                            <div class="text-[10px] text-sky-600 font-black mt-1">QR aktif saat jam mulai.</div>
+                        @elseif($isExpired)
+                            <div class="text-[10px] text-amber-600 font-black mt-1">QR sudah melewati jam selesai.</div>
+                        @endif
                     </td>
                     <td class="px-6 py-4 text-center font-bold text-xs text-slate-700">
-                        {{ $s['Grace_Period'] ?? 15 }} Menit
+                        {{ $s['Grace_Period'] ?? 30 }} Menit
                     </td>
                     <td class="px-6 py-4 text-center">
-                        @if(!$isClosed)
+                        @if($isOpen)
                             <span class="px-3 py-1 text-xs font-black rounded-lg bg-emerald-100 text-emerald-800 inline-flex items-center gap-1 uppercase">
                                 🟢 AKTIF (OPEN)
                             </span>
@@ -85,7 +99,7 @@
                         @endif
                     </td>
                     <td class="px-6 py-4 text-right space-x-1.5">
-                        @if(!$isClosed)
+                        @if($isOpen || $isScheduled)
                             <a href="{{ route('hr.attendance.qr.display', $s['Session_ID']) }}" target="_blank" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-xs transition-colors inline-block">
                                 📺 Tampilkan QR Proyektor
                             </a>

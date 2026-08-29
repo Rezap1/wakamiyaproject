@@ -1,13 +1,13 @@
 @extends('layouts.app')
-@section('header', 'Master Mata Pelajaran')
+@section('header', 'Master Materi')
 @section('content')
 
 <x-universal.index-layout 
-    title="Daftar Mata Pelajaran" 
-    description="Kelola data mata pelajaran dan penugasan per program."
-    :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Mata Pelajaran' => route('subjects.index')]"
+    title="Daftar Materi" 
+    description="Kelola data Materi dan penugasan per program."
+    :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Materi' => route('subjects.index')]"
     add-action="{{ route('subjects.create') }}"
-    add-text="Tambah Mata Pelajaran"
+    add-text="Tambah Materi"
 >
     <x-slot:headerActions>
         <x-universal.multi-export route-prefix="subjects" />
@@ -28,9 +28,9 @@
         </x-universal.toolbar>
     </x-slot:toolbar>
 
-    <x-universal.data-table :empty="count($subjects) === 0" empty-title="Data Mata Pelajaran Kosong" empty-description="Belum ada mata pelajaran yang ditambahkan.">
+    <x-universal.data-table :empty="count($subjects) === 0" empty-title="Data Materi Kosong" empty-description="Belum ada Materi yang ditambahkan.">
         <x-slot:header>
-            <th class="px-6 py-4">Kode / Nama Mata Pelajaran</th>
+            <th class="px-6 py-4">Kode / Nama Materi</th>
             <th class="px-6 py-4">Program</th>
             <th class="px-6 py-4">SKS / Durasi</th>
             <th class="px-6 py-4">Status</th>

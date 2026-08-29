@@ -185,7 +185,9 @@ class TeacherController extends Controller
             $usedUserIds = $allTeachers->pluck('User_ID')->filter()->toArray();
             
             $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
-                return !in_array($user['User_ID'], $usedUserIds) && ($user['Is_Active'] ?? 'TRUE') === 'TRUE';
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && ($user['Is_Active'] ?? 'TRUE') === 'TRUE'
+                    && !$this->userHasRole($user, 'STUDENT');
             })->values();
             
             return view('teachers.create', compact('users'));
@@ -251,8 +253,9 @@ class TeacherController extends Controller
             $allTeachers = $this->teacherService->getAllTeachers();
             $usedUserIds = $allTeachers->where('Teacher_ID', '!=', $id)->pluck('User_ID')->filter()->toArray();
             
-            $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
-                return !in_array($user['User_ID'], $usedUserIds);
+            $users = collect($allUsers)->filter(function($user) use ($usedUserIds, $teacher) {
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && (!$this->userHasRole($user, 'STUDENT') || ($user['User_ID'] ?? '') === ($teacher['User_ID'] ?? ''));
             })->values();
 
             return view('teachers.edit', compact('teacher', 'users'));
@@ -295,5 +298,11 @@ class TeacherController extends Controller
             Log::error('Error deleting teacher: ' . $e->getMessage());
             return redirect()->route('teachers.index')->with('error', 'Terjadi kesalahan saat menghapus data tenaga pendidik.');
         }
+    }
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
     }
 }

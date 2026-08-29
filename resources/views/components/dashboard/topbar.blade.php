@@ -1,6 +1,6 @@
 @props(['userRole', 'header' => 'Dashboard'])
-<header class="hidden lg:flex h-20 bg-white border-b border-slate-200 shadow-sm items-center justify-between px-6 lg:px-8 sticky top-0 z-40 transition-colors duration-200">
-    
+<header style="background-color: var(--color-topbar-bg, #FFFFFF);" class="hidden lg:flex h-20 border-b border-slate-200 shadow-sm items-center justify-between px-6 lg:px-8 sticky top-0 z-40 transition-colors duration-200">
+
     <!-- Left Section: Header -->
     <div class="flex items-center gap-4 flex-1">
         <!-- Mobile Menu Button -->
@@ -8,9 +8,9 @@
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
 
-        <h1 class="text-2xl font-bold text-slate-800 tracking-tight ml-2">
-            {{ $header }}
-        </h1>
+        <div class="text-xl lg:text-2xl font-bold text-slate-800 tracking-tight ml-2 truncate max-w-lg">
+            {!! strip_tags($header) !!}
+        </div>
     </div>
 
     <!-- Center Section: Global Search -->
@@ -20,18 +20,18 @@
                 <input type="text" name="q" x-model="query" @focus="open = true; fetchResults()" @input.debounce.500ms="fetchResults()" @click.outside="open = false" placeholder="Cari apa saja..." class="bg-transparent border-none outline-none text-[13px] font-medium w-full text-slate-800 placeholder-slate-400 focus:ring-0 py-0" autocomplete="off">
                 <svg class="w-4 h-4 text-slate-500 ml-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            
+
             <!-- Overlay Dropdown -->
             <div x-show="open" style="display: none;" class="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden" x-transition.opacity>
-                
+
                 <!-- Loading State -->
                 <div x-show="loading" class="p-6 text-center text-sm font-medium text-slate-500 flex flex-col items-center">
                     <svg class="animate-spin h-6 w-6 text-emerald-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     Sedang mencari...
                 </div>
-                
+
                 <div x-show="!loading" class="max-h-96 overflow-y-auto custom-scrollbar">
-                    
+
                     <!-- History View -->
                     <div x-show="mode === 'history' && history.length > 0">
                         <div class="px-5 py-3 bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
@@ -59,21 +59,21 @@
                                 </template>
                             </div>
                         </template>
-                        
+
                         <div x-show="Object.keys(results).length === 0 && query !== ''" class="p-8 text-center text-sm font-medium text-slate-500">
                             Tidak ada hasil untuk "<span x-text="query" class="font-bold text-slate-800"></span>"
                         </div>
                     </div>
 
                 </div>
-                
+
                 <div x-show="query !== ''" class="p-3 border-t border-slate-200 bg-slate-50 text-center">
                     <button type="submit" class="text-[12px] font-bold text-blue-400 hover:underline">Lihat Semua Hasil</button>
                 </div>
             </div>
         </form>
     </div>
-    
+
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('globalSearch', () => ({
@@ -83,13 +83,13 @@
                 mode: 'history',
                 history: [],
                 results: {},
-                
+
                 async fetchResults() {
                     this.loading = true;
                     try {
                         const res = await fetch(`{{ route('search.overlay') }}?q=${encodeURIComponent(this.query)}`);
                         const data = await res.json();
-                        
+
                         if (data.status === 'history') {
                             this.mode = 'history';
                             this.history = data.data;
@@ -102,18 +102,28 @@
                     }
                     this.loading = false;
                 },
-                
+
                 async clearHistory() {
                     try {
-                        await fetch(`{{ route('search.clearHistory') }}`, {
+                        const response = await fetch(`{{ route('search.clearHistory') }}`, {
                             method: 'POST',
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json',
                                 'Content-Type': 'application/json'
                             }
                         });
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        const result = await response.json();
+                        if (result.status !== 'success') {
+                            throw new Error('Riwayat pencarian gagal dihapus.');
+                        }
                         this.history = [];
-                    } catch(e) {}
+                    } catch (error) {
+                        console.error('Gagal menghapus riwayat pencarian:', error);
+                    }
                 }
             }))
         })
@@ -121,7 +131,7 @@
 
     <!-- Right Section: Date, Time, Notif, User -->
     <div class="flex items-center justify-end flex-1 gap-5">
-        
+
         <!-- Date & Time Widget -->
         <div class="hidden xl:flex items-center gap-6">
             <!-- Date -->
@@ -140,7 +150,7 @@
                     <p class="text-[11px] text-slate-500 font-medium leading-tight">WIB</p>
                 </div>
             </div>
-            
+
             <script>
                 // Live clock logic running in the background
                 setInterval(function() {
@@ -157,40 +167,62 @@
 
         <!-- Notification Bell -->
         @php
-            $userId = auth()->user()->email ?? (auth()->user()->User_ID ?? 'user@example.com');
-            $roleData = app(\App\Services\Core\RoleService::class)->getRoleById(auth()->user()->Role_ID ?? '');
-            $userRole = strtoupper(trim($roleData['Role_Name'] ?? session('role') ?? 'GUEST'));
             $notifService = app(\App\Services\Core\NotificationService::class);
-            $unreadCount = $notifService->UnreadCount($userId, $userRole);
-            $recentNotifs = $notifService->RecentNotification($userId, $userRole, 5);
+            $unreadCount = $notifService->UnreadCount();
+            $recentNotifs = $notifService->RecentNotification(null, null, 6);
         @endphp
         <div class="relative flex items-center justify-center" x-data="{ openNotif: false }">
-            <button @click="openNotif = !openNotif" @click.outside="openNotif = false" class="relative p-2 text-slate-500 hover:text-slate-800 transition-colors focus:outline-none">
+            <button @click="openNotif = !openNotif" @click.outside="openNotif = false" class="relative p-2 text-slate-500 hover:text-slate-800 transition-colors focus:outline-none" title="Notifikasi System">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
                 @if($unreadCount > 0)
-                <span class="absolute top-1.5 right-1.5 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full border border-white">{{ $unreadCount }}</span>
+                <span class="absolute top-1 right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-rose-500 text-white text-[9px] font-black rounded-full border-2 border-white shadow-xs">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
                 @endif
             </button>
 
             <!-- Dropdown -->
-            <div x-show="openNotif" style="display: none;" x-transition class="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
-                <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                    <h3 class="font-bold text-slate-800 text-[13px]">Notifikasi</h3>
-                    <span class="text-[10px] bg-emerald-100 text-blue-400 px-2 py-0.5 rounded font-bold uppercase border border-emerald-200">{{ $unreadCount }} Baru</span>
+            <div x-show="openNotif" style="display: none;" x-transition class="absolute top-full right-0 mt-2 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur-md">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-black text-slate-800 text-xs tracking-wider uppercase">Notifikasi</h3>
+                        @if($unreadCount > 0)
+                            <span class="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-bold uppercase shadow-xs">{{ $unreadCount }} Baru</span>
+                        @endif
+                    </div>
+                    @if($unreadCount > 0)
+                        <form action="{{ route('notifications.markAllRead') }}" method="POST" class="inline">
+                            @csrf
+                            <button type="submit" class="text-[10px] font-bold text-sky-600 hover:text-sky-800 hover:underline">Tandai Semua Dibaca</button>
+                        </form>
+                    @endif
                 </div>
-                <div class="max-h-80 overflow-y-auto custom-scrollbar">
+                <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
                     @forelse($recentNotifs as $n)
-                    <a href="{{ $n['Action_URL'] ?? route('notifications.index') }}" class="block p-4 border-b border-slate-200/50 hover:bg-slate-50 transition {{ ($n['Is_Read'] ?? 'FALSE') === 'FALSE' ? 'bg-emerald-50' : '' }}">
-                        <p class="text-[13px] font-bold text-slate-800 truncate">{{ $n['Title'] ?? 'Notification' }}</p>
-                        <p class="text-[11px] font-medium text-slate-500 mt-1 truncate">{{ $n['Message'] ?? '' }}</p>
-                        <p class="text-[10px] text-slate-500 mt-1 font-semibold">{{ \Carbon\Carbon::parse($n['Created_At'])->diffForHumans() }}</p>
-                    </a>
+                    @php
+                        $isUnread = strtoupper(trim($n['Is_Read'] ?? 'FALSE')) !== 'TRUE';
+                    @endphp
+                    <form action="{{ route('notifications.read', $n['Notification_ID']) }}" method="POST">
+                        @csrf
+                    <button type="submit" class="block w-full p-3.5 text-left hover:bg-slate-50 transition-colors {{ $isUnread ? 'bg-sky-50/50' : '' }}">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-xs font-bold text-slate-800 leading-snug flex-1">{{ $n['Title'] ?? 'Pemberitahuan System' }}</p>
+                            @if($isUnread)
+                                <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1"></span>
+                            @endif
+                        </div>
+                        <p class="text-[11px] font-medium text-slate-600 mt-1 line-clamp-2 leading-tight">{{ $n['Message'] ?? '' }}</p>
+                        <p class="text-[9px] text-slate-400 mt-1.5 font-semibold">{{ !empty($n['Created_At']) ? \Carbon\Carbon::parse($n['Created_At'])->diffForHumans() : '-' }}</p>
+                    </button>
+                    </form>
                     @empty
-                    <div class="p-6 text-center text-sm font-medium text-slate-500">Belum ada notifikasi</div>
+                    <div class="p-8 text-center">
+                        <span class="text-2xl block mb-1">🔔</span>
+                        <p class="text-xs font-bold text-slate-600">Belum ada notifikasi</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Semua pemberitahuan sistem akan muncul di sini.</p>
+                    </div>
                     @endforelse
                 </div>
-                <div class="p-3 text-center border-t border-slate-200 bg-slate-50">
-                    <a href="{{ route('notifications.index') }}" class="text-[11px] font-bold text-blue-400 hover:underline uppercase tracking-wide">Lihat Semua</a>
+                <div class="p-3 text-center border-t border-slate-100 bg-slate-50">
+                    <a href="{{ route('notifications.index') }}" class="text-[11px] font-extrabold text-sky-600 hover:text-sky-800 hover:underline uppercase tracking-wider">Lihat Semua Notifikasi →</a>
                 </div>
             </div>
         </div>
@@ -204,7 +236,7 @@
                     <x-user-avatar class="w-11 h-11" text-size="text-sm" />
                 </div>
                 <div class="text-left hidden md:block">
-                    <p class="text-[15px] font-bold text-slate-800 leading-tight group-hover:text-emerald-600 transition-colors">{{ auth()->user()->Username ?? 'Deri Alamsah' }}</p>
+                    <p class="text-[15px] font-bold text-slate-800 leading-tight group-hover:text-emerald-600 transition-colors">{{ auth()->user()->Username ?? auth()->user()->Full_Name ?? 'User' }}</p>
                     <p class="text-[13px] text-slate-500 font-medium mt-0.5">{{ $userRole ?? 'Administrator' }}</p>
                 </div>
                 <svg class="w-4 h-4 text-slate-500 ml-1 group-hover:text-slate-800 transition-colors" :class="{ 'rotate-180': openProfile }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
@@ -213,7 +245,7 @@
             <!-- Profile Dropdown -->
             <div x-show="openProfile" style="display: none;" class="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden" x-transition>
                 <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
-                    <p class="text-[13px] font-bold text-slate-800 truncate">{{ auth()->user()->Email ?? 'user@example.com' }}</p>
+                    <p class="text-[13px] font-bold text-slate-800 truncate">{{ auth()->user()->Email ?? 'N/A' }}</p>
                     <p class="text-[11px] font-medium text-slate-500 truncate mt-0.5">ID: {{ auth()->user()->User_ID ?? 'N/A' }}</p>
                 </div>
                 <div class="py-2">
@@ -221,7 +253,7 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                         Profil Saya
                     </a>
-                    @if(in_array($userRole ?? '', ['ADMINISTRATOR', 'HR', 'FINANCE']))
+                    @if(in_array($userRole ?? '', ['ADMINISTRATOR', 'HR', 'FINANCE', 'MASTER']))
                     <a href="{{ route('settings.index') }}" class="flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-slate-700 hover:bg-slate-50 hover:text-emerald-600 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                         Pengaturan Sistem
@@ -245,7 +277,3 @@
         </div>
     </div>
 </header>
-
-
-
-

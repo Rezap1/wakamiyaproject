@@ -85,7 +85,7 @@ class OvertimeController extends Controller
             return redirect()->route('hr.overtimes.show', $ot['Overtime_ID'])
                 ->with('success', 'Pengajuan lembur berhasil dikirim.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -97,30 +97,38 @@ class OvertimeController extends Controller
             $docData['overtime']['Approved_By_Name'] = UserResolverHelper::getName($docData['overtime']['Approved_By'] ?? '');
             return view('hr.overtimes.show', ['overtime' => $docData['overtime'], 'docData' => $docData]);
         } catch (\Exception $e) {
-            return redirect()->route('hr.overtimes.index')->with('error', $e->getMessage());
+            return redirect()->route('hr.overtimes.index')->with('error', $this->safeExceptionMessage($e));
         }
     }
 
     public function approve($id)
     {
         try {
-            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
+            $user = auth()->user();
+            $approver = $user->Email ?? $user->email ?? $user->Username ?? $user->User_ID ?? null;
+            if (!$approver) {
+                abort(403, 'Identitas approver tidak valid.');
+            }
             $this->overtimeService->approveOvertime($id, $approver);
             return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur disetujui (Approved).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
     public function reject(Request $request, $id)
     {
         try {
-            $approver = auth()->user()->Email ?? auth()->user()->Username ?? 'HR Manager';
+            $user = auth()->user();
+            $approver = $user->Email ?? $user->email ?? $user->Username ?? $user->User_ID ?? null;
+            if (!$approver) {
+                abort(403, 'Identitas approver tidak valid.');
+            }
             $reason = $request->input('reason');
             $this->overtimeService->rejectOvertime($id, $approver, $reason);
             return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur ditolak (Rejected).');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
@@ -141,19 +149,19 @@ class OvertimeController extends Controller
                 false
             );
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 
     public function verifyOvertimePublic($id)
     {
         try {
-            $docData = $this->overtimeService->getOvertimeDocumentData($id);
+            $docData = $this->overtimeService->getOvertimeDocumentData($id, true);
             $docData['overtime']['Employee_Name'] = UserResolverHelper::getName($docData['overtime']['Employee_ID'] ?? '');
             $docData['overtime']['Approved_By'] = UserResolverHelper::getName($docData['overtime']['Approved_By'] ?? '');
             return view('hr.overtimes.verify_overtime_public', ['data' => $docData]);
         } catch (\Exception $e) {
-            abort(404, $e->getMessage());
+            abort(404, $this->safeExceptionMessage($e, 'Dokumen lembur tidak ditemukan atau tidak tersedia.'));
         }
     }
 }

@@ -14,6 +14,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
 
+
 class EmployeeController extends Controller
 {
     use \App\Traits\Exportable;
@@ -145,11 +146,31 @@ class EmployeeController extends Controller
                 });
             }
 
+            $employeeGroups = $employees
+                ->groupBy(fn ($employee) => trim((string) ($employee['Department_ID'] ?? '')) ?: 'NO_DEPARTMENT')
+                ->map(function ($group, $departmentId) {
+                    $first = $group->first();
+                    $active = $group->where('Is_Active', 'TRUE')->count();
+
+                    return [
+                        'id' => $departmentId,
+                        'title' => $first['Department_Name'] ?? ($departmentId === 'NO_DEPARTMENT' ? 'Belum Ada Departemen' : $departmentId),
+                        'subtitle' => $group->pluck('Position_Name')->filter()->unique()->take(3)->implode(', ') ?: '-',
+                        'total' => $group->count(),
+                        'active' => $active,
+                        'inactive' => $group->count() - $active,
+                        'items' => $group->sortBy('Full_Name')->values(),
+                    ];
+                })
+                ->sortBy('title')
+                ->values();
+
             // Pagination
             $employeesPaginated = \App\Helpers\CollectionHelper::paginate($employees, 10)->withQueryString();
             
             return view('employees.index', [
                 'employees' => $employeesPaginated,
+                'employeeGroups' => $employeeGroups,
                 'departments' => $departments->where('Is_Active', 'TRUE'),
                 'positions' => $positions->where('Is_Active', 'TRUE')
             ]);
@@ -171,7 +192,9 @@ class EmployeeController extends Controller
             $usedUserIds = $allEmployees->pluck('User_ID')->filter()->toArray();
             
             $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
-                return !in_array($user['User_ID'], $usedUserIds) && ($user['Is_Active'] ?? 'TRUE') === 'TRUE';
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && ($user['Is_Active'] ?? 'TRUE') === 'TRUE'
+                    && !$this->userHasRole($user, 'STUDENT');
             })->values();
             
             return view('employees.create', compact('departments', 'positions', 'users'));
@@ -252,7 +275,8 @@ class EmployeeController extends Controller
             $usedUserIds = $allEmployees->where('Employee_ID', '!=', $id)->pluck('User_ID')->filter()->toArray();
             
             $users = collect($allUsers)->filter(function($user) use ($usedUserIds, $employee) {
-                return !in_array($user['User_ID'], $usedUserIds);
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && (!$this->userHasRole($user, 'STUDENT') || ($user['User_ID'] ?? '') === ($employee['User_ID'] ?? ''));
             })->values();
 
             return view('employees.edit', compact('employee', 'departments', 'positions', 'users'));
@@ -313,7 +337,7 @@ class EmployeeController extends Controller
             return back()->with('success', 'Data karyawan berhasil dikirim via email ke: ' . $request->input('email'));
         } catch (\Exception $e) {
             Log::error('Error sending employee email: ' . $e->getMessage());
-            return back()->with('error', 'Gagal mengirim email: ' . $e->getMessage());
+            return back()->with('error', 'Gagal mengirim email: ' . $this->safeExceptionMessage($e));
         }
     }
 
@@ -341,5 +365,13 @@ class EmployeeController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => 'Terjadi kesalahan internal.'], 500);
         }
+    }
+
+
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
     }
 }

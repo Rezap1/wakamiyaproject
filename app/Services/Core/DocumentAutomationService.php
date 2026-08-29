@@ -8,6 +8,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Support\ActorIdentity;
 use Exception;
 
 class DocumentAutomationService
@@ -34,6 +35,8 @@ class DocumentAutomationService
     public function generateDocument($documentType, $referenceType, $referenceId, $data, $viewName, $user = 'System')
     {
         try {
+            $user = ActorIdentity::resolve((string) $user);
+
             // 1. Determine ID Prefix and Folder
             $prefix = $this->getPrefix($documentType);
             $folder = $this->getFolder($documentType);
@@ -45,18 +48,12 @@ class DocumentAutomationService
                 ->where('Document_Type', $documentType);
 
             $version = 1;
-            if ($existingDocs->count() > 0) {
-                // Archive old documents
-                foreach ($existingDocs as $doc) {
-                    if (($doc['Status'] ?? '') === 'Active') {
-                        $this->documentRepo->update($doc['Document_ID'], ['Status' => 'Archived']);
-                        $version = max($version, (int)str_replace('v', '', $doc['Version'] ?? 'v1') + 1);
-                    }
-                }
+            foreach ($existingDocs as $doc) {
+                $version = max($version, (int) str_replace('v', '', $doc['Version'] ?? 'v1') + 1);
             }
 
             // 3. Generate New ID
-            $documentId = $this->generateId($prefix);
+            $documentId = $this->documentRepo->generateNewId($prefix . '-' . date('y'), 5);
 
             // 4. Set File Path
             $filename = "{$documentId}.pdf";
@@ -78,7 +75,9 @@ class DocumentAutomationService
             $hash = hash('sha256', $pdfContent);
 
             // 8. Save to Storage
-            Storage::disk('public')->put($relativePath, $pdfContent);
+            if (!Storage::disk('local')->put($relativePath, $pdfContent)) {
+                throw new Exception('Gagal menyimpan dokumen ke storage private.');
+            }
 
             // 9. Record to MASTER_DOCUMENT
             $docData = [
@@ -94,7 +93,20 @@ class DocumentAutomationService
                 'Hash' => $hash,
             ];
 
-            $this->documentRepo->create($docData);
+            $created = $this->documentRepo->create($docData);
+            if (!$created) {
+                Storage::disk('local')->delete($relativePath);
+                throw new Exception('Gagal menyimpan metadata dokumen.');
+            }
+
+            foreach ($existingDocs as $doc) {
+                if (($doc['Status'] ?? '') === 'Active') {
+                    $archived = $this->documentRepo->update($doc['Document_ID'], ['Status' => 'Archived']);
+                    if (!$archived) {
+                        throw new Exception("Gagal mengarsipkan versi dokumen {$doc['Document_ID']}.");
+                    }
+                }
+            }
             $this->documentRepo->clearCache();
 
             return $docData;
@@ -110,7 +122,7 @@ class DocumentAutomationService
                     'GENERATE_FAILED',
                     strtoupper($documentType),
                     $referenceId,
-                    Auth::id() ?? 0,
+                    Auth::check() ? ActorIdentity::required() : 'SYSTEM',
                     ['ADMINISTRATOR'],
                     [],
                     ['error' => $e->getMessage()]
@@ -157,10 +169,4 @@ class DocumentAutomationService
         };
     }
 
-    private function generateId($prefix)
-    {
-        $year = date('y');
-        $count = $this->documentRepo->getAll()->count() + 1;
-        return sprintf("%s-%s%05d", $prefix, $year, $count);
-    }
 }

@@ -239,7 +239,7 @@
         <tr>
             <td class="field-label">Telah Diterima Dari:</td>
             <td class="field-value">
-                <strong style="font-size: 12px; color: #0f172a;">{{ $data['client_name'] ?? 'Rifai Sholikhin' }}</strong>
+                <strong style="font-size: 12px; color: #0f172a;">{{ $data['client_name'] ?? '-' }}</strong>
             </td>
         </tr>
         <tr>

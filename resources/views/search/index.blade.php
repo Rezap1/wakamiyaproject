@@ -2,7 +2,7 @@
 @section('header', 'Pencarian Perusahaan')
 @section('content')
 <div class="mb-6 bg-white rounded-2xl shadow p-6">
-    <form action="{{ route('search.index') }}" method="GET" class="flex gap-4">
+    <form action="{{ route('search.index') }}" method="GET" class="flex flex-col sm:flex-row gap-4">
         <div class="flex-1 relative">
             <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input type="text" name="q" value="{{ $keyword }}" placeholder="Cari sesuatu di WMS..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-medium text-lg">
@@ -13,7 +13,7 @@
 
 @if($keyword)
     <h3 class="font-bold text-gray-500 mb-4 uppercase tracking-wider text-sm">Hasil pencarian untuk "<span class="text-slate-800">{{ $keyword }}</span>"</h3>
-    
+
     @if(empty($results))
     <div class="bg-white rounded-2xl shadow p-12 text-center">
         <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -48,7 +48,7 @@
         <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         <h3 class="text-xl font-bold text-gray-700">Pencarian Perusahaan</h3>
         <p class="text-gray-500 mt-2">Ketik kata kunci di atas untuk memindai modul yang diizinkan.</p>
-        
+
         <form action="{{ route('search.clearHistory') }}" method="POST" class="mt-6">
             @csrf
             <button type="submit" class="text-sm font-bold text-red-500 hover:underline">Bersihkan Riwayat</button>

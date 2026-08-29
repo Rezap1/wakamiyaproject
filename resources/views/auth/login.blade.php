@@ -173,7 +173,7 @@
         <!-- Branding Header -->
         <div class="text-center mb-5 flex flex-col items-center mt-[-40px]">
             <div class="w-[140px] h-[140px] rounded-full border-[5px] border-[#4fc3f7] flex items-center justify-center mb-4 bg-white p-1 shadow-lg shadow-cyan-500/20">
-                <img src="{{ asset('img/logo.png.jpeg') }}" alt="WAKAMIYA" class="w-full h-full object-contain rounded-full" onerror="this.src='https://ui-avatars.com/api/?name=W&background=fff&color=000&rounded=true&bold=true'">
+                <img src="{{ $companyProfile['company']['logo_url'] ?? asset('img/logo.png.jpeg') }}" alt="WAKAMIYA" class="w-full h-full object-contain rounded-full" onerror="this.src='{{ asset('img/logo.png.jpeg') }}'">
             </div>
             
             <h1 class="text-6xl md:text-[5rem] leading-none font-bold tracking-widest text-white drop-shadow-lg mb-1">WAKAMIYA</h1>
@@ -212,7 +212,7 @@
                     <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                     </svg>
-                    <input id="email" name="email" type="email" autocomplete="email" required value="{{ old('email') }}" class="glass-input" placeholder="Nama Pengguna">
+                    <input id="login" name="login" type="text" autocomplete="username" required value="{{ old('login') }}" class="glass-input" placeholder="Nama Pengguna atau Email">
                 </div>
 
                 <div class="glass-input-container">

@@ -3,6 +3,7 @@
 namespace App\Services\HR;
 
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\OvertimeRepositoryInterface;
 use App\Services\Core\EmployeeService;
 use App\Services\Core\EnterpriseEventService;
 use Illuminate\Support\Facades\Cache;
@@ -12,15 +13,18 @@ use Exception;
 
 class OvertimeService
 {
+    protected $overtimeRepo;
     protected $employeeRepo;
     protected $employeeService;
     protected $enterpriseEvent;
 
     public function __construct(
+        OvertimeRepositoryInterface $overtimeRepo,
         EmployeeRepositoryInterface $employeeRepo,
         EmployeeService $employeeService,
         EnterpriseEventService $enterpriseEvent
     ) {
+        $this->overtimeRepo = $overtimeRepo;
         $this->employeeRepo = $employeeRepo;
         $this->employeeService = $employeeService;
         $this->enterpriseEvent = $enterpriseEvent;
@@ -28,14 +32,15 @@ class OvertimeService
 
     public function getAllOvertimes(): array
     {
-        $overtimesList = Cache::get('overtime_records_list', []);
-        return array_values($overtimesList);
+        return collect($this->overtimeRepo->getAll())
+            ->map(fn ($row) => (array) $row)
+            ->values()
+            ->all();
     }
 
     public function getOvertimeById(string $overtimeId): ?array
     {
-        $overtimes = Cache::get('overtime_records_list', []);
-        return $overtimes[$overtimeId] ?? null;
+        return $this->overtimeRepo->getById($overtimeId);
     }
 
     public function getApprovedOvertimePayForPeriod(string $employeeId, string $period): float
@@ -45,7 +50,7 @@ class OvertimeService
 
         foreach ($allOvertimes as $ot) {
             if (($ot['Employee_ID'] ?? '') !== $employeeId) continue;
-            if (in_array(strtoupper($ot['Status'] ?? ''), ['REJECTED', 'CANCELLED'])) continue;
+            if (!in_array(strtoupper($ot['Status'] ?? ''), ['APPROVED', 'INCLUDED_IN_PAYROLL'], true)) continue;
 
             $date = $ot['Date'] ?? '';
             if (str_starts_with($date, $period)) {
@@ -89,7 +94,7 @@ class OvertimeService
             throw new Exception("Jam selesai lembur harus lebih besar dari jam mulai.");
         }
 
-        $durationHours = max(0.5, round($endCarbon->diffInMinutes($startCarbon) / 60, 2));
+        $durationHours = max(0.5, round($startCarbon->diffInMinutes($endCarbon) / 60, 2));
         $hourlyRate = (float) config('finance.overtime_rate_per_hour', 25000); // Rp 25.000 / jam
         $overtimePay = $durationHours * $hourlyRate;
 
@@ -109,6 +114,8 @@ class OvertimeService
             $overtimeId = 'OVT-' . date('Ymd') . '-' . strtoupper(Str::random(6));
             $docNumber = 'DOC-OVT-' . date('Y') . '-' . sprintf("%06d", rand(1, 999999));
 
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
             $record = [
                 'Overtime_ID' => $overtimeId,
                 'Document_Number' => $docNumber,
@@ -122,13 +129,12 @@ class OvertimeService
                 'Overtime_Pay' => $overtimePay,
                 'Reason' => $reason,
                 'Status' => 'SUBMITTED',
-                'Submitted_At' => now()->toDateTimeString(),
-                'Created_At' => now()->toDateTimeString()
+                'Submitted_At' => $timestamp,
+                'Created_At' => $timestamp,
+                'Updated_At' => $timestamp,
             ];
 
-            $overtimesList = Cache::get('overtime_records_list', []);
-            $overtimesList[$overtimeId] = $record;
-            Cache::forever('overtime_records_list', $overtimesList);
+            $this->overtimeRepo->create($record);
 
             Cache::forget("employee_overtime_{$employeeId}");
             Cache::forget('hr_dashboard');
@@ -138,7 +144,7 @@ class OvertimeService
                 'CREATE', 
                 'OVERTIME', 
                 $overtimeId, 
-                auth()->id() ?? 'SYSTEM', 
+                $actorId,
                 ['HR', 'ADMINISTRATOR'], 
                 [$employeeId], 
                 $record
@@ -150,96 +156,117 @@ class OvertimeService
 
     public function approveOvertime(string $overtimeId, string $approver): array
     {
-        $ot = $this->getOvertimeById($overtimeId);
-        if (!$ot) {
-            throw new Exception("Pengajuan lembur #{$overtimeId} tidak ditemukan.");
-        }
+        return Cache::lock("overtime_status_{$overtimeId}", 10)->block(3, function () use ($overtimeId) {
+            $ot = $this->getOvertimeById($overtimeId);
+            if (!$ot) {
+                throw new Exception("Pengajuan lembur #{$overtimeId} tidak ditemukan.");
+            }
 
-        $currentStatus = strtoupper(trim($ot['Status'] ?? 'SUBMITTED'));
-        if (in_array($currentStatus, ['APPROVED', 'INCLUDED_IN_PAYROLL', 'CANCELLED'])) {
-            throw new Exception("Status lembur saat ini ({$currentStatus}) tidak dapat disetujui lagi.");
-        }
+            $currentStatus = strtoupper(trim($ot['Status'] ?? 'SUBMITTED'));
+            if ($currentStatus !== 'SUBMITTED') {
+                throw new Exception("Status lembur saat ini ({$currentStatus}) tidak dapat disetujui.");
+            }
 
-        $ot['Status'] = 'APPROVED';
-        $ot['Approved_By'] = $approver;
-        $ot['Approved_At'] = now()->toDateTimeString();
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
+            $changes = [
+                'Status' => 'APPROVED',
+                'Approved_By' => $actorId,
+                'Approved_At' => $timestamp,
+                'Updated_At' => $timestamp,
+            ];
+            $this->overtimeRepo->update($overtimeId, $changes);
+            $ot = array_merge($ot, $changes);
 
-        $overtimesList = Cache::get('overtime_records_list', []);
-        $overtimesList[$overtimeId] = $ot;
-        Cache::forever('overtime_records_list', $overtimesList);
+            Cache::forget("employee_overtime_{$ot['Employee_ID']}");
+            Cache::forget('hr_dashboard');
 
-        Cache::forget("employee_overtime_{$ot['Employee_ID']}");
-        Cache::forget('hr_dashboard');
+            $this->enterpriseEvent->dispatch(
+                'HR',
+                'UPDATE',
+                'OVERTIME',
+                $overtimeId,
+                $actorId,
+                ['HR', 'ADMINISTRATOR', 'EMPLOYEE'],
+                [$ot['Employee_ID']],
+                ['Status' => 'APPROVED', 'Approved_By' => $actorId]
+            );
 
-        $this->enterpriseEvent->dispatch(
-            'HR', 
-            'UPDATE', 
-            'OVERTIME', 
-            $overtimeId, 
-            auth()->id() ?? 'SYSTEM', 
-            ['HR', 'ADMINISTRATOR', 'EMPLOYEE'], 
-            [$ot['Employee_ID']], 
-            ['Status' => 'APPROVED', 'Approved_By' => $approver]
-        );
-
-        return $ot;
+            return $ot;
+        });
     }
 
     public function rejectOvertime(string $overtimeId, string $approver, ?string $reason = null): array
     {
-        $ot = $this->getOvertimeById($overtimeId);
-        if (!$ot) {
-            throw new Exception("Pengajuan lembur #{$overtimeId} tidak ditemukan.");
-        }
+        return Cache::lock("overtime_status_{$overtimeId}", 10)->block(3, function () use ($overtimeId, $reason) {
+            $ot = $this->getOvertimeById($overtimeId);
+            if (!$ot) {
+                throw new Exception("Pengajuan lembur #{$overtimeId} tidak ditemukan.");
+            }
 
-        $ot['Status'] = 'REJECTED';
-        $ot['Rejected_By'] = $approver;
-        $ot['Rejection_Reason'] = $reason ?? 'Tidak disetujui atasan.';
-        $ot['Rejected_At'] = now()->toDateTimeString();
+            $currentStatus = strtoupper(trim($ot['Status'] ?? 'SUBMITTED'));
+            if ($currentStatus !== 'SUBMITTED') {
+                throw new Exception("Status lembur saat ini ({$currentStatus}) tidak dapat ditolak.");
+            }
 
-        $overtimesList = Cache::get('overtime_records_list', []);
-        $overtimesList[$overtimeId] = $ot;
-        Cache::forever('overtime_records_list', $overtimesList);
+            $actorId = \App\Support\ActorIdentity::required();
+            $timestamp = now()->toDateTimeString();
+            $changes = [
+                'Status' => 'REJECTED',
+                'Rejected_By' => $actorId,
+                'Rejection_Reason' => $reason ?? 'Tidak disetujui atasan.',
+                'Rejected_At' => $timestamp,
+                'Updated_At' => $timestamp,
+            ];
+            $this->overtimeRepo->update($overtimeId, $changes);
+            $ot = array_merge($ot, $changes);
 
-        Cache::forget("employee_overtime_{$ot['Employee_ID']}");
-        Cache::forget('hr_dashboard');
+            Cache::forget("employee_overtime_{$ot['Employee_ID']}");
+            Cache::forget('hr_dashboard');
 
-        $this->enterpriseEvent->dispatch(
-            'HR', 
-            'UPDATE', 
-            'OVERTIME', 
-            $overtimeId, 
-            auth()->id() ?? 'SYSTEM', 
-            ['HR', 'EMPLOYEE'], 
-            [$ot['Employee_ID']], 
-            ['Status' => 'REJECTED', 'Reason' => $reason]
-        );
+            $this->enterpriseEvent->dispatch(
+                'HR',
+                'UPDATE',
+                'OVERTIME',
+                $overtimeId,
+                $actorId,
+                ['HR', 'EMPLOYEE'],
+                [$ot['Employee_ID']],
+                ['Status' => 'REJECTED', 'Reason' => $reason]
+            );
 
-        return $ot;
+            return $ot;
+        });
     }
 
-    public function getOvertimeDocumentData(string $overtimeId): array
+    public function getOvertimeDocumentData(string $overtimeId, bool $allowPublicVerification = false): array
     {
         $ot = $this->getOvertimeById($overtimeId);
         if (!$ot) {
             throw new Exception("Dokumen Lembur #{$overtimeId} tidak ditemukan.");
         }
 
-        // IDOR Protection for Student & Employee Users
+        // Public access is reserved for the signed verification endpoint.
         $user = auth()->user();
-        if ($user && ($user->Role ?? '') === 'STUDENT') {
-            throw new Exception("Akses Ditolak: Siswa tidak memiliki akses ke dokumen lembur.");
-        }
-        if ($user && in_array(strtoupper($user->Role ?? ''), ['TEACHER', 'EMPLOYEE'])) {
-            $emp = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$emp || ($ot['Employee_ID'] ?? '') !== ($emp['Employee_ID'] ?? '')) {
-                throw new Exception("Akses Ditolak: Dokumen lembur #{$overtimeId} bukan milik akun Anda.");
+        if (!$allowPublicVerification) {
+            if (!$user) {
+                throw new Exception("Akses Ditolak: Identitas pengguna tidak dapat dipastikan.");
+            }
+
+            $role = strtoupper(trim((string) ($user->Role ?? '')));
+            if (in_array($role, ['TEACHER', 'EMPLOYEE'], true)) {
+                $emp = collect($this->employeeRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
+                if (!$emp || ($ot['Employee_ID'] ?? '') !== ($emp['Employee_ID'] ?? '')) {
+                    throw new Exception("Akses Ditolak: Dokumen lembur #{$overtimeId} bukan milik akun Anda.");
+                }
+            } elseif (!in_array($role, ['ADMINISTRATOR', 'HR'], true)) {
+                throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses dokumen lembur.");
             }
         }
 
         $employee = $this->employeeRepo->findById($ot['Employee_ID'] ?? '') ?? [];
 
-        $verificationUrl = route('overtimes.verify-public', $overtimeId);
+        $verificationUrl = \App\Helpers\PublicVerificationUrl::make('overtimes.verify-public', $overtimeId);
 
         $qrCodeSvg = null;
         if (class_exists('\SimpleSoftwareIO\QrCode\Facades\QrCode')) {

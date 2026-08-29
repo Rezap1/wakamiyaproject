@@ -28,28 +28,32 @@ class DocumentTemplateController extends Controller
     public function store(\App\Http\Requests\StoreDocumentTemplateRequest $request)
     {
         try {
-            $data = $request->except('_token');
+            $data = $request->validated();
             $this->tplService->create($data);
             return redirect()->route('templates.index')->with('success', 'Template created successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
     public function edit($id)
     {
         $template = $this->tplService->getById($id);
+        if (!$template) {
+            abort(404);
+        }
+
         return view('document.templates.edit', compact('template'));
     }
 
     public function update(\App\Http\Requests\UpdateDocumentTemplateRequest $request, $id)
     {
         try {
-            $data = $request->except(['_token', '_method']);
+            $data = $request->validated();
             $this->tplService->update($id, $data);
             return redirect()->route('templates.index')->with('success', 'Template updated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 }

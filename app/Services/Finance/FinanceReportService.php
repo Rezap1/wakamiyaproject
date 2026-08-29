@@ -47,11 +47,16 @@ class FinanceReportService
         $allAccounts = collect($this->accountRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
         
         // Account Filter Validation
+        $selectedAccountKeys = [];
         if ($accountId !== 'ALL') {
             $validAcc = $allAccounts->firstWhere('Account_ID', $accountId) ?? $allAccounts->firstWhere('Account_Code', $accountId);
             if (!$validAcc) {
                 throw new Exception("Akun Keuangan dengan ID/Kode #{$accountId} tidak ditemukan.");
             }
+            $selectedAccountKeys = array_values(array_filter([
+                $validAcc['Account_ID'] ?? null,
+                $validAcc['Account_Code'] ?? null,
+            ]));
         }
 
         $allTransactions = collect($this->transactionRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
@@ -60,11 +65,11 @@ class FinanceReportService
         $categories = $allTransactions->pluck('Category')->filter()->unique()->values();
 
         // Base filter helper for Account & Category
-        $applyAccountAndCategoryFilter = function($collection) use ($accountId, $category) {
+        $applyAccountAndCategoryFilter = function($collection) use ($accountId, $category, $selectedAccountKeys) {
             if ($accountId !== 'ALL') {
-                $collection = $collection->filter(function($t) use ($accountId) {
-                    $acc = $t['Account_ID'] ?? '';
-                    return $acc === $accountId;
+                $collection = $collection->filter(function($t) use ($selectedAccountKeys) {
+                    $acc = trim((string) ($t['Account_ID'] ?? ''));
+                    return in_array($acc, $selectedAccountKeys, true);
                 });
             }
             if ($category !== 'ALL') {
@@ -82,8 +87,8 @@ class FinanceReportService
         });
         $priorTransactions = $applyAccountAndCategoryFilter($priorTransactions);
 
-        $priorIncome = (float) $priorTransactions->where('Type', 'Income')->sum('Amount');
-        $priorExpense = (float) $priorTransactions->where('Type', 'Expense')->sum('Amount');
+        $priorIncome = $this->sumByType($priorTransactions, 'Income');
+        $priorExpense = $this->sumByType($priorTransactions, 'Expense');
         $openingBalance = $priorIncome - $priorExpense;
 
         // 2. PERIOD TRANSACTIONS: startDate <= Transaction_Date <= endDate
@@ -93,8 +98,8 @@ class FinanceReportService
         });
         $periodTransactions = $applyAccountAndCategoryFilter($periodTransactions);
 
-        $totalIncome = (float) $periodTransactions->where('Type', 'Income')->sum('Amount');
-        $totalExpense = (float) $periodTransactions->where('Type', 'Expense')->sum('Amount');
+        $totalIncome = $this->sumByType($periodTransactions, 'Income');
+        $totalExpense = $this->sumByType($periodTransactions, 'Expense');
         $netCashFlow = $totalIncome - $totalExpense;
         $closingBalance = $openingBalance + $netCashFlow;
 
@@ -112,6 +117,32 @@ class FinanceReportService
             'accounts' => $allAccounts->values(),
             'categories' => $categories
         ];
+    }
+
+    private function sumByType($transactions, string $expectedType): float
+    {
+        return (float) collect($transactions)
+            ->filter(function ($transaction) use ($expectedType) {
+                return $this->normalizeType($transaction['Type'] ?? '') === $expectedType;
+            })
+            ->sum(function ($transaction) {
+                return (float) ($transaction['Amount'] ?? 0);
+            });
+    }
+
+    private function normalizeType($type): ?string
+    {
+        $value = strtolower(trim((string) $type));
+
+        if (in_array($value, ['income', 'pemasukan', 'masuk', 'revenue', 'pendapatan'], true)) {
+            return 'Income';
+        }
+
+        if (in_array($value, ['expense', 'pengeluaran', 'keluar', 'cost', 'biaya', 'beban'], true)) {
+            return 'Expense';
+        }
+
+        return null;
     }
 
     public function getOutstandingInvoices($type = null, $studentId = null, $companyId = null)

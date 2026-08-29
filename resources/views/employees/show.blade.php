@@ -226,13 +226,15 @@
                     <p class="text-sm text-slate-800 bg-slate-50 p-4 rounded-xl border border-slate-200">{{ $employee['Notes'] }}</p>
                 </div>
                 @endif
+                
+
             </div>
         </x-slot:information>
 
-        <!-- SECTION G: SYSTEM METADATA -->
+        <!-- SECTION H: SYSTEM METADATA -->
         <x-slot:audit>
             <div class="space-y-4">
-                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">Section G. System Metadata & Audit</h3>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">Section H. System Metadata & Audit</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">ID Karyawan (Primary Key)</p>

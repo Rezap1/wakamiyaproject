@@ -32,12 +32,12 @@
                 <h3 class="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Tautan Akun Pengguna</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
-                        <x-universal.searchable-select 
+                        <x-universal.select 
                             name="User_ID" 
-                            label="Akun Tersambung" 
+                            label="Pilih Akun Pengguna" 
                             :required="true"
                             :options="$userOptions"
-                            value="{{ $teacher['User_ID'] ?? '' }}"
+                            :value="old('User_ID', $teacher['User_ID'])"
                         />
                     </div>
                 </div>

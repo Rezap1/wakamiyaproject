@@ -4,22 +4,29 @@
 
 @section('content')
 
-<!-- MOBILE DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
-<x-mobile-dashboard-hero user-role="ADMINISTRATOR" />
-
-<!-- DESKTOP DASHBOARD VIEW -->
-<div class="hidden lg:block space-y-6">
-
-    <!-- Welcome Banner -->
-    <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div class="absolute inset-0 bg-cover bg-center opacity-90" style="background-image: url('https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80');"></div>
-        <div class="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent"></div>
-        <div class="relative p-8 md:p-10 z-10 w-full md:w-2/3">
-            <h1 class="text-3xl font-extrabold text-slate-800 mb-2">Selamat Datang, {{ auth()->user()->Full_Name ?? 'Administrator' }}!</h1>
-            <p class="text-blue-700 font-semibold mb-4">Anda berhasil login ke WAKAMIYA MANAGEMENT SYSTEM</p>
-            <p class="text-slate-600 font-medium">Semangat bekerja dan terus memberikan yang terbaik.</p>
+@if(isset($api_error) && $api_error)
+    <div class="bg-red-50 border border-red-200 rounded-2xl p-6 m-4 md:m-8 lg:m-12 flex flex-col items-center justify-center text-center space-y-4">
+        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+            <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
+        <h2 class="text-xl font-bold text-red-800">Data belum dapat dimuat</h2>
+        <p class="text-red-600 max-w-md">{{ $error_message ?? 'Terjadi kesalahan komunikasi dengan database utama (Google Sheets). Silakan coba beberapa saat lagi.' }}</p>
+        <button onclick="window.location.reload()" class="px-4 py-2 mt-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors shadow-sm">
+            Coba Muat Ulang
+        </button>
     </div>
+@else
+
+<!-- MOBILE HERO (VISIBLE ON MOBILE ONLY) -->
+<div class="block md:hidden mb-4">
+    <x-mobile-dashboard-hero user-role="ADMINISTRATOR" />
+</div>
+
+<!-- MAIN UNIFIED DASHBOARD VIEW (HIDDEN ON MOBILE, VISIBLE ON DESKTOP) -->
+<div class="hidden lg:block w-full space-y-6">
+
+    <!-- Welcome Banner (Universal Header) -->
+    <x-dashboard-header />
 
     <!-- KPI Cards -->
     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
@@ -133,7 +140,7 @@
             $bgClass = $salStat == 'Diterima' ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600' : 'bg-rose-500 hover:bg-rose-600 border-rose-600';
             $iconBgClass = $salStat == 'Diterima' ? 'bg-emerald-600' : 'bg-rose-600';
         @endphp
-        <a href="#" class="{{ $bgClass }} rounded-2xl p-4 shadow-sm border transition-colors block">
+        <a href="{{ route('dashboard.personal-payroll') }}" class="{{ $bgClass }} rounded-2xl p-4 shadow-sm border transition-colors block">
             <div class="flex items-center gap-3 mb-2">
                 <div class="w-10 h-10 rounded-full {{ $iconBgClass }} flex items-center justify-center text-white shrink-0 shadow-inner">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
@@ -403,5 +410,5 @@
 
     </div>
 
-</div>
+@endif
 @endsection

@@ -6,6 +6,7 @@ use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use App\Services\Core\DashboardCacheService;
 use Illuminate\Support\Facades\Log;
+use App\Support\ActorIdentity;
 
 class EnterpriseEventService
 {
@@ -44,13 +45,12 @@ class EnterpriseEventService
         array $affectedUsers = [],
         array $metadata = []
     ) {
-        // Fallback for user ID
-        $actorUserId = $actorUserId ?? auth()->id() ?? 'SYSTEM';
+        $actorUserId = ActorIdentity::resolve($actorUserId);
 
         // 1. Record Activity Log
         $title = "{$referenceType} {$action}";
         $description = json_encode($metadata);
-        
+
         try {
             $this->activityLogService->logAction($actorUserId, $action, $module, $description, null, null, null, null, $referenceType, $referenceId);
         } catch (\Exception $e) {
@@ -58,12 +58,38 @@ class EnterpriseEventService
         }
 
         // 2. Create Notification
-        $message = "A {$referenceType} has been {$action} ({$referenceId}) by {$actorUserId}.";
+        $indonesianTypes = [
+            'INVOICE' => 'Tagihan',
+            'STUDENT' => 'Siswa',
+            'PAYMENT' => 'Pembayaran',
+            'BATCH' => 'Gelombang',
+            'CLASS' => 'Kelas',
+            'PROGRAM' => 'Program',
+            'AUTH' => 'Otentikasi',
+            'TEACHER' => 'Pengajar'
+        ];
+        $indonesianActions = [
+            'CREATE' => 'dibuat',
+            'UPDATE' => 'diperbarui',
+            'DELETE' => 'dihapus',
+            'VERIFY' => 'diverifikasi',
+            'NOTIFY' => 'dikirimkan',
+            'LOGIN' => 'melakukan login',
+            'FAILED_LOGIN' => 'gagal login',
+            'CANCEL' => 'dibatalkan',
+            'PUBLISH' => 'dipublikasikan'
+        ];
+
+        $typeId = $indonesianTypes[strtoupper($referenceType)] ?? $referenceType;
+        $actionId = $indonesianActions[strtoupper($action)] ?? strtolower($action);
+        
+        $title = strtoupper("{$typeId} {$actionId}");
+        $message = "Sistem telah mencatat bahwa {$typeId} dengan referensi ({$referenceId}) telah {$actionId} oleh {$actorUserId}.";
         
         // Notify Roles
         foreach ($affectedRoles as $role) {
             try {
-                $this->notificationService->NotifyRole($role, $title, $message, $module, 'Normal', '/');
+                $this->notificationService->NotifyRole($role, $title, $message, $module, 'Normal', '/', $actorUserId);
             } catch (\Exception $e) {
                 Log::error("Failed to notify role {$role}: " . $e->getMessage());
             }
@@ -72,7 +98,7 @@ class EnterpriseEventService
         // Notify Users
         foreach ($affectedUsers as $userId) {
             try {
-                $this->notificationService->NotifyUser($userId, $title, $message, $module, 'Normal', '/');
+                $this->notificationService->NotifyUser($userId, $title, $message, $module, 'Normal', '/', $actorUserId);
             } catch (\Exception $e) {
                 Log::error("Failed to notify user {$userId}: " . $e->getMessage());
             }

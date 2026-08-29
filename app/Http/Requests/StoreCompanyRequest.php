@@ -63,8 +63,8 @@ class StoreCompanyRequest extends FormRequest
             'Email' => 'nullable|email|max:150',
             'Website' => 'nullable|url|max:255',
             'Director_Name' => 'nullable|string|max:150',
-            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
-            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'Is_Active' => 'nullable|in:TRUE,FALSE',
             'Notes' => 'nullable|string'
         ];

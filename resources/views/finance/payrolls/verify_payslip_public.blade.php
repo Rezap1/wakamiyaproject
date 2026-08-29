@@ -1,71 +1,54 @@
 @extends('layouts.app')
-@section('header', 'Verifikasi Keabsahan Slip Gaji Pegawai')
+@section('header', 'Verifikasi Slip Gaji')
 @section('content')
 
 @php
-    $status = $data['payroll']['Status'] ?? 'Draft';
-    $isPaid = strtoupper($status) === 'PAID' || strtoupper($status) === 'CLOSED';
+    $payroll = $data['payroll'] ?? [];
+    $employee = $data['employee'] ?? [];
+    $status = $payroll['Status'] ?? 'Draft';
+    $documentNumber = $payroll['Document_Number'] ?? $payroll['Payroll_Number'] ?? 'Dokumen Terverifikasi';
+    $maskName = function ($name) {
+        $name = trim((string) $name);
+        if ($name === '') return '-';
+        $parts = preg_split('/\s+/', $name);
+        return collect($parts)->map(function ($part, $index) {
+            return $index === 0 ? $part : substr($part, 0, 1) . str_repeat('*', max(strlen($part) - 1, 1));
+        })->implode(' ');
+    };
 @endphp
 
-<div class="max-w-2xl mx-auto py-8 px-4 space-y-6">
-    <!-- VERIFICATION STATUS HEADER -->
-    <div class="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
-        <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-3xl {{ $isPaid ? 'bg-emerald-100 text-emerald-600 border border-emerald-200' : 'bg-amber-100 text-amber-600 border border-amber-200' }}">
-            @if($isPaid) ✅ @else ⏳ @endif
+<div class="max-w-xl mx-auto py-8 px-4">
+    <div class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center space-y-5">
+        <div class="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center bg-emerald-100 text-emerald-700 border border-emerald-200">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
 
         <div>
-            <span class="px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-200">
-                STATUS PAYROLL: {{ $status }}
+            <span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Dokumen Valid
             </span>
-            <h2 class="text-2xl font-black text-slate-800 mt-3">Slip Gaji #{{ $data['payroll']['Payroll_Number'] ?? $data['payroll']['Payroll_ID'] ?? '-' }}</h2>
-            <p class="text-xs text-slate-500 mt-1">Sistem Otentikasi & Verifikasi Slip Gaji Wakamiya Management System (WMS)</p>
+            <h2 class="text-2xl font-black text-slate-800 mt-3">Slip Gaji Terverifikasi</h2>
+            <p class="text-xs text-slate-500 mt-1">Verifikasi publik hanya menampilkan metadata minimum dokumen.</p>
         </div>
 
-        <div class="pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 text-left text-xs">
-            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <span class="text-slate-400 font-bold uppercase text-[10px] block">Gaji Bersih (Net Salary)</span>
-                <span class="text-lg font-black text-emerald-600 mt-1 block">Rp {{ number_format((float)($data['payroll']['Net_Salary'] ?? 0), 0, ',', '.') }}</span>
+        <div class="space-y-3 pt-4 text-left border-t border-slate-100 text-sm">
+            <div class="flex justify-between gap-4">
+                <span class="text-slate-500 font-medium">Nomor Dokumen</span>
+                <span class="font-bold text-slate-800 text-right">{{ $documentNumber }}</span>
             </div>
-            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <span class="text-slate-400 font-bold uppercase text-[10px] block">Periode Penggajian</span>
-                <span class="text-lg font-black text-slate-800 mt-1 block">{{ $data['payroll']['Payroll_Period'] ?? '-' }}</span>
+            <div class="flex justify-between gap-4">
+                <span class="text-slate-500 font-medium">Pemilik</span>
+                <span class="font-bold text-slate-800 text-right">{{ $maskName($employee['Full_Name'] ?? '') }}</span>
             </div>
-        </div>
-
-        <!-- DETAILED PUBLIC INFORMATION -->
-        <div class="space-y-3 pt-4 text-left border-t border-slate-100">
-            <div class="flex justify-between py-1 border-b border-slate-50 text-xs">
-                <span class="text-slate-500 font-medium">Pemilik Slip Gaji:</span>
-                <span class="font-bold text-slate-800">{{ $data['employee']['Full_Name'] ?? $data['payroll']['Employee_ID'] ?? '-' }}</span>
+            <div class="flex justify-between gap-4">
+                <span class="text-slate-500 font-medium">Periode</span>
+                <span class="font-bold text-slate-800 text-right">{{ $payroll['Payroll_Period'] ?? '-' }}</span>
             </div>
-            <div class="flex justify-between py-1 border-b border-slate-50 text-xs">
-                <span class="text-slate-500 font-medium">ID Pegawai (NIP):</span>
-                <span class="font-bold text-slate-800">{{ $data['payroll']['Employee_ID'] ?? '-' }} ({{ $data['employee']['Employee_Number'] ?? '-' }})</span>
+            <div class="flex justify-between gap-4">
+                <span class="text-slate-500 font-medium">Status</span>
+                <span class="font-bold text-emerald-700 text-right">{{ $status }}</span>
             </div>
-            <div class="flex justify-between py-1 border-b border-slate-50 text-xs">
-                <span class="text-slate-500 font-medium">No. Dokumen Resmi:</span>
-                <span class="font-mono font-bold text-blue-600">{{ $data['payroll']['Document_Number'] ?? '-' }}</span>
-            </div>
-            <div class="flex justify-between py-1 text-xs">
-                <span class="text-slate-500 font-medium">Tanggal Pembayaran:</span>
-                <span class="font-bold text-slate-800">
-                    {{ !empty($data['payroll']['Paid_Date']) ? \Carbon\Carbon::parse($data['payroll']['Paid_Date'])->format('d M Y, H:i') : 'Belum Dilunasi' }}
-                </span>
-            </div>
-        </div>
-
-        <!-- ACTION BUTTON FOR PDF DOWNLOAD -->
-        <div class="pt-4 border-t border-slate-100">
-            <a href="{{ route('payrolls.pdf', $data['payroll']['Payroll_ID']) }}" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow-md transition-colors inline-block text-xs uppercase tracking-wider">
-                📄 Unduh Dokumen PDF Slip Gaji Resmi
-            </a>
         </div>
     </div>
-
-    <!-- FOOTER PRIVACY STATEMENT -->
-    <p class="text-[11px] text-slate-400 text-center leading-relaxed">
-        Halaman verifikasi ini dipublikasikan secara resmi oleh Wakamiya Management System (WMS) untuk memastikan otentisitas dokumen Slip Gaji Pegawai.
-    </p>
 </div>
 @endsection

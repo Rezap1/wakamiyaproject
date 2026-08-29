@@ -17,7 +17,24 @@
   --color-dashboard-bg: #f4f7f6;
 }
 
-/* Custom Utilities that bypass Tailwind tree-shaking */
+/* Custom Utilities that bypass Tailwind tree-shaking & v4 specificity overrides */
 .bg-dashboard-bg {
   background-color: #f4f7f6 !important;
+}
+
+@media (min-width: 1024px) {
+  .lg-show-desktop {
+    display: block !important;
+  }
+  .lg-hide-desktop {
+    display: none !important;
+  }
+}
+@media (max-width: 1023px) {
+  .lg-show-desktop {
+    display: none !important;
+  }
+  .lg-hide-desktop {
+    display: block !important;
+  }
 }

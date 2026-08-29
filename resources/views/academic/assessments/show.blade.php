@@ -25,7 +25,9 @@
 >
     
     <x-slot:headerActions>
-        <x-universal.action-button action="edit" url="{{ route('assessments.edit', $assessment['Assessment_ID'] ?? 1) }}" />
+        @if(!empty($assessment['Assessment_ID']))
+            <x-universal.action-button action="edit" url="{{ route('assessments.edit', $assessment['Assessment_ID']) }}" />
+        @endif
     </x-slot:headerActions>
 
     <x-slot:sidebarContent>

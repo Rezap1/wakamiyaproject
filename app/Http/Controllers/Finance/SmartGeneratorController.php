@@ -159,24 +159,23 @@ class SmartGeneratorController extends Controller
         $data['id'] = $request->input('id', 'HIST-' . date('YmdHis') . '-' . Str::random(4));
         $data['saved_at'] = now()->format('d M Y, H:i');
 
-        $history = $this->getHistory();
-        
-        // Check if updating existing record
-        $existingIndex = null;
-        foreach ($history as $index => $item) {
-            if (isset($item['doc_number']) && $item['doc_number'] === $data['doc_number']) {
-                $existingIndex = $index;
-                break;
+        $history = $this->mutateHistory(function (array $history) use ($data) {
+            $existingIndex = null;
+            foreach ($history as $index => $item) {
+                if (isset($item['doc_number']) && $item['doc_number'] === $data['doc_number']) {
+                    $existingIndex = $index;
+                    break;
+                }
             }
-        }
 
-        if ($existingIndex !== null) {
-            $history[$existingIndex] = $data;
-        } else {
-            array_unshift($history, $data);
-        }
+            if ($existingIndex !== null) {
+                $history[$existingIndex] = $data;
+            } else {
+                array_unshift($history, $data);
+            }
 
-        $this->saveHistoryFile($history);
+            return $history;
+        });
 
         return response()->json([
             'success' => true,
@@ -195,12 +194,11 @@ class SmartGeneratorController extends Controller
 
     public function deleteHistory($id)
     {
-        $history = $this->getHistory();
-        $filtered = array_values(array_filter($history, function($item) use ($id) {
-            return ($item['id'] ?? '') !== $id && ($item['doc_number'] ?? '') !== $id;
-        }));
-
-        $this->saveHistoryFile($filtered);
+        $filtered = $this->mutateHistory(function (array $history) use ($id) {
+            return array_values(array_filter($history, function ($item) use ($id) {
+                return ($item['id'] ?? '') !== $id && ($item['doc_number'] ?? '') !== $id;
+            }));
+        });
 
         return response()->json([
             'success' => true,
@@ -262,6 +260,10 @@ class SmartGeneratorController extends Controller
 
     private function prepareDocumentData(Request $request)
     {
+        if ($request->input('source_type') === 'student_invoice') {
+            return $this->prepareStudentInvoiceDocumentData($request);
+        }
+
         $items = $request->input('items', []);
         if (is_string($items)) {
             $items = json_decode($items, true) ?: [];
@@ -315,9 +317,9 @@ class SmartGeneratorController extends Controller
             'status' => $request->input('status', 'UNPAID'),
             
             // Client info
-            'client_name' => $request->input('client_name', 'Rifai Sholikhin'),
-            'client_email' => $request->input('client_email', 'rifai@example.com'),
-            'client_address' => $request->input('client_address', 'Ds. Sukareja Blok.Karanganyar RT.07/RW 03 Kec.Balongan Kab.Indramayu'),
+            'client_name' => $request->input('client_name', ''),
+            'client_email' => $request->input('client_email', ''),
+            'client_address' => $request->input('client_address', ''),
 
             // Company Profile Info
             'company_name' => $request->input('company_name', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
@@ -360,24 +362,203 @@ class SmartGeneratorController extends Controller
         ];
     }
 
+    private function prepareStudentInvoiceDocumentData(Request $request): array
+    {
+        $sourceId = trim((string) $request->input('source_id', ''));
+        if ($sourceId === '') {
+            throw new \InvalidArgumentException('Source invoice wajib dipilih untuk dokumen invoice siswa.');
+        }
+
+        $invoice = $this->invoiceService->getById($sourceId);
+        if (!$invoice) {
+            throw new \InvalidArgumentException("Invoice siswa #{$sourceId} tidak ditemukan.");
+        }
+
+        if (strtoupper((string) ($invoice['Invoice_Type'] ?? 'STUDENT')) !== 'STUDENT' || empty($invoice['Student_ID'])) {
+            throw new \InvalidArgumentException("Invoice #{$sourceId} bukan invoice siswa yang valid.");
+        }
+
+        $studentRepo = app(StudentRepositoryInterface::class);
+        $userRepo = app(UserRepositoryInterface::class);
+        $student = $studentRepo->findById($invoice['Student_ID']);
+
+        $studentName = $student['Full_Name'] ?? UserResolverHelper::getName($invoice['Student_ID']);
+        $studentEmail = $student['Email'] ?? '';
+        if (empty($studentEmail) && !empty($student['User_ID'])) {
+            $user = $userRepo->findById($student['User_ID']);
+            $studentEmail = $user['Email'] ?? '';
+        }
+
+        $description = $invoice['Description'] ?? ($invoice['Category'] ?? 'Tagihan Siswa');
+        $items = $this->trustedInvoiceItems($invoice, $description);
+        $subtotal = (float) ($invoice['Subtotal_Amount'] ?? collect($items)->sum('total'));
+        $discount = (float) ($invoice['Total_Discount'] ?? 0);
+        $ppnAmount = (float) ($invoice['Total_Tax'] ?? 0);
+        $grandTotal = (float) ($invoice['Grand_Total'] ?? $invoice['Amount'] ?? collect($items)->sum('total'));
+        $docType = $request->input('doc_type') === 'kwitansi' ? 'kwitansi' : 'invoice';
+        $docNumber = $docType === 'kwitansi' ? 'KWI-' . $invoice['Invoice_ID'] : $invoice['Invoice_ID'];
+        $status = $invoice['Display_Status'] ?? ($invoice['Status'] ?? 'Waiting Payment');
+        $logoBase64 = $this->encodeImageToBase64($request->input('company_logo'));
+        $signatureBase64 = $this->encodeImageToBase64($request->input('signature'));
+        $stampBase64 = $this->encodeImageToBase64($request->input('stamp'));
+        $kwitansiAmount = $grandTotal;
+
+        return [
+            'source_type' => 'student_invoice',
+            'source_id' => $invoice['Invoice_ID'],
+            'student_id' => $invoice['Student_ID'],
+
+            'doc_type' => $docType,
+            'theme' => $this->normalizeTheme($request->input('theme', 'emerald')),
+            'doc_number' => $docNumber,
+            'currency' => 'IDR',
+            'issue_date' => $invoice['Invoice_Date'] ?? ($invoice['Created_At'] ?? date('Y-m-d')),
+            'due_date' => $invoice['Due_Date'] ?? date('Y-m-d', strtotime('+14 days')),
+            'status' => $status,
+
+            'client_name' => $studentName === '-' ? $invoice['Student_ID'] : $studentName,
+            'client_email' => $studentEmail,
+            'client_address' => $student['Address'] ?? '',
+
+            'company_name' => $request->input('company_name', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
+            'company_tagline' => $request->input('company_tagline', 'Growing Together With Integrity'),
+            'company_address' => $request->input('company_address', 'Perum Graha Samolo Indah Blok B1 No 22 Desa Babakan Caringin, Karang Tengah,Cianjur'),
+            'company_phone' => $request->input('company_phone', '0813-1811-5151'),
+            'company_email' => $request->input('company_email', 'lpkwakamiya01@gmail.com'),
+            'company_web' => $request->input('company_web', 'www.wakamiya.com'),
+            'company_npwp' => $request->input('company_npwp', '1000000003150626'),
+            'layout_kop' => $request->input('layout_kop', 'left'),
+
+            'bank_name' => $request->input('bank_name', 'Bank Syariah Indonesia (BSI)'),
+            'bank_account' => $request->input('bank_account', '7343551023'),
+            'bank_holder' => $request->input('bank_holder', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
+
+            'items' => $items,
+            'subtotal' => $subtotal,
+            'discount' => $discount,
+            'ppn_percent' => 0,
+            'ppn_amount' => $ppnAmount,
+            'shipping' => 0,
+            'grand_total' => $grandTotal,
+
+            'kwitansi_amount' => $kwitansiAmount,
+            'terbilang' => TerbilangHelper::convert($kwitansiAmount),
+            'payment_for' => $description,
+            'issue_city' => $request->input('issue_city', 'Cianjur'),
+            'signer_name' => $request->input('signer_name', 'Helmi Maulana'),
+            'notes' => $invoice['Notes'] ?? $request->input('notes', 'Pembayaran via Transfer BSI 7343551023 a.n PT Wakamiya Mandiri Sejahtera.'),
+            'company_logo' => $logoBase64,
+            'signature' => $signatureBase64,
+            'stamp' => $stampBase64
+        ];
+    }
+
+    private function trustedInvoiceItems(array $invoice, string $description): array
+    {
+        $lineItems = $invoice['Parsed_Line_Items'] ?? ($invoice['Line_Items'] ?? []);
+        if (is_string($lineItems)) {
+            $lineItems = json_decode($lineItems, true) ?: [];
+        }
+
+        $items = [];
+        if (is_array($lineItems)) {
+            foreach ($lineItems as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $qty = (float) ($item['qty'] ?? 1);
+                $price = (float) ($item['unit_price'] ?? $item['price'] ?? 0);
+                $total = (float) ($item['subtotal'] ?? ($qty * $price));
+                $items[] = [
+                    'name' => $item['description'] ?? ($item['name'] ?? $description),
+                    'qty' => $qty,
+                    'price' => $price,
+                    'total' => $total,
+                ];
+            }
+        }
+
+        if (empty($items)) {
+            $amount = (float) ($invoice['Grand_Total'] ?? $invoice['Amount'] ?? 0);
+            $items[] = [
+                'name' => $description,
+                'qty' => 1,
+                'price' => $amount,
+                'total' => $amount,
+            ];
+        }
+
+        return $items;
+    }
+
+    private function normalizeTheme(string $theme): string
+    {
+        return in_array($theme, ['emerald', 'indigo', 'crimson'], true) ? $theme : 'emerald';
+    }
+
     private function encodeImageToBase64($pathOrBase64)
     {
         if (empty($pathOrBase64)) {
             return null;
         }
 
-        if (str_starts_with($pathOrBase64, 'data:image')) {
+        if (is_string($pathOrBase64) && preg_match('#^data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$#i', $pathOrBase64)) {
             return $pathOrBase64;
         }
 
-        $fullPath = public_path($pathOrBase64);
-        if (file_exists($fullPath)) {
-            $type = pathinfo($fullPath, PATHINFO_EXTENSION);
-            $data = file_get_contents($fullPath);
-            return 'data:image/' . $type . ';base64,' . base64_encode($data);
+        // Extract relative URL path if a full URL (http/https) was passed
+        $urlPath = parse_url((string) $pathOrBase64, PHP_URL_PATH) ?? (string) $pathOrBase64;
+        $cleanPath = str_replace('\\', '/', ltrim(rawurldecode($urlPath), '/'));
+
+        if (
+            $cleanPath === ''
+            || str_contains($cleanPath, "\0")
+            || preg_match('#(^|/)\.\.(/|$)#', $cleanPath)
+            || preg_match('/^[A-Za-z]:/', $cleanPath)
+            || !preg_match('#^(storage|img|images|assets)/#', $cleanPath)
+        ) {
+            return null;
         }
 
-        return $pathOrBase64;
+        // Check in public_path (e.g. img/logo.png.jpeg, storage/...)
+        $fullPath = $this->resolveSafePath(public_path($cleanPath), public_path());
+
+        // Fallback: check storage/app/public if path starts with storage/
+        if (!$fullPath && str_starts_with($cleanPath, 'storage/')) {
+            $storageRelative = str_replace('storage/', 'app/public/', $cleanPath);
+            $fullPath = $this->resolveSafePath(storage_path($storageRelative), storage_path('app/public'));
+        }
+
+        if ($fullPath && is_file($fullPath)) {
+            $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+            if ($ext === 'jpg') {
+                $ext = 'jpeg';
+            }
+            if (!in_array($ext, ['jpeg', 'png', 'webp', 'gif'], true)) {
+                return null;
+            }
+            $imgData = @file_get_contents($fullPath);
+            if ($imgData !== false) {
+                return 'data:image/' . $ext . ';base64,' . base64_encode($imgData);
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveSafePath(string $candidatePath, string $rootPath): ?string
+    {
+        $realCandidate = realpath($candidatePath);
+        $realRoot = realpath($rootPath);
+
+        if (!$realCandidate || !$realRoot) {
+            return null;
+        }
+
+        $rootPrefix = rtrim($realRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+        return str_starts_with($realCandidate, $rootPrefix) ? $realCandidate : null;
     }
 
     private function getHistory()
@@ -385,7 +566,16 @@ class SmartGeneratorController extends Controller
         $filePath = storage_path('app/smart_generator_history.json');
         if (file_exists($filePath)) {
             $json = file_get_contents($filePath);
-            return json_decode($json, true) ?: [];
+            if ($json === false) {
+                throw new \RuntimeException('Riwayat Smart Generator tidak dapat dibaca.');
+            }
+
+            $decoded = json_decode($json, true);
+            if (!is_array($decoded) && trim($json) !== '') {
+                throw new \RuntimeException('Format riwayat Smart Generator tidak valid.');
+            }
+
+            return $decoded ?: [];
         }
         return [];
     }
@@ -393,6 +583,20 @@ class SmartGeneratorController extends Controller
     private function saveHistoryFile(array $history)
     {
         $filePath = storage_path('app/smart_generator_history.json');
-        file_put_contents($filePath, json_encode($history, JSON_PRETTY_PRINT));
+        $json = json_encode($history, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (file_put_contents($filePath, $json, LOCK_EX) === false) {
+            throw new \RuntimeException('Riwayat Smart Generator gagal disimpan.');
+        }
+    }
+
+    private function mutateHistory(callable $mutation): array
+    {
+        return \Illuminate\Support\Facades\Cache::lock('smart_generator_history_write', 10)
+            ->block(3, function () use ($mutation) {
+                $history = $mutation($this->getHistory());
+                $this->saveHistoryFile($history);
+
+                return $history;
+            });
     }
 }

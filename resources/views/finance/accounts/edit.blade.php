@@ -1,8 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-    <h2 class="font-bold text-xl text-slate-800 leading-tight">Edit Master Akun Keuangan</h2>
-@endsection
+@section('header', 'Edit Master Akun')
 
 @section('content')
 @php

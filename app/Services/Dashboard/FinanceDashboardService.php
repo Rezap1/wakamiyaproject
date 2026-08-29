@@ -52,17 +52,19 @@ class FinanceDashboardService
             return $date >= $thisMonthStart && $date <= $thisMonthEnd;
         });
 
-        $revenueThisMonth = $thisMonthTransactions->where('Type', 'Income')->sum('Amount');
-        $expenseThisMonth = $thisMonthTransactions->where('Type', 'Expense')->sum('Amount');
+        $revenueThisMonth = $this->sumByType($thisMonthTransactions, 'Income');
+        $expenseThisMonth = $this->sumByType($thisMonthTransactions, 'Expense');
 
         // === Cash Balance (all time from FINANCE_TRANSACTION) ===
-        $totalRevenue = $transactions->where('Type', 'Income')->sum('Amount');
-        $totalExpense = $transactions->where('Type', 'Expense')->sum('Amount');
+        $totalRevenue = $this->sumByType($transactions, 'Income');
+        $totalExpense = $this->sumByType($transactions, 'Expense');
         $cashBalance = $totalRevenue - $totalExpense;
 
         // === Outstanding Invoice ===
         $totalInvoice = $invoices->count();
-        $unpaidInvoices = $invoices->whereIn('Status', ['Waiting Payment', 'Partial Paid']);
+        // OVERDUE is a dynamic invoice status, but remains an outstanding
+        // receivable and must be included in both the amount and overdue KPI.
+        $unpaidInvoices = $invoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
         $outstandingAmount = $unpaidInvoices->sum('Amount') -
             $payments->where('Status', 'Verified')
                 ->whereIn('Invoice_ID', $unpaidInvoices->pluck('Invoice_ID'))
@@ -155,12 +157,12 @@ class FinanceDashboardService
                 return str_starts_with($t['Transaction_Date'] ?? '', $monthKey);
             });
 
-            $incomeData[] = (int) $monthTransactions->where('Type', 'Income')->sum('Amount');
-            $expenseData[] = (int) $monthTransactions->where('Type', 'Expense')->sum('Amount');
+            $incomeData[] = (int) $this->sumByType($monthTransactions, 'Income');
+            $expenseData[] = (int) $this->sumByType($monthTransactions, 'Expense');
         }
 
         // === Revenue by Category (riil) ===
-        $revenueByCat = $transactions->where('Type', 'Income')->groupBy('Category');
+        $revenueByCat = $this->filterByType($transactions, 'Income')->groupBy('Category');
         $revCatLabels = [];
         $revCatData = [];
         foreach ($revenueByCat as $cat => $txns) {
@@ -169,7 +171,7 @@ class FinanceDashboardService
         }
 
         // === Expense by Category (riil) ===
-        $expenseByCat = $transactions->where('Type', 'Expense')->groupBy('Category');
+        $expenseByCat = $this->filterByType($transactions, 'Expense')->groupBy('Category');
         $expCatLabels = [];
         $expCatData = [];
         foreach ($expenseByCat as $cat => $txns) {
@@ -217,5 +219,35 @@ class FinanceDashboardService
         } catch (\Exception $e) {
             return [];
         }
+    }
+
+    private function sumByType($transactions, string $expectedType): float
+    {
+        return (float) $this->filterByType($transactions, $expectedType)
+            ->sum(function ($transaction) {
+                return (float) ($transaction['Amount'] ?? 0);
+            });
+    }
+
+    private function filterByType($transactions, string $expectedType)
+    {
+        return collect($transactions)->filter(function ($transaction) use ($expectedType) {
+            return $this->normalizeType($transaction['Type'] ?? '') === $expectedType;
+        });
+    }
+
+    private function normalizeType($type): ?string
+    {
+        $value = strtolower(trim((string) $type));
+
+        if (in_array($value, ['income', 'pemasukan', 'masuk', 'revenue', 'pendapatan'], true)) {
+            return 'Income';
+        }
+
+        if (in_array($value, ['expense', 'pengeluaran', 'keluar', 'cost', 'biaya', 'beban'], true)) {
+            return 'Expense';
+        }
+
+        return null;
     }
 }

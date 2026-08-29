@@ -56,8 +56,8 @@ class PositionService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -68,7 +68,7 @@ class PositionService
             'CREATE',
             'POSITION',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             $mappedData
@@ -81,7 +81,7 @@ class PositionService
     {
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         if (isset($data['Position_Name'])) $mappedData['Position_Name'] = $data['Position_Name'];
@@ -98,7 +98,7 @@ class PositionService
             'UPDATE',
             'POSITION',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             $mappedData
@@ -124,7 +124,7 @@ class PositionService
             'DELETE',
             'POSITION',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             []

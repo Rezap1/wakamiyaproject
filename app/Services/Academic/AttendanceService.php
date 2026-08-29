@@ -2,8 +2,10 @@
 
 namespace App\Services\Academic;
 
+use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
+use Illuminate\Support\Facades\Cache;
 use Exception;
 
 class AttendanceService
@@ -59,29 +61,43 @@ class AttendanceService
 
     public function markAttendance(array $data)
     {
-        // $data contains: Schedule_ID, Student_ID, Teacher_ID, Attendance_Date, Check_In_Time, Grace_Period, Status (optional)
-        
-        // Auto-Late detection
-        $status = $data['Status'] ?? 'Present';
-        if (empty($data['Status']) && !empty($data['Check_In_Time']) && !empty($data['Grace_Period'])) {
-            // Assume Schedule Start_Time is passed or fetched. Check if it's late based on logic.
-            // In a real scenario we'd fetch Schedule_ID to get Start_Time.
-            $status = 'Present'; // Simplified
+        $data = $this->normalizeAttendanceData($data);
+        $studentId = trim((string) ($data['Student_ID'] ?? ''));
+        $attendanceDate = trim((string) ($data['Attendance_Date'] ?? ''));
+        if ($studentId === '' || $attendanceDate === '') {
+            throw new Exception('Student_ID dan Attendance_Date wajib diisi untuk absensi siswa.');
         }
 
-        if (!isset($data['Attendance_ID'])) {
-            $data['Attendance_ID'] = $this->generateId();
-        }
-        $data['Status'] = $status;
-        $data['Created_At'] = now()->toDateTimeString();
+        $scope = $data['Class_ID'] ?? $data['Schedule_ID'] ?? '';
+        $lockKey = 'student_attendance_' . sha1("{$studentId}|{$attendanceDate}|{$scope}");
 
-        $result = $this->repository->create($data);
-        $this->repository->clearCache();
-        return $result;
+        return Cache::lock($lockKey, 30)->block(5, function () use ($data) {
+            $existing = $this->findExistingStudentAttendance($data);
+
+            if ($existing && !empty($existing['Attendance_ID'])) {
+                $data['Updated_At'] = now()->toDateTimeString();
+                $result = $this->repository->update($existing['Attendance_ID'], $data);
+                $this->repository->clearCache();
+                return $result;
+            }
+
+            if (empty($data['Attendance_ID'])) {
+                $data['Attendance_ID'] = $this->generateId();
+            }
+
+            $data['Created_At'] = now()->toDateTimeString();
+            $data['Updated_At'] = now()->toDateTimeString();
+            $data['Is_Active'] = $data['Is_Active'] ?? 'TRUE';
+
+            $result = $this->repository->create($data);
+            $this->repository->clearCache();
+            return $result;
+        });
     }
 
     public function update($id, array $data)
     {
+        $data = $this->normalizeAttendanceData($data, false);
         $data['Updated_At'] = now()->toDateTimeString();
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
@@ -93,5 +109,59 @@ class AttendanceService
         $result = $this->repository->delete($id);
         $this->repository->clearCache();
         return $result;
+    }
+
+    private function normalizeAttendanceData(array $data, bool $isCreate = true): array
+    {
+        if (array_key_exists('Status', $data)) {
+            $data['Status'] = AttendanceStatusHelper::normalize($data['Status']);
+        } elseif ($isCreate) {
+            $data['Status'] = 'PRESENT';
+        }
+
+        foreach (['Student_ID', 'Employee_ID', 'User_ID', 'Class_ID', 'Schedule_ID', 'Teacher_ID', 'Notes'] as $field) {
+            if (array_key_exists($field, $data) && is_string($data[$field])) {
+                $data[$field] = trim($data[$field]);
+            }
+        }
+
+        $status = $data['Status'] ?? null;
+        if ($isCreate && AttendanceStatusHelper::isPresentLike($status) && empty($data['Check_In_Time'])) {
+            $data['Check_In_Time'] = now()->format('H:i:s');
+        }
+
+        if (!AttendanceStatusHelper::isPresentLike($status)) {
+            $data['Check_In_Time'] = $data['Check_In_Time'] ?? '';
+            $data['Check_Out_Time'] = $data['Check_Out_Time'] ?? '';
+        }
+
+        return $data;
+    }
+
+    private function findExistingStudentAttendance(array $data): ?array
+    {
+        $studentId = trim((string) ($data['Student_ID'] ?? ''));
+        $date = trim((string) ($data['Attendance_Date'] ?? ''));
+        $classId = trim((string) ($data['Class_ID'] ?? ''));
+        $scheduleId = trim((string) ($data['Schedule_ID'] ?? ''));
+
+        if ($studentId === '' || $date === '') {
+            return null;
+        }
+
+        return $this->getAll()->first(function ($attendance) use ($studentId, $date, $classId, $scheduleId) {
+            if (($attendance['Student_ID'] ?? '') !== $studentId
+                || ($attendance['Attendance_Date'] ?? '') !== $date
+                || strtoupper(trim($attendance['Is_Active'] ?? 'TRUE')) === 'FALSE') {
+                return false;
+            }
+
+            $existingClass = trim((string) ($attendance['Class_ID'] ?? ''));
+            $existingSchedule = trim((string) ($attendance['Schedule_ID'] ?? ''));
+
+            return ($classId !== '' && $existingClass === $classId)
+                || ($scheduleId !== '' && $existingSchedule === $scheduleId)
+                || ($classId === '' && $scheduleId === '');
+        });
     }
 }

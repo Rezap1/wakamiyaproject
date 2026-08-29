@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Helpers\AttendanceStatusHelper;
 use App\Services\Academic\AttendanceService;
 use App\Services\Core\ActivityLogService;
 
@@ -47,9 +48,9 @@ class AttendanceController extends Controller
                     $studentName . ($studentId ? " ($studentId)" : ''),
                     trim($className . ' ' . ($row['Schedule_ID'] ?? '')) ?: '-',
                     $row['Teacher_ID'] ?? $row['Employee_ID'] ?? '-',
-                    $row['Status'] ?? '-',
-                    $row['Time_In'] ?? '-',
-                    $row['Time_Out'] ?? '-',
+                    AttendanceStatusHelper::label($row['Status'] ?? ''),
+                    $row['Check_In_Time'] ?? $row['Time_In'] ?? '-',
+                    $row['Check_Out_Time'] ?? $row['Time_Out'] ?? '-',
                     $row['Notes'] ?? '-'
                 ];
             },
@@ -68,7 +69,6 @@ class AttendanceController extends Controller
     {
         $attendances = $this->attendanceService->getAll();
         
-        // Load Classes for the filter dropdown
         $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
         $allClasses = $classRepo->fetchAll();
         $classes = $allClasses->filter(function($c) {
@@ -76,18 +76,6 @@ class AttendanceController extends Controller
             return $isActive === 'TRUE' || $isActive === '';
         })->values();
 
-        // Determine user role (kept for potential future use)
-        $user = auth()->user();
-        $userRole = 'UNKNOWN';
-        if ($user && isset($user->Role_ID)) {
-            try {
-                $roleService = app(\App\Services\Core\RoleService::class);
-                $role = $roleService->getRoleById($user->Role_ID);
-                $userRole = strtoupper(trim($role['Role_Name'] ?? 'UNKNOWN'));
-            } catch (\Exception $e) {}
-        }
-        
-        // Build classOptions for the view (show all active classes)
         $classOptions = [];
         foreach ($classes as $c) {
             $cid = trim((string) ($c['Class_ID'] ?? ''));
@@ -96,50 +84,121 @@ class AttendanceController extends Controller
             }
         }
 
-        // Load Students for name mapping
+        $scheduleRepo = app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class);
+        $schedules = $scheduleRepo->fetchAll()->keyBy('Schedule_ID');
+
         $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
         $students = $studentRepo->fetchAll()->keyBy('Student_ID');
         
-        // Apply filters
         $dateFilter = $request->input('date', date('Y-m-d'));
+        $dateEndFilter = $request->input('date_end');
         $classFilter = $request->input('class_id');
+        $statusFilter = $request->input('status');
+        $search = strtolower($request->input('search', ''));
         
-        $debug = [
-            'raw_count' => $attendances->count(),
-            'dateFilter' => $dateFilter,
-            'classFilter' => $classFilter,
-            'userRole' => $userRole,
-        ];
         
-        if ($dateFilter) {
-            $attendances = $attendances->filter(function($a) use ($dateFilter) {
-                try {
-                    if (empty($a['Attendance_Date'])) return false;
-                    $aDate = \Carbon\Carbon::parse(str_replace('/', '-', $a['Attendance_Date']))->format('Y-m-d');
-                    return $aDate === $dateFilter;
-                } catch (\Exception $e) {
-                    return false;
+// Resolve Class_ID for all attendances first
+        $attendances = $attendances->map(function($a) use ($schedules) {
+            $cId = $a['Class_ID'] ?? '';
+            if (empty($cId) && !empty($a['Schedule_ID'])) {
+                $sch = $schedules[$a['Schedule_ID']] ?? null;
+                if ($sch && !empty($sch['Class_ID'])) {
+                    $cId = $sch['Class_ID'];
+                } else {
+                    $cId = $a['Schedule_ID']; // Fallback
                 }
-            });
-            $debug['after_date_filter'] = $attendances->count();
-        }
-        
-        if ($classFilter) {
-            $attendances = $attendances->filter(function($a) use ($classFilter) {
-                $cId = $a['Class_ID'] ?? $a['Schedule_ID'] ?? '';
-                return $cId === $classFilter;
-            });
-            $debug['after_class_filter'] = $attendances->count();
-        }
+            }
+            $a['Resolved_Class_ID'] = $cId;
+            return $a;
+        });
 
-                \Log::info('Attendance Index Debug:', $debug);
+        // Filter attendances
+        $attendances = $attendances->filter(function($a) use ($dateFilter, $dateEndFilter, $classFilter, $statusFilter, $search, $students) {
+            try {
+                if (empty($a['Attendance_Date'])) return false;
+                $aDate = \Carbon\Carbon::parse(str_replace('/', '-', $a['Attendance_Date']))->format('Y-m-d');
+                
+                // Date logic
+                if ($dateEndFilter) {
+                    if ($aDate < $dateFilter || $aDate > $dateEndFilter) return false;
+                } else {
+                    if ($dateFilter && $aDate !== $dateFilter) return false;
+                }
+                
+                $cId = $a['Resolved_Class_ID'] ?? '';
 
-        $attendances = \App\Helpers\CollectionHelper::paginate($attendances, 10)->withQueryString();
+                // Class filter
+                if ($classFilter && $cId !== $classFilter) return false;
 
-        return view('academic.attendances.index', compact('attendances', 'classOptions', 'students'));
+                // Status filter
+                if ($statusFilter) {
+                    if (AttendanceStatusHelper::normalize($a['Status'] ?? '') !== AttendanceStatusHelper::normalize($statusFilter)) return false;
+                }
+
+                // Search filter (by student ID or Name)
+                if ($search) {
+                    $sId = strtolower($a['Student_ID'] ?? '');
+                    $student = $students[$a['Student_ID'] ?? ''] ?? null;
+                    $sName = strtolower($student['Full_Name'] ?? $student['Name'] ?? '');
+                    
+                    if (strpos($sId, $search) === false && strpos($sName, $search) === false) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            } catch (\Exception $e) {
+                return false;
+            }
+        });
+
+        // Group by Resolved Class_ID
+        $groupedAttendances = $attendances->groupBy(function($a) {
+            return $a['Resolved_Class_ID'] ?? 'Unknown';
+        });
+
+        $classSummary = $groupedAttendances->map(function($classAttendances, $classId) use ($classOptions, $students, $dateFilter, $dateEndFilter) {
+            $className = $classOptions[$classId] ?? $classId;
+            
+            // Enrich students in this class attendances
+            $enrichedStudents = $classAttendances->map(function($a) use ($students) {
+                $student = $students[$a['Student_ID'] ?? ''] ?? null;
+                $a['Student_Name'] = $student['Full_Name'] ?? $student['Name'] ?? 'Unknown';
+                return $a;
+            })->values();
+
+            $total = $classAttendances->count();
+            $hadir = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'PRESENT')->count();
+            $terlambat = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'LATE')->count();
+            $sakit = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'SICK')->count();
+            $izin = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'PERMITTED')->count();
+            $alpha = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'ABSENT')->count();
+            
+            // For range display
+            $dateDisplay = $dateFilter;
+            if ($dateEndFilter && $dateFilter !== $dateEndFilter) {
+                $dateDisplay = $dateFilter . ' - ' . $dateEndFilter;
+            }
+
+            return [
+                'Class_ID' => $classId,
+                'Class_Name' => $className,
+                'Date_Display' => $dateDisplay,
+                'Total' => $total,
+                'Hadir' => $hadir,
+                'Terlambat' => $terlambat,
+                'Sakit' => $sakit,
+                'Izin' => $izin,
+                'Alpha' => $alpha,
+                'Students' => $enrichedStudents
+            ];
+        })->values();
+
+        $paginatedClasses = \App\Helpers\CollectionHelper::paginate($classSummary, 10)->withQueryString();
+
+        return view('academic.attendances.index', compact('paginatedClasses', 'classOptions', 'dateFilter', 'dateEndFilter', 'search', 'statusFilter', 'classFilter'));
     }
-
-    public function create()
+public function create()
     {
         try {
             $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
@@ -159,17 +218,10 @@ class AttendanceController extends Controller
                 }
             }
             
-            // Debug log
-            file_put_contents(storage_path('logs/attendance_debug.json'), json_encode([
-                'timestamp' => now()->toDateTimeString(),
-                'classes_count' => $classes->count(),
-                'classOptions' => $classOptions,
-            ], JSON_PRETTY_PRINT));
-            
             return view('academic.attendances.create', ['classes' => $classes, 'classOptions' => $classOptions]);
         } catch (\Exception $e) {
             \Log::error('AttendanceController@create error: ' . $e->getMessage());
-            return view('academic.attendances.create', ['classes' => collect([])]);
+            return view('academic.attendances.create', ['classes' => collect([]), 'classOptions' => []]);
         }
     }
 
@@ -179,10 +231,26 @@ class AttendanceController extends Controller
             $students = $request->input('students', []);
             $classId = $request->input('Class_ID');
             $date = $request->input('Attendance_Date');
+            $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+            $validStudentIds = collect($studentRepo->fetchAll())
+                ->filter(function ($student) use ($classId) {
+                    return ($student['Class_ID'] ?? '') === $classId
+                        && strtoupper(trim($student['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+                })
+                ->pluck('Student_ID')
+                ->filter()
+                ->values()
+                ->all();
             
             $count = 0;
             foreach ($students as $student) {
                 if (isset($student['Student_ID']) && isset($student['Status'])) {
+                    if (!in_array($student['Student_ID'], $validStudentIds, true)) {
+                        return back()
+                            ->withErrors(['error' => 'Data siswa tidak valid untuk kelas yang dipilih.'])
+                            ->withInput();
+                    }
+
                     $attendanceData = [
                         'Student_ID' => $student['Student_ID'],
                         'Status' => $student['Status'],
@@ -199,7 +267,7 @@ class AttendanceController extends Controller
             
             return redirect()->route('attendances.index')->with('success', "Kehadiran $count siswa berhasil dicatat.");
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -231,10 +299,31 @@ class AttendanceController extends Controller
     public function exportCSV()
     {
         $attendances = $this->attendanceService->getAll();
-        $csvData = "Attendance_ID,Schedule_ID,Student_ID,Status,Date\n";
+        $file = fopen('php://temp', 'r+');
+        $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
+
+        fputcsv($file, array_map($sanitize, [
+            'Attendance_ID',
+            'Schedule_ID',
+            'Student_ID',
+            'Status',
+            'Date',
+        ]));
+
         foreach ($attendances as $att) {
-            $csvData .= ($att['Attendance_ID']??'').",".($att['Schedule_ID']??'').",".($att['Student_ID']??'').",".($att['Status']??'').",".($att['Attendance_Date']??'')."\n";
+            fputcsv($file, array_map($sanitize, [
+                $att['Attendance_ID'] ?? '',
+                $att['Schedule_ID'] ?? '',
+                $att['Student_ID'] ?? '',
+                $att['Status'] ?? '',
+                $att['Attendance_Date'] ?? '',
+            ]));
         }
+
+        rewind($file);
+        $csvData = stream_get_contents($file);
+        fclose($file);
+
         return response($csvData)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="attendance_export.csv"');
@@ -246,7 +335,7 @@ class AttendanceController extends Controller
             $this->attendanceService->delete($id);
             return redirect()->route('attendances.index')->with('success', 'Data kehadiran berhasil dihapus.');
         } catch (\Exception $e) {
-            return redirect()->route('attendances.index')->withErrors(['error' => 'Gagal menghapus data: ' . $e->getMessage()]);
+            return redirect()->route('attendances.index')->withErrors(['error' => 'Gagal menghapus data: ' . $this->safeExceptionMessage($e)]);
         }
     }
 }

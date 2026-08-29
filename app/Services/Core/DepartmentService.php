@@ -55,8 +55,8 @@ class DepartmentService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -67,7 +67,7 @@ class DepartmentService
             'CREATE',
             'DEPARTMENT',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             $mappedData
@@ -80,7 +80,7 @@ class DepartmentService
     {
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
         ];
         
         if (isset($data['Department_Name'])) $mappedData['Department_Name'] = $data['Department_Name'];
@@ -96,7 +96,7 @@ class DepartmentService
             'UPDATE',
             'DEPARTMENT',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             $mappedData
@@ -122,7 +122,7 @@ class DepartmentService
             'DELETE',
             'DEPARTMENT',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR'],
             [],
             []

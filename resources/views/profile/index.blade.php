@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('header', 'Profil Saya')
 
@@ -23,7 +23,8 @@
                         <x-user-avatar :user="$user" class="w-24 h-24" text-size="text-2xl" />
                     </div>
                     <div class="pt-14">
-                        <h2 class="text-xl font-extrabold text-slate-900">{{ $user->Username ?? 'User' }}</h2>
+                        <h2 class="text-xl font-extrabold text-slate-900">{{ $user->Full_Name ?? $user->Name ?? $user->Username ?? 'User' }}</h2>
+                        <p class="text-sm font-medium text-slate-500">{{ $user->Username ?? '' }}</p>
                         <p class="text-sm font-medium text-slate-500 mb-4">{{ $roleName }}</p>
                         
                         <div class="space-y-3">
@@ -44,6 +45,17 @@
                                 <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold uppercase">{{ $user->Status ?? 'AKTIF' }}</span>
                             </div>
                         </div>
+
+                        <!-- Logout Button -->
+                        <form action="{{ route('logout') }}" method="POST" class="mt-5 pt-4 border-t border-slate-100">
+                            @csrf
+                            <button type="submit" class="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 border border-rose-200 transition-all shadow-xs min-h-[44px] cursor-pointer">
+                                <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                                <span>Keluar dari Akun (Logout)</span>
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -91,21 +103,27 @@
                     <!-- Change Password -->
                     <div>
                         <h4 class="text-sm font-bold text-slate-800 mb-4">Ubah Kata Sandi</h4>
-                        <form action="#" method="POST" class="space-y-4">
+                        <form action="{{ route('profile.password.update') }}" method="POST" class="space-y-4">
                             @csrf
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Kata Sandi Saat Ini</label>
-                                <input type="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="••••••••" required>
+                                <input type="password" name="current_password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="current-password" required>
+                                @error('current_password')
+                                    <p class="mt-1.5 text-xs font-semibold text-rose-600">{{ $message }}</p>
+                                @enderror
                             </div>
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Kata Sandi Baru</label>
-                                <input type="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="••••••••" required>
+                                <input type="password" name="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="new-password" required>
+                                @error('password')
+                                    <p class="mt-1.5 text-xs font-semibold text-rose-600">{{ $message }}</p>
+                                @enderror
                             </div>
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Konfirmasi Kata Sandi Baru</label>
-                                <input type="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="••••••••" required>
+                                <input type="password" name="password_confirmation" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="new-password" required>
                             </div>
-                            <button type="button" class="w-full text-white bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-300 font-bold rounded-xl text-sm px-5 py-2.5 text-center transition-all shadow-md shadow-emerald-200" onclick="alert('Demo: Pembaruan kata sandi dipicu')">Perbarui Kata Sandi</button>
+                            <button type="submit" class="w-full text-white bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-300 font-bold rounded-xl text-sm px-5 py-2.5 text-center transition-all shadow-md shadow-emerald-200">Perbarui Kata Sandi</button>
                         </form>
                     </div>
                 </div>

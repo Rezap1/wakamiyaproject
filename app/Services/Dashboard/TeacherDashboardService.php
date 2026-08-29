@@ -49,12 +49,21 @@ class TeacherDashboardService
 
     public function getDashboardData()
     {
-        $userId = Auth::id() ?? 'U-001';
+        $user = Auth::user();
+        if (!$user) {
+            abort(403, 'Profil pengajar tidak ditemukan.');
+        }
+
+        $userId = $user->User_ID ?? Auth::id();
 
         // === Resolve Teacher ID (fetch once) ===
         $allTeachers = collect($this->teacherService->getAllTeachers());
         $teacher = $allTeachers->firstWhere('User_ID', $userId);
-        $teacherId = $teacher['Teacher_ID'] ?? null;
+        if (!$teacher || empty($teacher['Teacher_ID'])) {
+            abort(403, 'Profil pengajar tidak ditemukan.');
+        }
+
+        $teacherId = $teacher['Teacher_ID'];
 
         // === Fetch data ONCE ===
         $allSchedules = collect($this->scheduleService->getAll());
@@ -64,8 +73,8 @@ class TeacherDashboardService
         $allStudents = collect($this->studentService->getAllStudents())->where('Is_Active', '!=', 'FALSE');
 
         // === Filter by Teacher ===
-        $mySchedules = $teacherId ? $allSchedules->where('Teacher_ID', $teacherId) : $allSchedules;
-        $myAssessments = $teacherId ? $allAssessments->where('Teacher_ID', $teacherId) : $allAssessments;
+        $mySchedules = $allSchedules->where('Teacher_ID', $teacherId);
+        $myAssessments = $allAssessments->where('Teacher_ID', $teacherId);
 
         // === Today's Classes from MASTER_SCHEDULE ===
         $todayIndo = $this->getTodayIndo();
@@ -85,7 +94,9 @@ class TeacherDashboardService
         })->toArray();
 
         // === My Students (from classes I teach or homeroom) ===
-        $homeroomClassIds = collect($this->classService->getAllClasses())->pluck('Class_ID');
+        $homeroomClassIds = collect($this->classService->getAllClasses())
+            ->where('Homeroom_Teacher_ID', $teacherId)
+            ->pluck('Class_ID');
         $myClassIds = $mySchedules->pluck('Class_ID')->merge($homeroomClassIds)->unique()->filter();
         $myStudentCount = $allStudents->filter(function ($s) use ($myClassIds) {
             return $myClassIds->contains($s['Class_ID'] ?? '');
@@ -96,12 +107,22 @@ class TeacherDashboardService
             return ($a['Attendance_Date'] ?? '') === $todayDate;
         })->pluck('Schedule_ID')->unique();
         $todayScheduleIds = $todayClassesRaw->pluck('Schedule_ID')->unique();
+        $todayAttendances = $allAttendances->filter(function ($a) use ($todayDate, $todayScheduleIds) {
+            return ($a['Attendance_Date'] ?? '') === $todayDate
+                && $todayScheduleIds->contains($a['Schedule_ID'] ?? '');
+        });
+        $attendanceStats = [
+            'hadir' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT'], true))->count(),
+            'sakit' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['SICK', 'SAKIT'], true))->count(),
+            'izin' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['PERMITTED', 'IZIN'], true))->count(),
+            'alpa' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['ABSENT', 'ALPHA', 'ALPA'], true))->count(),
+        ];
+        $attendanceToday = array_sum($attendanceStats);
         $attendancePending = $todayScheduleIds->diff($todayAttendedSchedules)->count();
 
         // === Assessment Pending (my assessments not yet fully scored) ===
-        $myAssessmentIds = $myAssessments->pluck('Assessment_ID')->unique();
-        $scoredAssessmentIds = $allScores->pluck('Assessment_ID')->unique();
-        $assessmentPending = $myAssessmentIds->diff($scoredAssessmentIds)->count();
+        $myAssessmentIds = $myAssessments->pluck('Assessment_ID')->filter()->unique();
+        $assessmentPending = $this->countAssessmentsWithoutFullScores($myAssessments, $allScores, $allStudents);
 
         // === Score Pending (scores with Draft/Pending status for my assessments) ===
         $scorePending = $allScores->filter(function ($s) use ($myAssessmentIds) {
@@ -120,7 +141,7 @@ class TeacherDashboardService
                     ->where('Employee_ID', $employee['Employee_ID'])
                     ->where('Status', 'Paid')
                     ->sortByDesc('Created_At');
-                
+
                 $latestPayroll = $payrolls->first();
                 if ($latestPayroll) {
                     $monthCreated = \Carbon\Carbon::parse($latestPayroll['Created_At'])->format('Y-m');
@@ -136,6 +157,7 @@ class TeacherDashboardService
         $kpi = [
             'today_classes'      => $todayClassesRaw->count(),
             'my_students'        => $myStudentCount,
+            'attendance_today'    => $attendanceToday,
             'attendance_pending' => $attendancePending,
             'assessment_pending' => $assessmentPending,
             'score_pending'      => $scorePending,
@@ -149,7 +171,7 @@ class TeacherDashboardService
             $reminders[] = [
                 'title'       => 'Class Today: ' . ($cls['subject'] ?? 'Unknown'),
                 'description' => ($cls['time'] ?? '') . ' in ' . ($cls['room'] ?? ''),
-                'action_url'  => route('schedules.index'),
+                'action_url'  => route('teacher.workspace.schedule'),
             ];
         }
 
@@ -157,7 +179,7 @@ class TeacherDashboardService
             $reminders[] = [
                 'title'       => 'Attendance Pending',
                 'description' => $attendancePending . ' sesi absensi belum diisi hari ini.',
-                'action_url'  => route('attendances.index'),
+                'action_url'  => route('teacher.workspace.attendances'),
             ];
         }
 
@@ -165,23 +187,23 @@ class TeacherDashboardService
             $reminders[] = [
                 'title'       => 'Assessment Pending',
                 'description' => $assessmentPending . ' assessment menunggu input nilai.',
-                'action_url'  => route('scores.index'),
+                'action_url'  => route('teacher.workspace.scores'),
             ];
         }
 
         // === Recent Activity (Teacher's own, max 10) ===
         $myClassIdsArray = $myClassIds->toArray();
         $myScheduleIds = $mySchedules->pluck('Schedule_ID')->toArray();
-        $myAssessmentIds = collect($mySchedules)->pluck('Subject_ID')->toArray(); // rough proxy for assessments
-        $myScoreIds = $allScores->filter(function($s) use ($myAssessmentIds) {
-            return in_array($s['Assessment_ID'] ?? '', $myAssessmentIds);
+        $myAssessmentIdsArray = $myAssessmentIds->toArray();
+        $myScoreIds = $allScores->filter(function($s) use ($myAssessmentIdsArray) {
+            return in_array($s['Assessment_ID'] ?? '', $myAssessmentIdsArray, true);
         })->pluck('Score_ID')->toArray();
 
         $relatedIds = array_merge(
             [$teacherId],
             $myClassIdsArray,
             $myScheduleIds,
-            $myAssessmentIds,
+            $myAssessmentIdsArray,
             $myScoreIds
         );
         $recentActivities = $this->getRecentActivity($userId, $relatedIds);
@@ -195,7 +217,7 @@ class TeacherDashboardService
         }
 
         return compact(
-            'kpi', 'todayClasses', 'reminders', 'recentActivities', 'unreadNotifications'
+            'kpi', 'todayClasses', 'attendanceStats', 'reminders', 'recentActivities', 'unreadNotifications'
         );
     }
 
@@ -208,6 +230,41 @@ class TeacherDashboardService
         return $dayMap[date('l')] ?? date('l');
     }
 
+    private function countAssessmentsWithoutFullScores($assessments, $scores, $students): int
+    {
+        return collect($assessments)->filter(function ($assessment) use ($scores, $students) {
+            $assessmentId = $assessment['Assessment_ID'] ?? '';
+            if ($assessmentId === '') {
+                return false;
+            }
+
+            $assessmentScores = collect($scores)->where('Assessment_ID', $assessmentId);
+            $classId = trim((string) ($assessment['Class_ID'] ?? ''));
+            if ($classId === '') {
+                return $assessmentScores->isEmpty();
+            }
+
+            $classStudentIds = collect($students)
+                ->filter(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) === $classId)
+                ->pluck('Student_ID')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($classStudentIds->isEmpty()) {
+                return $assessmentScores->isEmpty();
+            }
+
+            $scoredStudentIds = $assessmentScores
+                ->whereIn('Student_ID', $classStudentIds->all())
+                ->pluck('Student_ID')
+                ->filter()
+                ->unique();
+
+            return $scoredStudentIds->count() < $classStudentIds->count();
+        })->count();
+    }
+
     private function getRecentActivity($userId, $relatedIds = [])
     {
         try {
@@ -216,8 +273,8 @@ class TeacherDashboardService
             return $logs->filter(function ($log) use ($userId, $relatedIds, $allowedModules) {
                 $isAllowedModule = in_array(strtoupper($log['Module'] ?? ''), $allowedModules);
                 if (!$isAllowedModule) return false;
-                
-                return ($log['User_ID'] ?? '') === $userId 
+
+                return ($log['User_ID'] ?? '') === $userId
                     || ($log['Reference_ID'] ?? '') === $userId
                     || in_array($log['Reference_ID'] ?? '', $relatedIds);
             })->sortByDesc('Created_At')->take(5)->map(function ($log) {

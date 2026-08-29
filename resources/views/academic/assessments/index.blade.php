@@ -76,8 +76,12 @@
                 </td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-2">
-                        <x-universal.action-button action="detail" url="{{ route('assessments.show', $item['Assessment_ID'] ?? 1) }}" />
-                        <x-universal.action-button action="edit" url="{{ route('assessments.edit', $item['Assessment_ID'] ?? 1) }}" />
+                        @if(!empty($item['Assessment_ID']))
+                            <x-universal.action-button action="detail" url="{{ route('assessments.show', $item['Assessment_ID']) }}" />
+                            <x-universal.action-button action="edit" url="{{ route('assessments.edit', $item['Assessment_ID']) }}" />
+                        @else
+                            <span class="text-xs font-semibold text-slate-400">Tidak tersedia</span>
+                        @endif
                     </div>
                 </td>
             </tr>

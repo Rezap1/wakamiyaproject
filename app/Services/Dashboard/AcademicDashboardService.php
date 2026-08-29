@@ -12,7 +12,9 @@ use App\Services\Core\TeacherService;
 use App\Services\Core\StudentService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use App\Services\Attendance\AttendanceRequestService;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class AcademicDashboardService
 {
@@ -25,6 +27,7 @@ class AcademicDashboardService
     protected $studentService;
     protected $scheduleService;
     protected $attendanceService;
+    protected $attendanceRequestService;
     protected $activityLogService;
     protected $notificationService;
 
@@ -38,6 +41,7 @@ class AcademicDashboardService
         StudentService $studentService,
         ScheduleService $scheduleService,
         AcademicAttendanceService $attendanceService,
+        AttendanceRequestService $attendanceRequestService,
         ActivityLogService $activityLogService,
         NotificationService $notificationService
     ) {
@@ -50,6 +54,7 @@ class AcademicDashboardService
         $this->studentService = $studentService;
         $this->scheduleService = $scheduleService;
         $this->attendanceService = $attendanceService;
+        $this->attendanceRequestService = $attendanceRequestService;
         $this->activityLogService = $activityLogService;
         $this->notificationService = $notificationService;
     }
@@ -66,22 +71,36 @@ class AcademicDashboardService
         $assessments = collect($this->assessmentService->getAll());
         $scores = collect($this->scoreService->getAll());
         $attendances = collect($this->attendanceService->getAll());
+        $attendanceRequests = collect($this->attendanceRequestService->getAll());
 
         // === Attendance Rate (riil) ===
         $totalAttendance = $attendances->count();
-        $presentCount = $attendances->whereIn('Status', ['Present', 'Late'])->count();
+        $presentCount = $attendances->filter(function ($attendance) {
+            return in_array(strtoupper(trim($attendance['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT'], true);
+        })->count();
         $attendanceRate = $totalAttendance > 0 ? round(($presentCount / $totalAttendance) * 100) : 0;
 
         // === Score Stats ===
-        $totalScore = $scores->sum('Score_Value');
-        $avgScore = $scores->count() > 0 ? round($totalScore / $scores->count(), 1) : 0;
-        $passed = $scores->where('Status', 'PASS')->count();
+        $numericScores = $scores->filter(fn ($score) => is_numeric($score['Score_Value'] ?? $score['Score'] ?? null));
+        $avgScore = $numericScores->count() > 0 ? round($numericScores->avg(function ($score) {
+            return (float) ($score['Score_Value'] ?? $score['Score']);
+        }), 1) : 0;
+        $passed = $scores->filter(fn ($score) => strtoupper(trim($score['Status'] ?? '')) === 'PASS')->count();
         $passingRate = $scores->count() > 0 ? round(($passed / $scores->count()) * 100) : 0;
 
         // === Score Pending (assessments tanpa score) ===
-        $assessmentIds = $assessments->pluck('Assessment_ID')->unique();
-        $scoredAssessmentIds = $scores->pluck('Assessment_ID')->unique();
-        $pendingScoreCount = $assessmentIds->diff($scoredAssessmentIds)->count();
+        $pendingScoreCount = $this->countAssessmentsWithoutFullScores($assessments, $scores, $students);
+
+        $todayDate = date('Y-m-d');
+
+        $unplacedStudents = $students->filter(function($s) {
+            return empty(trim($s['Class_ID'] ?? '')) || trim($s['Class_ID'] ?? '') === '-';
+        })->count();
+
+        $attendanceToday = $attendances->filter(function($a) use ($todayDate) {
+            return ($a['Attendance_Date'] ?? '') === $todayDate
+                && in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT', 'SICK', 'SAKIT', 'PERMITTED', 'IZIN', 'ABSENT', 'ALPHA', 'ALPA'], true);
+        })->count();
 
         // === KPI ===
         $kpi = [
@@ -95,6 +114,9 @@ class AcademicDashboardService
             'passing_rate'     => $passingRate . '%',
             'total_assessments'=> $assessments->count(),
             'score_pending'    => $pendingScoreCount,
+            'pending_requests' => $attendanceRequests->where('Status', 'PENDING')->count(),
+            'student_unplaced' => $unplacedStudents,
+            'attendance_today' => $attendanceToday,
         ];
 
         // === Today's Schedule ===
@@ -124,7 +146,6 @@ class AcademicDashboardService
         }
 
         // Attendance Pending
-        $todayDate = date('Y-m-d');
         $todayScheduleCount = count($todayClasses);
         $todayAttendanceCount = $attendances->filter(function ($a) use ($todayDate) {
             return ($a['Attendance_Date'] ?? '') === $todayDate;
@@ -173,6 +194,41 @@ class AcademicDashboardService
             'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu',
         ];
         return $dayMap[date('l')] ?? date('l');
+    }
+
+    private function countAssessmentsWithoutFullScores($assessments, $scores, $students): int
+    {
+        return collect($assessments)->filter(function ($assessment) use ($scores, $students) {
+            $assessmentId = $assessment['Assessment_ID'] ?? '';
+            if ($assessmentId === '') {
+                return false;
+            }
+
+            $assessmentScores = collect($scores)->where('Assessment_ID', $assessmentId);
+            $classId = trim((string) ($assessment['Class_ID'] ?? ''));
+            if ($classId === '') {
+                return $assessmentScores->isEmpty();
+            }
+
+            $classStudentIds = collect($students)
+                ->filter(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) === $classId)
+                ->pluck('Student_ID')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($classStudentIds->isEmpty()) {
+                return $assessmentScores->isEmpty();
+            }
+
+            $scoredStudentIds = $assessmentScores
+                ->whereIn('Student_ID', $classStudentIds->all())
+                ->pluck('Student_ID')
+                ->filter()
+                ->unique();
+
+            return $scoredStudentIds->count() < $classStudentIds->count();
+        })->count();
     }
 
     private function getRecentActivity(array $modules)

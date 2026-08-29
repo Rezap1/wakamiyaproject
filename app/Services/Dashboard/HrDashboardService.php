@@ -47,20 +47,23 @@ class HrDashboardService
         $thisMonth = date('Y-m');
 
         // === Employee Derived KPIs ===
-        $activeEmployees = $employees->where('Status', 'Active');
+        $activeEmployees = $employees->filter(function ($emp) {
+            return strcasecmp(trim($emp['Status'] ?? ''), 'Active') === 0 || strtoupper(trim($emp['Is_Active'] ?? '')) === 'TRUE';
+        });
         $totalEmployees = $employees->count();
         $activeCount = $activeEmployees->count();
 
         // === Employee On Leave (today) ===
         $onLeaveToday = $attendances->filter(function ($a) use ($todayDate) {
             return ($a['Attendance_Date'] ?? '') === $todayDate &&
-                   in_array(($a['Status'] ?? ''), ['Leave', 'Sick', 'Permission', 'Cuti']);
+                   in_array(strtoupper(trim($a['Status'] ?? '')), ['LEAVE', 'SICK', 'PERMISSION', 'CUTI', 'SAKIT', 'IZIN']);
         })->pluck('Employee_ID')->unique()->count();
 
         // === Contract Expired ===
         $contractExpired = $employees->filter(function ($emp) use ($todayDate) {
             $contractEnd = $emp['Contract_End_Date'] ?? $emp['End_Date'] ?? '';
-            return !empty($contractEnd) && $contractEnd <= $todayDate && ($emp['Status'] ?? '') === 'Active';
+            $isActive = strcasecmp(trim($emp['Status'] ?? ''), 'Active') === 0 || strtoupper(trim($emp['Is_Active'] ?? '')) === 'TRUE';
+            return !empty($contractEnd) && $contractEnd <= $todayDate && $isActive;
         });
         $contractExpiredCount = $contractExpired->count();
 
@@ -87,7 +90,7 @@ class HrDashboardService
         ];
 
         // === Charts (data riil) ===
-        $charts = $this->getChartData($employees, $departments);
+        $charts = $this->getChartData($activeEmployees, $departments);
 
         // === Reminders (data riil) ===
         $reminders = [];

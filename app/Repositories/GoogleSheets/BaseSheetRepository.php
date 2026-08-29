@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Log;
 
 abstract class BaseSheetRepository
 {
+    private const WRITE_INPUT_OPTION = 'RAW';
+
     protected $client;
     protected $service;
     protected $spreadsheetId;
@@ -16,6 +18,9 @@ abstract class BaseSheetRepository
     protected $cacheKey;
     protected $primaryKey = 'id';
     protected $cacheTtl = 3600; // 1 hour default
+    protected $inMemoryRows = null;
+    protected $skipRowsWithoutPrimaryKey = true;
+    protected $expectedHeaders = [];
 
     public function __construct()
     {
@@ -42,6 +47,10 @@ abstract class BaseSheetRepository
      */
     public function fetchAll()
     {
+        if ($this->inMemoryRows !== null) {
+            return clone $this->inMemoryRows;
+        }
+
         $startTime = microtime(true);
         $isHit = Cache::has($this->cacheKey . '_all');
 
@@ -51,11 +60,16 @@ abstract class BaseSheetRepository
                     $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
                     $values = $response->getValues();
 
-                    if (empty($values) || count($values) <= 1) {
+                    if (empty($values)) {
+                        $this->assertExpectedHeaders([]);
                         return collect([]);
                     }
 
-                    $headers = array_shift($values);
+                    $headers = array_map(fn ($header) => trim((string) $header), array_shift($values));
+                    $this->assertExpectedHeaders($headers);
+                    if (empty($values)) {
+                        return collect([]);
+                    }
                     $data = [];
 
                     foreach ($values as $row) {
@@ -78,7 +92,9 @@ abstract class BaseSheetRepository
                         }
 
                         // Skip rows missing a primary key (if defined)
-                        if (!empty($this->primaryKey) && empty(trim((string)($item[$this->primaryKey] ?? '')))) {
+                        if ($this->skipRowsWithoutPrimaryKey
+                            && !empty($this->primaryKey)
+                            && empty(trim((string)($item[$this->primaryKey] ?? '')))) {
                             continue;
                         }
 
@@ -95,10 +111,12 @@ abstract class BaseSheetRepository
                 'cache' => $isHit ? 'HIT' : 'MISS'
             ]);
 
-            return $data;
+            $this->inMemoryRows = $data instanceof \Illuminate\Support\Collection ? $data : collect($data);
+
+            return clone $this->inMemoryRows;
         } catch (\Exception $e) {
             Log::error("Google API Error during fetchAll on {$this->sheetName}: " . $e->getMessage());
-            return collect([]); // Graceful fallback
+            throw $e;
         }
     }
 
@@ -107,7 +125,20 @@ abstract class BaseSheetRepository
      */
     public function clearCache()
     {
+        $this->inMemoryRows = null;
         Cache::forget($this->cacheKey . '_all');
+
+        if (in_array($this->sheetName, [
+            'MASTER_EMPLOYEE',
+            'MASTER_STUDENT',
+            'MASTER_TEACHER',
+            'MASTER_USER',
+            'MASTER_ROLE',
+            'MASTER_CLASS',
+            'MASTER_BATCH',
+        ], true)) {
+            \App\Helpers\UserResolverHelper::clearCache();
+        }
     }
 
     /**
@@ -154,9 +185,38 @@ abstract class BaseSheetRepository
         try {
             return Cache::lock($lockKey, 10)->block(5, function () use ($data, $startTime) {
                 $result = retry(3, function () use ($data) {
-                    // First get the headers to ensure data is in the correct order
-                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName . '!1:1');
-                    $headers = $response->getValues()[0] ?? [];
+                    // Read current rows inside the write lock so PK validation and append are atomic.
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
+                    $values = $response->getValues();
+                    $headers = array_map(fn ($header) => trim((string) $header), $values[0] ?? []);
+
+                    if (empty($headers)) {
+                        throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak tersedia.");
+                    }
+                    $this->assertExpectedHeaders($headers);
+
+                    $primaryKeyHeader = collect($headers)->first(function ($header) {
+                        return strcasecmp(trim((string) $header), trim((string) $this->primaryKey)) === 0;
+                    });
+
+                    if ($primaryKeyHeader === null) {
+                        throw new \RuntimeException("Header primary key '{$this->primaryKey}' tidak ditemukan.");
+                    }
+
+                    $primaryKeyValue = trim((string) ($data[$primaryKeyHeader] ?? $data[$this->primaryKey] ?? ''));
+                    if ($primaryKeyValue === '') {
+                        throw new \InvalidArgumentException("Nilai primary key '{$this->primaryKey}' wajib diisi.");
+                    }
+
+                    $primaryKeyIndex = array_search($primaryKeyHeader, $headers, true);
+                    foreach (array_slice($values, 1) as $existingRow) {
+                        $existingId = trim((string) ($existingRow[$primaryKeyIndex] ?? ''));
+                        if ($existingId !== '' && strcasecmp($existingId, $primaryKeyValue) === 0) {
+                            throw new \LogicException(
+                                "Primary key '{$primaryKeyValue}' sudah ada di sheet '{$this->sheetName}'."
+                            );
+                        }
+                    }
 
                     $rowValues = [];
                     foreach ($headers as $header) {
@@ -168,11 +228,13 @@ abstract class BaseSheetRepository
                     ]);
 
                     $params = [
-                        'valueInputOption' => 'USER_ENTERED'
+                        'valueInputOption' => self::WRITE_INPUT_OPTION
                     ];
 
                     return $this->service->spreadsheets_values->append($this->spreadsheetId, $this->sheetName, $body, $params);
-                }, 1000);
+                }, 1000, fn ($e) => !$e instanceof \InvalidArgumentException
+                    && !$e instanceof \LogicException
+                    && !$e instanceof \RuntimeException);
                 
                 $this->clearCache();
                 
@@ -183,7 +245,7 @@ abstract class BaseSheetRepository
             });
         } catch (\Exception $e) {
             Log::error("Google API Error during append on {$this->sheetName}: " . $e->getMessage());
-            return false;
+            throw $e;
         }
     }
 
@@ -209,26 +271,37 @@ abstract class BaseSheetRepository
                     $values = $response->getValues();
                     
                     if (empty($values)) {
-                        return false;
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak memiliki header atau data.");
                     }
 
-                    $headers = $values[0];
-                    $idIndex = array_search($this->primaryKey, $headers);
+                    $headers = array_map(function ($h) { return trim((string) $h); }, $values[0]);
+                    $this->assertExpectedHeaders($headers);
+                    $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
+                    $idIndex = false;
+                    foreach ($headers as $index => $header) {
+                        if (strtolower(trim((string) $header)) === $primaryKeyClean) {
+                            $idIndex = $index;
+                            break;
+                        }
+                    }
                     
                     if ($idIndex === false) {
                         throw new \Exception("Header '{$this->primaryKey}' not found in sheet.");
                     }
 
+                    $idClean = strtolower(trim((string) $id));
                     $rowIndexToUpdate = -1;
                     foreach ($values as $index => $row) {
-                        if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
+                        if ($index > 0 && isset($row[$idIndex]) && strtolower(trim((string) $row[$idIndex])) === $idClean) {
                             $rowIndexToUpdate = $index + 1; // Google Sheets is 1-indexed
                             break;
                         }
                     }
 
                     if ($rowIndexToUpdate === -1) {
-                        return false; // Not found
+                        throw new \RuntimeException(
+                            "Record '{$id}' tidak ditemukan di sheet '{$this->sheetName}'."
+                        );
                     }
 
                     $rowValues = [];
@@ -245,12 +318,12 @@ abstract class BaseSheetRepository
                     ]);
 
                     $params = [
-                        'valueInputOption' => 'USER_ENTERED'
+                        'valueInputOption' => self::WRITE_INPUT_OPTION
                     ];
 
                     $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
                     return true;
-                }, 1000);
+                }, 1000, fn ($e) => !$e instanceof \RuntimeException);
                 
                 $this->clearCache();
                 
@@ -261,7 +334,7 @@ abstract class BaseSheetRepository
             });
         } catch (\Exception $e) {
             Log::error("Google API Error during update on {$this->sheetName}: " . $e->getMessage());
-            return false;
+            throw $e;
         }
     }
 
@@ -281,36 +354,55 @@ abstract class BaseSheetRepository
      */
     public function delete($id)
     {
+        return $this->hardDelete($id);
+    }
+
+    /**
+     * Physically remove a row by ID, bypassing repository-level soft delete overrides.
+     */
+    public function hardDelete($id)
+    {
         $startTime = microtime(true);
         $lockKey = $this->sheetName . '_write_lock';
 
         try {
-            return Cache::lock($lockKey, 10)->block(5, function () use ($id, $startTime) {
-                $result = retry(3, function () use ($id) {
+            $result = Cache::lock($lockKey, 10)->block(5, function () use ($id, $startTime) {
+                $delResult = retry(3, function () use ($id) {
                     $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
                     $values = $response->getValues();
                     
                     if (empty($values)) {
-                        return false;
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak memiliki header atau data.");
                     }
 
-                    $headers = $values[0];
-                    $idIndex = array_search($this->primaryKey, $headers);
+                    $headers = array_map(function ($h) { return trim((string) $h); }, $values[0]);
+                    $this->assertExpectedHeaders($headers);
+                    $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
+                    $idIndex = false;
+                    foreach ($headers as $index => $header) {
+                        if (strtolower(trim((string) $header)) === $primaryKeyClean) {
+                            $idIndex = $index;
+                            break;
+                        }
+                    }
                     
                     if ($idIndex === false) {
-                        return false;
+                        throw new \RuntimeException("Header primary key '{$this->primaryKey}' tidak ditemukan.");
                     }
 
+                    $idClean = strtolower(trim((string) $id));
                     $rowIndexToDelete = -1;
                     foreach ($values as $index => $row) {
-                        if ($index > 0 && isset($row[$idIndex]) && $row[$idIndex] == $id) {
+                        if ($index > 0 && isset($row[$idIndex]) && strtolower(trim((string) $row[$idIndex])) === $idClean) {
                             $rowIndexToDelete = $index; // 0-indexed for API
                             break;
                         }
                     }
 
                     if ($rowIndexToDelete === -1) {
-                        return false;
+                        throw new \RuntimeException(
+                            "Record '{$id}' tidak ditemukan di sheet '{$this->sheetName}'."
+                        );
                     }
 
                     $spreadsheet = $this->service->spreadsheets->get($this->spreadsheetId);
@@ -323,7 +415,7 @@ abstract class BaseSheetRepository
                     }
 
                     if ($sheetId === null) {
-                        return false;
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak ditemukan pada spreadsheet.");
                     }
 
                     $request = new \Google_Service_Sheets_Request([
@@ -343,18 +435,91 @@ abstract class BaseSheetRepository
 
                     $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
                     return true;
-                }, 1000);
+                }, 1000, fn ($e) => !$e instanceof \RuntimeException);
                 
                 $this->clearCache();
 
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
                 Log::info("Google Sheets Delete on {$this->sheetName}", ['duration_ms' => $duration]);
                 
-                return $result;
+                return $delResult;
             });
+
+            $this->clearCache();
+            return $result;
         } catch (\Exception $e) {
             Log::error("Google API Error during delete on {$this->sheetName}: " . $e->getMessage());
-            return false;
+            $this->clearCache();
+            throw $e;
+        }
+    }
+
+    /**
+     * Truncate all data rows from the sheet (keeps header).
+     * Added specifically for QA Zero-State Reset to avoid API rate limits.
+     */
+    public function truncateData()
+    {
+        $startTime = microtime(true);
+        $lockKey = $this->sheetName . '_write_lock';
+
+        try {
+            $result = Cache::lock($lockKey, 10)->block(5, function () use ($startTime) {
+                return retry(3, function () {
+                    $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
+                    $values = $response->getValues();
+                    
+                    if (empty($values) || count($values) <= 1) {
+                        return true; // Already empty (only header or nothing)
+                    }
+
+                    $spreadsheet = $this->service->spreadsheets->get($this->spreadsheetId);
+                    $sheetId = null;
+                    foreach ($spreadsheet->getSheets() as $sheet) {
+                        if ($sheet->getProperties()->getTitle() == $this->sheetName) {
+                            $sheetId = $sheet->getProperties()->getSheetId();
+                            break;
+                        }
+                    }
+
+                    if ($sheetId === null) {
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak ditemukan pada spreadsheet.");
+                    }
+
+                    $request = new \Google_Service_Sheets_Request([
+                        'deleteDimension' => [
+                            'range' => [
+                                'sheetId' => $sheetId,
+                                'dimension' => 'ROWS',
+                                'startIndex' => 1,
+                                'endIndex' => count($values) // Delete exactly the number of data rows
+                            ]
+                        ]
+                    ]);
+
+                    $batchUpdateRequest = new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest([
+                        'requests' => [$request]
+                    ]);
+
+                    $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
+                    
+                    return true;
+                }, 1000, fn ($e) => !$e instanceof \RuntimeException);
+            });
+
+            $this->clearCache();
+            return $result;
+        } catch (\Exception $e) {
+            Log::error("Google API Error during truncateData on {$this->sheetName}: " . $e->getMessage());
+            $this->clearCache();
+            throw $e;
+        }
+    }
+
+    protected function assertExpectedHeaders(array $headers): void
+    {
+        if (!empty($this->expectedHeaders) && array_values($headers) !== array_values($this->expectedHeaders)) {
+            throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak sesuai schema yang diharapkan.");
         }
     }
 }

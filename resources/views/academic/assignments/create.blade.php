@@ -22,7 +22,9 @@
     <x-page-header 
         title="Buat Tugas Baru" 
         description="Buat dan distribusikan tugas (assignment) untuk kelas."
-        :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Tambah Baru' => '#']"
+        :breadcrumbs="isset($currentTeacherId) && $currentTeacherId 
+            ? ['Dashboard' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Buat Tugas Baru' => '#']
+            : ['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Tambah Baru' => '#']"
     />
 
     <x-card class="p-0 overflow-hidden">
@@ -68,8 +70,8 @@
 
                     <div>
                         <x-select name="Status" label="Status Publikasi" required>
+                            <option value="Published" {{ old('Status', 'Published') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
                             <option value="Draft" {{ old('Status') == 'Draft' ? 'selected' : '' }}>Draft (Belum Dipublikasikan)</option>
-                            <option value="Published" {{ old('Status') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
                             <option value="Closed" {{ old('Status') == 'Closed' ? 'selected' : '' }}>Closed (Ditutup)</option>
                         </x-select>
                     </div>
@@ -81,7 +83,7 @@
             </div>
 
             <div class="px-6 md:px-12 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl">
-                <x-button as="a" href="{{ route('assignments.index') }}" variant="secondary">Batal</x-button>
+                <x-button as="a" href="{{ isset($currentTeacherId) && $currentTeacherId ? route('teacher.workspace.assignments') : route('assignments.index') }}" variant="secondary">Batal</x-button>
                 <x-button type="submit" variant="primary">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                     Simpan Tugas

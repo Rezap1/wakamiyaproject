@@ -75,6 +75,9 @@ class TeacherService
         if (!$user) {
             throw new Exception("User tidak ditemukan.");
         }
+        if ($this->userHasRole($user, 'STUDENT')) {
+            throw new Exception("Akun siswa tidak dapat digunakan sebagai tenaga pendidik.");
+        }
 
         // Prevent Duplicate Teacher for same User
         $allTeachers = $this->teacherRepository->fetchAll();
@@ -102,8 +105,8 @@ class TeacherService
             'Is_Active' => $data['Is_Active'] ?? 'TRUE',
             'Created_At' => now()->toDateTimeString(),
             'Updated_At' => now()->toDateTimeString(),
-            'Created_By' => auth()->id() ?? 'SYSTEM',
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Created_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Notes' => $data['Notes'] ?? ''
         ];
 
@@ -114,7 +117,7 @@ class TeacherService
             'CREATE',
             'TEACHER',
             $newId,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
             [],
             $mappedData
@@ -137,10 +140,13 @@ class TeacherService
         if (!$user) {
             throw new Exception("User tidak ditemukan.");
         }
+        if ($this->userHasRole($user, 'STUDENT')) {
+            throw new Exception("Akun siswa tidak dapat digunakan sebagai tenaga pendidik.");
+        }
 
         $mappedData = [
             'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => auth()->id() ?? 'SYSTEM',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Full_Name' => $user['Full_Name'] ?? '',
             'Phone_Number' => $user['Phone_Number'] ?? '',
             'Email' => $user['Email'] ?? '',
@@ -169,7 +175,7 @@ class TeacherService
             'UPDATE',
             'TEACHER',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
             [],
             $mappedData
@@ -188,12 +194,18 @@ class TeacherService
             'DELETE',
             'TEACHER',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR', 'HR', 'ACADEMIC'],
             [],
             []
         );
 
         return $res;
+    }
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
     }
 }

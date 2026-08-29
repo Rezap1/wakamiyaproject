@@ -26,10 +26,10 @@ class SubjectController extends Controller
         }
         
         return [
-            'moduleName' => 'Mata Pelajaran (Subject)',
+            'moduleName' => 'Materi',
             'data' => collect(array_values($subjects->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Mapel', 'Kode', 'Nama Mata Pelajaran', 'Deskripsi'],
+            'headers' => ['ID Mapel', 'Kode', 'Nama Materi', 'Deskripsi'],
             'mapRow' => function($row) {
 
                 return [
@@ -45,10 +45,12 @@ class SubjectController extends Controller
     }
 
     protected $subjectService;
+    protected $programService;
 
-    public function __construct(SubjectService $subjectService)
+    public function __construct(SubjectService $subjectService, \App\Services\Core\ProgramService $programService)
     {
         $this->subjectService = $subjectService;
+        $this->programService = $programService;
     }
 
     public function index(Request $request)
@@ -72,7 +74,8 @@ class SubjectController extends Controller
 
     public function create()
     {
-        return view('academic.subjects.create');
+        $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
+        return view('academic.subjects.create', compact('programs'));
     }
 
     public function store(\App\Http\Requests\StoreSubjectRequest $request)
@@ -82,7 +85,7 @@ class SubjectController extends Controller
             $this->subjectService->create($data);
             return redirect()->route('subjects.index')->with('success', 'Subject created successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -95,7 +98,9 @@ class SubjectController extends Controller
     {
         $subject = $this->subjectService->getById($id);
         if (!$subject) return redirect()->route('subjects.index')->withErrors(['error' => 'Not found']);
-        return view('academic.subjects.edit', compact('subject'));
+        
+        $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
+        return view('academic.subjects.edit', compact('subject', 'programs'));
     }
 
     public function update(\App\Http\Requests\UpdateSubjectRequest $request, $id)
@@ -105,7 +110,7 @@ class SubjectController extends Controller
             $this->subjectService->update($id, $data);
             return redirect()->route('subjects.index')->with('success', 'Subject updated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -115,7 +120,7 @@ class SubjectController extends Controller
             $this->subjectService->delete($id);
             return redirect()->route('subjects.index')->with('success', 'Subject deleted successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 }

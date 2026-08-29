@@ -10,6 +10,7 @@
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Jadwal' => route('schedules.index')]"
     >
         <x-slot:actions>
+            <x-universal.multi-export route-prefix="schedules" />
             <x-button as="a" href="{{ route('schedules.index') }}" variant="secondary" title="Refresh Data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </x-button>
@@ -37,6 +38,40 @@
             </x-select>
         </div>
     </div>
+
+    @php
+        $dayMap = [
+            'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu',
+            'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu'
+        ];
+    @endphp
+
+    @if(($scheduleGroups ?? collect())->count() > 0)
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+            @foreach($scheduleGroups as $group)
+                <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
+                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800">{{ $dayMap[$group['title']] ?? $group['title'] }}</h3>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} jadwal kelas</p>
+                        </div>
+                        <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
+                    </summary>
+                    <div class="border-t border-slate-100 divide-y divide-slate-100">
+                        @foreach($group['items'] as $schedule)
+                            <a href="{{ route('schedules.edit', $schedule['Schedule_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $schedule['Class_Name'] ?? $schedule['Class_ID'] ?? '-' }} | {{ $schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? '-' }}</p>
+                                    <p class="text-[11px] text-slate-500">{{ $schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? '-' }}</p>
+                                </div>
+                                <span class="text-xs font-black text-slate-700 shrink-0">{{ $schedule['Start_Time'] ?? '--:--' }} - {{ $schedule['End_Time'] ?? '--:--' }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                </details>
+            @endforeach
+        </div>
+    @endif
 
     <x-table :empty="count($schedules) === 0">
         <x-slot:header>
@@ -69,7 +104,7 @@
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center gap-2 mb-1">
-                    <x-badge color="blue">{{ $schedule['Day_Of_Week'] ?? '-' }}</x-badge>
+                    <x-badge color="blue">{{ $dayMap[$schedule['Day_Of_Week'] ?? ''] ?? $schedule['Day_Of_Week'] ?? '-' }}</x-badge>
                 </div>
                 <div class="text-[13px] font-mono font-medium text-slate-500">
                     {{ $schedule['Start_Time'] ?? '--:--' }} - {{ $schedule['End_Time'] ?? '--:--' }}

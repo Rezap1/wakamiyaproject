@@ -6,10 +6,11 @@
 <div class="space-y-6">
     <x-page-header 
         title="Daftar Tugas (Assignments)" 
-        description="Kelola tugas siswa, batas waktu pengumpulan, dan pantau status."
+        description="Kelola tugas siswa dan batas waktu."
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index')]"
     >
         <x-slot:actions>
+            <x-universal.multi-export route-prefix="assignments" />
             <x-button as="a" href="{{ route('assignments.index') }}" variant="secondary" title="Refresh Data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </x-button>
@@ -28,7 +29,7 @@
             <x-select id="statusFilter">
                 <option value="ALL">Semua Status</option>
                 <option value="Published">Published</option>
-                <option value="Draft">Draft</option>
+                <option value="PUBLISHED">PUBLISHED</option>
                 <option value="Closed">Closed</option>
             </x-select>
         </div>
@@ -38,7 +39,7 @@
         <x-slot:header>
             <th class="px-6 py-4">Informasi Tugas</th>
             <th class="px-6 py-4">Tenggat Waktu (Deadline)</th>
-            <th class="px-6 py-4 text-center">Pengumpulan / Max Score</th>
+            <th class="px-6 py-4 text-center">Max Score</th>
             <th class="px-6 py-4">Status</th>
             <th class="px-6 py-4 text-right">Aksi</th>
         </x-slot:header>
@@ -46,7 +47,7 @@
         @foreach($assignments as $a)
         <tr class="hover:bg-slate-50 transition-colors filter-row" 
             data-search="{{ strtolower(($a['Title'] ?? '').($a['Teacher_ID'] ?? '')) }}" 
-            data-status="{{ $a['Status'] ?? 'Draft' }}">
+            data-status="{{ $a['Status'] ?? 'PUBLISHED' }}">
             
             <td class="px-6 py-4">
                 <div class="font-bold text-slate-800 text-sm mb-1">{{ $a['Title'] ?? 'No Title' }}</div>
@@ -81,18 +82,15 @@
             </td>
             <td class="px-6 py-4 text-center">
                 <div class="inline-flex flex-col items-center justify-center w-16 h-12 rounded-xl bg-slate-50 border border-slate-200">
-                    <span class="text-[13px] font-bold text-slate-800 leading-none">
-                        {{ $a['Submission_Count'] ?? 0 }}
-                    </span>
-                    <span class="text-[9px] text-slate-400 font-medium leading-none mt-1" title="Max Score">Max: {{ $a['Max_Score'] ?? 100 }}</span>
+                    <span class="text-[13px] font-bold text-slate-800 leading-none" title="Max Score">{{ $a['Max_Score'] ?? 100 }}</span>
                 </div>
             </td>
             <td class="px-6 py-4">
                 @php
-                    $status = $a['Status'] ?? 'Draft';
+                    $status = $a['Status'] ?? 'PUBLISHED';
                     $statusColor = match($status) {
                         'Published' => 'green',
-                        'Draft' => 'gray',
+                        'PUBLISHED' => 'gray',
                         'Closed' => 'red',
                         default => 'blue'
                     };

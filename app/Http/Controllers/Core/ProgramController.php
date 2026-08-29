@@ -104,7 +104,7 @@ class ProgramController extends Controller
             return redirect()->route('programs.index')->with('success', 'Program berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating program: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -152,7 +152,7 @@ class ProgramController extends Controller
             return redirect()->route('programs.index')->with('success', 'Data program berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating program: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 

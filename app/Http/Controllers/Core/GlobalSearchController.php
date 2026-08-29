@@ -21,13 +21,13 @@ class GlobalSearchController extends Controller
     {
         $keyword = $request->get('q', '');
         $user = auth()->user();
-        $roleData = $this->roleService->getRoleById($user->Role_ID);
-        $roleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
-        
+        $roleName = $this->resolveRoleName($user);
+        $userId = $this->resolveUserId($user);
+
         $results = [];
         if ($keyword) {
-            $results = $this->searchService->search($keyword, $roleName, $user->Employee_ID ?? $user->User_ID);
-            $this->searchService->saveHistory($user->Employee_ID ?? $user->User_ID, $keyword);
+            $results = $this->searchService->search($keyword, $roleName, $userId);
+            $this->searchService->saveHistory($userId, $keyword);
         }
 
         return view('search.index', compact('keyword', 'results'));
@@ -37,9 +37,8 @@ class GlobalSearchController extends Controller
     {
         $keyword = $request->get('q', '');
         $user = auth()->user();
-        $userId = $user->Employee_ID ?? $user->User_ID;
-        $roleData = $this->roleService->getRoleById($user->Role_ID);
-        $roleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
+        $userId = $this->resolveUserId($user);
+        $roleName = $this->resolveRoleName($user);
 
         if ($keyword) {
             $results = $this->searchService->search($keyword, $roleName, $userId);
@@ -55,7 +54,37 @@ class GlobalSearchController extends Controller
     public function clearHistory()
     {
         $user = auth()->user();
-        $this->searchService->clearHistory($user->Employee_ID ?? $user->User_ID);
+        $this->searchService->clearHistory($this->resolveUserId($user));
+
+        if (request()->expectsJson()) {
+            return response()->json(['status' => 'success']);
+        }
+
         return back()->with('success', 'Search history cleared.');
+    }
+
+    private function resolveUserId($user): string
+    {
+        if (!$user) {
+            abort(403, 'Sesi pengguna tidak valid.');
+        }
+
+        $identifier = $user->User_ID ?? $user->Employee_ID ?? $user->email ?? auth()->id();
+        if (!$identifier) {
+            abort(403, 'Identitas pengguna tidak dapat ditentukan.');
+        }
+
+        return (string) $identifier;
+    }
+
+    private function resolveRoleName($user): string
+    {
+        $role = strtoupper(trim((string) ($user->Role ?? session('role') ?? '')));
+        if ($role !== '') {
+            return $role;
+        }
+
+        $roleData = $this->roleService->getRoleById($user->Role_ID ?? '');
+        return strtoupper(trim($roleData['Role_Name'] ?? 'GUEST'));
     }
 }

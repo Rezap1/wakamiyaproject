@@ -21,13 +21,40 @@
             <div class="w-full md:w-auto">
                 <select name="category" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
                     <option value="">Semua Kategori Penilaian</option>
-                    <option value="GENERAL" {{ request('category') == 'GENERAL' ? 'selected' : '' }}>📚 Akademik Umum (GENERAL)</option>
-                    <option value="SPORTS" {{ request('category') == 'SPORTS' ? 'selected' : '' }}>🏀 Olahraga (SPORTS)</option>
-                    <option value="LANGUAGE" {{ request('category') == 'LANGUAGE' ? 'selected' : '' }}>🗣️ Bahasa (LANGUAGE)</option>
+                    @foreach($assessmentConfigs as $config)
+                        <option value="{{ $config['Category_ID'] }}" {{ request('category') == $config['Category_ID'] ? 'selected' : '' }}>{{ $config['Category_Name'] }}</option>
+                    @endforeach
                 </select>
             </div>
         </x-universal.toolbar>
     </x-slot:toolbar>
+
+    @if(($scoreGroups ?? collect())->count() > 0)
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+            @foreach($scoreGroups as $group)
+                <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
+                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} nilai @if($group['average'] !== null) | Rata-rata {{ $group['average'] }} @endif</p>
+                        </div>
+                        <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
+                    </summary>
+                    <div class="border-t border-slate-100 divide-y divide-slate-100">
+                        @foreach($group['items'] as $score)
+                            <a href="{{ route('scores.show', $score['Score_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $score['Student_Display'] ?? $score['Student_ID'] ?? '-' }}</p>
+                                    <p class="text-[11px] text-slate-500 font-mono">{{ $score['Score_ID'] ?? '-' }} | {{ $score['Assessment_Title'] ?? $score['Assessment_ID'] ?? '-' }}</p>
+                                </div>
+                                <span class="text-sm font-black text-slate-800 shrink-0">{{ $score['Score'] ?? $score['Score_Value'] ?? '-' }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                </details>
+            @endforeach
+        </div>
+    @endif
 
     <x-universal.data-table :empty="count($scores) === 0" empty-title="Data Nilai Kosong" empty-description="Belum ada data nilai atau evaluasi yang tercatat.">
         <x-slot:header>
@@ -54,20 +81,21 @@
                 </td>
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-2">
-                        @if($category === 'SPORTS')
-                            <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800 uppercase">SPORTS</span>
-                        @elseif($category === 'LANGUAGE')
-                            <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-purple-100 text-purple-800 uppercase">LANGUAGE</span>
-                        @else
-                            <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 uppercase">GENERAL</span>
-                        @endif
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 uppercase">{{ $category }}</span>
                         <span class="font-bold text-slate-700 text-xs">{{ $item['Assessment_Title'] ?? $item['Assessment_ID'] ?? '-' }}</span>
                     </div>
                     <div class="text-[11px] text-slate-500 mt-1 truncate max-w-xs">
-                        @if($category === 'SPORTS')
-                            Lari: {{ $details['running_distance'] ?? 0 }}km/{{ $details['running_time'] ?? 0 }}m &bull; PushUp: {{ $details['push_up'] ?? 0 }} &bull; SitUp: {{ $details['sit_up'] ?? 0 }}
-                        @elseif($category === 'LANGUAGE')
-                            Spk: {{ $details['speaking'] ?? 0 }} &bull; Wrt: {{ $details['writing'] ?? 0 }} &bull; Lst: {{ $details['listening'] ?? 0 }} &bull; Rdg: {{ $details['reading'] ?? 0 }}
+                        @php
+                            $metricSummary = [];
+                            if (!empty($details) && is_array($details)) {
+                                foreach ($details as $k => $v) {
+                                    if (in_array(strtolower($k), ['category', 'notes', 'subject_id'])) continue;
+                                    $metricSummary[] = ucfirst(str_replace('_', ' ', $k)) . ": " . $v;
+                                }
+                            }
+                        @endphp
+                        @if(!empty($metricSummary))
+                            {!! implode(' &bull; ', $metricSummary) !!}
                         @else
                             {{ $details['notes'] ?? $item['Remarks'] ?? 'Tidak ada catatan.' }}
                         @endif
@@ -82,9 +110,13 @@
                 </td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-2">
-                        <x-universal.action-button action="detail" url="{{ route('scores.show', $item['Score_ID'] ?? '1') }}" />
-                        <x-universal.action-button action="edit" url="{{ route('scores.edit', $item['Score_ID'] ?? '1') }}" />
-                        <x-universal.action-button action="delete" url="{{ route('scores.destroy', $item['Score_ID'] ?? '1') }}" />
+                        @if(!empty($item['Score_ID']))
+                            <x-universal.action-button action="detail" url="{{ route('scores.show', $item['Score_ID']) }}" />
+                            <x-universal.action-button action="edit" url="{{ route('scores.edit', $item['Score_ID']) }}" />
+                            <x-universal.action-button action="delete" url="{{ route('scores.destroy', $item['Score_ID']) }}" />
+                        @else
+                            <span class="text-xs font-semibold text-slate-400">Tidak tersedia</span>
+                        @endif
                     </div>
                 </td>
             </tr>

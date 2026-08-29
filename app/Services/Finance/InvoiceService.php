@@ -170,12 +170,147 @@ class InvoiceService
         return $invoice;
     }
 
+    public function isEducationCategory(?string $category): bool
+    {
+        $category = strtolower(trim((string) $category));
+
+        return $category !== ''
+            && (str_contains($category, 'pendidikan')
+                || str_contains($category, 'spp')
+                || str_contains($category, 'tuition'));
+    }
+
+    public function isEducationInvoice(array $invoice): bool
+    {
+        if ($this->isEducationCategory($invoice['Category'] ?? '')) {
+            return true;
+        }
+
+        if ($this->isEducationCategory($invoice['Description'] ?? '')) {
+            return true;
+        }
+
+        $lineItems = $invoice['Line_Items'] ?? [];
+        if (is_string($lineItems) && trim($lineItems) !== '') {
+            $decodedItems = json_decode($lineItems, true);
+            $lineItems = is_array($decodedItems) ? $decodedItems : [];
+        }
+
+        if (!is_array($lineItems)) {
+            return false;
+        }
+
+        foreach ($lineItems as $item) {
+            if (is_array($item) && $this->isEducationCategory($item['description'] ?? '')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getStudentTuitionFee(string $studentId): float
+    {
+        $settingService = app(\App\Services\Core\SystemSettingService::class);
+        $tuitionFee = (float) $settingService->getDefaultTuitionFee();
+        $student = $this->studentRepository->findById($studentId);
+
+        if ($student) {
+            if (!empty($student['Program_ID'])) {
+                $program = app(\App\Interfaces\GoogleSheets\ProgramRepositoryInterface::class)->findById($student['Program_ID']);
+                if ($program && !empty($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
+                    $tuitionFee = (float) $program['Tuition_Fee'];
+                }
+            }
+
+            if (!empty($student['Batch_ID'])) {
+                $batch = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->findById($student['Batch_ID']);
+                if ($batch && !empty($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
+                    $tuitionFee = (float) $batch['Tuition_Fee'];
+                }
+            }
+        }
+
+        return max(0.0, $tuitionFee);
+    }
+
+    public function getStudentEducationBillingSummary(string $studentId, ?string $excludeInvoiceId = null): array
+    {
+        $tuitionFee = $this->getStudentTuitionFee($studentId);
+        $educationInvoices = collect($this->repository->getAll())->filter(function ($invoice) use ($studentId, $excludeInvoiceId) {
+            $status = strtolower(trim($invoice['Status'] ?? ''));
+
+            return ($invoice['Student_ID'] ?? '') === $studentId
+                && ($invoice['Is_Active'] ?? 'TRUE') !== 'FALSE'
+                && $status !== 'cancelled'
+                && ($excludeInvoiceId === null || ($invoice['Invoice_ID'] ?? '') !== $excludeInvoiceId)
+                && $this->isEducationInvoice($invoice);
+        });
+
+        $invoiceIds = $educationInvoices->pluck('Invoice_ID')->filter()->values()->all();
+        $billed = (float) $educationInvoices->sum(fn($invoice) => $this->rawInvoiceAmount($invoice));
+        $paid = (float) collect($this->paymentRepository->getAll())
+            ->whereIn('Invoice_ID', $invoiceIds)
+            ->where('Status', 'Verified')
+            ->sum('Amount_Paid');
+
+        return [
+            'tuition_fee' => $tuitionFee,
+            'education_billed' => $billed,
+            'education_paid' => $paid,
+            'remaining_to_bill' => max(0.0, $tuitionFee - $billed),
+            'remaining_to_pay' => max(0.0, $tuitionFee - $paid),
+            'progress' => $tuitionFee > 0 ? min(100, round(($paid / $tuitionFee) * 100)) : 0,
+        ];
+    }
+
+    private function rawInvoiceAmount(array $invoice): float
+    {
+        if (isset($invoice['Grand_Total']) && is_numeric($invoice['Grand_Total'])) {
+            return (float) $invoice['Grand_Total'];
+        }
+
+        return (float) ($invoice['Amount'] ?? 0);
+    }
+
+    private function enforceEducationTuitionCap(array $data, ?string $excludeInvoiceId = null): void
+    {
+        if (($data['Invoice_Type'] ?? 'STUDENT') !== 'STUDENT'
+            || empty($data['Student_ID'])
+            || !$this->isEducationCategory($data['Category'] ?? '')) {
+            return;
+        }
+
+        $newAmount = (float) ($data['Amount'] ?? 0);
+        $summary = $this->getStudentEducationBillingSummary($data['Student_ID'], $excludeInvoiceId);
+        $tuitionFee = (float) $summary['tuition_fee'];
+        $alreadyBilled = (float) $summary['education_billed'];
+
+        if ($tuitionFee <= 0) {
+            return;
+        }
+
+        if (($alreadyBilled + $newAmount) > ($tuitionFee + 0.001)) {
+            $remaining = max(0.0, $tuitionFee - $alreadyBilled);
+            throw new Exception(
+                'Total invoice Biaya Pendidikan siswa ini tidak boleh melebihi plafon Rp '
+                . number_format($tuitionFee, 0, ',', '.')
+                . '. Sudah ditagihkan Rp ' . number_format($alreadyBilled, 0, ',', '.')
+                . ', sisa yang boleh dibuat Rp ' . number_format($remaining, 0, ',', '.')
+                . '.'
+            );
+        }
+    }
+
     public function getAll() 
     { 
         $invoices = collect($this->repository->getAll())->where('Is_Active', '!=', 'FALSE')->values();
         $user = auth()->user();
         
-        if ($user && ($user->Role ?? '') === 'STUDENT') {
+        // Role values originate from legacy sheets and are not guaranteed to be
+        // upper-case. Keep the student data boundary fail-closed regardless of
+        // presentation casing.
+        if ($user && strtoupper(trim((string) ($user->Role ?? ''))) === 'STUDENT') {
             $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
             if ($student) {
                 $invoices = $invoices->where('Student_ID', $student['Student_ID'])->values();
@@ -197,19 +332,28 @@ class InvoiceService
         return null;
     }
 
-    public function getInvoiceDocumentData(string $invoiceId): array
+    public function getInvoiceDocumentData(string $invoiceId, bool $allowPublicVerification = false): array
     {
         $invoice = $this->getById($invoiceId);
         if (!$invoice) {
             throw new Exception("Tagihan (Invoice) #{$invoiceId} tidak ditemukan.");
         }
 
-        // IDOR Protection for Student Users
+        // Public access is reserved for the signed verification endpoint.
         $user = auth()->user();
-        if ($user && ($user->Role ?? '') === 'STUDENT') {
-            $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$student || ($invoice['Student_ID'] ?? '') !== $student['Student_ID']) {
-                throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
+        if (!$allowPublicVerification) {
+            if (!$user) {
+                throw new Exception("Akses Ditolak: Identitas pengguna tidak dapat dipastikan.");
+            }
+
+            $role = strtoupper(trim((string) ($user->Role ?? '')));
+            if ($role === 'STUDENT') {
+                $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
+                if (!$student || ($invoice['Student_ID'] ?? '') !== ($student['Student_ID'] ?? '')) {
+                    throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
+                }
+            } elseif (!in_array($role, ['ADMINISTRATOR', 'FINANCE'], true)) {
+                throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses tagihan.");
             }
         }
 
@@ -232,7 +376,7 @@ class InvoiceService
         }
 
         // QR Verification URL
-        $verificationUrl = route('invoices.verify-public', $invoiceId);
+        $verificationUrl = \App\Helpers\PublicVerificationUrl::make('invoices.verify-public', $invoiceId);
 
         // QR Code SVG
         $qrCodeSvg = null;
@@ -331,25 +475,47 @@ class InvoiceService
                 ]
             ]);
         }
-        
-        $data['Status'] = 'Draft';
-        $data['Created_At'] = now()->toDateTimeString();
-        $data['Is_Active'] = 'TRUE';
 
-        $res = $this->repository->create($data);
+        if ($this->isEducationCategory($data['Category'] ?? '')) {
+            $data['Category'] = 'Biaya Pendidikan';
+        }
+
+        $persist = function () use (&$data) {
+            $this->enforceEducationTuitionCap($data);
+
+            $data['Status'] = 'Draft';
+            $data['Created_At'] = now()->toDateTimeString();
+            $data['Is_Active'] = 'TRUE';
+
+            $result = $this->repository->create($data);
+            if (!$result) {
+                throw new Exception("Gagal menyimpan invoice {$data['Invoice_ID']}.");
+            }
+
+            return $result;
+        };
+
+        if ($this->isEducationCategory($data['Category'] ?? '') && !empty($data['Student_ID'])) {
+            $lockKey = 'invoice_tuition_' . sha1((string) $data['Student_ID']);
+            $res = Cache::lock($lockKey, 30)->block(5, $persist);
+        } else {
+            $res = $persist();
+        }
+
         $this->repository->clearCache();
 
         if (!empty($data['Student_ID'])) {
             Cache::forget("student_billing_{$data['Student_ID']}");
         }
         Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
 
         $this->enterpriseEvent->dispatch(
             'FINANCE', 
             'CREATE', 
             'INVOICE', 
-            $res['Invoice_ID'] ?? $data['Invoice_ID'], 
-            auth()->id() ?? 'SYSTEM', 
+            $data['Invoice_ID'], 
+            \App\Support\ActorIdentity::required(), 
             ['FINANCE'], 
             !empty($data['Student_ID']) ? [$data['Student_ID']] : [], 
             $data
@@ -376,25 +542,30 @@ class InvoiceService
         ];
 
         $res = $this->repository->update($id, $data);
+        if (!$res) {
+            throw new Exception("Gagal menerbitkan invoice {$id}.");
+        }
         $this->repository->clearCache();
 
         if (!empty($invoice['Student_ID'])) {
             Cache::forget("student_billing_{$invoice['Student_ID']}");
         }
         Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
 
         $this->enterpriseEvent->dispatch(
             'FINANCE',
             'UPDATE',
             'INVOICE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['STUDENT', 'FINANCE'],
             !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
             ['Status' => 'Waiting Payment', 'Previous_Status' => 'Draft']
         );
 
-        return $this->formatInvoiceRecord($invoice);
+        $updatedInvoice = array_merge($invoice, $data);
+        return $this->formatInvoiceRecord($updatedInvoice);
     }
 
     public function cancel($id)
@@ -415,25 +586,30 @@ class InvoiceService
         ];
 
         $res = $this->repository->update($id, $data);
+        if (!$res) {
+            throw new Exception("Gagal membatalkan invoice {$id}.");
+        }
         $this->repository->clearCache();
 
         if (!empty($invoice['Student_ID'])) {
             Cache::forget("student_billing_{$invoice['Student_ID']}");
         }
         Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
 
         $this->enterpriseEvent->dispatch(
             'FINANCE',
             'UPDATE',
             'INVOICE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['FINANCE'],
             !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
             ['Status' => 'Cancelled', 'Previous_Status' => $currentStatus]
         );
 
-        return $this->formatInvoiceRecord($res);
+        $updatedInvoice = array_merge($invoice, $data);
+        return $this->formatInvoiceRecord($updatedInvoice);
     }
 
     public function update($id, array $data)
@@ -474,28 +650,42 @@ class InvoiceService
             $data['Amount'] = $grandTotal;
         }
 
+        if ($this->isEducationCategory($data['Category'] ?? ($invoice['Category'] ?? ''))) {
+            $data['Category'] = 'Biaya Pendidikan';
+            $data['Student_ID'] = $data['Student_ID'] ?? ($invoice['Student_ID'] ?? '');
+            $this->enforceEducationTuitionCap($data, $id);
+        }
+
         $data['Updated_At'] = now()->toDateTimeString();
 
         $res = $this->repository->update($id, $data);
+        if (!$res) {
+            throw new Exception("Gagal memperbarui invoice {$id}.");
+        }
         $this->repository->clearCache();
 
         if (!empty($invoice['Student_ID'])) {
             Cache::forget("student_billing_{$invoice['Student_ID']}");
         }
+        if (!empty($data['Student_ID']) && ($data['Student_ID'] ?? '') !== ($invoice['Student_ID'] ?? '')) {
+            Cache::forget("student_billing_{$data['Student_ID']}");
+        }
         Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
 
         $this->enterpriseEvent->dispatch(
             'FINANCE', 
             'UPDATE', 
             'INVOICE', 
             $id, 
-            auth()->id() ?? 'SYSTEM', 
+            \App\Support\ActorIdentity::required(), 
             ['FINANCE'], 
             !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [], 
             $data
         );
 
-        return $this->formatInvoiceRecord($res);
+        $updatedInvoice = array_merge($invoice, $data);
+        return $this->formatInvoiceRecord($updatedInvoice);
     }
 
     public function delete($id)
@@ -510,20 +700,24 @@ class InvoiceService
             throw new Exception("Hanya invoice berstatus Draft yang dapat dihapus.");
         }
 
-        $this->repository->delete($id);
+        $res = $this->repository->delete($id);
+        if (!$res) {
+            throw new Exception("Gagal menghapus invoice {$id}.");
+        }
         $this->repository->clearCache();
 
         if (!empty($invoice['Student_ID'])) {
             Cache::forget("student_billing_{$invoice['Student_ID']}");
         }
         Cache::forget('finance_dashboard');
+        Cache::forget('dashboard_finance');
 
         $this->enterpriseEvent->dispatch(
             'FINANCE',
             'DELETE',
             'INVOICE',
             $id,
-            auth()->id() ?? 'SYSTEM',
+            \App\Support\ActorIdentity::required(),
             ['FINANCE'],
             !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
             []

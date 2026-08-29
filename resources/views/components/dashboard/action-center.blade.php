@@ -2,17 +2,6 @@
 
 <div class="space-y-8">
     
-    <!-- Welcome Banner -->
-    <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
-        <div class="absolute inset-0 bg-cover bg-center opacity-90" style="background-image: url('https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80');"></div>
-        <div class="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent"></div>
-        <div class="relative p-8 md:p-10 z-10 w-full md:w-2/3">
-            <h1 class="text-3xl font-extrabold text-slate-800 mb-2">Selamat Datang, {{ auth()->user()->Full_Name ?? 'Administrator' }}!</h1>
-            <p class="text-blue-700 font-semibold mb-4">Anda berhasil login ke WAKAMIYA MANAGEMENT SYSTEM</p>
-            <p class="text-slate-600 font-medium">Semangat bekerja dan terus memberikan yang terbaik.</p>
-        </div>
-    </div>
-
     <!-- Top Welcome & Date -->
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-2">
         <div>
@@ -25,8 +14,20 @@
     </div>
 
     <!-- KPI Cards (Row 1) -->
-    @if(count($kpi) > 0)
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        @if(count($kpi) > 0)
+    @php
+        $showGaji = !in_array('Gaji Bulan Ini', array_column($kpi, 'title')) && !request()->routeIs('dashboard.student');
+        $totalCards = count($kpi) + ($showGaji ? 1 : 0);
+        $gridClass = match($totalCards) {
+            1 => 'lg:grid-cols-1',
+            2 => 'lg:grid-cols-2',
+            3 => 'lg:grid-cols-3',
+            4 => 'lg:grid-cols-4',
+            6 => 'lg:grid-cols-6',
+            default => 'lg:grid-cols-5'
+        };
+    @endphp
+    <div class="grid grid-cols-2 md:grid-cols-4 {{ $gridClass }} gap-4">
         @foreach($kpi as $item)
             @if(isset($item['title']) && $item['title'] === 'Gaji Bulan Ini')
                 @php 
@@ -59,7 +60,7 @@
         
         <!-- Dynamic Gaji Saya Card for non-teachers who use action-center -->
         <!-- Dynamic Gaji Saya Card for non-teachers who use action-center -->
-        @if(!in_array('Gaji Bulan Ini', array_column($kpi, 'title')) && !request()->routeIs('dashboard.student'))
+        @if($showGaji)
             @php 
                 $salStat = \App\Services\Core\DashboardHelperService::getSalaryStatus(auth()->id()); 
                 $bgClass = $salStat == 'Diterima' ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600' : 'bg-rose-500 hover:bg-rose-600 border-rose-600';

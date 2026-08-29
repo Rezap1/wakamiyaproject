@@ -17,7 +17,9 @@ class EmployeeRepository extends BaseSheetRepository implements EmployeeReposito
     public function findById(string $id)
     {
         $employees = $this->fetchAll();
-        return $employees->firstWhere($this->primaryKey, $id);
+        return $employees->firstWhere($this->primaryKey, $id)
+            ?? ($employees->firstWhere('Employee_Number', $id)
+            ?? $employees->firstWhere('User_ID', $id));
     }
 
     public function findByEmail(string $email)

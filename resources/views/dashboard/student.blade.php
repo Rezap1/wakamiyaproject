@@ -7,26 +7,28 @@
 @php
     $formattedKpi = [
         ['title' => "Kelas Hari Ini", 'value' => $kpi['today_class'] ?? 0, 'icon' => 'calendar', 'color' => 'indigo', 'link' => route('student.schedule')],
-        ['title' => 'Tagihan Belum Lunas', 'value' => 'Rp '.number_format($kpi['outstanding_bills'] ?? 0, 0, ',', '.'), 'icon' => 'cash', 'color' => ($kpi['outstanding_bills'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('student.billing.index')],
-        ['title' => 'Nilai Terakhir', 'value' => $kpi['latest_score'] ?? 0, 'icon' => 'academic-cap', 'color' => 'blue'],
-        ['title' => 'Kehadiran', 'value' => $kpi['attendance_percentage'] ?? '0%', 'icon' => 'clock', 'color' => 'emerald'],
-        ['title' => 'Sertifikat', 'value' => $kpi['certificate_status'] ?? 'Belum Ada Data', 'icon' => 'badge-check', 'color' => ($kpi['certificate_status'] ?? '') === 'Memenuhi Syarat' ? 'emerald' : 'amber'],
+        ['title' => 'Total Tagihan', 'value' => 'Rp '.number_format($kpi['total_tagihan'] ?? 0, 0, ',', '.'), 'icon' => 'document-text', 'color' => 'blue', 'link' => route('student.billing.index')],
+        ['title' => 'Tagihan Dibayar', 'value' => 'Rp '.number_format($kpi['tagihan_dibayar'] ?? 0, 0, ',', '.'), 'icon' => 'check-circle', 'color' => 'emerald', 'link' => route('student.billing.index')],
+        ['title' => 'Sisa Tagihan', 'value' => 'Rp '.number_format($kpi['sisa_tagihan'] ?? 0, 0, ',', '.') . ' (' . ($kpi['status_pembayaran'] ?? 'BELUM LUNAS') . ')', 'icon' => 'cash', 'color' => ($kpi['sisa_tagihan'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('student.billing.index')],
+        ['title' => 'Pengajuan Presensi', 'value' => ($kpi['request_pending'] ?? 0) . ' Pending / ' . ($kpi['request_approved'] ?? 0) . ' Setuju', 'icon' => 'document-text', 'color' => ($kpi['request_pending'] ?? 0) > 0 ? 'amber' : 'emerald', 'link' => route('student.attendance.requests.index')],
     ];
 
     $quickActions = [
         ['title' => 'Lihat Jadwal', 'url' => route('student.schedule'), 'icon' => 'calendar', 'color' => 'indigo'],
         ['title' => 'Unggah Pembayaran', 'url' => route('student.billing.index'), 'icon' => 'cash', 'color' => 'blue'],
-        ['title' => 'Nilai Saya', 'url' => route('student.progress'), 'icon' => 'clipboard-check', 'color' => 'emerald'],
-        ['title' => 'Tugas Saya', 'url' => route('student.portal.assignments'), 'icon' => 'document-text', 'color' => 'amber'],
-        ['title' => 'Materi Pelajaran', 'url' => route('student.portal.materials'), 'icon' => 'book-open', 'color' => 'cyan'],
+        ['title' => 'Pengajuan Sakit/Izin', 'url' => route('student.attendance.requests.index'), 'icon' => 'document-text', 'color' => 'amber'],
+        ['title' => 'Tugas Saya', 'url' => route('student.portal.assignments'), 'icon' => 'clipboard-list', 'color' => 'indigo'],
     ];
 @endphp
 
-<!-- MOBILE-FIRST DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
-<x-mobile-dashboard-hero user-role="STUDENT" />
+<!-- MOBILE HERO (VISIBLE ON MOBILE ONLY) -->
+<div class="block md:hidden mb-4">
+    <x-mobile-dashboard-hero user-role="STUDENT" :kpi-data="$kpi ?? []" />
+</div>
 
-<!-- DESKTOP DASHBOARD VIEW -->
-<div class="hidden lg:block">
+<!-- MAIN UNIFIED DASHBOARD VIEW (HIDDEN ON MOBILE, VISIBLE ON DESKTOP) -->
+<div class="hidden md:block w-full">
+    <x-dashboard-header />
     <x-dashboard.action-center 
         title="Dashboard Siswa" 
         description="Pusat informasi akademik dan administrasi siswa LPK."

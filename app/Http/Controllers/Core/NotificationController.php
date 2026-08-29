@@ -15,15 +15,13 @@ class NotificationController extends Controller
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
 
-        $userEmail = \Illuminate\Support\Facades\Auth::user()->email ?? 'user@example.com';
-        $userRole = session('role') ?? 'GUEST';
-        
+        $user = Auth::user();
         $notifications = $this->notificationService->getAll()
-            ->filter(function($n) use ($userEmail, $userRole) {
-                return (($n['User_ID'] ?? '') == $userEmail || ($n['Role'] ?? '') == $userRole) &&
-                       ($n['Status'] ?? '') !== 'Archived';
+            ->filter(function($n) use ($user) {
+                return $this->notificationService->isForUser($n, $user) &&
+                       strtolower(trim($n['Status'] ?? '')) !== 'archived';
             })->sortByDesc('Created_At');
-        
+
         return [
             'moduleName' => 'Notifikasi (Notification)',
             'data' => collect(array_values($notifications->toArray())),
@@ -52,54 +50,100 @@ class NotificationController extends Controller
 
     public function index(Request $request)
     {
-        // Ideally fetch based on user role and id
-        $userEmail = Auth::user()->email ?? 'user@example.com';
-        $userRole = session('role') ?? 'GUEST';
-        
+        $user = Auth::user();
         $notifications = $this->notificationService->getAll()
-            ->filter(function($n) use ($userEmail, $userRole) {
-                return (($n['User_ID'] ?? '') == $userEmail || ($n['Role'] ?? '') == $userRole) &&
-                       ($n['Status'] ?? '') !== 'Archived';
-            })->sortByDesc('Created_At');
+            ->filter(function($n) use ($user) {
+                return $this->notificationService->isForUser($n, $user) &&
+                       strtolower(trim($n['Status'] ?? '')) !== 'archived';
+            })->sortByDesc(function($n) {
+                try {
+                    return \Carbon\Carbon::parse($n['Created_At'] ?? null)->timestamp;
+                } catch (\Exception $e) {
+                    return 0;
+                }
+            });
+
+        $notifications = \App\Helpers\CollectionHelper::paginate($notifications, 15)->withQueryString();
 
         return view('notifications.index', compact('notifications'));
     }
 
     public function show($id)
     {
-        $notification = $this->notificationService->getById($id);
-        if (!$notification) abort(404);
-        
-        // Mark as read when opened
-        if (($notification['Is_Read'] ?? 'FALSE') === 'FALSE') {
-            $this->notificationService->MarkAsRead($id);
-        }
+        $notification = $this->notificationService->visibleToCurrentUser($id);
+        if (!$notification) abort(404, 'Notifikasi tidak ditemukan.');
 
         return view('notifications.show', compact('notification'));
     }
 
+    public function readAndRedirect($id)
+    {
+        $notification = $this->notificationService->visibleToCurrentUser($id);
+        if (!$notification) {
+            return redirect()->route('notifications.index');
+        }
+
+        if (strtoupper(trim($notification['Is_Read'] ?? 'FALSE')) !== 'TRUE') {
+            $this->notificationService->MarkAsRead($id);
+        }
+
+        $actionUrl = $notification['Action_URL'] ?? $notification['Url'] ?? null;
+        $safeActionUrl = $this->safeActionUrl($actionUrl);
+        if ($safeActionUrl) {
+            return redirect($safeActionUrl);
+        }
+
+        return redirect()->route('notifications.show', $id);
+    }
+
     public function markRead($id)
     {
-        $this->notificationService->MarkAsRead($id);
-        return back()->with('success', 'Notification marked as read.');
+        if (!$this->notificationService->MarkAsRead($id)) {
+            abort(404, 'Notifikasi tidak ditemukan.');
+        }
+        return back()->with('success', 'Notifikasi berhasil ditandai telah dibaca.');
     }
 
     public function markAllRead()
     {
-        $userEmail = Auth::user()->email ?? 'user@example.com';
-        $this->notificationService->MarkAllRead($userEmail);
-        return back()->with('success', 'All notifications marked as read.');
+        $this->notificationService->MarkAllRead();
+        return back()->with('success', 'Semua notifikasi berhasil ditandai telah dibaca.');
     }
 
     public function archive($id)
     {
-        $this->notificationService->ArchiveNotification($id);
-        return redirect()->route('notifications.index')->with('success', 'Notification archived.');
+        if (!$this->notificationService->ArchiveNotification($id)) {
+            abort(404, 'Notifikasi tidak ditemukan.');
+        }
+        return redirect()->route('notifications.index')->with('success', 'Notifikasi berhasil diarsipkan.');
     }
 
     public function destroy($id)
     {
-        $this->notificationService->DeleteNotification($id);
-        return redirect()->route('notifications.index')->with('success', 'Notification deleted.');
+        if (!$this->notificationService->DeleteNotification($id)) {
+            abort(404, 'Notifikasi tidak ditemukan.');
+        }
+        return redirect()->route('notifications.index')->with('success', 'Notifikasi berhasil dihapus.');
+    }
+
+    private function safeActionUrl(?string $actionUrl): ?string
+    {
+        $actionUrl = trim((string) $actionUrl);
+        if ($actionUrl === '' || $actionUrl === '#') {
+            return null;
+        }
+
+        if (str_starts_with($actionUrl, '/')) {
+            return $actionUrl;
+        }
+
+        $appHost = parse_url(config('app.url'), PHP_URL_HOST);
+        $actionHost = parse_url($actionUrl, PHP_URL_HOST);
+
+        if ($appHost && $actionHost && strcasecmp($appHost, $actionHost) === 0) {
+            return $actionUrl;
+        }
+
+        return null;
     }
 }

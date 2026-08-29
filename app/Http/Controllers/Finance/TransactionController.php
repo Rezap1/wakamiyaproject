@@ -17,7 +17,10 @@ class TransactionController extends Controller
         $transactions = $this->transactionService->getAll();
         
         if ($request->filled('type')) {
-            $transactions = $transactions->where('Type', $request->type);
+            $type = $request->type;
+            $transactions = $transactions->filter(function ($item) use ($type) {
+                return strcasecmp(trim($item['Type'] ?? ''), $type) === 0;
+            });
         }
 
         if ($request->filled('date_from')) {
@@ -66,7 +69,10 @@ class TransactionController extends Controller
         $transactions = $this->transactionService->getAll();
         
         if ($request->filled('type')) {
-            $transactions = $transactions->where('Type', $request->type);
+            $type = $request->type;
+            $transactions = $transactions->filter(function ($item) use ($type) {
+                return strcasecmp(trim($item['Type'] ?? ''), $type) === 0;
+            });
         }
 
         if ($request->filled('date_from')) {
@@ -81,26 +87,49 @@ class TransactionController extends Controller
             });
         }
 
+        $transactionGroups = $transactions
+            ->groupBy(function ($transaction) {
+                $date = $transaction['Transaction_Date'] ?? null;
+                if (!$date) {
+                    return 'NO_DATE';
+                }
+
+                try {
+                    return \Carbon\Carbon::parse($date)->format('Y-m-d');
+                } catch (\Throwable $e) {
+                    return 'NO_DATE';
+                }
+            })
+            ->map(function ($group, $date) {
+                $income = $group->filter(fn ($item) => strcasecmp($item['Type'] ?? '', 'Income') === 0)->sum('Amount');
+                $expense = $group->filter(fn ($item) => strcasecmp($item['Type'] ?? '', 'Expense') === 0)->sum('Amount');
+
+                return [
+                    'id' => $date,
+                    'title' => $date === 'NO_DATE' ? 'Tanpa Tanggal' : \Carbon\Carbon::parse($date)->format('d M Y'),
+                    'total' => $group->count(),
+                    'income' => (float) $income,
+                    'expense' => (float) $expense,
+                    'net' => (float) $income - (float) $expense,
+                    'items' => $group->sortByDesc('Transaction_ID')->values(),
+                ];
+            })
+            ->sortByDesc('id')
+            ->values();
+
         $transactions = \App\Helpers\CollectionHelper::paginate($transactions, 15)->withQueryString();
 
-        return view('finance.transactions.index', compact('transactions'));
+        return view('finance.transactions.index', compact('transactions', 'transactionGroups'));
     }
 
     public function create()
     {
-        $accounts = $this->accountService->getAll();
-        
-        $categories = [
-            'Tuition',
-            'Registration',
-            'Training',
-            'Corporate',
-            'Salary',
-            'Operational',
-            'Other'
-        ];
+        $defaultAccount = $this->accountService->getDefaultTransactionAccount();
+        if (!$defaultAccount) {
+            return redirect()->route('transactions.index')->with('error', 'Data Akun Kas/Bank kosong atau tidak aktif di Ledger Master Account. Harap tambahkan Data Rekening/Kas terlebih dahulu.');
+        }
 
-        return view('finance.transactions.create', compact('accounts', 'categories'));
+        return view('finance.transactions.create', compact('defaultAccount'));
     }
 
     public function store(Request $request)
@@ -108,7 +137,6 @@ class TransactionController extends Controller
         try {
             $request->validate([
                 'Transaction_Date' => 'required|date',
-                'Account_ID' => 'required|string',
                 'Type' => 'required|in:Income,Expense',
                 'Category' => 'required|string',
                 'Amount' => 'required|numeric|min:0',
@@ -117,10 +145,18 @@ class TransactionController extends Controller
                 'Reference_ID' => 'nullable|string'
             ]);
 
-            $this->transactionService->create($request->except('_token'));
+            $defaultAccount = $this->accountService->getDefaultTransactionAccount();
+            if (!$defaultAccount) {
+                throw new \Exception('Data Akun Kas/Bank kosong atau tidak aktif di Ledger Master Account. Harap tambahkan Data Rekening/Kas terlebih dahulu.');
+            }
+
+            $data = $request->except('_token');
+            $data['Account_ID'] = $defaultAccount['Account_ID'];
+
+            $this->transactionService->create($data);
             return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil dicatat.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -141,18 +177,8 @@ class TransactionController extends Controller
             return redirect()->route('transactions.index')->with('error', 'Transaksi tidak ditemukan.');
         }
         $accounts = $this->accountService->getAll();
-        
-        $categories = [
-            'Tuition',
-            'Registration',
-            'Training',
-            'Corporate',
-            'Salary',
-            'Operational',
-            'Other'
-        ];
 
-        return view('finance.transactions.edit', compact('transaction', 'accounts', 'categories'));
+        return view('finance.transactions.edit', compact('transaction', 'accounts'));
     }
 
     public function update(Request $request, $id)
@@ -172,7 +198,7 @@ class TransactionController extends Controller
             $this->transactionService->update($id, $request->except(['_token', '_method']));
             return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil diupdate.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -182,7 +208,7 @@ class TransactionController extends Controller
             $this->transactionService->delete($id);
             return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil dibatalkan.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 }

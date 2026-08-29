@@ -1,8 +1,6 @@
 @extends('layouts.app')
 
-@section('header')
-    <h2 class="font-bold text-xl text-slate-800 leading-tight">Laporan Arus Kas (Cash Flow Report)</h2>
-@endsection
+@section('header', 'Laporan Arus Kas')
 
 @section('content')
 <div class="space-y-6">

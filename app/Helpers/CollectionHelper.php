@@ -45,20 +45,41 @@ class CollectionHelper
      */
     public static function search(Collection $collection, $searchTerm, array $attributes = [])
     {
-        if (empty($searchTerm)) {
+        $searchTerm = trim((string) $searchTerm);
+        if ($searchTerm === '') {
             return $collection;
         }
 
-        $searchTerm = strtolower($searchTerm);
+        $searchTerm = mb_strtolower($searchTerm);
 
         return $collection->filter(function ($item) use ($searchTerm, $attributes) {
+            if (empty($attributes)) {
+                $haystack = self::flattenSearchableValue($item);
+                return str_contains(mb_strtolower($haystack), $searchTerm);
+            }
+
             foreach ($attributes as $attribute) {
-                $value = is_array($item) ? ($item[$attribute] ?? '') : ($item->$attribute ?? '');
-                if (str_contains(strtolower((string)$value), $searchTerm)) {
+                $value = data_get($item, $attribute, '');
+                if (str_contains(mb_strtolower(self::flattenSearchableValue($value)), $searchTerm)) {
                     return true;
                 }
             }
             return false;
         });
+    }
+
+    private static function flattenSearchableValue($value): string
+    {
+        if ($value instanceof Collection) {
+            $value = $value->all();
+        }
+
+        if (is_array($value) || is_object($value)) {
+            return collect((array) $value)
+                ->map(fn ($item) => self::flattenSearchableValue($item))
+                ->implode(' ');
+        }
+
+        return (string) $value;
     }
 }

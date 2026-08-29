@@ -61,7 +61,7 @@ class AnnouncementController extends Controller
             $this->announcementService->create($data);
             return redirect()->route('announcements.index')->with('success', 'Announcement created successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -86,7 +86,7 @@ class AnnouncementController extends Controller
             $this->announcementService->update($id, $data);
             return redirect()->route('announcements.index')->with('success', 'Announcement updated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -96,7 +96,7 @@ class AnnouncementController extends Controller
             $this->announcementService->delete($id);
             return redirect()->route('announcements.index')->with('success', 'Announcement deleted successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 }

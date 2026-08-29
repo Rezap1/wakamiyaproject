@@ -118,7 +118,7 @@ class BatchController extends Controller
             // For filter
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
 
-            return view('batches.index', [
+            return view('academic.batches.index', [
                 'batches' => $batchesPaginated,
                 'programs' => $activePrograms
             ]);
@@ -132,7 +132,7 @@ class BatchController extends Controller
     {
         try {
             $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
-            return view('batches.create', compact('programs'));
+            return view('academic.batches.create', compact('programs'));
         } catch (\Exception $e) {
             Log::error('Error loading create batch form: ' . $e->getMessage());
             return redirect()->route('batches.index')->with('error', 'Gagal memuat data program untuk pendaftaran angkatan.');
@@ -148,7 +148,7 @@ class BatchController extends Controller
             return redirect()->route('batches.index')->with('success', 'Angkatan (Batch) berhasil ditambahkan.');
         } catch (\Exception $e) {
             Log::error('Error creating batch: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -165,7 +165,7 @@ class BatchController extends Controller
             $batch['Program_Name'] = $program ? $program['Program_Name'] : 'Program Tidak Ditemukan';
             $batch['Program_Code'] = $program ? $program['Program_Code'] : '-';
 
-            return view('batches.show', compact('batch'));
+            return view('academic.batches.show', compact('batch'));
         } catch (\Exception $e) {
             Log::error('Error showing batch: ' . $e->getMessage());
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat memuat data angkatan.');
@@ -188,7 +188,7 @@ class BatchController extends Controller
                 $programs->push($currentProgram);
             }
 
-            return view('batches.edit', compact('batch', 'programs'));
+            return view('academic.batches.edit', compact('batch', 'programs'));
         } catch (\Exception $e) {
             Log::error('Error editing batch: ' . $e->getMessage());
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat memuat form edit angkatan.');
@@ -209,7 +209,7 @@ class BatchController extends Controller
             return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating batch: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 

@@ -10,6 +10,7 @@ use App\Services\Core\ProgramService;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
 use App\Services\Core\ActivityLogService;
+use App\Services\Academic\PlacementService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
@@ -81,19 +82,22 @@ class StudentController extends Controller
     protected $batchService;
     protected $classService;
     protected $userService;
+    protected $placementService;
 
     public function __construct(
         StudentService $studentService,
         ProgramService $programService,
         BatchService $batchService,
         ClassService $classService,
-        \App\Services\Core\UserService $userService
+        \App\Services\Core\UserService $userService,
+        PlacementService $placementService
     ) {
         $this->studentService = $studentService;
         $this->programService = $programService;
         $this->batchService = $batchService;
         $this->classService = $classService;
         $this->userService = $userService;
+        $this->placementService = $placementService;
     }
 
     public function index(\Illuminate\Http\Request $request)
@@ -159,6 +163,25 @@ class StudentController extends Controller
                 });
             }
 
+            $studentGroups = $students
+                ->groupBy(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) ?: 'NO_CLASS')
+                ->map(function ($group, $classId) {
+                    $first = $group->first();
+                    $active = $group->where('Is_Active', 'TRUE')->count();
+
+                    return [
+                        'id' => $classId,
+                        'title' => $first['Class_Name'] ?? ($classId === 'NO_CLASS' ? 'Belum Ada Kelas' : $classId),
+                        'subtitle' => trim(($first['Program_Name'] ?? '-') . ' / ' . ($first['Batch_Name'] ?? '-')),
+                        'total' => $group->count(),
+                        'active' => $active,
+                        'inactive' => $group->count() - $active,
+                        'items' => $group->sortBy('Full_Name')->values(),
+                    ];
+                })
+                ->sortBy('title')
+                ->values();
+
             // Pagination
             $studentsPaginated = \App\Helpers\CollectionHelper::paginate($students, 10)->withQueryString();
             
@@ -169,6 +192,7 @@ class StudentController extends Controller
 
             return view('students.index', [
                 'students' => $studentsPaginated,
+                'studentGroups' => $studentGroups,
                 'programs' => $activePrograms,
                 'batches' => $activeBatches,
                 'classes' => $activeClasses
@@ -191,7 +215,9 @@ class StudentController extends Controller
             $usedUserIds = $allStudents->pluck('User_ID')->filter()->toArray();
             
             $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
-                return !in_array($user['User_ID'], $usedUserIds) && ($user['Is_Active'] ?? 'TRUE') === 'TRUE';
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && ($user['Is_Active'] ?? 'TRUE') === 'TRUE'
+                    && $this->userHasRole($user, 'STUDENT');
             })->values();
             
             return view('students.create', compact('programs', 'batches', 'classes', 'users'));
@@ -207,10 +233,16 @@ class StudentController extends Controller
             $data = $request->validated();
             $student = $this->studentService->createStudent($data);
 
+            if ($request->hasFile('Photo')) {
+                $file = $request->file('Photo');
+                $filename = 'student_' . $student['Student_ID'] . '.' . $file->getClientOriginalExtension();
+                $file->storeAs('profiles', $filename, 'public');
+            }
+
             return redirect()->route('students.index')->with('success', 'Siswa berhasil didaftarkan.');
         } catch (\Exception $e) {
             Log::error('Error creating student: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -269,8 +301,9 @@ class StudentController extends Controller
             $allStudents = $this->studentService->getAllStudents();
             $usedUserIds = $allStudents->where('Student_ID', '!=', $id)->pluck('User_ID')->filter()->toArray();
             
-            $users = collect($allUsers)->filter(function($user) use ($usedUserIds) {
-                return !in_array($user['User_ID'], $usedUserIds);
+            $users = collect($allUsers)->filter(function($user) use ($usedUserIds, $student) {
+                return !in_array($user['User_ID'], $usedUserIds)
+                    && ($this->userHasRole($user, 'STUDENT') || ($user['User_ID'] ?? '') === ($student['User_ID'] ?? ''));
             })->values();
 
             return view('students.edit', compact('student', 'programs', 'batches', 'classes', 'users'));
@@ -289,12 +322,32 @@ class StudentController extends Controller
             }
 
             $data = $request->validated();
+            
+            // 1. Handle Placement if Class/Batch changed
+            if (isset($data['Batch_ID']) || isset($data['Class_ID'])) {
+                $newBatchId = $data['Batch_ID'] ?? ($student['Batch_ID'] ?? null);
+                $newClassId = $data['Class_ID'] ?? ($student['Class_ID'] ?? null);
+                $this->placementService->placeStudent($id, $newBatchId, $newClassId, \App\Support\ActorIdentity::required());
+            }
+
+            // 2. Update the rest of student profile (Class_ID & Batch_ID are ignored internally by StudentService now)
             $this->studentService->updateStudent($id, $data);
+
+            if ($request->hasFile('Photo')) {
+                $file = $request->file('Photo');
+                $filename = 'student_' . $id . '.' . $file->getClientOriginalExtension();
+                // Delete old ones first to prevent extension mismatch (e.g., .png vs .jpg)
+                $oldFiles = glob(storage_path('app/public/profiles/student_' . $id . '.*'));
+                foreach ($oldFiles as $oldFile) {
+                    if (is_file($oldFile)) @unlink($oldFile);
+                }
+                $file->storeAs('profiles', $filename, 'public');
+            }
 
             return redirect()->route('students.index')->with('success', 'Data profil siswa berhasil diperbarui.');
         } catch (\Exception $e) {
             Log::error('Error updating student: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -356,7 +409,13 @@ class StudentController extends Controller
             return redirect()->route('alumni.show', $id)->with('success', 'Siswa ' . ($student['Full_Name'] ?? '') . ' telah berhasil diproses sebagai LULUS dan dipindahkan ke Alumni!');
         } catch (\Exception $e) {
             Log::error('Error graduating student: ' . $e->getMessage());
-            return redirect()->route('students.show', $id)->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+            return redirect()->route('students.show', $id)->with('error', 'Terjadi kesalahan: ' . $this->safeExceptionMessage($e));
         }
+    }
+
+    private function userHasRole(array $user, string $expectedRole): bool
+    {
+        $roleName = \App\Helpers\UserResolverHelper::getRoleName($user['Role_ID'] ?? '');
+        return strtoupper(trim($roleName)) === strtoupper($expectedRole);
     }
 }

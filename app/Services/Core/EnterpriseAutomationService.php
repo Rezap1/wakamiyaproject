@@ -94,7 +94,7 @@ class EnterpriseAutomationService
     public function writeAudit($module, $action, $refType, $refId, $old, $new)
     {
         try {
-            app(\App\Services\Core\AuditLogService::class)->log($module, $action, $refType, $refId, $old, $new);
+            app(\App\Services\Core\AuditLogService::class)->log($module, $action, $refType, $refId, $old, $new, 'SYSTEM');
         } catch (\Exception $e) {
             Log::error("Automation Audit Failed: " . $e->getMessage());
         }

@@ -121,7 +121,7 @@ class AssessmentController extends Controller
             $this->assessmentService->create($request->except('_token'));
             return redirect()->route('assessments.index')->with('success', 'Assessment created successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -164,7 +164,7 @@ class AssessmentController extends Controller
             $this->assessmentService->update($id, $request->except(['_token', '_method']));
             return redirect()->route('assessments.index')->with('success', 'Assessment updated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -174,7 +174,7 @@ class AssessmentController extends Controller
             $this->assessmentService->delete($id);
             return redirect()->route('assessments.index')->with('success', 'Assessment deleted successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 }

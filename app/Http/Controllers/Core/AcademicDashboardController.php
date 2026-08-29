@@ -16,9 +16,13 @@ class AcademicDashboardController extends Controller
 
     public function index()
     {
-        $data = Cache::remember('dashboard_academic', 300, function() {
-            return $this->dashboardService->getDashboardData();
-        });
+        try {
+            $data = Cache::remember('dashboard_academic', 300, function() {
+                return $this->dashboardService->getDashboardData();
+            });
+        } catch (\Exception $e) {
+            $data = ['api_error' => true, 'error_message' => $this->safeExceptionMessage($e)];
+        }
 
         return view('dashboard.academic', $data);
     }

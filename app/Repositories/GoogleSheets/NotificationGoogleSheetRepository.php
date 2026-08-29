@@ -9,7 +9,7 @@ class NotificationGoogleSheetRepository extends BaseSheetRepository implements N
     {
         parent::__construct();
         $this->sheetName = 'MASTER_NOTIFICATION';
-        $this->cacheKey = 'notifications_sheet';
+        $this->cacheKey = 'notification_list';
         $this->primaryKey = 'Notification_ID';
     }
 
@@ -25,37 +25,33 @@ class NotificationGoogleSheetRepository extends BaseSheetRepository implements N
         return collect($result)->sortByDesc('Created_At')->values()->all();
     }
 
+    public function getAll()
+    {
+        return $this->fetchAll();
+    }
+
+    public function getById($id)
+    {
+        return $this->fetchAll()->firstWhere($this->primaryKey, $id);
+    }
+
     public function create(array $data)
     {
-        $id = $this->generateNewId('NOTIF-', 6); // Or some logical prefix
-        if (empty($id) || $id === 'NOTIF-000000') {
-            $id = 'NOTIF-' . time() . rand(100, 999);
-        }
+        $data['Notification_ID'] = $data['Notification_ID'] ?? $this->generateNewId('NOTIF-', 6);
+        $data['Status'] = $data['Status'] ?? 'Pending';
+        $data['Created_At'] = $data['Created_At'] ?? now()->toDateTimeString();
 
-        $row = [
-            'Notification_ID' => $id,
-            'User_ID' => $data['User_ID'] ?? '',
-            'Role' => $data['Role'] ?? '',
-            'Module' => $data['Module'] ?? '',
-            'Reference_ID' => $data['Reference_ID'] ?? '',
-            'Category' => $data['Category'] ?? '',
-            'Priority' => $data['Priority'] ?? 'Low',
-            'Title' => $data['Title'] ?? '',
-            'Message' => $data['Message'] ?? '',
-            'Action_URL' => $data['Action_URL'] ?? '',
-            'Icon' => $data['Icon'] ?? '',
-            'Color' => $data['Color'] ?? '',
-            'Is_Read' => 'FALSE',
-            'Read_At' => '',
-            'Is_Archived' => 'FALSE',
-            'Archived_At' => '',
-            'Created_At' => date('Y-m-d H:i:s'),
-            'Created_By' => $data['Created_By'] ?? 'System',
-            'Notes' => $data['Notes'] ?? ''
-        ];
-        
-        $this->append($row);
-        return $id;
+        return $this->append($data);
+    }
+
+    public function update($id, array $data)
+    {
+        return $this->updateRow($id, $data);
+    }
+
+    public function delete($id)
+    {
+        return $this->updateRow($id, ['Status' => 'Archived']);
     }
 
     public function updateNotification($id, array $data)

@@ -37,6 +37,16 @@ return [
 
     'google' => [
         'spreadsheet_id' => env('GOOGLE_SPREADSHEET_ID'),
+        'oauth_client_id' => env('GOOGLE_OAUTH_CLIENT_ID'),
+        'oauth_client_secret' => env('GOOGLE_OAUTH_CLIENT_SECRET'),
+        'oauth_redirect_uri' => env('GOOGLE_OAUTH_REDIRECT_URI'),
+    ],
+
+    'microsoft' => [
+        'oauth_client_id' => env('MICROSOFT_OAUTH_CLIENT_ID'),
+        'oauth_client_secret' => env('MICROSOFT_OAUTH_CLIENT_SECRET'),
+        'oauth_redirect_uri' => env('MICROSOFT_OAUTH_REDIRECT_URI'),
+        'tenant' => env('MICROSOFT_OAUTH_TENANT', 'common'),
     ],
 
 ];

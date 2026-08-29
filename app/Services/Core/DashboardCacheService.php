@@ -39,11 +39,13 @@ class DashboardCacheService
     public function clearMarketing()
     {
         Cache::forget('dashboard_marketing');
+        Cache::forget('wms_marketing_dashboard_data');
     }
 
     public function clearDirector()
     {
         Cache::forget('dashboard_director');
+        Cache::forget('wms_director_dashboard_data');
     }
 
     public function clearAll()

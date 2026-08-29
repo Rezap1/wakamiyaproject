@@ -41,80 +41,113 @@ class PayrollCalculationEngine
             throw new \Exception("Pegawai #{$employeeId} tidak ditemukan atau sedang tidak aktif.");
         }
 
-        // 1. Base Salary Resolution
-        $baseSalary = (float) ($employee['Base_Salary'] ?? $overrides['base_salary'] ?? 0);
-        if ($baseSalary <= 0) {
-            $baseSalary = (float) config('finance.default_base_salary', 3500000);
+        // Fetch System Settings for Payroll
+        $settingService = app(\App\Services\Core\SystemSettingService::class);
+        $payrollSettings = $settingService->category('Payroll')->pluck('Setting_Value', 'Setting_Key');
+
+        $defaultBasicSalary = (float) ($payrollSettings['DEFAULT_BASIC_SALARY'] ?? 3500000);
+        $salaryFinance = (float) ($payrollSettings['SALARY_FINANCE'] ?? 3800000);
+        $salaryTeacher = (float) ($payrollSettings['SALARY_TEACHER'] ?? 4000000);
+        $salaryAcademic = (float) ($payrollSettings['SALARY_ACADEMIC'] ?? 3700000);
+        $salaryMarketing = (float) ($payrollSettings['SALARY_MARKETING'] ?? 3500000);
+        $salaryHr = (float) ($payrollSettings['SALARY_HR'] ?? 4000000);
+
+        $taxRatePercentage = (float) ($payrollSettings['TAX_PERCENTAGE'] ?? 0.0);
+        $bpjsRatePercentage = (float) ($payrollSettings['BPJS_PERCENTAGE'] ?? 0.0);
+        $absenceDeductionPerDay = (float) ($payrollSettings['ABSENCE_DEDUCTION_PER_DAY'] ?? 0);
+        $enableAutoAttendanceDeduction = filter_var($payrollSettings['ENABLE_AUTO_ATTENDANCE_DEDUCTION'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        // 1. Base Salary Resolution by Role / Department / Profile
+        $employeeBaseSalary = (float) ($employee['Base_Salary'] ?? 0);
+        
+        if ($employeeBaseSalary > 0) {
+            $baseSalary = $employeeBaseSalary;
+        } else {
+            // Determine by Department or Position or Role
+            $dept = strtoupper(trim($employee['Department_Name'] ?? ($employee['Department_ID'] ?? '')));
+            $pos = strtoupper(trim($employee['Position_Name'] ?? ($employee['Position_ID'] ?? '')));
+            $role = strtoupper(trim($employee['Role'] ?? ($employee['Role_ID'] ?? '')));
+            $fullName = strtoupper(trim($employee['Full_Name'] ?? ''));
+
+            if (str_contains($dept, 'FINANCE') || str_contains($pos, 'FINANCE') || str_contains($role, 'FINANCE') || str_contains($fullName, 'FINANCE')) {
+                $baseSalary = $salaryFinance;
+            } elseif (str_contains($dept, 'TEACHER') || str_contains($pos, 'GURU') || str_contains($pos, 'SENSEI') || str_contains($role, 'TEACHER') || str_contains($fullName, 'TEACHER') || str_contains($fullName, 'SENSEI')) {
+                $baseSalary = $salaryTeacher;
+            } elseif (str_contains($dept, 'ACADEMIC') || str_contains($pos, 'AKADEMIK') || str_contains($role, 'ACADEMIC') || str_contains($fullName, 'ACADEMIC')) {
+                $baseSalary = $salaryAcademic;
+            } elseif (str_contains($dept, 'MARKETING') || str_contains($pos, 'MARKETING') || str_contains($role, 'MARKETING') || str_contains($fullName, 'MARKETING')) {
+                $baseSalary = $salaryMarketing;
+            } elseif (str_contains($dept, 'HR') || str_contains($pos, 'HR') || str_contains($role, 'HR') || str_contains($fullName, 'HR')) {
+                $baseSalary = $salaryHr;
+            } else {
+                $baseSalary = $defaultBasicSalary;
+            }
         }
 
-        // 2. Allowances & Approved Overtime Integration (Sub-Phase H5)
+        // If user submitted an explicit Net Salary input on form (and Net_Salary > 0)
+        $inputNetSalary = (float) ($overrides['Net_Salary'] ?? 0);
+        if ($inputNetSalary > 0) {
+            $baseSalary = $inputNetSalary;
+        }
+
+        // 2. Allowances & Approved Overtime Integration
         $allowances = (float) ($overrides['allowances'] ?? 0);
         $bonus = (float) ($overrides['bonus'] ?? 0);
 
-        // Read Approved Overtime Pay from OvertimeService
         $approvedOvertimePay = $this->overtimeService->getApprovedOvertimePayForPeriod($employeeId, $period);
         $overtime = (float) ($overrides['overtime'] ?? 0) + $approvedOvertimePay;
 
-        // Fetch master active salary components if available
-        $components = collect($this->salaryComponentRepo->getAll())
-            ->where('Status', 'Active');
-        
+        $components = collect($this->salaryComponentRepo->getAll())->where('Status', 'Active');
         $masterAllowances = (float) $components->where('Type', 'Allowance')->sum('Amount');
         $allowances += $masterAllowances;
 
-        // 3. Read Server-side Phase F Dynamic QR Attendance Data for Period (YYYY-MM)
+        // 3. Attendance Data
         $allAttendances = collect($this->attendanceRepo->fetchAll());
         $periodAttendances = $allAttendances->filter(function ($att) use ($employeeId, $period) {
             if (($att['Employee_ID'] ?? '') !== $employeeId) return false;
             if (strtoupper(trim($att['Is_Active'] ?? 'TRUE')) === 'FALSE') return false;
-            
             $attDate = $att['Attendance_Date'] ?? null;
-            if (!$attDate) return false;
-
-            try {
-                return str_starts_with($attDate, $period);
-            } catch (\Exception $e) {
-                return false;
-            }
+            return $attDate && str_starts_with($attDate, $period);
         });
 
         $presentCount = $periodAttendances->where('Status', 'PRESENT')->count();
         $lateCount = $periodAttendances->where('Status', 'LATE')->count();
         $totalLateMinutes = (int) $periodAttendances->sum('Late_Minutes');
 
-        // Late Deduction (Calculated separately per minute)
         $lateRatePerMinute = (float) config('finance.late_deduction_per_minute', 1000);
-        $lateDeduction = $totalLateMinutes * $lateRatePerMinute;
+        $lateDeduction = $enableAutoAttendanceDeduction ? ($totalLateMinutes * $lateRatePerMinute) : 0;
 
-        // Read Approved Leaves for Period (Sub-Phase H4)
         $approvedLeaveDays = $this->leaveService->getApprovedLeavesForPeriod($employeeId, $period);
-
-        // ABSENT DAYS CORRECTION DIRECTIVE:
-        // LATE IS A PRESENT DAY! (Valid Present Days = Present Days + Late Days)
         $validPresentDays = $presentCount + $lateCount;
         $expectedWorkingDays = (int) config('finance.monthly_working_days', 22);
 
-        // Absent Days = max(0, Working Days - Valid Present Days - Approved Leave Days)
         $absentDays = max(0, $expectedWorkingDays - $validPresentDays - $approvedLeaveDays);
         
-        $dailyAbsenceRate = (float) config('finance.absence_deduction_per_day', 150000);
-        $absenceDeduction = $absentDays * $dailyAbsenceRate;
+        // Only apply absence deduction if auto attendance deduction is explicitly enabled AND attendances exist
+        if ($enableAutoAttendanceDeduction && $periodAttendances->count() > 0) {
+            $absenceDeduction = $absentDays * $absenceDeductionPerDay;
+        } else {
+            $absenceDeduction = 0;
+        }
 
-        // Master Component Deductions
         $masterDeductions = (float) $components->where('Type', 'Deduction')->sum('Amount');
 
-        // 4. Tax & BPJS Calculation (Configurable)
-        $taxRate = (float) config('finance.tax_rate_pph21', 0.05);
-        $bpjsRate = (float) config('finance.bpjs_rate', 0.02);
-
+        // 4. Tax & BPJS Calculation
         $grossSalary = $baseSalary + $allowances + $bonus + $overtime;
         
-        $tax = $grossSalary * $taxRate;
-        $bpjs = $grossSalary * $bpjsRate;
+        $tax = $grossSalary * ($taxRatePercentage / 100);
+        $bpjs = $grossSalary * ($bpjsRatePercentage / 100);
         $otherDeduction = (float) ($overrides['other_deduction'] ?? 0) + $masterDeductions;
 
         $totalDeduction = $lateDeduction + $absenceDeduction + $tax + $bpjs + $otherDeduction;
-        $netSalary = max(0.0, $grossSalary - $totalDeduction);
+
+        // If user submitted an explicit Net_Salary > 0, honor inputNetSalary as netSalary
+        if ($inputNetSalary > 0) {
+            $netSalary = $inputNetSalary;
+            $totalDeduction = max(0.0, $grossSalary - $netSalary);
+        } else {
+            $netSalary = max(0.0, $grossSalary - $totalDeduction);
+        }
 
         return [
             'employee_id' => $employeeId,

@@ -46,13 +46,13 @@ use App\Repositories\GoogleSheets\SubjectRepository;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Repositories\GoogleSheets\ScheduleRepository;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
+use App\Repositories\GoogleSheets\AttendanceRequestRepository;
 use App\Repositories\GoogleSheets\AttendanceRepository;
 use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
 use App\Repositories\GoogleSheets\ScoreRepository;
 use App\Interfaces\GoogleSheets\AssignmentRepositoryInterface;
 use App\Repositories\GoogleSheets\AssignmentRepository;
-use App\Interfaces\GoogleSheets\SubmissionRepositoryInterface;
-use App\Repositories\GoogleSheets\SubmissionRepository;
 use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
 use App\Repositories\GoogleSheets\AnnouncementRepository;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
@@ -71,6 +71,10 @@ use App\Repositories\GoogleSheets\TransactionRepository;
 // Phase 9.3 & 9.4 Bindings
 use App\Interfaces\GoogleSheets\PayrollRepositoryInterface;
 use App\Repositories\GoogleSheets\PayrollRepository;
+use App\Interfaces\GoogleSheets\LeaveRepositoryInterface;
+use App\Repositories\GoogleSheets\LeaveRepository;
+use App\Interfaces\GoogleSheets\OvertimeRepositoryInterface;
+use App\Repositories\GoogleSheets\OvertimeRepository;
 use App\Interfaces\GoogleSheets\SalaryComponentRepositoryInterface;
 use App\Repositories\GoogleSheets\SalaryComponentRepository;
 use App\Interfaces\GoogleSheets\DocumentTemplateRepositoryInterface;
@@ -90,6 +94,12 @@ use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
 use App\Repositories\GoogleSheets\SystemSettingRepository;
 use App\Interfaces\GoogleSheets\SystemParameterRepositoryInterface;
 use App\Repositories\GoogleSheets\SystemParameterRepository;
+
+use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
+use App\Repositories\GoogleSheets\PermanentQrRepository;
+
+use App\Interfaces\GoogleSheets\AssessmentConfigRepositoryInterface;
+use App\Repositories\GoogleSheets\AssessmentConfigRepository;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -117,9 +127,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SubjectRepositoryInterface::class, SubjectRepository::class);
         $this->app->bind(ScheduleRepositoryInterface::class, ScheduleRepository::class);
         $this->app->bind(AttendanceRepositoryInterface::class, AttendanceRepository::class);
+        $this->app->bind(AttendanceRequestRepositoryInterface::class, AttendanceRequestRepository::class);
         $this->app->bind(ScoreRepositoryInterface::class, ScoreRepository::class);
         $this->app->bind(AssignmentRepositoryInterface::class, AssignmentRepository::class);
-        $this->app->bind(SubmissionRepositoryInterface::class, SubmissionRepository::class);
         $this->app->bind(AnnouncementRepositoryInterface::class, AnnouncementRepository::class);
         $this->app->bind(NotificationRepositoryInterface::class, NotificationRepository::class);
         $this->app->bind(AssessmentRepositoryInterface::class, AssessmentRepository::class);
@@ -128,15 +138,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(AccountRepositoryInterface::class, AccountRepository::class);
         $this->app->bind(TransactionRepositoryInterface::class, TransactionRepository::class);
         $this->app->bind(PayrollRepositoryInterface::class, PayrollRepository::class);
+        $this->app->bind(LeaveRepositoryInterface::class, LeaveRepository::class);
+        $this->app->bind(OvertimeRepositoryInterface::class, OvertimeRepository::class);
         $this->app->bind(SalaryComponentRepositoryInterface::class, SalaryComponentRepository::class);
         $this->app->bind(DocumentTemplateRepositoryInterface::class, DocumentTemplateRepository::class);
     $this->app->bind(WorkflowRepositoryInterface::class, WorkflowRepository::class);
         $this->app->bind(ApprovalRepositoryInterface::class, ApprovalRepository::class);
         $this->app->bind(ApprovalHistoryRepositoryInterface::class, ApprovalHistoryRepository::class);
             $this->app->bind(AuditLogRepositoryInterface::class, AuditLogRepository::class);
-            $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
-        $this->app->bind(SystemParameterRepositoryInterface::class, SystemParameterRepository::class);
-            $this->app->singleton(\App\Services\Core\EnterpriseAutomationService::class, function ($app) { return new \App\Services\Core\EnterpriseAutomationService(); });
+            $this->app->singleton(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
+        $this->app->singleton(SystemParameterRepositoryInterface::class, SystemParameterRepository::class);
+        
+        $this->app->singleton(PermanentQrRepositoryInterface::class, PermanentQrRepository::class);
+        $this->app->singleton(AssessmentConfigRepositoryInterface::class, AssessmentConfigRepository::class);
+        $this->app->singleton(\App\Services\Core\EnterpriseAutomationService::class, function ($app) { return new \App\Services\Core\EnterpriseAutomationService(); });
     }
 
     /**
@@ -150,6 +165,45 @@ class AppServiceProvider extends ServiceProvider
 
         Auth::provider('google_sheets', function ($app, array $config) {
             return new GoogleSheetsUserProvider($app->make(UserService::class));
+        });
+
+        view()->composer('*', function ($view) {
+            try {
+                static $brandingPayload = null;
+
+                if ($brandingPayload === null) {
+                    $settingService = app(\App\Services\Core\SystemSettingService::class);
+                    $brandingPayload = [
+                        'themeTokens' => $settingService->getThemeTokens(),
+                        'companyProfile' => $settingService->getCompanyProfile(),
+                    ];
+                }
+
+                $view->with('themeTokens', $brandingPayload['themeTokens']);
+                $view->with('companyProfile', $brandingPayload['companyProfile']);
+            } catch (\Throwable $e) {
+                // Safe fallback
+            }
+        });
+
+        // Dashboard Context Composer
+        view()->composer(['dashboard.*', 'components.dashboard-header', 'components.mobile-dashboard-hero'], function ($view) {
+            try {
+                $contextService = app(\App\Services\Dashboard\DashboardContextService::class);
+                $view->with('dashboardContext', $contextService->getContext());
+            } catch (\Throwable $e) {
+                // Safe fallback
+                $view->with('dashboardContext', [
+                    'time' => date('H:i:s'),
+                    'date' => date('Y-m-d'),
+                    'greeting' => 'Selamat datang',
+                    'greeting_icon' => '👋',
+                    'timezone' => 'Asia/Jakarta',
+                    'user_name' => auth()->user()->Full_Name ?? 'User',
+                    'role' => auth()->user()->Role ?? 'USER',
+                    'timestamp' => time()
+                ]);
+            }
         });
 
 

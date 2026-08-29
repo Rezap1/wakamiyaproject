@@ -105,6 +105,14 @@ class ReportHelper
         return $pdf->download($filename . '.pdf');
     }
 
+    public static function sanitizeCsvCell($value)
+    {
+        if (is_string($value) && preg_match('/^[=\-+\@]/', $value)) {
+            return "'" . $value;
+        }
+        return $value;
+    }
+
     private static function generateCsv($filename, $data, $headers, $mapRow)
     {
         $headersArr = ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => "attachment; filename=\"$filename.csv\""];
@@ -116,10 +124,13 @@ class ReportHelper
             fputs($file, "\xEF\xBB\xBF");
             
             if (!empty($headers)) {
-                fputcsv($file, $headers);
+                $sanitizedHeaders = array_map([self::class, 'sanitizeCsvCell'], $headers);
+                fputcsv($file, $sanitizedHeaders);
             }
             foreach ($data as $row) {
-                fputcsv($file, $mapRow($row));
+                $mapped = $mapRow($row);
+                $sanitizedRow = array_map([self::class, 'sanitizeCsvCell'], $mapped);
+                fputcsv($file, $sanitizedRow);
             }
             fclose($file);
         };
@@ -150,7 +161,7 @@ class ReportHelper
         <body>
         <table><tr>";
         foreach ($headers as $h) {
-            $html .= "<th style='background-color:#cccccc;font-weight:bold;border:1px solid #000;'>" . htmlspecialchars($h) . "</th>";
+            $html .= "<th style='background-color:#cccccc;font-weight:bold;border:1px solid #000;'>" . htmlspecialchars((string) self::sanitizeCsvCell($h), ENT_QUOTES, 'UTF-8') . "</th>";
         }
         $html .= "</tr>";
         
@@ -158,7 +169,7 @@ class ReportHelper
             $mapped = $mapRow($row);
             $html .= "<tr>";
             foreach ($mapped as $cell) {
-                $html .= "<td style='border:1px solid #000;'>" . htmlspecialchars($cell ?? '') . "</td>";
+                $html .= "<td style='border:1px solid #000;'>" . htmlspecialchars((string) self::sanitizeCsvCell($cell ?? ''), ENT_QUOTES, 'UTF-8') . "</td>";
             }
             $html .= "</tr>";
         }

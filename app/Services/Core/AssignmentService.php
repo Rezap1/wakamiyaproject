@@ -47,6 +47,7 @@ class AssignmentService
             $data['Assignment_ID'] = $this->generateId();
         }
         $data['Created_At'] = now()->toDateTimeString();
+        $data['Status'] = !empty($data['Status']) ? $data['Status'] : 'Published';
         
         $result = $this->repository->create($data);
         $this->repository->clearCache();
@@ -69,6 +70,10 @@ class AssignmentService
     {
         $this->validateAssignment($data);
         $data['Updated_At'] = now()->toDateTimeString();
+        if (isset($data['Status']) && empty($data['Status'])) {
+            $data['Status'] = 'Published';
+        }
+        
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
 

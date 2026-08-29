@@ -119,21 +119,6 @@ class UserResolverHelper
 
         $trimmed = trim($roleId);
 
-        $knownRoles = [
-            'ROL000001' => 'DIRECTOR',
-            'ROL000002' => 'ADMINISTRATOR',
-            'ROL000003' => 'HR',
-            'ROL000004' => 'ACADEMIC',
-            'ROL000005' => 'FINANCE',
-            'ROL000006' => 'TEACHER',
-            'ROL000007' => 'MARKETING',
-            'ROL000008' => 'STUDENT',
-        ];
-
-        if (isset($knownRoles[$trimmed])) {
-            return $knownRoles[$trimmed];
-        }
-
         try {
             $rolesMap = Cache::remember('all_roles_lookup_map', 300, function () {
                 $repo = app(\App\Interfaces\GoogleSheets\RoleRepositoryInterface::class);
@@ -141,11 +126,113 @@ class UserResolverHelper
             });
 
             if (isset($rolesMap[$trimmed])) {
-                return $rolesMap[$trimmed]['Role_Name'] ?? $trimmed;
+                $role = $rolesMap[$trimmed];
+                if (strtoupper(trim((string) ($role['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                    return '';
+                }
+
+                return trim((string) ($role['Role_Name'] ?? ''));
             }
         } catch (\Exception $e) {}
 
-        return $trimmed;
+        return '';
+    }
+
+    /**
+     * Resolve Student ID/User ID to array containing student details:
+     * ['name' => ..., 'class_name' => ..., 'batch_name' => ..., 'formatted' => ...]
+     */
+    public static function getStudentDetail(?string $identifier): array
+    {
+        $default = [
+            'name' => '-',
+            'class_name' => '-',
+            'batch_name' => '-',
+            'formatted' => '-'
+        ];
+
+        if (empty($identifier)) {
+            return $default;
+        }
+
+        $trimmed = trim($identifier);
+
+        $students = Cache::remember('all_students_lookup_map', 300, function () {
+            try {
+                $repo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+                return collect($repo->fetchAll());
+            } catch (\Exception $e) {
+                return collect();
+            }
+        });
+
+        $std = $students->first(function ($s) use ($trimmed) {
+            return ($s['Student_ID'] ?? '') === $trimmed ||
+                   ($s['User_ID'] ?? '') === $trimmed ||
+                   strcasecmp($s['Email'] ?? '', $trimmed) === 0;
+        });
+
+        if (!$std) {
+            $name = self::getName($identifier);
+            return [
+                'name' => $name,
+                'class_name' => '-',
+                'batch_name' => '-',
+                'formatted' => $name
+            ];
+        }
+
+        $studentName = $std['Full_Name'] ?? '-';
+        $classId = $std['Class_ID'] ?? '';
+        $batchId = $std['Batch_ID'] ?? '';
+
+        $className = '-';
+        if (!empty($classId)) {
+            $classes = Cache::remember('all_classes_lookup_map', 300, function () {
+                try {
+                    $repo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
+                    return collect($repo->fetchAll());
+                } catch (\Exception $e) {
+                    return collect();
+                }
+            });
+            $cls = $classes->firstWhere('Class_ID', $classId);
+            if ($cls) {
+                $className = $cls['Class_Name'] ?? $cls['Class_Code'] ?? '-';
+            }
+        }
+
+        $batchName = '-';
+        if (!empty($batchId)) {
+            $batches = Cache::remember('all_batches_lookup_map', 300, function () {
+                try {
+                    $repo = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class);
+                    return collect($repo->fetchAll());
+                } catch (\Exception $e) {
+                    return collect();
+                }
+            });
+            $btc = $batches->firstWhere('Batch_ID', $batchId);
+            if ($btc) {
+                $batchName = $btc['Batch_Name'] ?? $btc['Batch_Code'] ?? '-';
+            }
+        }
+
+        $formattedInfo = $studentName;
+        $details = [];
+        if ($className !== '-') $details[] = "Kelas: {$className}";
+        if ($batchName !== '-') $details[] = "Batch: {$batchName}";
+
+        if (!empty($details)) {
+            $formattedInfo .= ' (' . implode(' | ', $details) . ')';
+        }
+
+        return [
+            'name' => $studentName,
+            'class_name' => $className,
+            'batch_name' => $batchName,
+            'formatted' => $formattedInfo
+        ];
     }
 
     /**
@@ -158,5 +245,7 @@ class UserResolverHelper
         Cache::forget('all_teachers_lookup_map');
         Cache::forget('all_users_lookup_map');
         Cache::forget('all_roles_lookup_map');
+        Cache::forget('all_classes_lookup_map');
+        Cache::forget('all_batches_lookup_map');
     }
 }

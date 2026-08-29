@@ -20,9 +20,11 @@
 
 <div class="space-y-6">
     <x-page-header 
-        title="Formulir Pembaruan Tugas" 
-        description="Mengubah data tugas: {{ $assignment['Assignment_ID'] ?? '' }}"
-        :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Edit' => '#']"
+        title="Edit Tugas: {{ $assignment['Title'] ?? 'Tidak ada judul' }}" 
+        description="Ubah informasi tugas dan tenggat waktu."
+        :breadcrumbs="isset($currentTeacherId) && $currentTeacherId 
+            ? ['Dashboard' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Edit Tugas' => '#']
+            : ['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Edit' => '#']"
     >
         <x-slot:actions>
             @php
@@ -91,8 +93,8 @@
 
                     <div>
                         <x-select name="Status" label="Status Publikasi" required>
+                            <option value="Published" {{ old('Status', $assignment['Status'] ?? 'Published') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
                             <option value="Draft" {{ old('Status', $assignment['Status'] ?? '') == 'Draft' ? 'selected' : '' }}>Draft (Belum Dipublikasikan)</option>
-                            <option value="Published" {{ old('Status', $assignment['Status'] ?? '') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
                             <option value="Closed" {{ old('Status', $assignment['Status'] ?? '') == 'Closed' ? 'selected' : '' }}>Closed (Ditutup)</option>
                         </x-select>
                     </div>
@@ -104,10 +106,10 @@
             </div>
 
             <div class="px-6 md:px-12 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl">
-                <x-button as="a" href="{{ route('assignments.index') }}" variant="secondary">Batal</x-button>
+                <x-button as="a" href="{{ isset($currentTeacherId) && $currentTeacherId ? route('teacher.workspace.assignments') : route('assignments.index') }}" variant="secondary">Batal</x-button>
                 <x-button type="submit" variant="primary">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    Perbarui Tugas
+                    Simpan Perubahan
                 </x-button>
             </div>
         </form>

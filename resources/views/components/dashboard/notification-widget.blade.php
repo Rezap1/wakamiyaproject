@@ -1,5 +1,5 @@
 @php
-    $userId = auth()->user()->email ?? (auth()->user()->User_ID ?? 'user@example.com');
+    $userId = auth()->user()->email ?? (auth()->user()->User_ID ?? null);
     $userRole = session('role') ?? 'GUEST';
     $notifService = app(\App\Services\Core\NotificationService::class);
     $criticalNotif = $notifService->CriticalNotification($userId, $userRole);

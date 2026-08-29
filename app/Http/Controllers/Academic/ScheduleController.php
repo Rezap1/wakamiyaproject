@@ -81,7 +81,23 @@ class ScheduleController extends Controller
             return $item;
         });
 
-        return view('academic.schedules.index', compact('schedules'));
+        $scheduleGroups = $schedules
+            ->groupBy(fn ($schedule) => trim((string) ($schedule['Day_Of_Week'] ?? $schedule['Day'] ?? 'NO_DAY')) ?: 'NO_DAY')
+            ->map(function ($group, $day) {
+                return [
+                    'id' => $day,
+                    'title' => $day,
+                    'total' => $group->count(),
+                    'items' => $group->sortBy('Start_Time')->values(),
+                ];
+            })
+            ->sortBy(function ($group) {
+                $order = array_search($group['id'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], true);
+                return $order === false ? 99 : $order;
+            })
+            ->values();
+
+        return view('academic.schedules.index', compact('schedules', 'scheduleGroups'));
     }
 
     public function create(
@@ -110,11 +126,26 @@ class ScheduleController extends Controller
     public function store(\App\Http\Requests\StoreScheduleRequest $request)
     {
         try {
-            $data = $request->except('_token');
-            $this->scheduleService->create($data);
-            return redirect()->route('schedules.index')->with('success', 'Schedule created successfully.');
+            $data = $request->only([
+                'Class_ID', 'Subject_ID', 'Teacher_ID', 'Academic_Year_ID',
+                'Day_Of_Week', 'Start_Time', 'End_Time', 'Room', 'Is_Active'
+            ]);
+            
+            $days = is_array($data['Day_Of_Week'] ?? '') ? $data['Day_Of_Week'] : [$data['Day_Of_Week']];
+            
+            if (empty($days) || (count($days) === 1 && empty($days[0]))) {
+                throw new \Exception('Pilih setidaknya satu hari.');
+            }
+
+            foreach ($days as $day) {
+                $scheduleData = $data;
+                $scheduleData['Day_Of_Week'] = $day;
+                $this->scheduleService->create($scheduleData);
+            }
+            
+            return redirect()->route('schedules.index')->with('success', 'Schedule(s) created successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -158,11 +189,14 @@ class ScheduleController extends Controller
     public function update(\App\Http\Requests\UpdateScheduleRequest $request, $id)
     {
         try {
-            $data = $request->except(['_token', '_method']);
+            $data = $request->only([
+                'Class_ID', 'Subject_ID', 'Teacher_ID', 'Academic_Year_ID',
+                'Day_Of_Week', 'Start_Time', 'End_Time', 'Room', 'Is_Active'
+            ]);
             $this->scheduleService->update($id, $data);
             return redirect()->route('schedules.index')->with('success', 'Schedule updated successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
     }
 
@@ -172,7 +206,7 @@ class ScheduleController extends Controller
             $this->scheduleService->delete($id);
             return redirect()->route('schedules.index')->with('success', 'Schedule deleted successfully.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
     }
 }

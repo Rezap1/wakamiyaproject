@@ -58,7 +58,7 @@
                     GPS Aktif
                 </span>
                 <span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-extrabold flex items-center gap-1">
-                    📍 <span x-text="coords.distanceText">8,4 meter</span>
+                    📍 <span x-text="coords.distanceText">Menghitung...</span>
                 </span>
             </div>
         </div>
@@ -95,11 +95,11 @@
             <h4 class="text-[11px] font-black text-slate-800 border-b border-slate-200 pb-2">Detail Presensi Pegawai</h4>
             <div class="flex justify-between border-b border-slate-200/60 pb-2">
                 <span class="text-slate-500">Tanggal</span>
-                <span class="font-bold text-slate-800" x-text="successData.date">18 Agustus 2026</span>
+                <span class="font-bold text-slate-800" x-text="successData.date">—</span>
             </div>
             <div class="flex justify-between border-b border-slate-200/60 pb-2">
                 <span class="text-slate-500">Waktu</span>
-                <span class="font-bold text-slate-800" x-text="successData.time + ' WIB'">07:42:18 WIB</span>
+                <span class="font-bold text-slate-800" x-text="successData.time ? successData.time + ' WIB' : '—'">—</span>
             </div>
             <div class="flex justify-between border-b border-slate-200/60 pb-2">
                 <span class="text-slate-500">Lokasi</span>
@@ -107,11 +107,11 @@
             </div>
             <div class="flex justify-between border-b border-slate-200/60 pb-2">
                 <span class="text-slate-500">Jarak</span>
-                <span class="font-bold text-emerald-600" x-text="successData.distance + ' meter'">8,4 meter</span>
+                <span class="font-bold text-emerald-600" x-text="successData.distance ? successData.distance + ' meter' : '—'">—</span>
             </div>
             <div class="flex justify-between items-center">
                 <span class="text-slate-500">Status</span>
-                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px]" x-text="successData.statusLabel">HADIR</span>
+                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px]" x-text="successData.statusLabel || '—'">—</span>
             </div>
         </div>
 
@@ -172,8 +172,8 @@
 
         <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs space-y-1">
             <p class="text-slate-500 font-medium">Jarak Anda</p>
-            <p class="text-2xl font-black text-slate-900" x-text="coords.distanceText">86,4 meter</p>
-            <p class="text-[11px] font-bold text-sky-600 pt-1">Maksimal jarak: 20 meter</p>
+            <p class="text-2xl font-black text-slate-900" x-text="coords.distanceText">—</p>
+            <p class="text-[11px] font-bold text-sky-600 pt-1" x-text="maxRadius !== null ? 'Maksimal jarak: ' + maxRadius + ' meter' : 'Radius geofence belum dikonfigurasi'">Radius geofence belum dikonfigurasi</p>
         </div>
 
         <p class="text-xs text-slate-600 font-medium max-w-xs mx-auto">
@@ -270,17 +270,50 @@
 <!-- HTML5 QR CODE SCANNER LIBRARY -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
+<style>
+    #hr-qr-reader {
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
+        background: #000 !important;
+        overflow: hidden !important;
+    }
+    #hr-qr-reader video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        border-radius: 1.5rem !important;
+    }
+    #hr-qr-reader canvas {
+        display: none !important;
+    }
+    #hr-qr-reader__scan_region {
+        background: transparent !important;
+    }
+    #hr-qr-reader__dashboard {
+        display: none !important;
+    }
+</style>
+
+@php
+    $settingService = app(\App\Services\Core\SystemSettingService::class);
+    $lpkLat = $settingService->get('LPK_LATITUDE', null);
+    $lpkLon = $settingService->get('LPK_LONGITUDE', null);
+    $maxRadius = $settingService->get('LPK_ALLOWED_RADIUS_METERS', null);
+@endphp
+
 <script>
     function employeeQrScannerEngine() {
         return {
             viewState: 'SCANNING',
             errorMessage: '',
-            coords: { lat: null, lon: null, distanceText: '8,4 meter' },
-            successData: { date: '18 Agustus 2026', time: '07:42:18', distance: '8,4', statusLabel: 'HADIR', message: '' },
+            coords: { lat: null, lon: null, distanceText: 'Menghitung...' },
+            successData: { date: '', time: '', distance: '', statusLabel: '', message: '' },
             html5QrCode: null,
             lastScannedToken: null,
-            lpkLat: -6.812391,
-            lpkLon: 107.194458,
+            lpkLat: @json(is_numeric($lpkLat) ? (float) $lpkLat : null),
+            lpkLon: @json(is_numeric($lpkLon) ? (float) $lpkLon : null),
+            maxRadius: @json(is_numeric($maxRadius) ? (float) $maxRadius : null),
 
             init() {
                 this.requestGpsAndReset();
@@ -293,6 +326,10 @@
                         (position) => {
                             this.coords.lat = position.coords.latitude;
                             this.coords.lon = position.coords.longitude;
+                            if (this.lpkLat === null || this.lpkLon === null) {
+                                this.coords.distanceText = 'Lokasi belum dikonfigurasi';
+                                return;
+                            }
                             const d = this.haversine(this.coords.lat, this.coords.lon, this.lpkLat, this.lpkLon);
                             this.coords.distanceText = d.toFixed(1).replace('.', ',') + ' meter';
                             if (this.viewState === 'GEO_ERROR') {
@@ -300,7 +337,7 @@
                             }
                         },
                         (error) => {
-                            this.coords.distanceText = '8,4 meter';
+                            this.coords.distanceText = 'Menunggu GPS...';
                             if (error.code === error.PERMISSION_DENIED) {
                                 this.viewState = 'GEO_ERROR';
                             }
@@ -315,40 +352,70 @@
             async startScanner() {
                 this.$nextTick(async () => {
                     if (typeof Html5Qrcode === 'undefined') {
-                        setTimeout(() => this.startScanner(), 500);
+                        setTimeout(() => this.startScanner(), 300);
                         return;
                     }
 
+                    if (this.html5QrCode) {
+                        try { await this.html5QrCode.stop(); } catch (e) {}
+                    }
+
                     this.html5QrCode = new Html5Qrcode("hr-qr-reader");
-                    const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+                    const config = {
+                        fps: 15,
+                        qrbox: (viewfinderWidth, viewfinderHeight) => {
+                            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                            const qrboxSize = Math.floor(minEdge * 0.75);
+                            return { width: qrboxSize, height: qrboxSize };
+                        },
+                        aspectRatio: 1.0
+                    };
+
+                    const onScanSuccess = (decodedText) => this.onQrScanned(decodedText);
+                    const onScanError = () => {};
+
+                    const fixVideoIOS = () => {
+                        setTimeout(() => {
+                            const videoElem = document.querySelector('#hr-qr-reader video');
+                            if (videoElem) {
+                                videoElem.setAttribute('playsinline', 'true');
+                                videoElem.setAttribute('webkit-playsinline', 'true');
+                                videoElem.setAttribute('muted', 'true');
+                                videoElem.style.objectFit = 'cover';
+                                videoElem.style.width = '100%';
+                                videoElem.style.height = '100%';
+                                videoElem.play().catch(() => {});
+                            }
+                        }, 200);
+                    };
 
                     try {
-                        const devices = await Html5Qrcode.getCameras();
-                        let cameraId = null;
-
-                        if (devices && devices.length > 0) {
-                            const backCamera = devices.find(d => {
-                                const label = (d.label || '').toLowerCase();
-                                return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('belakang');
-                            });
-                            cameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
-                        }
-
-                        const constraint = cameraId ? cameraId : { facingMode: "environment" };
-
-                        await this.html5QrCode.start(
-                            constraint,
-                            config,
-                            (decodedText) => this.onQrScanned(decodedText),
-                            () => {}
-                        );
+                        await this.html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanError);
+                        fixVideoIOS();
                         this.viewState = 'SCANNING';
-                    } catch (err) {
+                    } catch (err1) {
                         try {
-                            await this.html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => this.onQrScanned(decodedText), () => {});
-                            this.viewState = 'SCANNING';
-                        } catch (fallbackErr) {
-                            this.viewState = 'CAMERA_ERROR';
+                            const devices = await Html5Qrcode.getCameras();
+                            if (devices && devices.length > 0) {
+                                const backCam = devices.find(d => {
+                                    const l = (d.label || '').toLowerCase();
+                                    return l.includes('back') || l.includes('rear') || l.includes('environment') || l.includes('belakang');
+                                });
+                                const camId = backCam ? backCam.id : devices[0].id;
+                                await this.html5QrCode.start(camId, config, onScanSuccess, onScanError);
+                                fixVideoIOS();
+                                this.viewState = 'SCANNING';
+                            } else {
+                                throw new Error('No camera found');
+                            }
+                        } catch (err2) {
+                            try {
+                                await this.html5QrCode.start({ facingMode: "user" }, config, onScanSuccess, onScanError);
+                                fixVideoIOS();
+                                this.viewState = 'SCANNING';
+                            } catch (err3) {
+                                this.viewState = 'CAMERA_ERROR';
+                            }
                         }
                     }
                 });
@@ -357,8 +424,14 @@
             onQrScanned(token) {
                 if (this.viewState === 'PROCESSING' || this.lastScannedToken === token) return;
                 
-                if (!this.coords.lat || !this.coords.lon) {
+                if (this.coords.lat == null || this.coords.lon == null) {
                     this.requestGpsAndReset();
+                    this.viewState = 'GEO_ERROR';
+                    this.lastScannedToken = null;
+                    if (this.html5QrCode) {
+                        this.html5QrCode.resume();
+                    }
+                    return;
                 }
 
                 this.lastScannedToken = token;
@@ -377,8 +450,8 @@
                     },
                     body: JSON.stringify({
                         token: token,
-                        latitude: this.coords.lat || this.lpkLat,
-                        longitude: this.coords.lon || this.lpkLon,
+                        latitude: this.coords.lat,
+                        longitude: this.coords.lon,
                         device_info: navigator.userAgent
                     })
                 })
@@ -386,11 +459,12 @@
                 .then(data => {
                     if (data.success) {
                         const now = new Date();
+                        const isCheckOut = data.data.action === 'CHECK_OUT';
                         this.successData = {
                             date: now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-                            time: data.data.check_in_time || now.toLocaleTimeString('id-ID'),
-                            distance: (data.data.distance_meters || this.haversine(this.coords.lat || this.lpkLat, this.coords.lon || this.lpkLon, this.lpkLat, this.lpkLon)).toFixed(1).replace('.', ','),
-                            statusLabel: data.data.status === 'PRESENT' ? 'HADIR' : 'TERLAMBAT',
+                            time: (isCheckOut ? data.data.check_out_time : data.data.check_in_time) || now.toLocaleTimeString('id-ID'),
+                            distance: (data.data.distance_meters || this.haversine(this.coords.lat, this.coords.lon, this.lpkLat, this.lpkLon)).toFixed(1).replace('.', ','),
+                            statusLabel: isCheckOut ? 'KELUAR' : (data.data.status === 'PRESENT' ? 'HADIR' : 'TERLAMBAT'),
                             message: data.message
                         };
                         this.viewState = 'SUCCESS';

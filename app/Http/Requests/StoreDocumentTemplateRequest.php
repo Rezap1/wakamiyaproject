@@ -23,7 +23,12 @@ class StoreDocumentTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'Template_Name' => ['required', 'string', 'max:150'],
+            'Template_Code' => ['required', 'string', 'max:80'],
+            'Document_Type' => ['required', 'string', 'max:100'],
+            'Description' => ['nullable', 'string', 'max:1000'],
+            'Template_Content' => ['nullable', 'string'],
+            'Status' => ['nullable', 'in:Active,Inactive'],
         ];
     }
 }

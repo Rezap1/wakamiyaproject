@@ -20,7 +20,7 @@ class GoogleSheetsUserProvider implements UserProvider
     public function retrieveById($identifier)
     {
         $user = $this->userService->getUserById($identifier);
-        return $user ? $this->getGenericUser($user) : null;
+        return $user && $this->isActive($user) ? $this->getGenericUser($user) : null;
     }
 
     public function retrieveByToken($identifier, $token)
@@ -39,13 +39,23 @@ class GoogleSheetsUserProvider implements UserProvider
             return null;
         }
 
-        $user = $this->userService->getUserByEmail($credentials['email']);
-        return $user ? $this->getGenericUser($user) : null;
+        $loginValue = $credentials['login'] ?? $credentials['email'] ?? '';
+        
+        // Try fetching by email first
+        $user = $this->userService->getUserByEmail($loginValue);
+        
+        // If not found, try fetching by username
+        if (!$user) {
+            $user = $this->userService->getUserByUsername($loginValue);
+        }
+
+        return $user && $this->isActive($user) ? $this->getGenericUser($user) : null;
     }
 
     public function validateCredentials(Authenticatable $user, array $credentials)
     {
-        return Hash::check($credentials['password'], $user->getAuthPassword());
+        return $this->isActive($user)
+            && Hash::check($credentials['password'], $user->getAuthPassword());
     }
 
     public function rehashPasswordIfRequired(Authenticatable $user, array $credentials, bool $force = false)
@@ -71,5 +81,24 @@ class GoogleSheetsUserProvider implements UserProvider
         }
         
         return new GenericUser($user);
+    }
+
+    private function isActive($user): bool
+    {
+        if (is_object($user) && isset($user->Is_Active)) {
+            $status = strtoupper(trim((string) $user->Is_Active));
+
+            return !in_array($status, ['FALSE', '0', 'INACTIVE', 'DISABLED'], true);
+        }
+
+        if (is_object($user) && method_exists($user, 'toArray')) {
+            $user = $user->toArray();
+        } elseif (is_object($user)) {
+            $user = (array) $user;
+        }
+
+        $status = strtoupper(trim((string) ($user['Is_Active'] ?? 'TRUE')));
+
+        return !in_array($status, ['FALSE', '0', 'INACTIVE', 'DISABLED'], true);
     }
 }

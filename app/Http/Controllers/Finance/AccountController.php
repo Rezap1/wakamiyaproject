@@ -85,7 +85,7 @@ class AccountController extends Controller
             $this->accountService->create($request->validated());
             return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil ditambahkan.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -115,7 +115,7 @@ class AccountController extends Controller
             $this->accountService->update($id, $request->validated());
             return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil diperbarui.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -125,7 +125,7 @@ class AccountController extends Controller
             $this->accountService->delete($id);
             return redirect()->route('accounts.index')->with('success', 'Master Akun berhasil dihapus.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 }

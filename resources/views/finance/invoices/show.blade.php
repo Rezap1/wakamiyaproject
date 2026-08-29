@@ -17,12 +17,22 @@
     $paid = (float)($invoice['Paid_Amount'] ?? 0);
     $lineItems = $invoice['Parsed_Line_Items'] ?? [];
     $studentName = $invoice['student_name'] ?? \App\Helpers\UserResolverHelper::getName($invoice['Student_ID'] ?? '');
+    $className = $invoice['class_name'] ?? '-';
+    $batchName = $invoice['batch_name'] ?? '-';
+    
+    $studentFormatted = $studentName !== '-' ? $studentName : ($invoice['Company_Name'] ?? 'Pihak Terkait');
+    if ($className !== '-' || $batchName !== '-') {
+        $extra = [];
+        if ($className !== '-') $extra[] = "Kelas: {$className}";
+        if ($batchName !== '-') $extra[] = "Batch: {$batchName}";
+        $studentFormatted .= ' (' . implode(' | ', $extra) . ')';
+    }
 @endphp
 
 <div class="max-w-5xl mx-auto space-y-6">
     <x-universal.detail-layout 
         title="Invoice #{{ $invoice['Invoice_ID'] ?? '-' }}" 
-        description="Pihak Tagihan: {{ $studentName !== '-' ? $studentName : ($invoice['Company_Name'] ?? 'Pihak Terkait') }} ({{ $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? '-' }})"
+        description="Pihak Tagihan: {{ $studentFormatted }} ({{ $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? '-' }})"
         status="{{ $status }}"
         badgeColor="{{ $badgeColor }}"
         :breadcrumbs="['Dasbor' => route('dashboard.finance'), 'Keuangan' => '#', 'Tagihan' => route('invoices.index'), 'Detail' => '#']"

@@ -22,11 +22,11 @@
         :breadcrumbs="['Dasbor' => route('dashboard.hr'), 'HR' => '#', 'Pengajuan Cuti' => route('hr.leaves.index'), 'Detail' => '#']"
     >
         <x-slot:actions>
-            <a href="{{ route('hr.leaves.pdf', $leave['Leave_ID']) }}" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center gap-1.5">
+            <a href="{{ route('leaves.pdf', $leave['Leave_ID']) }}" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center gap-1.5">
                 📄 PDF Surat Cuti Resmi
             </a>
 
-            @if(in_array(strtoupper(auth()->user()->Role ?? ''), ['ADMINISTRATOR', 'HR', 'DIRECTOR']) && in_array(strtoupper($status), ['SUBMITTED', 'UNDER_REVIEW']))
+            @if(in_array(strtoupper(auth()->user()->Role ?? ''), ['ADMINISTRATOR', 'HR', 'DIRECTOR', 'MASTER']) && in_array(strtoupper($status), ['SUBMITTED', 'UNDER_REVIEW']))
                 <form action="{{ route('hr.leaves.approve', $leave['Leave_ID']) }}" method="POST" onsubmit="return confirm('Setujui pengajuan cuti ini?');" class="inline">
                     @csrf
                     <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-colors">

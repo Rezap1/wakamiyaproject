@@ -52,7 +52,7 @@
                 <div>
                     <div class="flex items-center justify-center gap-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
                         <span>Rotasi Token Otomatis:</span>
-                        <span id="countdown" class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30 font-mono text-sm font-black">20s</span>
+                        <span id="countdown" class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30 font-mono text-sm font-black">00:00</span>
                     </div>
                     <p class="text-[11px] text-slate-400 mt-2">Pindai QR ini menggunakan kamera scanner pada aplikasi mobile pegawai WMS.</p>
                 </div>
@@ -67,7 +67,7 @@
                     </div>
                     <div class="qr-card p-5 rounded-2xl border border-slate-800">
                         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Toleransi Terlambat</span>
-                        <span class="text-xl font-black text-amber-400 mt-1 block font-mono">+{{ $session['Grace_Period'] ?? 15 }} Menit</span>
+                        <span class="text-xl font-black text-amber-400 mt-1 block font-mono">+{{ $session['Grace_Period'] ?? 30 }} Menit</span>
                     </div>
                 </div>
 
@@ -96,8 +96,9 @@
         const tokenUrl = "/hr/attendance/qr/session/" + sessionId + "/token";
         const summaryUrl = "/hr/attendance/qr/session/" + sessionId + "/summary";
 
-        let countdownSec = 20;
+        let countdownSec = 0;
         let countdownInterval = null;
+        let tokenFetchInFlight = false;
 
         // Live Clock
         setInterval(() => {
@@ -107,6 +108,8 @@
 
         // Fetch Dynamic Token
         async function fetchToken() {
+            if (tokenFetchInFlight) return;
+            tokenFetchInFlight = true;
             try {
                 const response = await fetch(tokenUrl);
                 const result = await response.json();
@@ -122,12 +125,14 @@
                         document.getElementById('loadingOverlay').style.display = 'none';
                     });
 
-                    countdownSec = result.data.expires_in || 20;
+                    countdownSec = Number(result.data.expires_in) || 0;
                 } else {
                     console.error("Token error:", result.message);
                 }
             } catch (err) {
                 console.error("Failed to fetch token:", err);
+            } finally {
+                tokenFetchInFlight = false;
             }
         }
 
@@ -138,10 +143,16 @@
                 countdownSec--;
                 if (countdownSec <= 0) {
                     fetchToken();
-                    countdownSec = 20;
+                    countdownSec = 0;
                 }
-                document.getElementById('countdown').innerText = countdownSec + 's';
+                document.getElementById('countdown').innerText = formatCountdown(countdownSec);
             }, 1000);
+        }
+
+        function formatCountdown(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
         }
 
         // Live Attendance Summary Polling
@@ -159,8 +170,8 @@
                         listEl.innerHTML = data.attendances.map(a => `
                             <div class="flex justify-between items-center bg-slate-800/50 p-2.5 rounded-xl text-xs border border-slate-700/50">
                                 <div>
-                                    <span class="font-bold text-slate-200 block">${a.Employee_Name}</span>
-                                    <span class="text-[10px] text-slate-400 font-mono">${a.Check_In_Time} WIB</span>
+                                    <span class="font-bold text-slate-200 block">${escapeHtml(a.Employee_Name)}</span>
+                                    <span class="text-[10px] text-slate-400 font-mono">${escapeHtml(a.Check_In_Time)} WIB</span>
                                 </div>
                                 <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${a.Status === 'PRESENT' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}">
                                     ${a.Status === 'PRESENT' ? '✅ TEPAT WAKTU' : '⚠️ TERLAMBAT'}
@@ -172,6 +183,12 @@
             } catch (err) {
                 console.error("Failed to fetch summary:", err);
             }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>'\"]/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[ch]));
         }
 
         // Initial Load
