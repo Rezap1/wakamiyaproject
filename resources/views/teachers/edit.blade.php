@@ -135,14 +135,14 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const userData = {!! json_encode(collect($users)->push(['User_ID' => $teacher['User_ID'] ?? '', 'Full_Name' => $teacher['Full_Name'] ?? '', 'Phone_Number' => $teacher['Phone_Number'] ?? '', 'Email' => $teacher['Email'] ?? '', 'Gender' => $teacher['Gender'] ?? ''])->mapWithKeys(function($user) {
+        const userData = {{ \Illuminate\Support\Js::from(collect($users)->push(['User_ID' => $teacher['User_ID'] ?? '', 'Full_Name' => $teacher['Full_Name'] ?? '', 'Phone_Number' => $teacher['Phone_Number'] ?? '', 'Email' => $teacher['Email'] ?? '', 'Gender' => $teacher['Gender'] ?? ''])->mapWithKeys(function($user) {
             return [$user['User_ID'] => [
                 'Full_Name' => $user['Full_Name'] ?? '',
                 'Phone_Number' => $user['Phone_Number'] ?? '',
                 'Email' => $user['Email'] ?? '',
                 'Gender' => $user['Gender'] ?? ''
             ]];
-        })) !!};
+        })) }};
         const userSelect = document.getElementById('User_ID');
         
         const autoName = document.getElementById('auto_Full_Name');

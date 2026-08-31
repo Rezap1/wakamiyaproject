@@ -75,6 +75,10 @@
                             <span class="text-sm font-bold text-indigo-700 block">{{ $req['Request_Type'] }}</span>
                         </div>
                         <div class="mb-2">
+                            <span class="text-[10px] text-slate-500 block">Target Presensi</span>
+                            <span class="text-xs font-semibold text-slate-700 block">{{ ($req['Attendance_Type'] ?? (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE')) === 'CLASS_QR' ? 'Class Attendance / QR' : ($req['Schedule_ID'] ?? '-') }}</span>
+                        </div>
+                        <div class="mb-2">
                             <span class="text-[10px] text-slate-500 block">Alasan</span>
                             <span class="text-xs font-semibold text-slate-700 block">{{ $req['Reason'] }}</span>
                         </div>
@@ -112,7 +116,10 @@
                         @foreach($requests as $req)
                             <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                 <td class="p-4 font-bold text-slate-800">{{ $req['Attendance_Date'] }}</td>
-                                <td class="p-4 font-extrabold text-indigo-600">{{ $req['Request_Type'] }}</td>
+                                <td class="p-4 font-extrabold text-indigo-600">
+                                    <div>{{ $req['Request_Type'] }}</div>
+                                    <div class="text-[10px] text-slate-500">{{ ($req['Attendance_Type'] ?? (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE')) === 'CLASS_QR' ? 'Class Attendance / QR' : ($req['Schedule_ID'] ?? '-') }}</div>
+                                </td>
                                 <td class="p-4 text-slate-600 max-w-xs truncate">{{ $req['Reason'] }}</td>
                                 <td class="p-4 text-slate-600 text-xs">{{ $req['Academic_Notes'] ?? '-' }}</td>
                                 <td class="p-4 text-center">

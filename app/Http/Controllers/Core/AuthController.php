@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Services\Core\EnterpriseEventService;
+use App\Support\LoginRateLimiter;
 
 class AuthController extends Controller
 {
@@ -33,6 +34,7 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
+            LoginRateLimiter::clearIdentifier($request);
             
             // Log successful login
             $this->enterpriseEvent->dispatch(
@@ -81,6 +83,7 @@ class AuthController extends Controller
         }
 
         // FAILED LOGIN (can add event here but wait to see if requested, only LOGIN LOGOUT specified, actually requested FAILED LOGIN too)
+        $request->attributes->set('login_failed', true);
         try {
             $this->enterpriseEvent->dispatch(
                 'SYSTEM',

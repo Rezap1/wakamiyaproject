@@ -75,18 +75,28 @@ class AttendanceRequestController extends Controller
             return redirect()->route('dashboard')->with('error', 'Profil siswa tidak ditemukan.');
         }
 
+        $studentId = trim((string) ($student['Student_ID'] ?? ''));
+        $classId = trim((string) ($student['Class_ID'] ?? ''));
+        if ($studentId === '' || $classId === '') {
+            return back()->with('error', 'Profil siswa belum memiliki kelas yang valid.');
+        }
+
         $request->validate([
             'Attendance_Date' => 'required|date',
-            'Schedule_ID' => 'required|string',
+            'Schedule_ID' => 'nullable|string',
             'Request_Type' => 'required|in:SAKIT,IZIN',
             'Reason' => 'required|string|max:500',
             'Evidence' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
-        // Validate Schedule belongs to Class
-        $schedule = collect($this->scheduleRepo->fetchAll())->firstWhere('Schedule_ID', $request->Schedule_ID);
-        if (!$schedule || ($schedule['Class_ID'] ?? '') !== ($student['Class_ID'] ?? '')) {
-            return back()->with('error', 'Jadwal tidak valid atau bukan milik Anda.');
+        $scheduleId = trim((string) ($request->input('Schedule_ID') ?? ''));
+        $attendanceType = $scheduleId === '' ? 'CLASS_QR' : 'SCHEDULE';
+        if ($attendanceType === 'SCHEDULE') {
+            // Schedule-based requests must resolve to the student's actual class.
+            $schedule = collect($this->scheduleRepo->fetchAll())->firstWhere('Schedule_ID', $scheduleId);
+            if (!$schedule || trim((string) ($schedule['Class_ID'] ?? '')) !== $classId) {
+                return back()->with('error', 'Jadwal tidak valid atau bukan milik kelas Anda.');
+            }
         }
 
         // Handle File Upload
@@ -95,15 +105,21 @@ class AttendanceRequestController extends Controller
         $filename = Str::uuid() . '.' . $extension;
         $path = $file->storeAs('attendance-evidence', $filename);
 
-        // Create Attendance_ID to match how Attendance Engine generates or expects it
-        // A simple way is to hash schedule + date + student, or just use a standard format
-        $attendanceId = 'ATT-' . $student['Student_ID'] . '-' . Carbon::parse($request->Attendance_Date)->format('Ymd') . '-' . $request->Schedule_ID;
+        // Keep the legacy schedule shape compatible, while making class-based
+        // identity explicit and independent from Schedule_ID.
+        $dateKey = Carbon::parse($request->Attendance_Date)->format('Ymd');
+        $attendanceId = $attendanceType === 'SCHEDULE'
+            // Preserve the existing schedule-based ID format.
+            ? 'ATT-' . $studentId . '-' . $dateKey . '-' . $scheduleId
+            : 'ATT-' . $studentId . '-' . $dateKey . '-CLASS-' . $classId . '-CLASS_QR';
 
         try {
             $this->requestService->createRequest([
                 'Attendance_ID' => $attendanceId,
-                'Student_ID' => $student['Student_ID'],
-                'Schedule_ID' => $request->Schedule_ID,
+                'Student_ID' => $studentId,
+                'Class_ID' => $classId,
+                'Schedule_ID' => $scheduleId,
+                'Attendance_Type' => $attendanceType,
                 'Attendance_Date' => $request->Attendance_Date,
                 'Request_Type' => $request->Request_Type,
                 'Reason' => $request->Reason,

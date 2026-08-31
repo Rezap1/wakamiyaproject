@@ -79,7 +79,30 @@ class AttendanceHistoryController extends Controller
         $myRequests = $this->requestService->getStudentRequests($studentId);
         $myAttendances = $myAttendances->map(function($att) use ($myRequests) {
             $attId = $att['Attendance_ID'] ?? '';
-            $request = $myRequests->firstWhere('Attendance_ID', $attId);
+            $attendanceType = strtoupper(trim((string) ($att['Attendance_Type'] ?? '')));
+            $attendanceClassId = trim((string) ($att['Class_ID'] ?? ''));
+            $attendanceScheduleId = trim((string) ($att['Schedule_ID'] ?? ''));
+            $attendanceDate = $att['Attendance_Date'] ?? $att['Date'] ?? '';
+            $request = $myRequests->first(function ($item) use ($attId, $attendanceType, $attendanceClassId, $attendanceScheduleId, $attendanceDate) {
+                if (($item['Attendance_ID'] ?? '') === $attId) {
+                    return true;
+                }
+                if (($item['Attendance_Date'] ?? '') !== $attendanceDate) {
+                    return false;
+                }
+
+                $requestType = strtoupper(trim((string) ($item['Attendance_Type'] ?? '')));
+                if ($attendanceType === 'CLASS_QR') {
+                    $requestClassId = trim((string) ($item['Class_ID'] ?? ''));
+                    return ($requestType === 'CLASS_QR' || ($requestType === '' && empty($item['Schedule_ID'])))
+                        && ($requestClassId === '' || $requestClassId === $attendanceClassId);
+                }
+                if ($attendanceType === 'SCHEDULE') {
+                    return ($requestType === 'SCHEDULE' || ($requestType === '' && !empty($item['Schedule_ID'])))
+                        && trim((string) ($item['Schedule_ID'] ?? '')) === $attendanceScheduleId;
+                }
+                return false;
+            });
             if ($request) {
                 $att['Request_Status'] = $request['Status'];
                 $att['Request_Type'] = $request['Request_Type'];

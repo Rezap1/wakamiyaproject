@@ -358,6 +358,8 @@ class AttendanceQrFlowTest extends TestCase
             [
                 'Attendance_ID' => 'ATT-STU-EXISTING',
                 'Student_ID' => 'STU-A',
+                'Class_ID' => 'CLASS-1',
+                'Attendance_Type' => 'CLASS_QR',
                 'Attendance_Date' => '2026-08-23',
                 'Check_In_Time' => '08:05:00',
                 'Is_Active' => 'TRUE',
@@ -378,6 +380,145 @@ class AttendanceQrFlowTest extends TestCase
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('sudah melakukan presensi');
+
+        $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
+    }
+
+    public function test_student_qr_persists_class_identity_server_side_and_ignores_client_values(): void
+    {
+        Cache::flush();
+        $this->putOpenStudentSession();
+
+        $created = null;
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn([]);
+        $attendanceRepo->shouldReceive('create')
+            ->once()
+            ->with(Mockery::on(function ($record) use (&$created) {
+                $created = $record;
+                return true;
+            }))
+            ->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->once();
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->once();
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            $this->studentRepositoryForQr(),
+            $this->studentQrSettings(),
+            $enterpriseEvent
+        );
+
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
+        request()->merge([
+            'Student_ID' => 'ATTACKER-STUDENT',
+            'Class_ID' => 'ATTACKER-CLASS',
+            'Attendance_Type' => 'SCHEDULE',
+        ]);
+
+        $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
+
+        $this->assertSame('USR-STU', $created['User_ID']);
+        $this->assertSame('STU-A', $created['Student_ID']);
+        $this->assertSame('CLASS-1', $created['Class_ID']);
+        $this->assertSame('', $created['Schedule_ID']);
+        $this->assertSame('CLASS_QR', $created['Attendance_Type']);
+    }
+
+    public function test_student_qr_allows_distinct_students_and_keeps_classes_separate(): void
+    {
+        Cache::flush();
+        $this->putOpenStudentSession();
+
+        $students = [
+            [
+                'Student_ID' => 'STU-A', 'User_ID' => 'USR-STU-A', 'Full_Name' => 'Student A',
+                'Batch_ID' => 'BATCH-1', 'Class_ID' => 'CLASS-1', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+            [
+                'Student_ID' => 'STU-B', 'User_ID' => 'USR-STU-B', 'Full_Name' => 'Student B',
+                'Batch_ID' => 'BATCH-1', 'Class_ID' => 'CLASS-1', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+            [
+                'Student_ID' => 'STU-C', 'User_ID' => 'USR-STU-C', 'Full_Name' => 'Student C',
+                'Batch_ID' => 'BATCH-1', 'Class_ID' => 'CLASS-2', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+        ];
+
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->times(3)->andReturn(
+            [$students[0]], [$students[1]], [$students[2]]
+        );
+
+        $created = [];
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->times(3)->andReturn([], [], []);
+        $attendanceRepo->shouldReceive('create')
+            ->times(3)
+            ->with(Mockery::on(function ($record) use (&$created) {
+                $created[] = $record;
+                return true;
+            }))
+            ->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->times(3);
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->times(3);
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            $studentRepo,
+            $this->studentQrSettings(),
+            $enterpriseEvent
+        );
+
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        foreach ($students as $student) {
+            $this->actingAs(new GenericUser([
+                'id' => $student['User_ID'],
+                'User_ID' => $student['User_ID'],
+                'Role' => 'STUDENT',
+            ]));
+            $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
+        }
+
+        $this->assertCount(3, $created);
+        $this->assertSame(['STU-A', 'STU-B', 'STU-C'], array_column($created, 'Student_ID'));
+        $this->assertSame(['CLASS-1', 'CLASS-1', 'CLASS-2'], array_column($created, 'Class_ID'));
+        $this->assertSame(['', '', ''], array_column($created, 'Schedule_ID'));
+        $this->assertSame(['CLASS_QR', 'CLASS_QR', 'CLASS_QR'], array_column($created, 'Attendance_Type'));
+    }
+
+    public function test_student_qr_without_student_mapping_is_denied_without_creating_attendance(): void
+    {
+        Cache::flush();
+        $this->putOpenStudentSession();
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldNotReceive('fetchAll');
+        $attendanceRepo->shouldNotReceive('create');
+
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->once()->andReturn([]);
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            $studentRepo,
+            $this->studentQrSettings(),
+            Mockery::mock(EnterpriseEventService::class)
+        );
+
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-UNMAPPED', 'User_ID' => 'USR-UNMAPPED', 'Role' => 'STUDENT']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Profil siswa tidak ditemukan');
 
         $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
     }

@@ -66,17 +66,30 @@ class StudentWorkspaceController extends Controller
 
         return $rawAttendances->map(function ($att) use ($attendanceRequests) {
             $date = $att['Attendance_Date'] ?? $att['Date'] ?? null;
-            $scheduleId = $att['Schedule_ID'] ?? null;
+            $scheduleId = trim((string) ($att['Schedule_ID'] ?? ''));
+            $classId = trim((string) ($att['Class_ID'] ?? ''));
+            $attendanceType = strtoupper(trim((string) ($att['Attendance_Type'] ?? '')));
 
-            // Find matching approved request (match Date, and if Schedule_ID is available, match it too)
-            $matchingRequest = $attendanceRequests->first(function ($req) use ($date, $scheduleId) {
+            // Match approved requests by their explicit target identity. A
+            // class-based request must never be matched through Schedule_ID.
+            $matchingRequest = $attendanceRequests->first(function ($req) use ($date, $scheduleId, $classId, $attendanceType) {
                 $reqDate = $req['Attendance_Date'] ?? null;
-                $reqScheduleId = $req['Schedule_ID'] ?? null;
-
                 if ($reqDate !== $date) return false;
-                if ($scheduleId && $reqScheduleId && $scheduleId !== $reqScheduleId) return false;
 
-                return true;
+                $requestType = strtoupper(trim((string) ($req['Attendance_Type'] ?? '')));
+                if ($attendanceType === 'CLASS_QR') {
+                    $requestClassId = trim((string) ($req['Class_ID'] ?? ''));
+                    return ($requestType === 'CLASS_QR' || ($requestType === '' && empty($req['Schedule_ID'])))
+                        && ($requestClassId === '' || $requestClassId === $classId);
+                }
+
+                if ($attendanceType === 'SCHEDULE') {
+                    return ($requestType === 'SCHEDULE' || ($requestType === '' && !empty($req['Schedule_ID'])))
+                        && trim((string) ($req['Schedule_ID'] ?? '')) === $scheduleId;
+                }
+
+                return $requestType === ''
+                    && ($scheduleId === '' || trim((string) ($req['Schedule_ID'] ?? '')) === $scheduleId);
             });
 
             if ($matchingRequest) {

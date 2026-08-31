@@ -5,6 +5,9 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Http\Request;
+use App\Support\LoginRateLimiter;
 use App\Providers\GoogleSheetsUserProvider;
 use App\Services\Core\UserService;
 
@@ -159,6 +162,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('login', function (Request $request) {
+            return LoginRateLimiter::limits($request);
+        });
+
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }

@@ -148,8 +148,10 @@ class StudentBillingController extends Controller
                 abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda atau belum diterbitkan.");
             }
 
-            $request->validate([
+            $validated = $request->validate([
                 'Amount_Paid' => 'required|numeric|gt:0',
+                'Sender_Name' => 'required|string|max:255',
+                'Transfer_Date' => 'required|date',
                 'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120'
             ]);
 
@@ -160,9 +162,9 @@ class StudentBillingController extends Controller
             $paymentData = [
                 'Invoice_ID' => $id,
                 'Student_ID' => $studentId,
-                'Amount_Paid' => $request->input('Amount_Paid', 0),
-                'Reference_Number' => $request->input('Sender_Name', ''),
-                'Transfer_Date' => $request->input('Transfer_Date', now()->toDateString()),
+                'Amount_Paid' => $validated['Amount_Paid'],
+                'Reference_Number' => $validated['Sender_Name'],
+                'Transfer_Date' => $validated['Transfer_Date'],
                 'Proof_Image' => $proofFile,
                 'Proof_File' => $proofFile
             ];
@@ -170,6 +172,8 @@ class StudentBillingController extends Controller
             $this->paymentService->submitPayment($paymentData);
             
             return redirect()->route('student.billing.show', $id)->with('success', 'Payment submitted and waiting for verification.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
             throw $e;
         } catch (\Exception $e) {

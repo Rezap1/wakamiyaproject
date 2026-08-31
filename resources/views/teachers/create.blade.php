@@ -117,13 +117,13 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const userData = {!! json_encode(collect($users)->mapWithKeys(function($user) {
+        const userData = {{ \Illuminate\Support\Js::from(collect($users)->mapWithKeys(function($user) {
             return [$user['User_ID'] => [
                 'Full_Name' => $user['Full_Name'] ?? '',
                 'Phone_Number' => $user['Phone_Number'] ?? '',
                 'Email' => $user['Email'] ?? ''
             ]];
-        })) !!};
+        })) }};
         const userSelect = document.getElementById('User_ID');
         
         const autoName = document.getElementById('auto_Full_Name');

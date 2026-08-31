@@ -54,6 +54,7 @@
                     </div>
                     <h4 class="font-bold text-slate-800">{{ $req['Student_Name'] }}</h4>
                     <p class="text-xs text-slate-500 mb-2">{{ $req['Class_Name'] }} | {{ $req['Attendance_Date'] }}</p>
+                    <p class="text-[10px] font-semibold text-indigo-600">{{ $req['Attendance_Type'] ?? 'SCHEDULE' }} &middot; {{ $req['Target_Display'] ?? ($req['Schedule_ID'] ?? 'Tidak tersedia') }}</p>
                     
                     <div class="grid grid-cols-2 gap-2 mt-3">
                         <a href="{{ route('academic.attendance.requests.show', $req['Request_ID']) }}" class="block text-center bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 rounded-xl transition-colors">
@@ -92,7 +93,10 @@
                                     <div class="text-[10px] text-slate-500">{{ $req['Student_ID'] }}</div>
                                 </td>
                                 <td class="p-4 font-semibold text-slate-600">{{ $req['Class_Name'] }}</td>
-                                <td class="p-4 font-extrabold text-indigo-600">{{ $req['Request_Type'] }}</td>
+                                <td class="p-4 font-extrabold text-indigo-600">
+                                    <div>{{ $req['Request_Type'] }}</div>
+                                    <div class="text-[10px] font-semibold text-slate-500">{{ $req['Attendance_Type'] ?? 'SCHEDULE' }} &middot; {{ $req['Target_Display'] ?? ($req['Schedule_ID'] ?? 'Tidak tersedia') }}</div>
+                                </td>
                                 <td class="p-4 text-center">
                                     <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold border 
                                         {{ $req['Status'] === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : '' }}

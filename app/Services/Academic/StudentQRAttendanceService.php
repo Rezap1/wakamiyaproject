@@ -267,18 +267,28 @@ class StudentQRAttendanceService
             throw new Exception("Absensi Gagal: Batch siswa belum dikonfigurasi pada sistem.");
         }
 
-        $studentId = $student['Student_ID'];
-        $classId = $student['Class_ID'] ?? '';
+        $studentId = trim((string) ($student['Student_ID'] ?? ''));
+        if ($studentId === '') {
+            throw new Exception("Akun Anda tidak dapat melakukan absensi. Profil siswa tidak ditemukan atau tidak aktif.");
+        }
+
+        $classId = trim((string) ($student['Class_ID'] ?? ''));
+
+        if ($classId === '' || $classId === '-') {
+            throw new Exception("Absensi Gagal: Kelas siswa belum dikonfigurasi pada sistem.");
+        }
 
         // 9. Atomic Concurrency Locking & Duplicate Check
-        $lockKey = "student_qr_scan_{$sessionId}_{$studentId}";
+        $lockKey = "student_qr_scan_{$sessionId}_{$studentId}_{$classId}_CLASS_QR";
 
         return Cache::lock($lockKey, 10)->block(3, function () use ($sessionId, $nonce, $session, $student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo) {
             // Check Duplicate Attendance for this Student today
             $todayStr = now()->toDateString();
             $allAttendances = collect($this->attendanceRepository->fetchAll());
-            $existing = $allAttendances->first(function ($att) use ($studentId, $todayStr) {
+            $existing = $allAttendances->first(function ($att) use ($studentId, $classId, $todayStr) {
                 return ($att['Student_ID'] ?? '') === $studentId && 
+                       trim((string) ($att['Class_ID'] ?? '')) === $classId &&
+                       strtoupper(trim((string) ($att['Attendance_Type'] ?? ''))) === 'CLASS_QR' &&
                        ($att['Attendance_Date'] ?? '') === $todayStr && 
                        strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
             });
@@ -309,7 +319,8 @@ class StudentQRAttendanceService
                 'Student_ID' => $studentId,
                 'Batch_ID' => $batchId,
                 'Class_ID' => $classId,
-                'Schedule_ID' => $classId,
+                'Schedule_ID' => '',
+                'Attendance_Type' => 'CLASS_QR',
                 'Attendance_Date' => $todayStr,
                 'Check_In_Time' => $nowCarbon->format('H:i:s'),
                 'Status' => $status,

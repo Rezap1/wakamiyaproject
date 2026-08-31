@@ -8,6 +8,7 @@ use App\Services\Core\ClassService;
 use App\Services\Academic\ScheduleService;
 use App\Services\Core\StudentService;
 use App\Services\Academic\AttendanceService;
+use App\Services\Academic\AttendanceLegacyClassifier;
 use App\Services\Attendance\AttendanceRequestService;
 use App\Services\Academic\SubjectService;
 use App\Services\Core\BatchService;
@@ -119,15 +120,80 @@ class TeacherWorkspaceController extends Controller
         return view('academic.teacher.classes', compact('classes', 'teacherId'));
     }
 
-    private function verifyClassAccess($teacherId, $classId)
+    private function verifyClassAccess($teacherId, $classId, $schedules = null)
     {
-        $mySchedules = collect($this->scheduleService->getAll())
+        $mySchedules = collect($schedules ?? $this->scheduleService->getAll())
             ->where('Teacher_ID', $teacherId)
             ->where('Class_ID', $classId);
 
         if ($mySchedules->isEmpty()) {
             abort(403, 'Anda tidak memiliki akses ke kelas ini.');
         }
+    }
+
+    /**
+     * Build the teacher-scoped attendance read model without trusting request
+     * identifiers. Ownership is resolved from the authenticated teacher's
+     * schedules before class-based attendance is grouped.
+     */
+    private function teacherAttendanceReadModel($teacherId, ?string $classFilter = null): array
+    {
+        $allSchedules = collect($this->scheduleService->getAll());
+        $mySchedules = $allSchedules
+            ->filter(fn ($schedule) => ($schedule['Teacher_ID'] ?? '') === $teacherId)
+            ->values();
+        $teacherScheduleIds = $mySchedules->pluck('Schedule_ID')->filter()->unique()->values();
+        $teacherClassIds = $mySchedules->pluck('Class_ID')->filter()->unique()->values();
+
+        $classes = collect($this->classService->getAllClasses())
+            ->filter(function ($class) use ($teacherClassIds) {
+                $isActive = strtoupper(trim((string) ($class['Is_Active'] ?? '')));
+                return ($isActive === 'TRUE' || $isActive === '')
+                    && $teacherClassIds->contains($class['Class_ID'] ?? '');
+            })
+            ->values();
+        $studentRows = collect($this->studentService->getAllStudents());
+        $legacyClassifier = new AttendanceLegacyClassifier();
+        $attendanceRows = collect($this->attendanceService->getAll())
+            ->filter(function ($attendance) use ($legacyClassifier, $classes, $allSchedules, $teacherClassIds, $teacherScheduleIds) {
+                $classified = $legacyClassifier->classify($attendance, $classes, $allSchedules);
+                if (in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)) {
+                    return false;
+                }
+                if (empty($attendance['Student_ID'])) {
+                    return false;
+                }
+                if ($classified['is_schedule_based']) {
+                    return $teacherScheduleIds->contains($classified['schedule_id'] ?? '');
+                }
+                return $teacherClassIds->contains($classified['class_id'] ?? '');
+            })
+            ->sortBy(function ($attendance) {
+                $type = strtoupper(trim((string) ($attendance['Attendance_Type'] ?? '')));
+                return in_array($type, ['CLASS_QR', 'CLASS_MANUAL'], true) ? 0 : 1;
+            })
+            ->values();
+        $dateFilter = request()->input('date', date('Y-m-d'));
+
+        return [
+            'groups' => $this->attendanceService->buildClassAttendanceGroups(
+                $classes,
+                $studentRows,
+                $attendanceRows,
+                $allSchedules,
+                $dateFilter,
+                null,
+                $classFilter,
+                null,
+                null
+            ),
+            'classes' => $classes,
+            'students' => $studentRows,
+            'schedules' => $mySchedules,
+            'teacherClassIds' => $teacherClassIds,
+            'teacherScheduleIds' => $teacherScheduleIds,
+            'dateFilter' => $dateFilter,
+        ];
     }
 
     public function classStudents($classId)
@@ -151,20 +217,11 @@ class TeacherWorkspaceController extends Controller
     public function classAttendance($classId)
     {
         $teacherId = $this->verifyTeacherAccess();
-        $this->verifyClassAccess($teacherId, $classId);
+        $readModel = $this->teacherAttendanceReadModel($teacherId, $classId);
+        $this->verifyClassAccess($teacherId, $classId, $readModel['schedules']);
 
-        $cls = collect($this->classService->getAllClasses())->firstWhere('Class_ID', $classId);
+        $cls = $readModel['classes']->firstWhere('Class_ID', $classId);
         $className = $cls ? ($cls['Class_Name'] ?? $classId) : $classId;
-
-        $myScheduleIds = collect($this->scheduleService->getAll())
-            ->where('Teacher_ID', $teacherId)
-            ->where('Class_ID', $classId)
-            ->pluck('Schedule_ID')
-            ->toArray();
-
-        $attendances = collect($this->attendanceService->getAll())
-            ->whereIn('Schedule_ID', $myScheduleIds)
-            ->values();
 
         $attendanceRequests = collect($this->attendanceRequestService->getAll())
             ->filter(function($r) use ($classId) {
@@ -172,13 +229,7 @@ class TeacherWorkspaceController extends Controller
             })
             ->values();
 
-        $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
-
-        $attendances = $attendances->map(function($a) use ($studentsById) {
-            $stu = $studentsById[$a['Student_ID'] ?? ''] ?? null;
-            $a['Student_Name'] = $stu ? ($stu['Full_Name'] ?? $stu['Username'] ?? $a['Student_ID']) : ($a['Student_ID'] ?? '-');
-            return $a;
-        });
+        $studentsById = collect($readModel['students'])->keyBy('Student_ID');
 
         $attendanceRequests = $attendanceRequests->map(function($r) use ($studentsById) {
             $stu = $studentsById[$r['Student_ID'] ?? ''] ?? null;
@@ -186,7 +237,13 @@ class TeacherWorkspaceController extends Controller
             return $r;
         });
 
-        return view('academic.teacher.attendance', compact('attendances', 'attendanceRequests', 'className', 'classId'));
+        return view('academic.teacher.attendance', [
+            'attendanceGroups' => $readModel['groups'],
+            'dateFilter' => $readModel['dateFilter'],
+            'attendanceRequests' => $attendanceRequests,
+            'className' => $className,
+            'classId' => $classId,
+        ]);
     }
 
     public function reports()
@@ -396,25 +453,21 @@ class TeacherWorkspaceController extends Controller
     public function attendances()
     {
         $teacherId = $this->verifyTeacherAccess();
+        $classFilter = request()->input('class_id');
+        $readModel = $this->teacherAttendanceReadModel($teacherId, $classFilter);
+        $classOptions = $readModel['classes']->mapWithKeys(function ($class) {
+            $classId = trim((string) ($class['Class_ID'] ?? ''));
+            $label = trim((string) ($class['Class_Name'] ?? '')) ?: $classId;
+            return $classId === '' ? [] : [$classId => $label];
+        })->all();
 
-        $myScheduleIds = collect($this->scheduleService->getAll())
-            ->where('Teacher_ID', $teacherId)
-            ->pluck('Schedule_ID')
-            ->toArray();
-
-        $attendances = collect($this->attendanceService->getAll())
-            ->whereIn('Schedule_ID', $myScheduleIds)
-            ->values();
-
-        $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
-
-        $attendances = $attendances->map(function($a) use ($studentsById) {
-            $stu = $studentsById[$a['Student_ID'] ?? ''] ?? null;
-            $a['Student_Name'] = $stu ? ($stu['Full_Name'] ?? $stu['Username'] ?? $a['Student_ID']) : ($a['Student_ID'] ?? '-');
-            return $a;
-        });
-
-        return view('academic.teacher.attendances', compact('attendances', 'teacherId'));
+        return view('academic.teacher.attendances', [
+            'attendanceGroups' => $readModel['groups'],
+            'dateFilter' => $readModel['dateFilter'],
+            'classOptions' => $classOptions,
+            'classFilter' => trim((string) $classFilter),
+            'teacherId' => $teacherId,
+        ]);
     }
 
     public function attendanceRequests()

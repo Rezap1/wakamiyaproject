@@ -20,27 +20,22 @@
                 <input type="date" name="Attendance_Date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none" value="{{ date('Y-m-d') }}">
             </div>
 
-            <!-- Jadwal -->
+            <!-- Target attendance -->
             <div>
-                <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Jadwal Kelas <span class="text-rose-500">*</span></label>
-                @if($schedules->isEmpty())
-                    <div class="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl px-4 py-3 text-sm font-semibold">
-                        Anda belum memiliki jadwal kelas yang ditetapkan.
-                    </div>
-                @else
-                    @php
-                        $dayMap = [
-                            'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu',
-                            'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu'
-                        ];
-                    @endphp
-                    <select name="Schedule_ID" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none">
-                        <option value="">-- Pilih Jadwal --</option>
-                        @foreach($schedules as $s)
-                            <option value="{{ $s['Schedule_ID'] }}">{{ $dayMap[$s['Day'] ?? $s['Day_Of_Week'] ?? ''] ?? $s['Day'] ?? $s['Day_Of_Week'] }} ({{ $s['Start_Time'] }} - {{ $s['End_Time'] }}) - {{ $s['Subject_Name'] ?? $s['Subject_ID'] }}</option>
-                        @endforeach
-                    </select>
-                @endif
+                <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Target Presensi <span class="text-rose-500">*</span></label>
+                @php
+                    $dayMap = [
+                        'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu',
+                        'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu'
+                    ];
+                @endphp
+                <select name="Schedule_ID" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none">
+                    <option value="">Absensi Kelas / QR ({{ $student['Class_ID'] }})</option>
+                    @foreach($schedules as $s)
+                        <option value="{{ $s['Schedule_ID'] }}">{{ $dayMap[$s['Day'] ?? $s['Day_Of_Week'] ?? ''] ?? $s['Day'] ?? $s['Day_Of_Week'] }} ({{ $s['Start_Time'] }} - {{ $s['End_Time'] }}) - {{ $s['Subject_Name'] ?? $s['Subject_ID'] }}</option>
+                    @endforeach
+                </select>
+                <p class="text-xs text-slate-500 mt-2">Pilih Absensi Kelas / QR untuk pengajuan umum kelas. Jadwal hanya diperlukan untuk pengajuan berbasis jadwal.</p>
             </div>
 
             <!-- Tipe Pengajuan -->
@@ -80,7 +75,7 @@
             </div>
 
             <div class="pt-4 border-t border-slate-100">
-                <button type="submit" id="submit-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-sky-600/30 transition-all" @if($schedules->isEmpty()) disabled @endif>
+                <button type="submit" id="submit-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-sky-600/30 transition-all">
                     Kirim Pengajuan
                 </button>
             </div>

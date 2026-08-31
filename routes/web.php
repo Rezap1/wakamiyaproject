@@ -30,7 +30,7 @@ Route::get('/', function () {
 });
 
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/verify-receipt/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'verifyReceiptPublic'])->middleware('signed')->name('payments.verify-receipt-public');
 Route::get('/verify-invoice/{id}', [\App\Http\Controllers\Finance\InvoiceController::class, 'verifyInvoicePublic'])->middleware('signed')->name('invoices.verify-public');

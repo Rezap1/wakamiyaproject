@@ -170,6 +170,7 @@
                                     <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-xs font-bold" title="Izin">I: {{ $item['Izin'] }}</span>
                                     <span class="px-2 py-1 bg-yellow-50 text-yellow-600 rounded-md text-xs font-bold" title="Sakit">S: {{ $item['Sakit'] }}</span>
                                     <span class="px-2 py-1 bg-red-50 text-red-600 rounded-md text-xs font-bold" title="Alpa">A: {{ $item['Alpha'] }}</span>
+                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-bold" title="Belum Absen">B: {{ $item['Belum_Absen'] ?? 0 }}</span>
                                 </div>
                             </td>
                             <td class="px-6 py-4 text-right">
@@ -202,8 +203,8 @@
                                         <tbody class="divide-y divide-slate-100">
                                             @forelse($item['Students'] as $student)
                                                 @php
-                                                    $badgeColor = \App\Helpers\AttendanceStatusHelper::badgeColor($student['Status'] ?? '');
-                                                    $displayStatus = \App\Helpers\AttendanceStatusHelper::label($student['Status'] ?? '');
+                                                    $badgeColor = $student['Badge_Color'] ?? 'slate';
+                                                    $displayStatus = $student['Display_Status'] ?? 'Belum Absen';
                                                 @endphp
                                                 <tr class="hover:bg-slate-50/80 transition-colors">
                                                     <td class="px-4 py-3 font-mono text-xs text-slate-500">{{ $student['Student_ID'] }}</td>
@@ -271,7 +272,7 @@
                     <p class="text-xs text-slate-500 font-medium mt-1">{{ $item['Total'] }} Siswa Terdaftar</p>
                 </div>
                 
-                <div class="bg-slate-50 px-4 py-3 grid grid-cols-4 gap-2 text-center">
+                <div class="bg-slate-50 px-4 py-3 grid grid-cols-5 gap-2 text-center">
                     <div class="bg-white border border-green-100 rounded-lg p-2 shadow-sm">
                         <span class="block text-[10px] font-bold text-green-600 uppercase mb-0.5">Hadir</span>
                         <span class="block text-sm font-black text-slate-800">{{ $item['Hadir'] }}</span>
@@ -288,6 +289,10 @@
                         <span class="block text-[10px] font-bold text-red-600 uppercase mb-0.5">Alpa</span>
                         <span class="block text-sm font-black text-slate-800">{{ $item['Alpha'] }}</span>
                     </div>
+                    <div class="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                        <span class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Belum</span>
+                        <span class="block text-sm font-black text-slate-800">{{ $item['Belum_Absen'] ?? 0 }}</span>
+                    </div>
                 </div>
                 
                 <div class="p-4 bg-white">
@@ -303,8 +308,8 @@
                     <div class="space-y-3">
                         @forelse($item['Students'] as $student)
                             @php
-                                $badgeColor = \App\Helpers\AttendanceStatusHelper::badgeColor($student['Status'] ?? '');
-                                $displayStatus = \App\Helpers\AttendanceStatusHelper::label($student['Status'] ?? '');
+                                $badgeColor = $student['Badge_Color'] ?? 'slate';
+                                $displayStatus = $student['Display_Status'] ?? 'Belum Absen';
                             @endphp
                             <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
                                 <div class="flex justify-between items-start mb-2">

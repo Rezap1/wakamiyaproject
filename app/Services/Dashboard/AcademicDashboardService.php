@@ -5,6 +5,7 @@ use App\Services\Academic\AssessmentService;
 use App\Services\Academic\ScoreService;
 use App\Services\Academic\ScheduleService;
 use App\Services\Academic\AttendanceService as AcademicAttendanceService;
+use App\Services\Academic\AttendanceLegacyClassifier;
 use App\Services\Core\ProgramService;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
@@ -71,11 +72,17 @@ class AcademicDashboardService
         $assessments = collect($this->assessmentService->getAll());
         $scores = collect($this->scoreService->getAll());
         $attendances = collect($this->attendanceService->getAll());
+        $legacyClassifier = new AttendanceLegacyClassifier();
+        $academicAttendances = $attendances->filter(function ($attendance) use ($legacyClassifier, $classes, $schedules) {
+            $classified = $legacyClassifier->classify($attendance, $classes, $schedules);
+            return !in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)
+                && !empty($attendance['Student_ID']);
+        })->values();
         $attendanceRequests = collect($this->attendanceRequestService->getAll());
 
         // === Attendance Rate (riil) ===
-        $totalAttendance = $attendances->count();
-        $presentCount = $attendances->filter(function ($attendance) {
+        $totalAttendance = $academicAttendances->count();
+        $presentCount = $academicAttendances->filter(function ($attendance) {
             return in_array(strtoupper(trim($attendance['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT'], true);
         })->count();
         $attendanceRate = $totalAttendance > 0 ? round(($presentCount / $totalAttendance) * 100) : 0;
@@ -97,7 +104,7 @@ class AcademicDashboardService
             return empty(trim($s['Class_ID'] ?? '')) || trim($s['Class_ID'] ?? '') === '-';
         })->count();
 
-        $attendanceToday = $attendances->filter(function($a) use ($todayDate) {
+        $attendanceToday = $academicAttendances->filter(function($a) use ($todayDate) {
             return ($a['Attendance_Date'] ?? '') === $todayDate
                 && in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT', 'SICK', 'SAKIT', 'PERMITTED', 'IZIN', 'ABSENT', 'ALPHA', 'ALPA'], true);
         })->count();
@@ -147,10 +154,13 @@ class AcademicDashboardService
 
         // Attendance Pending
         $todayScheduleCount = count($todayClasses);
-        $todayAttendanceCount = $attendances->filter(function ($a) use ($todayDate) {
+        $todayClassIds = $todayClasses ? collect($todayClasses)->pluck('class')->filter()->unique() : collect();
+        $todayAttendanceClassIds = $academicAttendances->filter(function ($a) use ($todayDate) {
             return ($a['Attendance_Date'] ?? '') === $todayDate;
-        })->pluck('Schedule_ID')->unique()->count();
-        $attendancePending = max(0, $todayScheduleCount - $todayAttendanceCount);
+        })->map(function ($a) use ($legacyClassifier, $classes, $schedules) {
+            return $legacyClassifier->classify($a, $classes, $schedules)['class_id'] ?? '';
+        })->filter()->unique();
+        $attendancePending = max(0, $todayClassIds->diff($todayAttendanceClassIds)->count());
         if ($attendancePending > 0) {
             $reminders[] = [
                 'title'       => 'Attendance Pending',

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Helpers\AttendanceStatusHelper;
 use App\Services\Academic\AttendanceService;
+use App\Services\Academic\AttendanceLegacyClassifier;
 use App\Services\Core\ActivityLogService;
 
 class AttendanceController extends Controller
@@ -88,111 +89,25 @@ class AttendanceController extends Controller
         $schedules = $scheduleRepo->fetchAll()->keyBy('Schedule_ID');
 
         $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
-        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
+        $studentRows = $studentRepo->fetchAll();
         
         $dateFilter = $request->input('date', date('Y-m-d'));
         $dateEndFilter = $request->input('date_end');
         $classFilter = $request->input('class_id');
         $statusFilter = $request->input('status');
         $search = strtolower($request->input('search', ''));
-        
-        
-// Resolve Class_ID for all attendances first
-        $attendances = $attendances->map(function($a) use ($schedules) {
-            $cId = $a['Class_ID'] ?? '';
-            if (empty($cId) && !empty($a['Schedule_ID'])) {
-                $sch = $schedules[$a['Schedule_ID']] ?? null;
-                if ($sch && !empty($sch['Class_ID'])) {
-                    $cId = $sch['Class_ID'];
-                } else {
-                    $cId = $a['Schedule_ID']; // Fallback
-                }
-            }
-            $a['Resolved_Class_ID'] = $cId;
-            return $a;
-        });
 
-        // Filter attendances
-        $attendances = $attendances->filter(function($a) use ($dateFilter, $dateEndFilter, $classFilter, $statusFilter, $search, $students) {
-            try {
-                if (empty($a['Attendance_Date'])) return false;
-                $aDate = \Carbon\Carbon::parse(str_replace('/', '-', $a['Attendance_Date']))->format('Y-m-d');
-                
-                // Date logic
-                if ($dateEndFilter) {
-                    if ($aDate < $dateFilter || $aDate > $dateEndFilter) return false;
-                } else {
-                    if ($dateFilter && $aDate !== $dateFilter) return false;
-                }
-                
-                $cId = $a['Resolved_Class_ID'] ?? '';
-
-                // Class filter
-                if ($classFilter && $cId !== $classFilter) return false;
-
-                // Status filter
-                if ($statusFilter) {
-                    if (AttendanceStatusHelper::normalize($a['Status'] ?? '') !== AttendanceStatusHelper::normalize($statusFilter)) return false;
-                }
-
-                // Search filter (by student ID or Name)
-                if ($search) {
-                    $sId = strtolower($a['Student_ID'] ?? '');
-                    $student = $students[$a['Student_ID'] ?? ''] ?? null;
-                    $sName = strtolower($student['Full_Name'] ?? $student['Name'] ?? '');
-                    
-                    if (strpos($sId, $search) === false && strpos($sName, $search) === false) {
-                        return false;
-                    }
-                }
-                
-                return true;
-            } catch (\Exception $e) {
-                return false;
-            }
-        });
-
-        // Group by Resolved Class_ID
-        $groupedAttendances = $attendances->groupBy(function($a) {
-            return $a['Resolved_Class_ID'] ?? 'Unknown';
-        });
-
-        $classSummary = $groupedAttendances->map(function($classAttendances, $classId) use ($classOptions, $students, $dateFilter, $dateEndFilter) {
-            $className = $classOptions[$classId] ?? $classId;
-            
-            // Enrich students in this class attendances
-            $enrichedStudents = $classAttendances->map(function($a) use ($students) {
-                $student = $students[$a['Student_ID'] ?? ''] ?? null;
-                $a['Student_Name'] = $student['Full_Name'] ?? $student['Name'] ?? 'Unknown';
-                return $a;
-            })->values();
-
-            $total = $classAttendances->count();
-            $hadir = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'PRESENT')->count();
-            $terlambat = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'LATE')->count();
-            $sakit = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'SICK')->count();
-            $izin = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'PERMITTED')->count();
-            $alpha = $classAttendances->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'ABSENT')->count();
-            
-            // For range display
-            $dateDisplay = $dateFilter;
-            if ($dateEndFilter && $dateFilter !== $dateEndFilter) {
-                $dateDisplay = $dateFilter . ' - ' . $dateEndFilter;
-            }
-
-            return [
-                'Class_ID' => $classId,
-                'Class_Name' => $className,
-                'Date_Display' => $dateDisplay,
-                'Total' => $total,
-                'Hadir' => $hadir,
-                'Terlambat' => $terlambat,
-                'Sakit' => $sakit,
-                'Izin' => $izin,
-                'Alpha' => $alpha,
-                'Students' => $enrichedStudents
-            ];
-        })->values();
+        $classSummary = $this->attendanceService->buildClassAttendanceGroups(
+            $classes,
+            $studentRows,
+            $attendances,
+            $schedules,
+            $dateFilter,
+            $dateEndFilter,
+            $classFilter,
+            $statusFilter,
+            $search
+        );
 
         $paginatedClasses = \App\Helpers\CollectionHelper::paginate($classSummary, 10)->withQueryString();
 
@@ -299,21 +214,31 @@ public function create()
     public function exportCSV()
     {
         $attendances = $this->attendanceService->getAll();
+        $classes = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll());
+        $schedules = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll());
+        $classifier = new AttendanceLegacyClassifier();
         $file = fopen('php://temp', 'r+');
         $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
 
         fputcsv($file, array_map($sanitize, [
             'Attendance_ID',
             'Schedule_ID',
+            'Original_Schedule_ID',
+            'Class_ID',
+            'Classification',
             'Student_ID',
             'Status',
             'Date',
         ]));
 
         foreach ($attendances as $att) {
+            $classified = $classifier->classify($att, $classes, $schedules);
             fputcsv($file, array_map($sanitize, [
                 $att['Attendance_ID'] ?? '',
-                $att['Schedule_ID'] ?? '',
+                $classified['schedule_id'] ?? '',
+                $classified['original_schedule_id'] ?? '',
+                $classified['class_id'] ?? '',
+                $classified['classification'] ?? 'UNKNOWN',
                 $att['Student_ID'] ?? '',
                 $att['Status'] ?? '',
                 $att['Attendance_Date'] ?? '',

@@ -55,7 +55,10 @@
                 return asset('storage/profiles/' . basename($userFiles[0]));
             }
 
-            return '';
+            // Do not cache a negative lookup. A photo may be uploaded after
+            // the first render, and Laravel treats null as a cache miss on
+            // subsequent requests so the resolver can discover it promptly.
+            return null;
         });
 
         $photoUrl = $photoUrl ?: null;

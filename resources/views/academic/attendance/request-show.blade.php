@@ -41,6 +41,16 @@
                     <p class="text-sm font-semibold text-slate-700">{{ $request['Attendance_Date'] }} — {{ $request['Subject_Name'] }}</p>
                 </div>
                 <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Target Presensi</span>
+                    <p class="text-sm font-semibold text-slate-700">{{ $request['Attendance_Type'] ?? 'SCHEDULE' }} &middot; {{ $request['Schedule_Display'] ?? ($request['Schedule_ID'] ?? 'Tidak tersedia') }}</p>
+                </div>
+                @if(!empty($request['Existing_Attendance']))
+                    <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Attendance Saat Ini</span>
+                        <p class="text-sm font-semibold text-slate-700">{{ $request['Existing_Attendance']['Status'] ?? 'Tersedia' }}</p>
+                    </div>
+                @endif
+                <div>
                     <span class="text-[10px] font-bold text-slate-400 uppercase">Tipe Pengajuan</span>
                     <p class="text-sm font-black text-indigo-700">{{ $request['Request_Type'] }}</p>
                 </div>

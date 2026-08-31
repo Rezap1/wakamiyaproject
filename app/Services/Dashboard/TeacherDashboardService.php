@@ -10,6 +10,7 @@ use App\Services\Core\StudentService;
 use App\Services\Core\ClassService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use App\Helpers\AttendanceStatusHelper;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -102,23 +103,54 @@ class TeacherDashboardService
             return $myClassIds->contains($s['Class_ID'] ?? '');
         })->count();
 
-        // === Attendance Pending (today's schedules without attendance record) ===
-        $todayAttendedSchedules = $allAttendances->filter(function ($a) use ($todayDate) {
-            return ($a['Attendance_Date'] ?? '') === $todayDate;
-        })->pluck('Schedule_ID')->unique();
         $todayScheduleIds = $todayClassesRaw->pluck('Schedule_ID')->unique();
-        $todayAttendances = $allAttendances->filter(function ($a) use ($todayDate, $todayScheduleIds) {
-            return ($a['Attendance_Date'] ?? '') === $todayDate
+        $mySchedulesById = $mySchedules->keyBy('Schedule_ID');
+        $todayAttendances = $allAttendances->filter(function ($a) use ($todayDate, $todayScheduleIds, $myClassIds) {
+            if (($a['Attendance_Date'] ?? '') !== $todayDate
+                || strtoupper(trim((string) ($a['Is_Active'] ?? 'TRUE'))) === 'FALSE'
+                || empty($a['Student_ID'])) {
+                return false;
+            }
+
+            $attendanceType = strtoupper(trim((string) ($a['Attendance_Type'] ?? '')));
+            if (in_array($attendanceType, ['CLASS_QR', 'CLASS_MANUAL'], true)) {
+                return $myClassIds->contains($a['Class_ID'] ?? '');
+            }
+
+            return $attendanceType === 'SCHEDULE'
                 && $todayScheduleIds->contains($a['Schedule_ID'] ?? '');
-        });
+        })->sortBy(function ($attendance) {
+            $type = strtoupper(trim((string) ($attendance['Attendance_Type'] ?? '')));
+            return in_array($type, ['CLASS_QR', 'CLASS_MANUAL'], true) ? 0 : 1;
+        })->unique(function ($attendance) use ($mySchedulesById) {
+            $type = strtoupper(trim((string) ($attendance['Attendance_Type'] ?? '')));
+            if (in_array($type, ['CLASS_QR', 'CLASS_MANUAL'], true)) {
+                $classId = $attendance['Class_ID'] ?? '';
+            } else {
+                $schedule = $mySchedulesById->get($attendance['Schedule_ID'] ?? '');
+                $classId = $schedule['Class_ID'] ?? '';
+            }
+
+            return ($attendance['Student_ID'] ?? '') . '|' . $classId;
+        })->values();
         $attendanceStats = [
-            'hadir' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT'], true))->count(),
-            'sakit' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['SICK', 'SAKIT'], true))->count(),
-            'izin' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['PERMITTED', 'IZIN'], true))->count(),
-            'alpa' => $todayAttendances->filter(fn ($a) => in_array(strtoupper(trim($a['Status'] ?? '')), ['ABSENT', 'ALPHA', 'ALPA'], true))->count(),
+            'hadir' => $todayAttendances->filter(fn ($a) => in_array(AttendanceStatusHelper::normalize($a['Status'] ?? ''), ['PRESENT', 'LATE'], true))->count(),
+            'sakit' => $todayAttendances->filter(fn ($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'SICK')->count(),
+            'izin' => $todayAttendances->filter(fn ($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'PERMITTED')->count(),
+            'alpa' => $todayAttendances->filter(fn ($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'ABSENT')->count(),
         ];
         $attendanceToday = array_sum($attendanceStats);
-        $attendancePending = $todayScheduleIds->diff($todayAttendedSchedules)->count();
+        $todayClassIds = $todayClassesRaw->pluck('Class_ID')->filter()->unique();
+        $attendedClassIds = $todayAttendances->map(function ($attendance) use ($mySchedulesById) {
+            $type = strtoupper(trim((string) ($attendance['Attendance_Type'] ?? '')));
+            if (in_array($type, ['CLASS_QR', 'CLASS_MANUAL'], true)) {
+                return $attendance['Class_ID'] ?? '';
+            }
+
+            $schedule = $mySchedulesById->get($attendance['Schedule_ID'] ?? '');
+            return $schedule['Class_ID'] ?? '';
+        })->filter()->unique();
+        $attendancePending = $todayClassIds->diff($attendedClassIds)->count();
 
         // === Assessment Pending (my assessments not yet fully scored) ===
         $myAssessmentIds = $myAssessments->pluck('Assessment_ID')->filter()->unique();

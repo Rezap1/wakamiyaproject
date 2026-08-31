@@ -6,22 +6,204 @@ use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Collection;
 use Exception;
 
 class AttendanceService
 {
     protected $repository;
     protected $enterpriseEvent;
+    protected $legacyClassifier;
 
-    public function __construct(AttendanceRepositoryInterface $repository, EnterpriseEventService $enterpriseEvent)
+    public function __construct(AttendanceRepositoryInterface $repository, EnterpriseEventService $enterpriseEvent, ?AttendanceLegacyClassifier $legacyClassifier = null)
     {
         $this->repository = $repository;
         $this->enterpriseEvent = $enterpriseEvent;
+        $this->legacyClassifier = $legacyClassifier ?: new AttendanceLegacyClassifier();
     }
 
     public function getAll()
     {
         return $this->repository->fetchAll();
+    }
+
+    /**
+     * Build the Academic Attendance read model from the class roster.
+     *
+     * The roster is deliberately the base dataset so students without an
+     * attendance row are represented as "Belum Absen". Attendance rows are
+     * indexed in memory after their class has been resolved according to the
+     * persisted attendance type.
+     */
+    public function buildClassAttendanceGroups(
+        $classes,
+        $students,
+        $attendances,
+        $schedules,
+        ?string $dateFilter = null,
+        ?string $dateEndFilter = null,
+        ?string $classFilter = null,
+        ?string $statusFilter = null,
+        ?string $search = null
+    ): Collection {
+        $classes = collect($classes);
+        $students = collect($students);
+        $attendances = collect($attendances);
+        $schedules = collect($schedules)->keyBy(fn ($schedule) => trim((string) ($schedule['Schedule_ID'] ?? '')));
+
+        $activeClasses = $classes
+            ->filter(function ($class) {
+                $isActive = strtoupper(trim((string) ($class['Is_Active'] ?? '')));
+                return ($isActive === 'TRUE' || $isActive === '')
+                    && trim((string) ($class['Class_ID'] ?? '')) !== '';
+            })
+            ->values();
+        $classesById = $activeClasses->keyBy(fn ($class) => trim((string) $class['Class_ID']));
+
+        $classFilter = trim((string) $classFilter);
+        if ($classFilter !== '' && !$classesById->has($classFilter)) {
+            return collect();
+        }
+
+        $search = strtolower(trim((string) $search));
+        $studentsByClass = $students
+            ->filter(function ($student) use ($classesById) {
+                $studentId = trim((string) ($student['Student_ID'] ?? ''));
+                $classId = trim((string) ($student['Class_ID'] ?? ''));
+                $isActive = strtoupper(trim((string) ($student['Is_Active'] ?? 'TRUE')));
+
+                return $studentId !== ''
+                    && $classId !== ''
+                    && $classesById->has($classId)
+                    && $isActive !== 'FALSE';
+            })
+            ->groupBy(fn ($student) => trim((string) $student['Class_ID']));
+
+        $attendanceByStudentClass = [];
+        foreach ($attendances as $attendance) {
+            $studentId = trim((string) ($attendance['Student_ID'] ?? ''));
+            $attendanceType = strtoupper(trim((string) ($attendance['Attendance_Type'] ?? '')));
+            $isEmployee = $attendanceType === 'EMPLOYEE' || $studentId === '';
+            if ($isEmployee) {
+                continue;
+            }
+
+            $attendanceDate = trim((string) ($attendance['Attendance_Date'] ?? ''));
+            if ($attendanceDate === '') {
+                continue;
+            }
+
+            try {
+                $normalizedDate = \Carbon\Carbon::parse(str_replace('/', '-', $attendanceDate))->format('Y-m-d');
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if ($dateEndFilter !== null && $dateEndFilter !== '') {
+                if ($normalizedDate < (string) $dateFilter || $normalizedDate > $dateEndFilter) {
+                    continue;
+                }
+            } elseif ($dateFilter !== null && $dateFilter !== '' && $normalizedDate !== $dateFilter) {
+                continue;
+            }
+
+            $classified = $this->legacyClassifier->classify($attendance, $activeClasses, $schedules);
+            if (in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)) {
+                continue;
+            }
+            $classId = trim((string) ($classified['class_id'] ?? ''));
+            if ($classId === '' || !$classesById->has($classId)) {
+                continue;
+            }
+            if ($classFilter !== '' && $classId !== $classFilter) {
+                continue;
+            }
+
+            $key = implode('|', [$studentId, $classId, $normalizedDate, $attendanceType]);
+            $attendanceByStudentClass[$studentId . '|' . $classId][$key] = $attendance + [
+                'Resolved_Class_ID' => $classId,
+                'Resolved_Schedule_ID' => $classified['schedule_id'],
+                'Original_Schedule_ID' => $classified['original_schedule_id'],
+                'Legacy_Type' => $classified['classification'],
+                'Normalized_Attendance_Date' => $normalizedDate,
+            ];
+        }
+
+        $dateDisplay = (string) $dateFilter;
+        if ($dateEndFilter !== null && $dateEndFilter !== '' && $dateFilter !== $dateEndFilter) {
+            $dateDisplay .= ' - ' . $dateEndFilter;
+        }
+
+        return $activeClasses
+            ->filter(fn ($class) => $classFilter === '' || trim((string) $class['Class_ID']) === $classFilter)
+            ->map(function ($class) use ($studentsByClass, $attendanceByStudentClass, $statusFilter, $search, $dateDisplay) {
+                $classId = trim((string) $class['Class_ID']);
+                $classStudents = $studentsByClass->get($classId, collect());
+                $rows = [];
+
+                foreach ($classStudents as $student) {
+                    $studentId = trim((string) $student['Student_ID']);
+                    $studentName = (string) ($student['Full_Name'] ?? $student['Name'] ?? $studentId);
+                    if ($search !== ''
+                        && !str_contains(strtolower($studentId), $search)
+                        && !str_contains(strtolower($studentName), $search)) {
+                        continue;
+                    }
+
+                    $candidates = collect(array_values($attendanceByStudentClass[$studentId . '|' . $classId] ?? []));
+                    if ($statusFilter !== null && trim($statusFilter) !== '') {
+                        $wantedStatus = AttendanceStatusHelper::normalize($statusFilter);
+                        $candidates = $candidates->filter(fn ($attendance) =>
+                            AttendanceStatusHelper::normalize($attendance['Status'] ?? '') === $wantedStatus
+                        );
+                    }
+                    $attendance = $candidates->first();
+
+                    if ($attendance === null && $statusFilter !== null && trim($statusFilter) !== '') {
+                        continue;
+                    }
+
+                    $statusKey = $attendance === null
+                        ? 'NOT_ATTENDED'
+                        : AttendanceStatusHelper::normalize($attendance['Status'] ?? '');
+                    $rows[] = [
+                        'Student_ID' => $studentId,
+                        'Student_Name' => $studentName,
+                        'Class_ID' => $classId,
+                        'Status' => $attendance['Status'] ?? '',
+                        'Status_Key' => $statusKey,
+                        'Display_Status' => $attendance === null
+                            ? 'Belum Absen'
+                            : AttendanceStatusHelper::label($attendance['Status'] ?? ''),
+                        'Badge_Color' => $attendance === null
+                            ? 'slate'
+                            : AttendanceStatusHelper::badgeColor($attendance['Status'] ?? ''),
+                        'Attendance' => $attendance,
+                        'Attendance_ID' => $attendance['Attendance_ID'] ?? null,
+                        'Check_In_Time' => $attendance['Check_In_Time'] ?? $attendance['Time_In'] ?? null,
+                        'Check_Out_Time' => $attendance['Check_Out_Time'] ?? $attendance['Time_Out'] ?? null,
+                        'Notes' => $attendance['Notes'] ?? null,
+                    ];
+                }
+
+                $rows = collect($rows)->values();
+
+                return [
+                    'Class_ID' => $classId,
+                    'Class_Name' => (trim((string) ($class['Class_Name'] ?? '')) ?: $classId)
+                        . (!empty($class['Class_Code']) ? ' (' . $class['Class_Code'] . ')' : ''),
+                    'Date_Display' => $dateDisplay,
+                    'Total' => $rows->count(),
+                    'Hadir' => $rows->where('Status_Key', 'PRESENT')->count(),
+                    'Terlambat' => $rows->where('Status_Key', 'LATE')->count(),
+                    'Sakit' => $rows->where('Status_Key', 'SICK')->count(),
+                    'Izin' => $rows->where('Status_Key', 'PERMITTED')->count(),
+                    'Alpha' => $rows->where('Status_Key', 'ABSENT')->count(),
+                    'Belum_Absen' => $rows->where('Status_Key', 'NOT_ATTENDED')->count(),
+                    'Students' => $rows,
+                ];
+            })
+            ->values();
     }
 
     public function getById($id)

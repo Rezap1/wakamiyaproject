@@ -9,6 +9,7 @@ use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Helpers\CollectionHelper;
 use App\Helpers\StoragePathHelper;
 
@@ -19,19 +20,22 @@ class AttendanceRequestController extends Controller
     protected $scheduleRepo;
     protected $batchRepo;
     protected $classRepo;
+    protected $attendanceRepo;
 
     public function __construct(
         AttendanceRequestService $requestService,
         StudentRepositoryInterface $studentRepo,
         ScheduleRepositoryInterface $scheduleRepo,
         BatchRepositoryInterface $batchRepo,
-        ClassRepositoryInterface $classRepo
+        ClassRepositoryInterface $classRepo,
+        ?AttendanceRepositoryInterface $attendanceRepo = null
     ) {
         $this->requestService = $requestService;
         $this->studentRepo = $studentRepo;
         $this->scheduleRepo = $scheduleRepo;
         $this->batchRepo = $batchRepo;
         $this->classRepo = $classRepo;
+        $this->attendanceRepo = $attendanceRepo;
     }
 
     public function index(Request $request)
@@ -48,6 +52,11 @@ class AttendanceRequestController extends Controller
             $req['Student_Name'] = $student['Full_Name'] ?? 'Unknown';
             $req['Class_Name'] = $class['Class_Name'] ?? 'Unknown';
             $req['Batch_ID'] = $student['Batch_ID'] ?? 'Unknown';
+            $req['Attendance_Type'] = strtoupper(trim((string) ($req['Attendance_Type'] ?? '')))
+                ?: (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE');
+            $req['Target_Display'] = $req['Attendance_Type'] === 'CLASS_QR'
+                ? 'Class Attendance / QR'
+                : ($req['Schedule_ID'] ?? 'Tidak tersedia');
             return $req;
         });
 
@@ -78,11 +87,28 @@ class AttendanceRequestController extends Controller
 
         $student = $students->firstWhere('Student_ID', $request['Student_ID']);
         $class = $classes->firstWhere('Class_ID', $student['Class_ID'] ?? '');
-        $schedule = $schedules->firstWhere('Schedule_ID', $request['Schedule_ID']);
+        $requestType = strtoupper(trim((string) ($request['Attendance_Type'] ?? '')));
+        $isClassBased = $requestType === 'CLASS_QR'
+            || ($requestType === '' && empty($request['Schedule_ID']));
+        $schedule = $isClassBased ? null : $schedules->firstWhere('Schedule_ID', $request['Schedule_ID']);
+        $existingAttendance = null;
+        if ($this->attendanceRepo && !empty($request['Attendance_ID'])) {
+            $existingAttendance = $this->attendanceRepo->findById($request['Attendance_ID']);
+        }
 
         $request['Student_Name'] = $student['Full_Name'] ?? 'Unknown';
         $request['Class_Name'] = $class['Class_Name'] ?? 'Unknown';
-        $request['Subject_Name'] = $schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Unknown';
+        $request['Attendance_Type'] = $requestType !== ''
+            ? $requestType
+            : ($existingAttendance['Attendance_Type'] ?? ($isClassBased ? 'CLASS_QR' : 'SCHEDULE'));
+        $request['Class_ID'] = $student['Class_ID'] ?? $request['Class_ID'] ?? '';
+        $request['Schedule_Display'] = $request['Attendance_Type'] === 'CLASS_QR'
+            ? 'Class Attendance / QR'
+            : ($schedule['Schedule_ID'] ?? $request['Schedule_ID'] ?? 'Tidak tersedia');
+        $request['Subject_Name'] = $request['Attendance_Type'] === 'CLASS_QR'
+            ? 'Class Attendance / QR'
+            : ($schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Unknown');
+        $request['Existing_Attendance'] = $existingAttendance;
 
         return view('academic.attendance.request-show', compact('request'));
     }
