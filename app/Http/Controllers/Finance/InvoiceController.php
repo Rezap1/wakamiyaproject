@@ -10,6 +10,9 @@ use App\Http\Requests\UpdateInvoiceRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\UserResolverHelper;
 use App\Services\Core\SystemSettingService;
+use App\Exceptions\AmbiguousSheetWriteException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller
 {
@@ -154,6 +157,19 @@ class InvoiceController extends Controller
         try {
             $invoice = $this->invoiceService->create($request->validated());
             return redirect()->route('invoices.show', $invoice['Invoice_ID'])->with('success', 'Invoice tagihan berhasil dibuat sebagai Draft.');
+        } catch (AmbiguousSheetWriteException $e) {
+            Log::warning('Invoice create persistence ambiguous', [
+                'request_id' => $request->header('X-Request-ID'),
+                'idempotency_key' => $request->input('Idempotency_Key') ? hash('sha256', $request->input('Idempotency_Key')) : null,
+                'exception' => get_class($e),
+            ]);
+            return back()->with('error', 'Status penyimpanan invoice belum dapat dikonfirmasi. Silakan cek daftar invoice sebelum mencoba kembali.')->withInput();
+        } catch (LockTimeoutException $e) {
+            Log::warning('Invoice create lock timeout', [
+                'request_id' => $request->header('X-Request-ID'),
+                'exception' => get_class($e),
+            ]);
+            return back()->with('error', 'Permintaan invoice sedang diproses oleh transaksi lain. Silakan tunggu lalu kirim ulang dengan token yang sama.')->withInput();
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }

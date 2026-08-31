@@ -8,8 +8,13 @@ use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Exception;
+use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Support\ActorIdentity;
+use Throwable;
 
 class InvoiceService
 {
@@ -409,33 +414,66 @@ class InvoiceService
 
     public function generateInvoiceNumber($type = 'STUDENT')
     {
-        $prefix = $type === 'COMPANY' ? 'INV-CORP' : 'INV-STU';
-        $year = date('Y');
-        
-        $counterKey = 'invoice_counter_' . $prefix . '_' . $year;
-        $lockKey = 'invoice_write_lock';
+        $prefix = strtoupper((string) $type) === 'COMPANY' ? 'INV-CORP' : 'INV-STU';
+        $year = (int) date('Y');
 
-        return Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $year, $counterKey) {
-            if (!Cache::has($counterKey)) {
-                $all = $this->repository->getAll();
-                $count = collect($all)->filter(function($item) use ($prefix, $year) {
-                    return str_starts_with($item['Invoice_ID'] ?? '', "{$prefix}-{$year}-");
-                })->count();
-                Cache::forever($counterKey, $count);
+        return Cache::lock('invoice_creation_lock', 120)->block(15,
+            fn () => $this->allocateInvoiceNumberLocked($prefix, $year)
+        );
+    }
+
+    private function allocateInvoiceNumberLocked(string $prefix, int $year): string
+    {
+        $counterKey = "invoice_counter_{$prefix}_{$year}";
+        $this->repository->clearCache();
+        $rows = method_exists($this->repository, 'getAllFresh')
+            ? $this->repository->getAllFresh()
+            : $this->repository->getAll();
+        $maxSuffix = 0;
+        $pattern = '/^' . preg_quote($prefix, '/') . '-' . $year . '-(\\d+)$/i';
+
+        foreach ($rows as $row) {
+            $id = trim((string) ($row['Invoice_ID'] ?? ''));
+            if (preg_match($pattern, $id, $matches) === 1) {
+                $maxSuffix = max($maxSuffix, (int) $matches[1]);
             }
-            
-            $nextNumber = Cache::increment($counterKey);
-            return sprintf("%s-%s-%06d", $prefix, $year, $nextNumber);
-        });
+        }
+
+        // Cache is an optimization only. A stale/lower value is reconciled to
+        // the persisted maximum, while a higher value remains reserved.
+        $cachedSuffix = max(0, (int) Cache::get($counterKey, 0));
+        $candidate = max($maxSuffix, $cachedSuffix) + 1;
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $invoiceId = sprintf('%s-%d-%06d', $prefix, $year, $candidate);
+            $exists = collect($rows)->contains(function ($row) use ($invoiceId) {
+                return strcasecmp(trim((string) ($row['Invoice_ID'] ?? '')), $invoiceId) === 0;
+            });
+            if (!$exists) {
+                Cache::forever($counterKey, $candidate);
+                Log::info('Invoice number allocated', [
+                    'invoice_id' => $invoiceId,
+                    'prefix' => $prefix,
+                    'year' => $year,
+                    'max_persisted_suffix' => $maxSuffix,
+                    'cached_suffix' => $cachedSuffix,
+                    'attempt' => $attempt,
+                ]);
+                return $invoiceId;
+            }
+            $candidate++;
+        }
+
+        throw new Exception("Tidak dapat mengalokasikan nomor invoice aman untuk {$prefix}-{$year}.");
     }
 
     public function create(array $data)
     {
         $data['Invoice_Type'] = $data['Invoice_Type'] ?? 'STUDENT';
-        
-        if (empty($data['Invoice_ID'])) {
-            $data['Invoice_ID'] = $this->generateInvoiceNumber($data['Invoice_Type']);
-        }
+        $providedInvoiceId = trim((string) ($data['Invoice_ID'] ?? ''));
+        $idempotencyKey = trim((string) ($data['Idempotency_Key'] ?? ''));
+        unset($data['Idempotency_Key']);
+        $actorId = ActorIdentity::required();
+        $requestId = request()->header('X-Request-ID') ?: (string) Str::uuid();
 
         // Process Items Array
         $items = $data['items'] ?? [];
@@ -480,48 +518,172 @@ class InvoiceService
             $data['Category'] = 'Biaya Pendidikan';
         }
 
-        $persist = function () use (&$data) {
-            $this->enforceEducationTuitionCap($data);
-
-            $data['Status'] = 'Draft';
-            $data['Created_At'] = now()->toDateTimeString();
-            $data['Is_Active'] = 'TRUE';
-
-            $result = $this->repository->create($data);
-            if (!$result) {
-                throw new Exception("Gagal menyimpan invoice {$data['Invoice_ID']}.");
+        $fingerprint = hash('sha256', json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $run = function () use (&$data, $idempotencyKey, $fingerprint, $actorId, $requestId, $providedInvoiceId) {
+            $idempotencyCacheKey = $idempotencyKey !== ''
+                ? 'invoice_idempotency_' . hash('sha256', $actorId . ':' . $idempotencyKey)
+                : null;
+            if ($idempotencyCacheKey) {
+                $existing = Cache::get($idempotencyCacheKey);
+                if ($existing && ($existing['fingerprint'] ?? '') !== $fingerprint) {
+                    throw new Exception('Idempotency key sudah digunakan untuk payload invoice yang berbeda.');
+                }
+                if (($existing['status'] ?? null) === 'completed' && !empty($existing['data'])) {
+                    return $existing['data'];
+                }
+                if (($existing['status'] ?? null) === 'processing' && !empty($existing['invoice_id'])) {
+                    $persisted = method_exists($this->repository, 'findByIdFresh')
+                        ? $this->repository->findByIdFresh($existing['invoice_id'])
+                        : $this->repository->getById($existing['invoice_id']);
+                    if ($persisted) {
+                        $data = array_merge($data, $persisted);
+                        return $this->completeInvoiceCreation($data, $idempotencyCacheKey, $fingerprint, $actorId, $requestId, false);
+                    }
+                    $data['Invoice_ID'] = $existing['invoice_id'];
+                }
             }
 
-            return $result;
+            $write = function () use (&$data, $idempotencyCacheKey, $idempotencyKey, $fingerprint, $actorId, $requestId, $providedInvoiceId) {
+                if ($idempotencyCacheKey && empty($data['Invoice_ID'])) {
+                    // The record is populated immediately after allocation so a
+                    // retry can verify the same Invoice_ID instead of generating
+                    // another invoice blindly.
+                    Cache::put($idempotencyCacheKey, [
+                        'status' => 'processing',
+                        'invoice_id' => null,
+                        'fingerprint' => $fingerprint,
+                    ], now()->addHours(2));
+                }
+
+                for ($attempt = 1; $attempt <= 5; $attempt++) {
+                    if (empty($data['Invoice_ID'])) {
+                        $prefix = strtoupper((string) $data['Invoice_Type']) === 'COMPANY' ? 'INV-CORP' : 'INV-STU';
+                        $data['Invoice_ID'] = $this->allocateInvoiceNumberLocked($prefix, (int) date('Y'));
+                    }
+                    if ($idempotencyCacheKey) {
+                        Cache::put($idempotencyCacheKey, [
+                            'status' => 'processing',
+                            'invoice_id' => $data['Invoice_ID'],
+                            'fingerprint' => $fingerprint,
+                        ], now()->addHours(2));
+                    }
+
+                    $this->enforceEducationTuitionCap($data);
+                    $data['Status'] = 'Draft';
+                    $data['Created_At'] = $data['Created_At'] ?? now()->toDateTimeString();
+                    $data['Is_Active'] = 'TRUE';
+
+                    try {
+                        $result = $this->repository->create($data);
+                        if (!$result) {
+                            throw new Exception("Gagal menyimpan invoice {$data['Invoice_ID']}.");
+                        }
+                        return $data;
+                    } catch (DuplicatePrimaryKeyException $e) {
+                        if ($attempt >= 5 || $providedInvoiceId !== '') {
+                            throw $e;
+                        }
+                        $data['Invoice_ID'] = null;
+                        Log::warning('Invoice number collision reconciled', [
+                            'request_id' => $requestId,
+                            'idempotency_key' => $idempotencyKey !== '' ? hash('sha256', $idempotencyKey) : null,
+                            'attempt' => $attempt,
+                            'exception' => get_class($e),
+                        ]);
+                    }
+                }
+                throw new Exception('Pembuatan invoice melebihi batas percobaan aman.');
+            };
+
+            $executeWrite = function () use ($write, &$data) {
+                if ($this->isEducationCategory($data['Category'] ?? '') && !empty($data['Student_ID'])) {
+                    $lockKey = 'invoice_tuition_' . sha1((string) $data['Student_ID']);
+                    return Cache::lock($lockKey, 120)->block(15, $write);
+                }
+                return $write();
+            };
+
+            $persisted = Cache::lock('invoice_creation_lock', 120)->block(15, $executeWrite);
+            return $this->completeInvoiceCreation($persisted, $idempotencyCacheKey, $fingerprint, $actorId, $requestId);
         };
 
-        if ($this->isEducationCategory($data['Category'] ?? '') && !empty($data['Student_ID'])) {
-            $lockKey = 'invoice_tuition_' . sha1((string) $data['Student_ID']);
-            $res = Cache::lock($lockKey, 30)->block(5, $persist);
-        } else {
-            $res = $persist();
+        if ($idempotencyKey === '') {
+            return $run();
         }
 
-        $this->repository->clearCache();
+        $lockKey = 'invoice_idempotency_lock_' . hash('sha256', $actorId . ':' . $idempotencyKey);
+        return Cache::lock($lockKey, 120)->block(15, $run);
+    }
 
-        if (!empty($data['Student_ID'])) {
-            Cache::forget("student_billing_{$data['Student_ID']}");
+    private function completeInvoiceCreation(array $data, ?string $idempotencyCacheKey, string $fingerprint, string $actorId, string $requestId, bool $dispatchSideEffects = true): array
+    {
+        try {
+            $this->repository->clearCache();
+            if (!empty($data['Student_ID'])) {
+                Cache::forget("student_billing_{$data['Student_ID']}");
+            }
+            Cache::forget('finance_dashboard');
+            Cache::forget('dashboard_finance');
+        } catch (Throwable $e) {
+            Log::warning('Invoice cache invalidation failed after primary persistence', [
+                'request_id' => $requestId,
+                'invoice_id' => $data['Invoice_ID'] ?? null,
+                'exception' => get_class($e),
+            ]);
         }
-        Cache::forget('finance_dashboard');
-        Cache::forget('dashboard_finance');
 
-        $this->enterpriseEvent->dispatch(
-            'FINANCE', 
-            'CREATE', 
-            'INVOICE', 
-            $data['Invoice_ID'], 
-            \App\Support\ActorIdentity::required(), 
-            ['FINANCE'], 
-            !empty($data['Student_ID']) ? [$data['Student_ID']] : [], 
-            $data
-        );
-        
-        return $this->formatInvoiceRecord($data);
+        if ($dispatchSideEffects) {
+            try {
+                $eventMetadata = array_intersect_key($data, array_flip([
+                    'Invoice_Type', 'Category', 'Due_Date', 'Student_ID', 'Company_ID'
+                ]));
+                $this->enterpriseEvent->dispatch(
+                    'FINANCE', 'CREATE', 'INVOICE', $data['Invoice_ID'], $actorId,
+                    ['FINANCE'], !empty($data['Student_ID']) ? [$data['Student_ID']] : [], $eventMetadata
+                );
+            } catch (Throwable $e) {
+                Log::error('Invoice side effect dispatch failed after primary persistence', [
+                    'request_id' => $requestId,
+                    'invoice_id' => $data['Invoice_ID'] ?? null,
+                    'exception' => get_class($e),
+                ]);
+            }
+        }
+
+        $result = $this->formatCreatedInvoice($data);
+        if ($idempotencyCacheKey) {
+            Cache::put($idempotencyCacheKey, [
+                'status' => 'completed',
+                'invoice_id' => $result['Invoice_ID'],
+                'fingerprint' => $fingerprint,
+                'data' => $result,
+            ], now()->addHours(24));
+        }
+        Log::info('Invoice primary persistence succeeded', [
+            'request_id' => $requestId,
+            'invoice_id' => $result['Invoice_ID'] ?? null,
+            'actor_id' => $actorId,
+            'result' => 'success',
+        ]);
+        return $result;
+    }
+
+    private function formatCreatedInvoice(array $data): array
+    {
+        $lineItems = $data['Line_Items'] ?? [];
+        if (is_string($lineItems)) {
+            $decoded = json_decode($lineItems, true);
+            $lineItems = is_array($decoded) ? $decoded : [];
+        }
+        $amount = (float) ($data['Amount'] ?? 0);
+        $data['Parsed_Line_Items'] = $lineItems;
+        $data['Grand_Total'] = $amount;
+        $data['Display_Status'] = 'Draft';
+        $data['Status'] = 'Draft';
+        $data['Paid_Amount'] = 0.0;
+        $data['Remaining_Amount'] = $amount;
+        $data['Is_Overdue'] = false;
+        return $data;
     }
 
     public function publish($id)

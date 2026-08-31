@@ -24,6 +24,7 @@
     
     <form action="{{ route('invoices.store') }}" method="POST">
         @csrf
+        <input type="hidden" name="Idempotency_Key" value="{{ old('Idempotency_Key', (string) \Illuminate\Support\Str::uuid()) }}">
         <input type="hidden" name="Invoice_Type" value="STUDENT">
 
         @if ($errors->any())
@@ -277,5 +278,24 @@
             }
         }
     }
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('form[action="{{ route('invoices.store') }}"]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (form.dataset.submitting === 'true') {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.submitting = 'true';
+                const button = form.querySelector('button[type="submit"]');
+                if (button) {
+                    button.disabled = true;
+                    button.classList.add('opacity-60', 'cursor-not-allowed');
+                    button.textContent = 'Menyimpan...';
+                }
+            });
+        });
+    });
 </script>
 @endsection

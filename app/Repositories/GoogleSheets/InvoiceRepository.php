@@ -18,10 +18,20 @@ class InvoiceRepository extends BaseSheetRepository implements InvoiceRepository
         return $this->fetchAll();
     }
 
+    public function getAllFresh()
+    {
+        return $this->fetchAllFresh();
+    }
+
     public function getById($id)
     {
         $items = $this->fetchAll();
         return $items->firstWhere($this->primaryKey, $id);
+    }
+
+    public function findByIdFresh($id)
+    {
+        return parent::findByIdFresh($id);
     }
 
     public function create(array $data)

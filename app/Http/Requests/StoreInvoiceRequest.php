@@ -21,6 +21,7 @@ class StoreInvoiceRequest extends FormRequest
     {
         return [
             'Invoice_Type' => 'required|in:STUDENT,COMPANY',
+            'Idempotency_Key' => 'required|uuid',
             'Student_ID' => 'required_if:Invoice_Type,STUDENT|nullable|string',
             'Company_ID' => 'required_if:Invoice_Type,COMPANY|nullable|string',
             'Category' => 'required|string|max:100',
