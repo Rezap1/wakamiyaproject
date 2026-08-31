@@ -297,8 +297,8 @@
 
 @php
     $settingService = app(\App\Services\Core\SystemSettingService::class);
-    $lpkLat = $settingService->get('LPK_LATITUDE', null);
-    $lpkLon = $settingService->get('LPK_LONGITUDE', null);
+    $lpkLat = \App\Support\CoordinateNormalizer::parse($settingService->get('LPK_LATITUDE', null), -90, 90);
+    $lpkLon = \App\Support\CoordinateNormalizer::parse($settingService->get('LPK_LONGITUDE', null), -180, 180);
     $maxRadius = $settingService->get('LPK_ALLOWED_RADIUS_METERS', null);
 @endphp
 
@@ -311,8 +311,8 @@
             successData: { date: '', time: '', distance: '', statusLabel: '', message: '' },
             html5QrCode: null,
             lastScannedToken: null,
-            lpkLat: @json(is_numeric($lpkLat) ? (float) $lpkLat : null),
-            lpkLon: @json(is_numeric($lpkLon) ? (float) $lpkLon : null),
+            lpkLat: @json($lpkLat),
+            lpkLon: @json($lpkLon),
             maxRadius: @json(is_numeric($maxRadius) ? (float) $maxRadius : null),
 
             init() {

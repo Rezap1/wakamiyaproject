@@ -3,66 +3,7 @@
 @php
     $u = $user ?? auth()->user();
     $name = $u->Username ?? $u->Name ?? $u->Full_Name ?? $u->name ?? 'User';
-    $userId = $u->User_ID ?? $u->id ?? null;
-
-    // Resolve Profile Photo URL
-    $photoUrl = null;
-
-    if (isset($u->Profile_Photo) && !empty($u->Profile_Photo)) {
-        $photoUrl = str_starts_with($u->Profile_Photo, 'http') 
-            ? $u->Profile_Photo 
-            : asset($u->Profile_Photo);
-    } elseif ($userId) {
-        $cacheKey = 'user_photo_' . $userId;
-        $photoUrl = \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($userId, $u) {
-            // 1. Try finding Employee_ID by User_ID in EmployeeRepository
-            try {
-                $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
-                $employee = collect($employeeRepo->fetchAll())->firstWhere('User_ID', $userId);
-                if ($employee && !empty($employee['Employee_ID'])) {
-                    $empService = app(\App\Services\Core\EmployeeService::class);
-                    $path = $empService->getProfilePhotoPath($employee['Employee_ID']);
-                    if ($path && file_exists(public_path($path))) {
-                        return asset($path);
-                    }
-                }
-            } catch (\Throwable $e) {}
-
-            // 2. Try finding Student_ID by User_ID in StudentRepository
-            try {
-                $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
-                $students = $studentRepo->fetchAll();
-                $student = collect($students)->firstWhere('User_ID', $userId);
-                
-                if (!$student) {
-                    $studentName = $u->Full_Name ?? $u->Username ?? $u->Name ?? null;
-                    if ($studentName) {
-                        $student = collect($students)->firstWhere('Full_Name', $studentName);
-                    }
-                }
-
-                if ($student && !empty($student['Student_ID'])) {
-                    $files = glob(storage_path('app/public/profiles/student_' . $student['Student_ID'] . '.*'));
-                    if (!empty($files) && file_exists(public_path('storage/profiles/' . basename($files[0])))) {
-                        return asset('storage/profiles/' . basename($files[0]));
-                    }
-                }
-            } catch (\Throwable $e) {}
-
-            // 3. Fallback direct file glob for User_ID
-            $userFiles = glob(storage_path('app/public/profiles/user_' . $userId . '.*'));
-            if (!empty($userFiles) && file_exists(public_path('storage/profiles/' . basename($userFiles[0])))) {
-                return asset('storage/profiles/' . basename($userFiles[0]));
-            }
-
-            // Do not cache a negative lookup. A photo may be uploaded after
-            // the first render, and Laravel treats null as a cache miss on
-            // subsequent requests so the resolver can discover it promptly.
-            return null;
-        });
-
-        $photoUrl = $photoUrl ?: null;
-    }
+    $photoUrl = app(\App\Services\Core\AvatarResolver::class)->resolve($u);
 
     // Dynamic Initials Fallback (Never Hardcoded DE)
     $cleanName = trim(preg_replace('/[^a-zA-Z0-9\s]/', '', $name));

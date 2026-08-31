@@ -31,8 +31,10 @@ class StudentQRAttendanceController extends Controller
             return redirect()->route('login');
         }
 
-        $allStudents = collect($this->studentRepository->fetchAll());
-        $student = $allStudents->firstWhere('User_ID', $user->User_ID);
+        $userId = trim((string) ($user->User_ID ?? ''));
+        $student = collect($this->studentRepository->fetchAll())
+            ->first(fn ($candidate) => $userId !== ''
+                && strcasecmp(trim((string) ($candidate['User_ID'] ?? '')), $userId) === 0);
 
         return view('academic.attendances.qr_scanner', compact('user', 'student'));
     }

@@ -7,6 +7,7 @@ use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use App\Support\CoordinateNormalizer;
 use Carbon\Carbon;
 use Exception;
 
@@ -530,13 +531,8 @@ class QRAttendanceService
 
     private function parseRequiredCoordinate(mixed $value, float $minimum, float $maximum, string $label): float
     {
-        $normalized = str_replace(',', '.', trim((string) $value));
-        if ($normalized === '' || !is_numeric($normalized)) {
-            throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
-        }
-
-        $coordinate = (float) $normalized;
-        if (!is_finite($coordinate) || $coordinate < $minimum || $coordinate > $maximum) {
+        $coordinate = CoordinateNormalizer::parse($value, $minimum, $maximum);
+        if ($coordinate === null) {
             throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
         }
 

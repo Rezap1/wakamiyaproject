@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Exception;
+use App\Support\CoordinateNormalizer;
 
 class StudentQRAttendanceService
 {
@@ -243,8 +244,7 @@ class StudentQRAttendanceService
             throw new Exception("Akses Ditolak: Fitur ini khusus untuk akun Siswa.");
         }
 
-        $allStudents = collect($this->studentRepository->fetchAll());
-        $student = $allStudents->firstWhere('User_ID', $user->User_ID);
+        $student = $this->resolveStudentForUser($user);
 
         if (!$student || strtoupper(trim($student['Is_Active'] ?? 'TRUE')) === 'FALSE') {
             throw new Exception("Akun Anda tidak dapat melakukan absensi. Profil siswa tidak ditemukan atau tidak aktif.");
@@ -393,6 +393,26 @@ class StudentQRAttendanceService
         return true;
     }
 
+    /**
+     * Resolve only the authenticated account's exact User_ID.  A missing
+     * mapping is a hard failure; never substitute a first/nearest student.
+     */
+    private function resolveStudentForUser($user): ?array
+    {
+        $userId = trim((string) ($user->User_ID ?? ''));
+        if ($userId === '') {
+            return null;
+        }
+
+        foreach ($this->studentRepository->fetchAll() as $candidate) {
+            if (strcasecmp(trim((string) ($candidate['User_ID'] ?? '')), $userId) === 0) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
     private function signingKey(): string
     {
         $key = trim((string) config('app.key'));
@@ -437,13 +457,8 @@ class StudentQRAttendanceService
 
     private function parseRequiredCoordinate(mixed $value, float $minimum, float $maximum, string $label): float
     {
-        $normalized = str_replace(',', '.', trim((string) $value));
-        if ($normalized === '' || !is_numeric($normalized)) {
-            throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
-        }
-
-        $coordinate = (float) $normalized;
-        if (!is_finite($coordinate) || $coordinate < $minimum || $coordinate > $maximum) {
+        $coordinate = CoordinateNormalizer::parse($value, $minimum, $maximum);
+        if ($coordinate === null) {
             throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
         }
 

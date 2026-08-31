@@ -1,6 +1,8 @@
 <?php
 namespace App\Services\Core;
 
+use App\Support\CoordinateNormalizer;
+
 use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
 use App\Interfaces\GoogleSheets\SystemParameterRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
@@ -964,11 +966,11 @@ class SystemSettingService
 
     private function validateSettingRule(string $key, string $label, string $value): ?string
     {
-        if (in_array($key, ['LPK_LATITUDE'], true) && ((float) $value < -90 || (float) $value > 90)) {
+        if (in_array($key, ['LPK_LATITUDE'], true) && CoordinateNormalizer::parse($value, -90, 90) === null) {
             return "{$label} harus di antara -90 dan 90.";
         }
 
-        if (in_array($key, ['LPK_LONGITUDE'], true) && ((float) $value < -180 || (float) $value > 180)) {
+        if (in_array($key, ['LPK_LONGITUDE'], true) && CoordinateNormalizer::parse($value, -180, 180) === null) {
             return "{$label} harus di antara -180 dan 180.";
         }
 
