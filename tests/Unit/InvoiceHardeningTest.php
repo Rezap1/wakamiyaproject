@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Exceptions\FinancialIntegrityException;
 use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
 use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
@@ -21,7 +22,7 @@ class InvoiceHardeningTest extends TestCase
     {
         parent::setUp();
         Cache::flush();
-        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE']));
+        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE', 'Role' => 'FINANCE']));
     }
 
     public function test_allocator_uses_max_suffix_not_count_and_handles_gaps(): void
@@ -175,7 +176,37 @@ class InvoiceHardeningTest extends TestCase
         $this->assertStringStartsWith('INV-STU-', $invoice['Invoice_ID']);
     }
 
-    private function makeService(HardeningInvoiceRepository $repo, ?EnterpriseEventService $events = null): InvoiceService
+    public function test_invoice_line_items_are_verified_from_fresh_persisted_row(): void
+    {
+        $repo = new FreshIntegrityInvoiceRepository();
+        $service = $this->makeService($repo);
+
+        $invoice = $service->create([
+            'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU001', 'Category' => 'Medical',
+            'Due_Date' => now()->addDays(14)->format('Y-m-d'),
+            'items' => [['description' => 'Medical', 'qty' => 2, 'unit_price' => 125]],
+        ]);
+
+        $this->assertSame(1, $repo->freshReads);
+        $this->assertSame(250.0, (float) $invoice['Amount']);
+        $this->assertCount(1, $invoice['Parsed_Line_Items']);
+        $this->assertSame(250.0, (float) $invoice['Parsed_Line_Items'][0]['subtotal']);
+    }
+
+    public function test_invoice_line_items_loss_after_persistence_fails_closed(): void
+    {
+        $repo = new FreshIntegrityInvoiceRepository(true);
+        $service = $this->makeService($repo);
+
+        $this->expectException(FinancialIntegrityException::class);
+        $service->create([
+            'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU001', 'Category' => 'Medical',
+            'Due_Date' => now()->addDays(14)->format('Y-m-d'),
+            'items' => [['description' => 'Medical', 'qty' => 1, 'unit_price' => 100]],
+        ]);
+    }
+
+    private function makeService(InvoiceRepositoryInterface $repo, ?EnterpriseEventService $events = null): InvoiceService
     {
         $student = Mockery::mock(StudentRepositoryInterface::class);
         $student->shouldReceive('findById')->zeroOrMoreTimes()->andReturn(['Student_ID' => 'STU001', 'Program_ID' => '', 'Batch_ID' => '']);
@@ -217,6 +248,32 @@ class HardeningInvoiceRepository implements InvoiceRepositoryInterface
             throw new DuplicatePrimaryKeyException('duplicate');
         }
         $this->created[] = $data;
+        $this->rows[] = $data;
+        return true;
+    }
+    public function update($id, array $data) { return true; }
+    public function delete($id) { return true; }
+    public function clearCache() {}
+}
+
+/** Production-shaped repository double: create persists a row and
+ * findByIdFresh reads it back from the datastore boundary. */
+class FreshIntegrityInvoiceRepository implements InvoiceRepositoryInterface
+{
+    public int $freshReads = 0;
+    private array $rows = [];
+
+    public function __construct(private bool $dropLineItems = false) {}
+    public function getAll() { return collect($this->rows); }
+    public function getById($id) { return collect($this->rows)->firstWhere('Invoice_ID', $id); }
+    public function findByIdFresh($id) {
+        $this->freshReads++;
+        return $this->getById($id);
+    }
+    public function create(array $data) {
+        if ($this->dropLineItems) {
+            unset($data['Line_Items']);
+        }
         $this->rows[] = $data;
         return true;
     }

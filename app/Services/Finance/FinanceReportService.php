@@ -10,6 +10,10 @@ use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
 use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
 use Carbon\Carbon;
 use Exception;
+use App\Support\Finance\Money;
+use App\Exceptions\FinancialIntegrityException;
+use App\Support\Finance\PaymentStatus;
+use Illuminate\Support\Facades\Log;
 
 class FinanceReportService
 {
@@ -38,6 +42,9 @@ class FinanceReportService
         $endDate = $endDate ?? now()->endOfMonth()->toDateString();
         $accountId = $accountId ?? 'ALL';
         $category = $category ?? 'ALL';
+
+        $startDate = $this->normaliseDate($startDate, 'Mulai Tanggal');
+        $endDate = $this->normaliseDate($endDate, 'Sampai Tanggal');
 
         // Server-side Date Boundary Validation
         if ($startDate > $endDate) {
@@ -81,9 +88,16 @@ class FinanceReportService
         };
 
         // 1. OPENING BALANCE: Sum of all transactions BEFORE startDate
-        $priorTransactions = $allTransactions->filter(function($t) use ($startDate) {
-            $date = $t['Transaction_Date'] ?? '';
-            return !empty($date) && $date < $startDate;
+        $skippedTransactionCount = 0;
+        $priorTransactions = $allTransactions->filter(function($t) use ($startDate, &$skippedTransactionCount) {
+            try {
+                $date = $this->normaliseDate($t['Transaction_Date'] ?? '', 'Transaction_Date');
+                return $date < $startDate;
+            } catch (Exception) {
+                $skippedTransactionCount++;
+                Log::warning('finance.report_skipped_malformed_transaction_date', ['transaction_id' => (string) ($t['Transaction_ID'] ?? 'UNKNOWN')]);
+                return false;
+            }
         });
         $priorTransactions = $applyAccountAndCategoryFilter($priorTransactions);
 
@@ -92,9 +106,15 @@ class FinanceReportService
         $openingBalance = $priorIncome - $priorExpense;
 
         // 2. PERIOD TRANSACTIONS: startDate <= Transaction_Date <= endDate
-        $periodTransactions = $allTransactions->filter(function($t) use ($startDate, $endDate) {
-            $date = $t['Transaction_Date'] ?? '';
-            return !empty($date) && $date >= $startDate && $date <= $endDate;
+        $periodTransactions = $allTransactions->filter(function($t) use ($startDate, $endDate, &$skippedTransactionCount) {
+            try {
+                $date = $this->normaliseDate($t['Transaction_Date'] ?? '', 'Transaction_Date');
+                return $date >= $startDate && $date <= $endDate;
+            } catch (Exception) {
+                $skippedTransactionCount++;
+                Log::warning('finance.report_skipped_malformed_transaction_date', ['transaction_id' => (string) ($t['Transaction_ID'] ?? 'UNKNOWN')]);
+                return false;
+            }
         });
         $periodTransactions = $applyAccountAndCategoryFilter($periodTransactions);
 
@@ -114,9 +134,23 @@ class FinanceReportService
             'net_cash_flow' => $netCashFlow,
             'closing_balance' => $closingBalance,
             'transactions' => $periodTransactions->sortByDesc('Transaction_Date')->values(),
+            'skipped_transaction_count' => $skippedTransactionCount,
+            'snapshot_source' => 'repository_cache',
             'accounts' => $allAccounts->values(),
             'categories' => $categories
         ];
+    }
+
+    private function normaliseDate(mixed $value, string $field): string
+    {
+        $raw = trim((string) $value);
+        $date = Carbon::createFromFormat('!Y-m-d', $raw, config('app.timezone', 'Asia/Jakarta'));
+        $errors = Carbon::getLastErrors();
+        if (!$date || (is_array($errors) && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0))
+            || $date->format('Y-m-d') !== $raw) {
+            throw new Exception("{$field} harus menggunakan format Y-m-d yang valid.");
+        }
+        return $date->format('Y-m-d');
     }
 
     private function sumByType($transactions, string $expectedType): float
@@ -126,7 +160,7 @@ class FinanceReportService
                 return $this->normalizeType($transaction['Type'] ?? '') === $expectedType;
             })
             ->sum(function ($transaction) {
-                return (float) ($transaction['Amount'] ?? 0);
+                return Money::value($transaction['Amount'] ?? 0, 'Nominal transaksi');
             });
     }
 
@@ -163,7 +197,8 @@ class FinanceReportService
         }
         
         $totalOutstanding = 0;
-        $payments = collect($this->paymentRepo->fetchAll())->where('Status', 'Verified');
+        $payments = collect($this->paymentRepo->fetchAll())
+            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null));
         $students = collect($this->studentRepo->fetchAll());
         $companies = collect($this->companyRepo->fetchAll());
         $invoiceService = app(\App\Services\Finance\InvoiceService::class);
@@ -176,9 +211,19 @@ class FinanceReportService
                 return $inv;
             }
 
-            $paid = (float) $payments->where('Invoice_ID', $inv['Invoice_ID'] ?? '')->sum('Amount_Paid');
-            $amount = (float) ($inv['Amount'] ?? 0);
-            $sisa = max(0.0, $amount - $paid);
+            $paidCents = $payments->where('Invoice_ID', $inv['Invoice_ID'] ?? '')
+                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+            $paid = $paidCents / (10 ** Money::SCALE);
+            $amount = Money::value($inv['Amount'] ?? 0, 'Invoice Amount');
+            $lineItems = $inv['Line_Items'] ?? null;
+            if ($lineItems !== null && $lineItems !== '' && $lineItems !== []) {
+                [, , , , $canonicalAmount] = $invoiceService->calculateLineItemsTotal($lineItems, $amount);
+                if (!Money::equal($amount, $canonicalAmount)) {
+                    throw new FinancialIntegrityException("Invoice {$inv['Invoice_ID']} memiliki Amount yang tidak sama dengan total line item.");
+                }
+                $amount = $canonicalAmount;
+            }
+            $sisa = max(0, Money::cents($amount) - $paidCents) / (10 ** Money::SCALE);
             
             $inv['Paid_Amount'] = $paid;
             $inv['Remaining_Amount'] = $sisa;

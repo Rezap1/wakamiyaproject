@@ -9,6 +9,9 @@ use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use App\Support\Finance\Money;
+use Illuminate\Support\Facades\Log;
+use App\Support\Finance\PaymentStatus;
 
 class FinanceDashboardService
 {
@@ -47,28 +50,41 @@ class FinanceDashboardService
         $thisMonthEnd = Carbon::now()->endOfMonth()->format('Y-m-d');
 
         // === Revenue & Expense THIS MONTH (from FINANCE_TRANSACTION) ===
-        $thisMonthTransactions = $transactions->filter(function ($t) use ($thisMonthStart, $thisMonthEnd) {
+        $thisMonthTransactions = $transactions->filter(function ($t) use ($thisMonthStart, $thisMonthEnd, $todayDate) {
             $date = $t['Transaction_Date'] ?? '';
-            return $date >= $thisMonthStart && $date <= $thisMonthEnd;
+            return $date >= $thisMonthStart && $date <= $thisMonthEnd && $date <= $todayDate;
         });
 
         $revenueThisMonth = $this->sumByType($thisMonthTransactions, 'Income');
         $expenseThisMonth = $this->sumByType($thisMonthTransactions, 'Expense');
 
-        // === Cash Balance (all time from FINANCE_TRANSACTION) ===
-        $totalRevenue = $this->sumByType($transactions, 'Income');
-        $totalExpense = $this->sumByType($transactions, 'Expense');
+        // === Closing Cash Balance as of today. Future-dated transactions are
+        // scheduled cash flow and must not inflate the current balance. ===
+        $currentTransactions = $transactions->filter(function ($transaction) use ($todayDate) {
+            try {
+                return Carbon::createFromFormat('Y-m-d', (string) ($transaction['Transaction_Date'] ?? ''))->format('Y-m-d') <= $todayDate;
+            } catch (\Throwable) {
+                Log::warning('finance.dashboard_skipped_malformed_transaction_date', [
+                    'transaction_id' => (string) ($transaction['Transaction_ID'] ?? 'UNKNOWN'),
+                ]);
+                return false;
+            }
+        });
+        $totalRevenue = $this->sumByType($currentTransactions, 'Income');
+        $totalExpense = $this->sumByType($currentTransactions, 'Expense');
         $cashBalance = $totalRevenue - $totalExpense;
 
         // === Outstanding Invoice ===
-        $totalInvoice = $invoices->count();
+        $relevantInvoices = $invoices->whereNotIn('Status', ['Draft', 'Cancelled']);
+        $totalInvoice = $relevantInvoices->count();
         // OVERDUE is a dynamic invoice status, but remains an outstanding
         // receivable and must be included in both the amount and overdue KPI.
         $unpaidInvoices = $invoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
-        $outstandingAmount = $unpaidInvoices->sum('Amount') -
-            $payments->where('Status', 'Verified')
+        $outstandingCents = $unpaidInvoices->sum(fn ($invoice) => Money::cents($invoice['Amount'] ?? 0, 'Invoice Amount')) -
+            $payments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
                 ->whereIn('Invoice_ID', $unpaidInvoices->pluck('Invoice_ID'))
-                ->sum('Amount_Paid');
+                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        $outstandingAmount = $outstandingCents / (10 ** Money::SCALE);
 
         // === Overdue Invoices ===
         $overdueInvoices = $unpaidInvoices->filter(function ($inv) use ($todayDate) {
@@ -80,7 +96,7 @@ class FinanceDashboardService
 
         // === Collection Rate ===
         $collectionRate = $totalInvoice > 0
-            ? min(100, round(($invoices->whereIn('Status', ['Paid', 'Partial Paid'])->count() / $totalInvoice) * 100))
+            ? min(100, round(($relevantInvoices->whereIn('Status', ['Paid', 'Partial Paid'])->count() / $totalInvoice) * 100))
             : 0;
 
         // === KPI ===
@@ -167,7 +183,7 @@ class FinanceDashboardService
         $revCatData = [];
         foreach ($revenueByCat as $cat => $txns) {
             $revCatLabels[] = $cat ?: 'Lainnya';
-            $revCatData[] = (int) $txns->sum('Amount');
+            $revCatData[] = (int) $txns->sum(fn ($transaction) => Money::value($transaction['Amount'] ?? 0, 'Nominal transaksi'));
         }
 
         // === Expense by Category (riil) ===
@@ -176,7 +192,7 @@ class FinanceDashboardService
         $expCatData = [];
         foreach ($expenseByCat as $cat => $txns) {
             $expCatLabels[] = $cat ?: 'Lainnya';
-            $expCatData[] = (int) $txns->sum('Amount');
+            $expCatData[] = (int) $txns->sum(fn ($transaction) => Money::value($transaction['Amount'] ?? 0, 'Nominal transaksi'));
         }
 
         return [
@@ -225,7 +241,7 @@ class FinanceDashboardService
     {
         return (float) $this->filterByType($transactions, $expectedType)
             ->sum(function ($transaction) {
-                return (float) ($transaction['Amount'] ?? 0);
+                return Money::value($transaction['Amount'] ?? 0, 'Nominal transaksi');
             });
     }
 

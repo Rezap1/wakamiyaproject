@@ -20,6 +20,11 @@ class TransactionRepository extends BaseSheetRepository implements TransactionRe
         return $this->fetchAll()->firstWhere($this->primaryKey, $id);
     }
 
+    public function findByIdFresh($id)
+    {
+        return parent::findByIdFresh($id);
+    }
+
     public function create(array $data)
     {
         return $this->append($data);
@@ -40,23 +45,26 @@ class TransactionRepository extends BaseSheetRepository implements TransactionRe
         $lockKey = $this->sheetName . '_write_lock';
         $counterKey = 'id_counter_' . $this->sheetName . '_' . $prefix;
 
-        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $padding, $counterKey) {
-            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
-                $all = $this->fetchAll();
-                $maxId = 0;
-                foreach ($all as $item) {
-                    if (preg_match('/^' . $prefix . '-(\d+)$/', $item[$this->primaryKey] ?? '', $matches)) {
-                        $num = (int)$matches[1];
-                        if ($num > $maxId) {
-                            $maxId = $num;
-                        }
-                    }
+        return \Illuminate\Support\Facades\Cache::lock($lockKey, 120)->block(15, function () use ($prefix, $padding, $counterKey) {
+            $all = method_exists($this, 'fetchAllFresh') ? $this->fetchAllFresh() : $this->fetchAll();
+            $maxId = 0;
+            $existing = [];
+            foreach ($all as $item) {
+                $raw = trim((string) ($item[$this->primaryKey] ?? ''));
+                $existing[strtolower($raw)] = true;
+                if (preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/i', $raw, $matches)) {
+                    $maxId = max($maxId, (int) $matches[1]);
                 }
-                \Illuminate\Support\Facades\Cache::forever($counterKey, $maxId);
             }
-            
-            $newId = \Illuminate\Support\Facades\Cache::increment($counterKey);
-            return $prefix . '-' . str_pad((string)$newId, $padding, '0', STR_PAD_LEFT);
+            $candidate = max($maxId, (int) \Illuminate\Support\Facades\Cache::get($counterKey, 0)) + 1;
+            for ($attempt = 0; $attempt < 10; $attempt++, $candidate++) {
+                $newId = $prefix . '-' . str_pad((string) $candidate, $padding, '0', STR_PAD_LEFT);
+                if (!isset($existing[strtolower($newId)])) {
+                    \Illuminate\Support\Facades\Cache::forever($counterKey, $candidate);
+                    return $newId;
+                }
+            }
+            throw new \App\Exceptions\FinancialIntegrityException('Tidak dapat mengalokasikan Transaction_ID unik dari persisted state.');
         });
     }
 }

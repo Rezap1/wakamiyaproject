@@ -63,6 +63,7 @@
                     <h3 class="font-bold text-slate-800 text-base border-b pb-2">Unggah Bukti Pembayaran</h3>
                     <form action="{{ route('student.billing.pay', $invoice['Invoice_ID']) }}" method="POST" enctype="multipart/form-data">
                         @csrf
+                        <input type="hidden" name="Idempotency_Key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Nominal Transfer (Rp) <span class="text-rose-500 font-black">*</span></label>

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Exceptions\AmbiguousSheetWriteException;
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Exceptions\FinancialIntegrityException;
 use Throwable;
 
 abstract class BaseSheetRepository
@@ -126,6 +127,23 @@ abstract class BaseSheetRepository
         return collect($data);
     }
 
+    /**
+     * Read only the first row of a sheet.  Callers that need to decide whether
+     * a write is authoritative must inspect headers even when the sheet has
+     * no data rows.  A read error is deliberately propagated.
+     */
+    public function fetchHeadersFresh(): array
+    {
+        $values = $this->executeWithGoogleRetry(
+            fn () => $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName)->getValues(),
+            'fetchHeadersFresh'
+        );
+
+        $headers = array_map(fn ($header) => trim((string) $header), $values[0] ?? []);
+        $this->assertExpectedHeaders($headers);
+        return $headers;
+    }
+
     public function findByIdFresh($id)
     {
         $needle = strtolower(trim((string) $id));
@@ -208,6 +226,8 @@ abstract class BaseSheetRepository
                         throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak tersedia.");
                     }
                     $this->assertExpectedHeaders($headers);
+
+                    $this->assertDurableWriteSchema($headers);
 
                     $primaryKeyHeader = collect($headers)->first(function ($header) {
                         return strcasecmp(trim((string) $header), trim((string) $this->primaryKey)) === 0;
@@ -332,6 +352,7 @@ abstract class BaseSheetRepository
 
                 $delayMs = $this->retryDelayMs($e, $attempt);
                 Log::warning('Retrying Google Sheets operation', [
+                    'request_id' => function_exists('request') && request()->hasHeader('X-Request-ID') ? request()->header('X-Request-ID') : null,
                     'sheet' => $this->sheetName,
                     'operation' => $operationName,
                     'attempt' => $attempt,
@@ -432,6 +453,7 @@ abstract class BaseSheetRepository
 
                     $headers = array_map(function ($h) { return trim((string) $h); }, $values[0]);
                     $this->assertExpectedHeaders($headers);
+                    $this->assertDurableWriteSchema($headers);
                     $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
                     $idIndex = false;
                     foreach ($headers as $index => $header) {
@@ -477,7 +499,30 @@ abstract class BaseSheetRepository
                         'valueInputOption' => self::WRITE_INPUT_OPTION
                     ];
 
-                    $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
+                    try {
+                        $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
+                    } catch (Throwable $e) {
+                        if (!$this->isAmbiguousWriteException($e)) {
+                            throw $e;
+                        }
+                        $verified = $this->findRowMatchesFresh($id, $data);
+                        if ($verified === true) {
+                            Log::warning('Google Sheets update recovered after ambiguous write', [
+                                'sheet' => $this->sheetName,
+                                'primary_key' => (string) $id,
+                                'exception' => get_class($e),
+                            ]);
+                            return true;
+                        }
+                        if ($verified === null) {
+                            throw new AmbiguousSheetWriteException(
+                                "Update ke sheet '{$this->sheetName}' belum dapat dikonfirmasi untuk {$id}.",
+                                (int) $e->getCode(),
+                                $e
+                            );
+                        }
+                        throw $e;
+                    }
                     return true;
                 }, 'update');
                 
@@ -491,6 +536,30 @@ abstract class BaseSheetRepository
         } catch (\Exception $e) {
             Log::error("Google API Error during update on {$this->sheetName}: " . $e->getMessage());
             throw $e;
+        }
+    }
+
+    protected function findRowMatchesFresh($id, array $expected): ?bool
+    {
+        try {
+            $row = $this->findByIdFresh($id);
+            if (!$row) {
+                return false;
+            }
+            foreach ($expected as $key => $value) {
+                if ((string) ($row[$key] ?? '') !== (string) $value) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Throwable $e) {
+            Log::warning('Google Sheets update verification failed', [
+                'sheet' => $this->sheetName,
+                'operation' => 'verify_update',
+                'exception' => get_class($e),
+                'http_status' => $this->httpStatus($e),
+            ]);
+            return null;
         }
     }
 
@@ -676,6 +745,27 @@ abstract class BaseSheetRepository
     {
         if (!empty($this->expectedHeaders) && array_values($headers) !== array_values($this->expectedHeaders)) {
             throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak sesuai schema yang diharapkan.");
+        }
+    }
+
+    /**
+     * Finance writes may not proceed against a sheet that cannot persist the
+     * fields the application uses for correctness, audit, or identity.
+     */
+    protected function assertDurableWriteSchema(array $headers): void
+    {
+        $required = config("finance.schema.{$this->sheetName}", []);
+        if (!$required) {
+            return;
+        }
+
+        $missing = array_values(array_diff($required, $headers));
+        if ($missing !== []) {
+            throw new FinancialIntegrityException(
+                "Sheet {$this->sheetName} tidak memiliki kolom wajib: "
+                . implode(', ', $missing)
+                . '; penulisan dihentikan untuk mencegah kehilangan data.'
+            );
         }
     }
 }

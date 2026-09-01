@@ -10,7 +10,6 @@ use App\Services\Core\PositionService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\UserService;
 use Illuminate\Validation\Rules\Password;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class ProfileController extends Controller
@@ -86,15 +85,25 @@ class ProfileController extends Controller
 
         $user = auth()->user();
 
-        if (!$user || !Hash::check($validated['current_password'], $user->getAuthPassword())) {
+        if (!$user || !$userService->changePassword(
+            (string) ($user->User_ID ?? ''),
+            $validated['current_password'],
+            $validated['password']
+        )) {
             return back()
                 ->withErrors(['current_password' => 'Kata sandi saat ini tidak sesuai.'])
                 ->withInput($request->except(['current_password', 'password', 'password_confirmation']));
         }
 
-        $userService->updateUser($user->User_ID, [
-            'Password' => $validated['password'],
-        ]);
+        // Keep the in-memory authenticated principal consistent for subsequent
+        // password changes during the same session; the provider still reads
+        // the authoritative hash from MASTER_USER on the next login.
+        $freshUser = $userService->getUserById((string) $user->User_ID);
+        $freshHash = is_array($freshUser) ? ($freshUser['Password'] ?? null) : null;
+        if ($freshHash) {
+            $user->setAttribute('password', $freshHash);
+            $user->setAttribute('Password', $freshHash);
+        }
 
         return back()->with('success', 'Kata sandi berhasil diperbarui.');
     }

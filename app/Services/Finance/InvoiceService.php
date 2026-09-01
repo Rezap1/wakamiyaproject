@@ -15,6 +15,9 @@ use Exception;
 use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Support\ActorIdentity;
 use Throwable;
+use App\Support\Finance\Money;
+use App\Support\Finance\PaymentStatus;
+use App\Exceptions\FinancialIntegrityException;
 
 class InvoiceService
 {
@@ -42,18 +45,20 @@ class InvoiceService
     {
         if (empty($invoiceId)) return 0.0;
         
-        $allPayments = $this->paymentRepository->getAll();
+        $allPayments = method_exists($this->paymentRepository, 'getAllFresh')
+            ? $this->paymentRepository->getAllFresh()
+            : $this->paymentRepository->getAll();
         return (float) collect($allPayments)
             ->where('Invoice_ID', $invoiceId)
-            ->where('Status', 'Verified')
-            ->sum('Amount_Paid');
+            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+            ->sum(fn ($payment) => Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
     }
 
     public function calculateRemainingAmount(array $invoice): float
     {
-        $amount = (float) ($invoice['Amount'] ?? 0);
+        $amount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
         $paid = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
-        return max(0.0, $amount - $paid);
+        return max(0.0, round($amount - Money::value($paid, 'Verified payment total'), Money::SCALE));
     }
 
     public function resolveDynamicStatus(array $invoice): string
@@ -99,10 +104,6 @@ class InvoiceService
 
     public function formatInvoiceRecord(array $invoice): array
     {
-        $dynamicStatus = $this->resolveDynamicStatus($invoice);
-        $paidAmount = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
-        $remainingAmount = $this->calculateRemainingAmount($invoice);
-
         // Process Line Items
         $lineItems = [];
         if (!empty($invoice['Line_Items'])) {
@@ -113,16 +114,20 @@ class InvoiceService
                     $decoded = json_decode($invoice['Line_Items'], true);
                     if (is_array($decoded)) {
                         $lineItems = $decoded;
+                    } else {
+                        throw new FinancialIntegrityException("Invoice {$invoice['Invoice_ID']} memiliki Line_Items tidak valid.");
                     }
-                } catch (\Exception $e) {
-                    $lineItems = [];
+                } catch (FinancialIntegrityException $e) {
+                    throw $e;
+                } catch (\Throwable $e) {
+                    throw new FinancialIntegrityException("Invoice {$invoice['Invoice_ID']} memiliki Line_Items tidak valid.", 0, $e);
                 }
             }
         }
 
         // Fallback for legacy invoices without line items
         if (empty($lineItems)) {
-            $baseAmount = (float) ($invoice['Amount'] ?? 0);
+            $baseAmount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
             $lineItems = [
                 [
                     'description' => $invoice['Category'] ?? 'Tagihan Keuangan',
@@ -135,36 +140,25 @@ class InvoiceService
             ];
         }
 
-        $subtotal = 0;
-        $totalDiscount = 0;
-        $totalTax = 0;
-        $grandTotal = 0;
+        [$lineItems, $subtotal, $totalDiscount, $totalTax, $grandTotal] = $this->calculateLineItemsTotal($lineItems, $invoice['Amount'] ?? 0);
 
-        foreach ($lineItems as &$item) {
-            $qty = (float) ($item['qty'] ?? 1);
-            $price = (float) ($item['unit_price'] ?? 0);
-            $disc = (float) ($item['discount'] ?? 0);
-            $tax = (float) ($item['tax'] ?? 0);
-            $itemSubtotal = max(0.0, ($qty * $price) - $disc + $tax);
-
-            $item['qty'] = $qty;
-            $item['unit_price'] = $price;
-            $item['discount'] = $disc;
-            $item['tax'] = $tax;
-            $item['subtotal'] = $itemSubtotal;
-
-            $subtotal += ($qty * $price);
-            $totalDiscount += $disc;
-            $totalTax += $tax;
-            $grandTotal += $itemSubtotal;
+        if (array_key_exists('Amount', $invoice) && !Money::equal($invoice['Amount'], $grandTotal)) {
+            throw new FinancialIntegrityException(
+                "Invoice {$invoice['Invoice_ID']} memiliki Amount yang tidak sama dengan total line item."
+            );
         }
+
+        // Resolve status and balances only after canonical Amount is known.
+        $invoice['Amount'] = $grandTotal;
+        $dynamicStatus = $this->resolveDynamicStatus($invoice);
+        $paidAmount = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
+        $remainingAmount = max(0.0, round($grandTotal - Money::value($paidAmount, 'Verified payment total'), Money::SCALE));
 
         $invoice['Parsed_Line_Items'] = $lineItems;
         $invoice['Subtotal_Amount'] = $subtotal;
         $invoice['Total_Discount'] = $totalDiscount;
         $invoice['Total_Tax'] = $totalTax;
         $invoice['Grand_Total'] = $grandTotal;
-        $invoice['Amount'] = $grandTotal > 0 ? $grandTotal : (float)($invoice['Amount'] ?? 0);
 
         $invoice['Display_Status'] = $dynamicStatus;
         $invoice['Status'] = $dynamicStatus;
@@ -173,6 +167,60 @@ class InvoiceService
         $invoice['Is_Overdue'] = ($dynamicStatus === 'OVERDUE');
 
         return $invoice;
+    }
+
+    /**
+     * Canonical invoice calculation shared by create, display and reporting.
+     * Returns normalised items and all component totals.
+     */
+    public function calculateLineItemsTotal(array|string|null $items, mixed $legacyAmount = 0): array
+    {
+        if (is_string($items)) {
+            $decoded = json_decode($items, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($items) || $items === []) {
+            $amount = Money::value($legacyAmount, 'Invoice Amount');
+            $items = [[
+                'description' => 'Tagihan Keuangan',
+                'qty' => 1,
+                'unit_price' => $amount,
+                'discount' => 0,
+                'tax' => 0,
+            ]];
+        }
+
+        $subtotal = 0.0;
+        $discountTotal = 0.0;
+        $taxTotal = 0.0;
+        $grandTotal = 0.0;
+        $normalised = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                throw new FinancialIntegrityException('Line item invoice tidak valid.');
+            }
+            $qty = Money::value($item['qty'] ?? 1, 'Item quantity', false);
+            $price = Money::value($item['unit_price'] ?? 0, 'Item unit price');
+            $discount = Money::value($item['discount'] ?? 0, 'Item discount');
+            $tax = Money::value($item['tax'] ?? 0, 'Item tax');
+            $base = round($qty * $price, Money::SCALE);
+            $itemTotal = round(max(0.0, $base - $discount + $tax), Money::SCALE);
+            $subtotal = round($subtotal + $base, Money::SCALE);
+            $discountTotal = round($discountTotal + $discount, Money::SCALE);
+            $taxTotal = round($taxTotal + $tax, Money::SCALE);
+            $grandTotal = round($grandTotal + $itemTotal, Money::SCALE);
+            $normalised[] = [
+                'description' => (string) ($item['description'] ?? 'Item Tagihan'),
+                'qty' => $qty,
+                'unit_price' => $price,
+                'discount' => $discount,
+                'tax' => $tax,
+                'subtotal' => $itemTotal,
+            ];
+        }
+
+        return [$normalised, $subtotal, $discountTotal, $taxTotal, $grandTotal];
     }
 
     public function isEducationCategory(?string $category): bool
@@ -198,7 +246,10 @@ class InvoiceService
         $lineItems = $invoice['Line_Items'] ?? [];
         if (is_string($lineItems) && trim($lineItems) !== '') {
             $decodedItems = json_decode($lineItems, true);
-            $lineItems = is_array($decodedItems) ? $decodedItems : [];
+            if (!is_array($decodedItems)) {
+                throw new FinancialIntegrityException("Invoice {$invoice['Invoice_ID']} memiliki Line_Items tidak valid.");
+            }
+            $lineItems = $decodedItems;
         }
 
         if (!is_array($lineItems)) {
@@ -242,22 +293,28 @@ class InvoiceService
     public function getStudentEducationBillingSummary(string $studentId, ?string $excludeInvoiceId = null): array
     {
         $tuitionFee = $this->getStudentTuitionFee($studentId);
-        $educationInvoices = collect($this->repository->getAll())->filter(function ($invoice) use ($studentId, $excludeInvoiceId) {
+        $educationInvoices = collect(method_exists($this->repository, 'getAllFresh')
+            ? $this->repository->getAllFresh()
+            : $this->repository->getAll())->filter(function ($invoice) use ($studentId, $excludeInvoiceId) {
             $status = strtolower(trim($invoice['Status'] ?? ''));
 
             return ($invoice['Student_ID'] ?? '') === $studentId
                 && ($invoice['Is_Active'] ?? 'TRUE') !== 'FALSE'
-                && $status !== 'cancelled'
+                && in_array($status, ['waiting payment', 'partial paid', 'paid', 'overdue'], true)
                 && ($excludeInvoiceId === null || ($invoice['Invoice_ID'] ?? '') !== $excludeInvoiceId)
                 && $this->isEducationInvoice($invoice);
         });
 
         $invoiceIds = $educationInvoices->pluck('Invoice_ID')->filter()->values()->all();
-        $billed = (float) $educationInvoices->sum(fn($invoice) => $this->rawInvoiceAmount($invoice));
-        $paid = (float) collect($this->paymentRepository->getAll())
+        $billedCents = $educationInvoices->sum(fn($invoice) => Money::cents($this->rawInvoiceAmount($invoice), 'Invoice Amount'));
+        $paidCents = collect(method_exists($this->paymentRepository, 'getAllFresh')
+            ? $this->paymentRepository->getAllFresh()
+            : $this->paymentRepository->getAll())
             ->whereIn('Invoice_ID', $invoiceIds)
-            ->where('Status', 'Verified')
-            ->sum('Amount_Paid');
+            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+            ->sum(fn($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        $billed = $billedCents / 100;
+        $paid = $paidCents / 100;
 
         return [
             'tuition_fee' => $tuitionFee,
@@ -271,11 +328,15 @@ class InvoiceService
 
     private function rawInvoiceAmount(array $invoice): float
     {
-        if (isset($invoice['Grand_Total']) && is_numeric($invoice['Grand_Total'])) {
-            return (float) $invoice['Grand_Total'];
+        $items = $invoice['Line_Items'] ?? null;
+        if ($items !== null && $items !== '' && $items !== []) {
+            [, , , , $total] = $this->calculateLineItemsTotal($items, $invoice['Amount'] ?? 0);
+            if (array_key_exists('Amount', $invoice) && !Money::equal($invoice['Amount'], $total)) {
+                throw new FinancialIntegrityException("Invoice {$invoice['Invoice_ID']} memiliki Amount yang tidak sama dengan total line item.");
+            }
+            return $total;
         }
-
-        return (float) ($invoice['Amount'] ?? 0);
+        return Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
     }
 
     private function enforceEducationTuitionCap(array $data, ?string $excludeInvoiceId = null): void
@@ -286,7 +347,7 @@ class InvoiceService
             return;
         }
 
-        $newAmount = (float) ($data['Amount'] ?? 0);
+        $newAmount = Money::value($data['Amount'] ?? 0, 'Invoice Amount');
         $summary = $this->getStudentEducationBillingSummary($data['Student_ID'], $excludeInvoiceId);
         $tuitionFee = (float) $summary['tuition_fee'];
         $alreadyBilled = (float) $summary['education_billed'];
@@ -295,7 +356,7 @@ class InvoiceService
             return;
         }
 
-        if (($alreadyBilled + $newAmount) > ($tuitionFee + 0.001)) {
+        if (Money::cents($alreadyBilled) + Money::cents($newAmount) > Money::cents($tuitionFee)) {
             $remaining = max(0.0, $tuitionFee - $alreadyBilled);
             throw new Exception(
                 'Total invoice Biaya Pendidikan siswa ini tidak boleh melebihi plafon Rp '
@@ -304,6 +365,24 @@ class InvoiceService
                 . ', sisa yang boleh dibuat Rp ' . number_format($remaining, 0, ',', '.')
                 . '.'
             );
+        }
+    }
+
+    private function assertInvoiceReferences(array $data): void
+    {
+        $type = strtoupper(trim((string) ($data['Invoice_Type'] ?? 'STUDENT')));
+        if ($type === 'STUDENT') {
+            $id = trim((string) ($data['Student_ID'] ?? ''));
+            $student = $id !== '' ? $this->studentRepository->findById($id) : null;
+            if (!$student || strtoupper(trim((string) ($student['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                throw new FinancialIntegrityException("Student {$id} tidak ditemukan atau tidak aktif.");
+            }
+        } elseif ($type === 'COMPANY') {
+            $id = trim((string) ($data['Company_ID'] ?? ''));
+            $company = $id !== '' ? $this->companyRepository->findById($id) : null;
+            if (!$company || strtoupper(trim((string) ($company['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                throw new FinancialIntegrityException("Company {$id} tidak ditemukan atau tidak aktif.");
+            }
         }
     }
 
@@ -357,7 +436,7 @@ class InvoiceService
                 if (!$student || ($invoice['Student_ID'] ?? '') !== ($student['Student_ID'] ?? '')) {
                     throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
                 }
-            } elseif (!in_array($role, ['ADMINISTRATOR', 'FINANCE'], true)) {
+            } elseif (!in_array($role, ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true)) {
                 throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses tagihan.");
             }
         }
@@ -468,6 +547,7 @@ class InvoiceService
 
     public function create(array $data)
     {
+        $this->assertFinanceMutationActor();
         $data['Invoice_Type'] = $data['Invoice_Type'] ?? 'STUDENT';
         $providedInvoiceId = trim((string) ($data['Invoice_ID'] ?? ''));
         $idempotencyKey = trim((string) ($data['Idempotency_Key'] ?? ''));
@@ -475,44 +555,13 @@ class InvoiceService
         $actorId = ActorIdentity::required();
         $requestId = request()->header('X-Request-ID') ?: (string) Str::uuid();
 
-        // Process Items Array
-        $items = $data['items'] ?? [];
-        $processedItems = [];
-        $grandTotal = 0;
+        // Canonical amount is calculated once and persisted with the line items.
+        [$processedItems, $subtotal, $discountTotal, $taxTotal, $grandTotal] =
+            $this->calculateLineItemsTotal($data['items'] ?? null, $data['Amount'] ?? 0);
+        $data['Line_Items'] = json_encode($processedItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $data['Amount'] = $grandTotal;
 
-        if (!empty($items) && is_array($items)) {
-            foreach ($items as $item) {
-                $qty = (float)($item['qty'] ?? 1);
-                $unitPrice = (float)($item['unit_price'] ?? 0);
-                $discount = (float)($item['discount'] ?? 0);
-                $tax = (float)($item['tax'] ?? 0);
-                $subtotal = max(0.0, ($qty * $unitPrice) - $discount + $tax);
-                $grandTotal += $subtotal;
-                
-                $processedItems[] = [
-                    'description' => $item['description'] ?? 'Item Tagihan',
-                    'qty' => $qty,
-                    'unit_price' => $unitPrice,
-                    'discount' => $discount,
-                    'tax' => $tax,
-                    'subtotal' => $subtotal
-                ];
-            }
-            $data['Line_Items'] = json_encode($processedItems);
-            $data['Amount'] = $grandTotal;
-        } else {
-            $data['Amount'] = (float) ($data['Amount'] ?? 0);
-            $data['Line_Items'] = json_encode([
-                [
-                    'description' => $data['Category'] ?? 'Tagihan Keuangan',
-                    'qty' => 1,
-                    'unit_price' => $data['Amount'],
-                    'discount' => 0,
-                    'tax' => 0,
-                    'subtotal' => $data['Amount']
-                ]
-            ]);
-        }
+        $this->assertInvoiceReferences($data);
 
         if ($this->isEducationCategory($data['Category'] ?? '')) {
             $data['Category'] = 'Biaya Pendidikan';
@@ -571,12 +620,26 @@ class InvoiceService
                     $this->enforceEducationTuitionCap($data);
                     $data['Status'] = 'Draft';
                     $data['Created_At'] = $data['Created_At'] ?? now()->toDateTimeString();
+                    $data['Created_By'] = $data['Created_By'] ?? $actorId;
+                    $data['Updated_By'] = $actorId;
                     $data['Is_Active'] = 'TRUE';
 
                     try {
                         $result = $this->repository->create($data);
                         if (!$result) {
                             throw new Exception("Gagal menyimpan invoice {$data['Invoice_ID']}.");
+                        }
+
+                        // The append response is not authoritative.  Google
+                        // Sheets may accept a row while silently dropping a
+                        // field when headers drift.  Concrete production
+                        // repositories expose findByIdFresh(); verify the
+                        // canonical line items and amount from that fresh row
+                        // before reporting invoice creation success.
+                        if (method_exists($this->repository, 'findByIdFresh')) {
+                            $persisted = $this->repository->findByIdFresh($data['Invoice_ID']);
+                            $this->assertPersistedInvoiceIntegrity($persisted, $data);
+                            $data = array_merge($data, (array) $persisted);
                         }
                         return $data;
                     } catch (DuplicatePrimaryKeyException $e) {
@@ -592,8 +655,8 @@ class InvoiceService
                         ]);
                     }
                 }
-                throw new Exception('Pembuatan invoice melebihi batas percobaan aman.');
-            };
+        throw new Exception('Pembuatan invoice melebihi batas percobaan aman.');
+    };
 
             $executeWrite = function () use ($write, &$data) {
                 if ($this->isEducationCategory($data['Category'] ?? '') && !empty($data['Student_ID'])) {
@@ -613,6 +676,46 @@ class InvoiceService
 
         $lockKey = 'invoice_idempotency_lock_' . hash('sha256', $actorId . ':' . $idempotencyKey);
         return Cache::lock($lockKey, 120)->block(15, $run);
+    }
+
+    /**
+     * Verify correctness-critical invoice fields after the datastore append.
+     * This deliberately does not synthesize missing values: a missing or
+     * malformed Line_Items field is a schema/data-integrity failure.
+     */
+    private function assertPersistedInvoiceIntegrity($persisted, array $expected): void
+    {
+        if (!is_array($persisted) || trim((string) ($persisted['Invoice_ID'] ?? '')) !== trim((string) ($expected['Invoice_ID'] ?? ''))) {
+            throw new FinancialIntegrityException('Invoice tersimpan tetapi tidak dapat dibaca ulang secara authoritative.');
+        }
+
+        if (!array_key_exists('Line_Items', $persisted)) {
+            throw new FinancialIntegrityException('Line_Items invoice hilang setelah persistence.');
+        }
+
+        $rawItems = $persisted['Line_Items'];
+        if (is_string($rawItems)) {
+            $decoded = json_decode($rawItems, true);
+            if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
+                throw new FinancialIntegrityException('Line_Items invoice tersimpan dalam format tidak valid.');
+            }
+            $rawItems = $decoded;
+        }
+        if (!is_array($rawItems)) {
+            throw new FinancialIntegrityException('Line_Items invoice tersimpan dalam format tidak valid.');
+        }
+
+        $expectedItems = $expected['Line_Items'] ?? null;
+        if (is_string($expectedItems)) {
+            $expectedItems = json_decode($expectedItems, true);
+        }
+        if (!is_array($expectedItems) || $rawItems !== $expectedItems) {
+            throw new FinancialIntegrityException('Line_Items invoice berubah atau tidak konsisten setelah persistence.');
+        }
+
+        if (!Money::equal($persisted['Amount'] ?? null, $expected['Amount'] ?? null)) {
+            throw new FinancialIntegrityException('Amount invoice berubah atau tidak konsisten setelah persistence.');
+        }
     }
 
     private function completeInvoiceCreation(array $data, ?string $idempotencyCacheKey, string $fingerprint, string $actorId, string $requestId, bool $dispatchSideEffects = true): array
@@ -688,7 +791,12 @@ class InvoiceService
 
     public function publish($id)
     {
-        $invoice = $this->getById($id);
+        $this->assertFinanceMutationActor();
+        // Cancellation decisions must use persisted state, not a potentially
+        // stale service/cache representation.
+        $invoice = method_exists($this->repository, 'findByIdFresh')
+            ? $this->repository->findByIdFresh($id)
+            : $this->getById($id);
         if (!$invoice) {
             throw new Exception("Invoice tidak ditemukan.");
         }
@@ -700,6 +808,7 @@ class InvoiceService
 
         $data = [
             'Status' => 'Waiting Payment',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Updated_At' => now()->toDateTimeString()
         ];
 
@@ -715,16 +824,7 @@ class InvoiceService
         Cache::forget('finance_dashboard');
         Cache::forget('dashboard_finance');
 
-        $this->enterpriseEvent->dispatch(
-            'FINANCE',
-            'UPDATE',
-            'INVOICE',
-            $id,
-            \App\Support\ActorIdentity::required(),
-            ['STUDENT', 'FINANCE'],
-            !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
-            ['Status' => 'Waiting Payment', 'Previous_Status' => 'Draft']
-        );
+        $this->dispatchEventSafe($id, ['Status' => 'Waiting Payment', 'Previous_Status' => 'Draft'], $invoice, ['STUDENT', 'FINANCE']);
 
         $updatedInvoice = array_merge($invoice, $data);
         return $this->formatInvoiceRecord($updatedInvoice);
@@ -732,7 +832,10 @@ class InvoiceService
 
     public function cancel($id)
     {
-        $invoice = $this->getById($id);
+        $this->assertFinanceMutationActor();
+        $invoice = method_exists($this->repository, 'findByIdFresh')
+            ? $this->repository->findByIdFresh($id)
+            : $this->repository->getById($id);
         if (!$invoice) {
             throw new Exception("Invoice tidak ditemukan.");
         }
@@ -742,8 +845,20 @@ class InvoiceService
             throw new Exception("Invoice yang sudah Lunas (Paid) atau Dibatalkan (Cancelled) tidak dapat dibatalkan lagi.");
         }
 
+        $payments = method_exists($this->paymentRepository, 'getAllFresh')
+            ? $this->paymentRepository->getAllFresh()
+            : $this->paymentRepository->getAll();
+        $verifiedCents = collect($payments)
+            ->where('Invoice_ID', $id)
+            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+            ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        if ($verifiedCents > 0) {
+            throw new FinancialIntegrityException("Invoice #{$id} memiliki pembayaran terverifikasi dan tidak dapat dibatalkan.");
+        }
+
         $data = [
             'Status' => 'Cancelled',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
             'Updated_At' => now()->toDateTimeString()
         ];
 
@@ -759,24 +874,37 @@ class InvoiceService
         Cache::forget('finance_dashboard');
         Cache::forget('dashboard_finance');
 
-        $this->enterpriseEvent->dispatch(
-            'FINANCE',
-            'UPDATE',
-            'INVOICE',
-            $id,
-            \App\Support\ActorIdentity::required(),
-            ['FINANCE'],
-            !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
-            ['Status' => 'Cancelled', 'Previous_Status' => $currentStatus]
-        );
+        $this->dispatchEventSafe($id, ['Status' => 'Cancelled', 'Previous_Status' => $currentStatus], $invoice);
 
         $updatedInvoice = array_merge($invoice, $data);
         return $this->formatInvoiceRecord($updatedInvoice);
     }
 
+    private function assertFinanceMutationActor(): string
+    {
+        $actor = ActorIdentity::required();
+        $user = auth()->user();
+        $role = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
+        if ($role === '' && $user && !empty($user->Role_ID)) {
+            try {
+                $role = strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)
+                    ->getRoleById($user->Role_ID)['Role_Name'] ?? '')));
+            } catch (Throwable) {
+                $role = '';
+            }
+        }
+        if (!in_array($role, ['FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('Role pengguna tidak diizinkan melakukan mutasi invoice.');
+        }
+        return $actor;
+    }
+
     public function update($id, array $data)
     {
-        $invoice = $this->getById($id);
+        $this->assertFinanceMutationActor();
+        $invoice = method_exists($this->repository, 'findByIdFresh')
+            ? $this->repository->findByIdFresh($id)
+            : $this->getById($id);
         if (!$invoice) {
             throw new Exception("Invoice tidak ditemukan.");
         }
@@ -786,29 +914,10 @@ class InvoiceService
             throw new Exception("Hanya invoice berstatus Draft yang dapat diubah nilainya atau rincian itemnya.");
         }
 
-        // Process Items Array if provided
-        $items = $data['items'] ?? [];
-        if (!empty($items) && is_array($items)) {
-            $processedItems = [];
-            $grandTotal = 0;
-            foreach ($items as $item) {
-                $qty = (float)($item['qty'] ?? 1);
-                $unitPrice = (float)($item['unit_price'] ?? 0);
-                $discount = (float)($item['discount'] ?? 0);
-                $tax = (float)($item['tax'] ?? 0);
-                $subtotal = max(0.0, ($qty * $unitPrice) - $discount + $tax);
-                $grandTotal += $subtotal;
-                
-                $processedItems[] = [
-                    'description' => $item['description'] ?? 'Item Tagihan',
-                    'qty' => $qty,
-                    'unit_price' => $unitPrice,
-                    'discount' => $discount,
-                    'tax' => $tax,
-                    'subtotal' => $subtotal
-                ];
-            }
-            $data['Line_Items'] = json_encode($processedItems);
+        // Process items with the same canonical calculator used for display.
+        if (array_key_exists('items', $data)) {
+            [$processedItems, , , , $grandTotal] = $this->calculateLineItemsTotal($data['items'], $data['Amount'] ?? $invoice['Amount'] ?? 0);
+            $data['Line_Items'] = json_encode($processedItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $data['Amount'] = $grandTotal;
         }
 
@@ -818,6 +927,9 @@ class InvoiceService
             $this->enforceEducationTuitionCap($data, $id);
         }
 
+        $this->assertInvoiceReferences(array_merge($invoice, $data));
+
+        $data['Updated_By'] = \App\Support\ActorIdentity::required();
         $data['Updated_At'] = now()->toDateTimeString();
 
         $res = $this->repository->update($id, $data);
@@ -835,16 +947,7 @@ class InvoiceService
         Cache::forget('finance_dashboard');
         Cache::forget('dashboard_finance');
 
-        $this->enterpriseEvent->dispatch(
-            'FINANCE', 
-            'UPDATE', 
-            'INVOICE', 
-            $id, 
-            \App\Support\ActorIdentity::required(), 
-            ['FINANCE'], 
-            !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [], 
-            $data
-        );
+        $this->dispatchEventSafe($id, $data, $invoice);
 
         $updatedInvoice = array_merge($invoice, $data);
         return $this->formatInvoiceRecord($updatedInvoice);
@@ -852,7 +955,10 @@ class InvoiceService
 
     public function delete($id)
     {
-        $invoice = $this->getById($id);
+        $this->assertFinanceMutationActor();
+        $invoice = method_exists($this->repository, 'findByIdFresh')
+            ? $this->repository->findByIdFresh($id)
+            : $this->getById($id);
         if (!$invoice) {
             throw new Exception("Invoice tidak ditemukan.");
         }
@@ -862,7 +968,12 @@ class InvoiceService
             throw new Exception("Hanya invoice berstatus Draft yang dapat dihapus.");
         }
 
-        $res = $this->repository->delete($id);
+        $res = $this->repository->update($id, [
+            'Status' => 'Cancelled',
+            'Is_Active' => 'FALSE',
+            'Updated_By' => \App\Support\ActorIdentity::required(),
+            'Updated_At' => now()->toDateTimeString(),
+        ]);
         if (!$res) {
             throw new Exception("Gagal menghapus invoice {$id}.");
         }
@@ -874,17 +985,22 @@ class InvoiceService
         Cache::forget('finance_dashboard');
         Cache::forget('dashboard_finance');
 
-        $this->enterpriseEvent->dispatch(
-            'FINANCE',
-            'DELETE',
-            'INVOICE',
-            $id,
-            \App\Support\ActorIdentity::required(),
-            ['FINANCE'],
-            !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [],
-            []
-        );
+        $this->dispatchEventSafe($id, ['Status' => 'Cancelled', 'Previous_Status' => $currentStatus], $invoice);
 
         return true;
+    }
+
+    private function dispatchEventSafe(string $invoiceId, array $metadata, array $invoice, array $targetRoles = ['FINANCE']): void
+    {
+        try {
+            $this->enterpriseEvent->dispatch(
+                'FINANCE', 'UPDATE', 'INVOICE', $invoiceId, ActorIdentity::required(),
+                $targetRoles, !empty($invoice['Student_ID']) ? [$invoice['Student_ID']] : [], $metadata
+            );
+        } catch (Throwable $e) {
+            Log::error('Invoice side effect failed after primary persistence', [
+                'invoice_id' => $invoiceId, 'exception' => get_class($e),
+            ]);
+        }
     }
 }

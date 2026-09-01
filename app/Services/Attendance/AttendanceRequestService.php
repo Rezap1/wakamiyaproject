@@ -7,6 +7,10 @@ use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Services\Core\ActivityLogService;
+use App\Services\Core\NotificationService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Exception;
 
 class AttendanceRequestService
@@ -16,19 +20,22 @@ class AttendanceRequestService
     protected $activityLog;
     protected $studentRepo;
     protected $scheduleRepo;
+    protected $notificationService;
 
     public function __construct(
         AttendanceRequestRepositoryInterface $requestRepo,
         AttendanceRepositoryInterface $attendanceRepo,
         ActivityLogService $activityLog,
         ?StudentRepositoryInterface $studentRepo = null,
-        ?ScheduleRepositoryInterface $scheduleRepo = null
+        ?ScheduleRepositoryInterface $scheduleRepo = null,
+        ?NotificationService $notificationService = null
     ) {
         $this->requestRepo = $requestRepo;
         $this->attendanceRepo = $attendanceRepo;
         $this->activityLog = $activityLog;
         $this->studentRepo = $studentRepo;
         $this->scheduleRepo = $scheduleRepo;
+        $this->notificationService = $notificationService;
     }
 
     public function getAllPending()
@@ -53,6 +60,7 @@ class AttendanceRequestService
 
     public function createRequest(array $data, $user)
     {
+        $data['Attendance_Date'] = $this->normalizeDate($data['Attendance_Date'] ?? '');
         $target = $this->normalizeTarget($data);
         if ($this->studentRepo && $user && isset($user->User_ID)) {
             $student = collect($this->studentRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
@@ -118,6 +126,38 @@ class AttendanceRequestService
         $result = $this->requestRepo->create($insertData);
         $this->requestRepo->clearCache();
 
+        // A pending request is already a valid attendance exception. Persist it
+        // immediately so future dates cannot be marked PRESENT/ABSENT before review.
+        $attendanceScope = $target['Attendance_Type'] === 'CLASS_QR' ? $target['Class_ID'] : $target['Schedule_ID'];
+        $attendanceLockKey = 'attendance_request_sync_' . md5(implode('|', [
+            $insertData['Student_ID'], $insertData['Attendance_Date'], $target['Attendance_Type'], $attendanceScope,
+        ]));
+        Cache::lock($attendanceLockKey, 15)->block(10, function () use ($insertData, $target) {
+            $existingAttendance = $this->resolveOfficialAttendance($insertData, $target);
+            $this->syncOfficialAttendance($insertData, $target, $insertData['Request_Type'], $existingAttendance);
+        });
+
+        // Keep the existing approval semantics, but make a newly submitted
+        // request visible to Master immediately.
+        if ($this->notificationService) {
+            try {
+                $this->notificationService->NotifyRole(
+                    'MASTER',
+                    'PENGAJUAN IZIN SISWA BARU',
+                    "Pengajuan {$insertData['Request_ID']} untuk tanggal {$insertData['Attendance_Date']} menunggu review.",
+                    'ATTENDANCE',
+                    'Normal',
+                    '/academic/attendance/requests/' . $insertData['Request_ID'],
+                    $user->User_ID ?? null
+                );
+            } catch (\Throwable $notificationFailure) {
+                Log::warning('Failed to notify Master about attendance request', [
+                    'request_id' => $requestId,
+                    'exception' => get_class($notificationFailure),
+                ]);
+            }
+        }
+
         // 3. Audit Log
         $this->activityLog->log(
             'ATTENDANCE',
@@ -128,6 +168,11 @@ class AttendanceRequestService
         );
 
         return $result;
+    }
+
+    private function normalizeDate($date): string
+    {
+        return Carbon::parse($date, config('app.timezone'))->toDateString();
     }
 
     public function approveRequest($requestId, $statusToApply, $notes, $user)

@@ -108,7 +108,7 @@ class StudentDashboardService
         $statusPembayaran = $sisaTagihan <= 0 ? 'LUNAS' : 'BELUM LUNAS';
         $paymentProgress = $educationSummary['progress'];
 
-        $lastPayment = $myPayments->where('Status', 'Verified')->sortByDesc('Payment_Date')->first();
+        $lastPayment = $myPayments->filter(fn ($payment) => \App\Support\Finance\PaymentStatus::verified($payment['Status'] ?? null))->sortByDesc('Payment_Date')->first();
         $nextDueDate = $outstandingBills->whereNotNull('Due_Date')->sortBy('Due_Date')->first();
         $paymentHistory = $myPayments->sortByDesc('Created_At')->take(5)->values();
 

@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
 use Illuminate\Support\Facades\Cache;
@@ -12,6 +13,7 @@ use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\ReportHelper;
+use App\Support\Finance\PaymentStatus;
 
 class StudentBillingController extends Controller
 {
@@ -59,13 +61,16 @@ class StudentBillingController extends Controller
         $myPayments = $allPayments->filter(function($pay) use ($studentId) {
             return ($pay['Student_ID'] ?? '') == $studentId;
         })->values();
+        $selfServicePayments = $myPayments->filter(fn ($payment) =>
+            strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0
+            || empty($payment['Invoice_ID']))->values();
 
         // Use the dynamic remaining amount so partial and overdue invoices are
         // represented accurately without double-counting verified payments.
         $totalOutstanding = $myInvoices
             ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
             ->sum('Remaining_Amount');
-        $totalPaid = $myPayments->where('Status', 'Verified')->sum('Amount_Paid');
+        $totalPaid = $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))->sum('Amount_Paid');
 
         $educationSummary = $this->invoiceService->getStudentEducationBillingSummary($studentId);
         $biayaBelajar = $educationSummary['tuition_fee'];
@@ -75,19 +80,89 @@ class StudentBillingController extends Controller
         $companyProfile = $this->systemSettingService->getCompanyProfile();
         $bank = $companyProfile['bank'];
 
-        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
+        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) use ($myPayments) {
+            $invoiceIds = $invs->pluck('Invoice_ID');
             return [
                 'total_billed' => $invs->sum('Amount'),
-                'total_paid' => $invs->where('Status', 'Paid')->sum('Amount'),
+                'total_paid' => $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+                    ->whereIn('Invoice_ID', $invoiceIds)->sum('Amount_Paid'),
                 'outstanding' => $invs
                     ->whereNotIn('Status', ['Paid', 'Cancelled', 'Draft'])
                     ->sum('Remaining_Amount')
             ];
         });
 
-        $data = compact('myInvoices', 'myPayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown', 'bank', 'totalDibayarPendidikan');
+        $data = compact('myInvoices', 'myPayments', 'selfServicePayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown', 'bank', 'totalDibayarPendidikan');
 
         return view('student.billing.index', $data);
+    }
+
+    public function selfService()
+    {
+        $this->getStudentId();
+        $companyProfile = $this->systemSettingService->getCompanyProfile();
+        return view('student.billing.self-service', ['bank' => $companyProfile['bank'] ?? []]);
+    }
+
+    public function selfServicePay(Request $request)
+    {
+        $proofFile = '';
+        try {
+            $studentId = $this->getStudentId();
+            $validated = $request->validate([
+                'Amount_Paid' => 'required|numeric|gt:0',
+                'Sender_Name' => 'required|string|max:255',
+                'Transfer_Date' => 'required|date_format:Y-m-d',
+                'Payment_Method' => 'required|string|in:TRANSFER,CASH',
+                'Idempotency_Key' => 'required|uuid',
+                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            ]);
+            if ($request->hasFile('Proof_File')) {
+                $proofFile = $request->file('Proof_File')->store('payments');
+            }
+            \Illuminate\Support\Facades\Log::notice('finance.student_payment_verification_requested', [
+                'student_id' => $studentId,
+            ]);
+            $payment = $this->paymentService->submitPayment([
+                'Self_Service' => true,
+                'Student_ID' => $studentId,
+                'Amount_Paid' => $validated['Amount_Paid'],
+                'Payment_Method' => $validated['Payment_Method'],
+                'Reference_Number' => $validated['Sender_Name'],
+                'Sender_Name' => $validated['Sender_Name'],
+                'Transfer_Date' => $validated['Transfer_Date'],
+                'Payment_Date' => $validated['Transfer_Date'],
+                'Idempotency_Key' => $validated['Idempotency_Key'],
+                'Proof_Image' => $proofFile,
+                'Proof_File' => $proofFile,
+            ]);
+            \Illuminate\Support\Facades\Log::notice('finance.student_payment_submitted', [
+                'student_id' => $studentId,
+                'payment_id' => (string) ($payment['Payment_ID'] ?? 'UNKNOWN'),
+            ]);
+            return redirect()->route('student.billing.index')->with('success', 'Pembayaran mandiri terkirim dan menunggu verifikasi Finance.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('finance.student_payment_submission_failed', [
+                'student_id' => isset($studentId) ? (string) $studentId : 'UNKNOWN',
+                'reason' => get_class($e),
+            ]);
+            if ($proofFile !== '') {
+                try {
+                    $persisted = collect($this->paymentService->getAll())->contains(fn ($payment) =>
+                        ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile);
+                    if (!$persisted) {
+                        \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+                    }
+                } catch (\Throwable) {
+                    // Preserve the file when persistence cannot be determined safely.
+                }
+            }
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
+        }
     }
 
     public function show($id)
@@ -152,6 +227,7 @@ class StudentBillingController extends Controller
                 'Amount_Paid' => 'required|numeric|gt:0',
                 'Sender_Name' => 'required|string|max:255',
                 'Transfer_Date' => 'required|date',
+                'Idempotency_Key' => 'nullable|uuid',
                 'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120'
             ]);
 
@@ -165,6 +241,8 @@ class StudentBillingController extends Controller
                 'Amount_Paid' => $validated['Amount_Paid'],
                 'Reference_Number' => $validated['Sender_Name'],
                 'Transfer_Date' => $validated['Transfer_Date'],
+                'Payment_Date' => $validated['Transfer_Date'],
+                'Idempotency_Key' => $validated['Idempotency_Key'] ?? (string) Str::uuid(),
                 'Proof_Image' => $proofFile,
                 'Proof_File' => $proofFile
             ];

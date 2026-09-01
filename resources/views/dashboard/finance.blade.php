@@ -20,7 +20,7 @@
 @php
     $formattedKpi = [
         ['title' => 'Saldo Kas', 'value' => 'Rp '.number_format($kpi['cash_balance'] ?? 0, 0, ',', '.'), 'icon' => 'cash', 'color' => ($kpi['cash_balance'] ?? 0) >= 0 ? 'emerald' : 'rose'],
-        ['title' => 'Pemasukan Bulan Ini', 'value' => 'Rp '.number_format($kpi['revenue_this_month'] ?? 0, 0, ',', '.'), 'icon' => 'trending-up', 'color' => 'emerald'],
+        ['title' => 'Cash Collected Bulan Ini', 'value' => 'Rp '.number_format($kpi['revenue_this_month'] ?? 0, 0, ',', '.'), 'icon' => 'trending-up', 'color' => 'emerald'],
         ['title' => 'Pengeluaran Bulan Ini', 'value' => 'Rp '.number_format($kpi['expense_this_month'] ?? 0, 0, ',', '.'), 'icon' => 'trending-down', 'color' => 'rose'],
         ['title' => 'Tagihan Belum Lunas', 'value' => 'Rp '.number_format($kpi['outstanding_amount'] ?? 0, 0, ',', '.'), 'icon' => 'clock', 'color' => 'amber', 'link' => route('invoices.index')],
         ['title' => 'Menunggu Verifikasi', 'value' => $kpi['pending_verification'] ?? 0, 'icon' => 'document-text', 'color' => ($kpi['pending_verification'] ?? 0) > 0 ? 'blue' : 'emerald', 'link' => route('payments.index')],

@@ -46,6 +46,7 @@
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="p-6 border-b border-slate-100 flex justify-between items-center">
             <h3 class="font-bold text-slate-800">Daftar Tagihan Saya</h3>
+            <a href="{{ route('student.billing.self-service') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">Bayar Mandiri</a>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
@@ -106,5 +107,22 @@
             </table>
         </div>
     </div>
+
+    @if($selfServicePayments->isNotEmpty())
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h3 class="font-bold text-slate-800 mb-4">Pembayaran Mandiri</h3>
+            <div class="space-y-3">
+                @foreach($selfServicePayments as $payment)
+                    <div class="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
+                        <div>
+                            <p class="font-mono text-xs font-bold text-slate-500">{{ $payment['Payment_ID'] ?? '' }}</p>
+                            <p class="font-black text-slate-800">Rp {{ number_format($payment['Amount_Paid'] ?? 0, 0, ',', '.') }}</p>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">{{ $payment['Status'] ?? 'Waiting Verification' }}</span>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
 </div>
 @endsection

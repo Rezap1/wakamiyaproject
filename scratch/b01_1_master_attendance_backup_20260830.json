@@ -1,0 +1,28 @@
+{
+    "sheet": "MASTER_ATTENDANCE",
+    "spreadsheet_id": "18Iod8WJmXQH0IeBX6Vdsfs3OWtVVx0Kex7eDBEuOka0",
+    "exported_at": "2026-08-30T19:38:35+07:00",
+    "values": [
+        [
+            "Attendance_ID",
+            "Schedule_ID",
+            "Student_ID",
+            "Date",
+            "Status",
+            "Remarks",
+            "Created_At",
+            "Updated_At",
+            "Created_By",
+            "Updated_By",
+            "Notes",
+            "Teacher_ID",
+            "Attendance_Date",
+            "Check_In_Time",
+            "Check_Out_Time",
+            "Semester",
+            "Academic_Year",
+            "Session_Status",
+            "Grace_Period"
+        ]
+    ]
+}

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
 use App\Models\User;
 use App\Services\Core\NotificationService;
+use App\Exceptions\FinancialIntegrityException;
 use Mockery;
 use Tests\TestCase;
 
@@ -104,6 +105,26 @@ class NotificationServiceTest extends TestCase
             'User_ID' => 'all',
             'Title' => 'Broadcast',
         ], $user));
+    }
+
+    public function test_reminder_deduplication_fails_closed_without_identity_columns(): void
+    {
+        $repo = Mockery::mock(NotificationRepositoryInterface::class);
+        $repo->shouldReceive('getAll')->once()->andReturn(collect([
+            ['Notification_ID' => 'N-LEGACY', 'Title' => 'Legacy notification', 'Created_At' => '2026-09-01 09:00:00'],
+        ]));
+        $service = new NotificationService($repo);
+        $this->expectException(FinancialIntegrityException::class);
+        $service->hasReminder('INV-1', 7, '2026-09-01');
+    }
+
+    public function test_reminder_read_failure_is_not_masqueraded_as_no_reminder(): void
+    {
+        $repo = Mockery::mock(NotificationRepositoryInterface::class);
+        $repo->shouldReceive('getAll')->once()->andThrow(new \RuntimeException('notification read outage'));
+        $service = new NotificationService($repo);
+        $this->expectException(\RuntimeException::class);
+        $service->hasReminder('INV-1', 7, '2026-09-01');
     }
 
     protected function tearDown(): void

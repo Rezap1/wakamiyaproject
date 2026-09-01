@@ -22,7 +22,7 @@ class InvoiceServiceTuitionCapTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE']));
+        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE', 'Role' => 'FINANCE']));
         Cache::flush();
 
         $settings = Mockery::mock(SystemSettingService::class);

@@ -14,6 +14,7 @@ class StorePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'Idempotency_Key' => 'required|uuid',
             'Invoice_ID' => 'required|string',
             'Amount_Paid' => 'required|numeric|gt:0',
             'Payment_Date' => 'nullable|date',

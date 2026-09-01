@@ -241,6 +241,39 @@ class PaymentController extends Controller
         }
     }
 
+    public function reverse(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate(['reason' => 'required|string|max:1000']);
+            $this->paymentService->reversePayment($id, $validated['reason']);
+            return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil direversal melalui transaksi kompensasi.');
+        } catch (\Exception $e) {
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
+        }
+    }
+
+    public function reconcileLedger(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate(['Account_ID' => 'nullable|string|max:100']);
+            $this->paymentService->reconcileVerifiedPaymentLedger($id, $validated['Account_ID'] ?? null);
+            return redirect()->route('payments.show', $id)->with('success', 'Ledger pembayaran berhasil direkonsiliasi.');
+        } catch (\Exception $e) {
+            return back()->with('error', $this->safeExceptionMessage($e));
+        }
+    }
+
+    public function reconcileReversal(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate(['reason' => 'nullable|string|max:1000']);
+            $this->paymentService->reconcilePaymentReversal($id, $validated['reason'] ?? 'Recovery reversal');
+            return redirect()->route('payments.show', $id)->with('success', 'Ledger reversal berhasil direkonsiliasi.');
+        } catch (\Exception $e) {
+            return back()->with('error', $this->safeExceptionMessage($e));
+        }
+    }
+
     public function edit($id)
     {
         $payment = $this->paymentService->getById($id);

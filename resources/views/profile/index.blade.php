@@ -107,21 +107,36 @@
                             @csrf
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Kata Sandi Saat Ini</label>
-                                <input type="password" name="current_password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="current-password" required>
+                                <div class="relative">
+                                    <input type="password" name="current_password" data-password-input="current_password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 pr-11 transition-colors" placeholder="********" autocomplete="current-password" required>
+                                    <button type="button" data-password-toggle="current_password" aria-label="Tampilkan kata sandi saat ini" aria-pressed="false" class="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-slate-800" title="Tampilkan/sembunyikan kata sandi">
+                                        <svg data-password-eye="current_password" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </button>
+                                </div>
                                 @error('current_password')
                                     <p class="mt-1.5 text-xs font-semibold text-rose-600">{{ $message }}</p>
                                 @enderror
                             </div>
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Kata Sandi Baru</label>
-                                <input type="password" name="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="new-password" required>
+                                <div class="relative">
+                                    <input type="password" name="password" data-password-input="password" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 pr-11 transition-colors" placeholder="********" autocomplete="new-password" required>
+                                    <button type="button" data-password-toggle="password" aria-label="Tampilkan kata sandi baru" aria-pressed="false" class="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-slate-800" title="Tampilkan/sembunyikan kata sandi">
+                                        <svg data-password-eye="password" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </button>
+                                </div>
                                 @error('password')
                                     <p class="mt-1.5 text-xs font-semibold text-rose-600">{{ $message }}</p>
                                 @enderror
                             </div>
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Konfirmasi Kata Sandi Baru</label>
-                                <input type="password" name="password_confirmation" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" placeholder="********" autocomplete="new-password" required>
+                                <div class="relative">
+                                    <input type="password" name="password_confirmation" data-password-input="password_confirmation" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 pr-11 transition-colors" placeholder="********" autocomplete="new-password" required>
+                                    <button type="button" data-password-toggle="password_confirmation" aria-label="Tampilkan konfirmasi kata sandi baru" aria-pressed="false" class="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-slate-800" title="Tampilkan/sembunyikan kata sandi">
+                                        <svg data-password-eye="password_confirmation" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </button>
+                                </div>
                             </div>
                             <button type="submit" class="w-full text-white bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-300 font-bold rounded-xl text-sm px-5 py-2.5 text-center transition-all shadow-md shadow-emerald-200">Perbarui Kata Sandi</button>
                         </form>
@@ -170,6 +185,21 @@
         </div>
     </div>
 </div>
+<script>
+document.querySelectorAll('[data-password-toggle]').forEach(function (toggle) {
+    toggle.addEventListener('click', function () {
+        const name = toggle.getAttribute('data-password-toggle');
+        const input = document.querySelector('[data-password-input="' + name + '"]');
+        if (!input) return;
+        const visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        toggle.setAttribute('aria-pressed', visible ? 'false' : 'true');
+        toggle.setAttribute('aria-label', (visible ? 'Tampilkan ' : 'Sembunyikan ') +
+            (name === 'current_password' ? 'kata sandi saat ini' :
+                (name === 'password' ? 'kata sandi baru' : 'konfirmasi kata sandi baru')));
+    });
+});
+</script>
 @endsection
 
 

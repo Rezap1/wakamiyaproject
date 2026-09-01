@@ -13,6 +13,7 @@
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
         <form action="{{ route('payments.store') }}" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-5">
             @csrf
+            <input type="hidden" name="Idempotency_Key" value="{{ old('Idempotency_Key', (string) \Illuminate\Support\Str::uuid()) }}">
 
             <div class="md:col-span-2">
                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Invoice</label>

@@ -1,0 +1,255 @@
+Created At: 2026-08-27T00:47:07+07:00
+Completed At: 2026-08-27T00:47:07+07:00
+File Path: `file:///d:/orderan/wakamiya/app/Http/Controllers/Finance/StudentBillingController.php`
+Total Lines: 247
+Total Bytes: 9692
+Showing lines 1 to 247
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: <?php
+2: namespace App\Http\Controllers\Finance;
+3: 
+4: use App\Http\Controllers\Controller;
+5: use Illuminate\Http\Request;
+6: use App\Services\Finance\InvoiceService;
+7: use App\Services\Finance\PaymentService;
+8: use Illuminate\Support\Facades\Cache;
+9: use App\Services\Core\SystemSettingService;
+10: use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+11: use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+12: use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+13: use App\Helpers\StoragePathHelper;
+14: use App\Helpers\ReportHelper;
+15: 
+16: class StudentBillingController extends Controller
+17: {
+18:     protected $invoiceService, $paymentService, $systemSettingService, $studentRepo, $programRepo, $batchRepo;
+19: 
+20:     public function __construct(
+21:         InvoiceService $invoiceService, 
+22:         PaymentService $paymentService,
+23:         SystemSettingService $systemSettingService,
+24:         StudentRepositoryInterface $studentRepo,
+25:         ProgramRepositoryInterface $programRepo,
+26:         BatchRepositoryInterface $batchRepo
+27:     ) {
+28:         $this->invoiceService = $invoiceService;
+29:         $this->paymentService = $paymentService;
+30:         $this->systemSettingService = $systemSettingService;
+31:         $this->studentRepo = $studentRepo;
+32:         $this->programRepo = $programRepo;
+33:         $this->batchRepo = $batchRepo;
+34:     }
+35: 
+36:     private function getStudentId()
+37:     {
+38:         $user = auth()->user();
+39:         if ($user && isset($user->User_ID)) {
+40:             $student = collect($this->studentRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
+41:             if ($student) {
+42:                 return $student['Student_ID'];
+43:             }
+44:         }
+45: 
+46:         abort(403, 'Profil siswa tidak ditemukan.');
+47:     }
+48: 
+49:     public function index()
+50:     {
+51:         $studentId = $this->getStudentId();
+52:         
+53:         $allInvoices = $this->invoiceService->getAll();
+54:         $myInvoices = $allInvoices->filter(function($inv) use ($studentId) {
+55:             return ($inv['Student_ID'] ?? '') == $studentId;
+56:         })->values();
+57: 
+58:         $allPayments = $this->paymentService->getAll();
+59:         $myPayments = $allPayments->filter(function($pay) use ($studentId) {
+60:             return ($pay['Student_ID'] ?? '') == $studentId;
+61:         })->values();
+62: 
+63:         $totalOutstanding = $myInvoices->where('Status', 'Waiting Payment')->sum('Amount');
+64:         $totalPaid = $myPayments->where('Status', 'Verified')->sum('Amount_Paid');
+65: 
+66:         $educationSummary = $this->invoiceService->getStudentEducationBillingSummary($studentId);
+67:         $biayaBelajar = $educationSummary['tuition_fee'];
+68:         $totalDibayarPendidikan = $educationSummary['education_paid'];
+69:         $sisaTagihan = $educationSummary['remaining_to_pay'];
+70:         $progress = $educationSummary['progress'];
+71:         $companyProfile = $this->systemSettingService->getCompanyProfile();
+72:         $bank = $companyProfile['bank'];
+73: 
+74:         $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
+75:             return [
+76:                 'total_billed' => $invs->sum('Amount'),
+77:                 'total_paid' => $invs->where('Status', 'Paid')->sum('Amount'),
+78:                 'outstanding' => $invs->where('Status', '!=', 'Paid')->sum('Amount')
+79:             ];
+80:         });
+81: 
+82:         $data = compact('myInvoices', 'myPayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown', 'bank', 'totalDibayarPendidikan');
+83: 
+84:         return view('student.billing.index', $data);
+85:     }
+86: 
+87:     public function show($id)
+88:     {
+89:         $studentId = $this->getStudentId();
+90:         $invoice = $this->invoiceService->getById($id);
+91:         
+92:         if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId) {
+93:             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda.");
+94:         }
+95: 
+96:         $allPayments = $this->paymentService->getAll();
+97:         $relatedPayments = $allPayments
+98:             ->where('Invoice_ID', $id)
+99:             ->where('Student_ID', $studentId)
+100:             ->values();
+101: 
+102:         return view('student.billing.show', compact('invoice', 'relatedPayments'));
+103:     }
+104: 
+105:     public function downloadInvoicePdf($id)
+106:     {
+107:         $studentId = $this->getStudentId();
+108:         $invoice = $this->invoiceService->getById($id);
+109: 
+110:         if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId) {
+111:             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda.");
+112:         }
+113: 
+114:         try {
+115:             $docData = $this->invoiceService->getInvoiceDocumentData($id);
+116:             $docData['invoice']['student_name'] = \App\Helpers\UserResolverHelper::getName($docData['invoice']['Student_ID'] ?? '');
+117: 
+118:             return ReportHelper::export(
+119:                 'pdf',
+120:                 'Invoice_' . $id,
+121:                 collect([$docData['invoice']]),
+122:                 $docData,
+123:                 'pdf.official_invoice',
+124:                 [],
+125:                 null,
+126:                 false
+127:             );
+128:         } catch (\Exception $e) {
+129:             return back()->withErrors(['error' => $e->getMessage()]);
+130:         }
+131:     }
+132: 
+133:     public function pay(Request $request, $id)
+134:     {
+135:         $proofFile = '';
+136: 
+137:         try {
+138:             $studentId = $this->getStudentId();
+139: 
+140:             $invoice = $this->invoiceService->getById($id);
+141:             if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId) {
+142:                 abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda.");
+143:             }
+144: 
+145:             $request->validate([
+146:                 'Amount_Paid' => 'required|numeric|gt:0',
+147:                 'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120'
+148:             ]);
+149: 
+150:             if ($request->hasFile('Proof_File')) {
+151:                 $proofFile = $request->file('Proof_File')->store('payments');
+152:             }
+153: 
+154:             $paymentData = [
+155:                 'Invoice_ID' => $id,
+156:                 'Student_ID' => $studentId,
+157:                 'Amount_Paid' => $request->input('Amount_Paid', 0),
+158:                 'Reference_Number' => $request->input('Sender_Name', ''),
+159:                 'Transfer_Date' => $request->input('Transfer_Date', now()->toDateString()),
+160:                 'Proof_Image' => $proofFile,
+161:                 'Proof_File' => $proofFile
+162:             ];
+163: 
+164:             $this->paymentService->submitPayment($paymentData);
+165:             
+166:             return redirect()->route('student.billing.show', $id)->with('success', 'Payment submitted and waiting for verification.');
+167:         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+168:             throw $e;
+169:         } catch (\Exception $e) {
+170:             if ($proofFile !== '') {
+171:                 try {
+172:                     $persisted = collect($this->paymentService->getAll())->contains(function ($payment) use ($proofFile) {
+173:                         return ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile;
+174:                     });
+175:                     if (!$persisted) {
+176:                         \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+177:                     }
+178:                 } catch (\Throwable $lookupFailure) {
+179:                     // Preserve the file when persistence cannot be determined safely.
+180:                 }
+181:             }
+182:             return back()->withErrors(['error' => $e->getMessage()]);
+183:         }
+184:     }
+185: 
+186:     public function downloadProof(Request $request, $id)
+187:     {
+188:         $studentId = $this->getStudentId();
+189:         $invoice = $this->invoiceService->getById($id);
+190: 
+191:         if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId) {
+192:             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda.");
+193:         }
+194: 
+195:         $payment = collect($this->paymentService->getAll())->first(function ($payment) use ($id, $studentId) {
+196:             return ($payment['Invoice_ID'] ?? '') === $id
+197:                 && ($payment['Student_ID'] ?? '') === $studentId
+198:                 && (!empty($payment['Proof_File']) || !empty($payment['Proof_Image']));
+199:         });
+200: 
+201:         if (!$payment) {
+202:             abort(404, 'Bukti pembayaran tidak ditemukan.');
+203:         }
+204: 
+205:         return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-' . $id);
+206:     }
+207: 
+208:     public function downloadPaymentProof(Request $request, $paymentId)
+209:     {
+210:         $studentId = $this->getStudentId();
+211:         $payment = collect($this->paymentService->getAll())->first(function ($payment) use ($paymentId, $studentId) {
+212:             return ($payment['Payment_ID'] ?? '') === $paymentId
+213:                 && ($payment['Student_ID'] ?? '') === $studentId
+214:                 && (!empty($payment['Proof_File']) || !empty($payment['Proof_Image']));
+215:         });
+216: 
+217:         if (!$payment) {
+218:             abort(404, 'Bukti pembayaran tidak ditemukan.');
+219:         }
+220: 
+221:         return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-' . $paymentId);
+222:     }
+223: 
+224:     private function paymentProofResponse(array $payment, Request $request, string $filenamePrefix)
+225:     {
+226:         $proofPath = $payment['Proof_File'] ?? $payment['Proof_Image'] ?? null;
+227:         $path = StoragePathHelper::privateFileResponsePath($proofPath);
+228:         if (!$path) {
+229:             abort(404, 'File bukti pembayaran tidak ditemukan di server.');
+230:         }
+231: 
+232:         if ($request->boolean('inline')) {
+233:             return response()->file($path);
+234:         }
+235: 
+236:         return response()->download($path, $this->downloadFilename($filenamePrefix, $path));
+237:     }
+238: 
+239:     private function downloadFilename(string $prefix, string $path): string
+240:     {
+241:         $safePrefix = preg_replace('/[^A-Za-z0-9_-]/', '_', $prefix);
+242:         $extension = pathinfo($path, PATHINFO_EXTENSION);
+243: 
+244:         return $safePrefix . ($extension ? '.' . $extension : '');
+245:     }
+246: }
+247: 
+The above content shows the entire, complete file contents of the requested file.

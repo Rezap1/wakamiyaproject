@@ -78,54 +78,40 @@ class AccountService
 
     public function getDefaultTransactionAccount()
     {
-        $assets = collect($this->repository->fetchAll())
+        $rows = method_exists($this->repository, 'fetchAllFresh') ? $this->repository->fetchAllFresh() : $this->repository->fetchAll();
+        $assets = collect($rows)
             ->where('Is_Active', '!=', 'FALSE')
             ->filter(function($acc) {
                 $cat = strtoupper($acc['Account_Category'] ?? '');
                 return str_contains($cat, 'ASSET') || str_contains($cat, 'ASET');
             });
             
-        // 1. Try to find main cash account
-        $cashAcc = $assets->first(function($acc) {
+        $configured = trim((string) config('finance.accounts.default_id', ''));
+        if ($configured !== '') {
+            $matched = $assets->first(fn ($acc) => ($acc['Account_ID'] ?? '') === $configured || ($acc['Account_Code'] ?? '') === $configured);
+            return $matched ? $this->formatAccountRecord($matched) : null;
+        }
+
+        $candidates = $assets->filter(function($acc) {
             $name = strtolower($acc['Account_Name'] ?? '');
-            $code = $acc['Account_Code'] ?? '';
-            return str_contains($name, 'kas') || str_contains($name, 'cash') || $code === '101';
+            return str_contains($name, 'kas') || str_contains($name, 'cash')
+                || str_contains($name, 'bank') || str_contains($name, 'bsi');
         });
-        
-        if ($cashAcc) {
-            return $this->formatAccountRecord($cashAcc);
-        }
-        
-        // 2. Try to find main bank account
-        $bankAcc = $assets->first(function($acc) {
-            $name = strtolower($acc['Account_Name'] ?? '');
-            $code = $acc['Account_Code'] ?? '';
-            return str_contains($name, 'bank') || str_contains($name, 'bsi') || $code === '102';
-        });
-        
-        if ($bankAcc) {
-            return $this->formatAccountRecord($bankAcc);
-        }
-        
-        // 3. Fallback to any active asset account
-        $fallback = $assets->first();
-        if ($fallback) {
-            return $this->formatAccountRecord($fallback);
-        }
-        
-        return null;
+        return $candidates->count() === 1 ? $this->formatAccountRecord($candidates->first()) : null;
     }
 
     public function create(array $data)
     {
+        $this->assertFinanceMutationActor();
         $code = trim($data['Account_Code'] ?? '');
         if (empty($code)) {
             throw new Exception("Kode Akun wajib diisi.");
         }
 
         // Validate Account Code uniqueness
-        $all = collect($this->repository->fetchAll())->where('Is_Active', '!=', 'FALSE');
-        if ($all->contains('Account_Code', $code)) {
+        $allRows = method_exists($this->repository, 'fetchAllFresh') ? $this->repository->fetchAllFresh() : $this->repository->fetchAll();
+        $all = collect($allRows)->where('Is_Active', '!=', 'FALSE');
+        if ($all->contains(fn ($row) => strcasecmp(trim((string) ($row['Account_Code'] ?? '')), $code) === 0)) {
             throw new Exception("Kode Akun '{$code}' sudah terdaftar dalam sistem.");
         }
 
@@ -140,11 +126,19 @@ class AccountService
         $category = $this->normalizeCategory($data['Account_Category'] ?? '');
         $normalBalance = $this->getNormalBalance($category);
 
+        if (!empty($data['Parent_Account_ID'])) {
+            $parent = $this->repository->findById($data['Parent_Account_ID']);
+            if (!$parent || strtoupper(trim((string) ($parent['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                throw new \App\Exceptions\FinancialIntegrityException("Parent account {$data['Parent_Account_ID']} tidak ditemukan atau tidak aktif.");
+            }
+        }
+
         $data['Account_Code'] = $code;
         $data['Account_Category'] = $category;
         $data['Normal_Balance'] = $normalBalance;
         $data['Is_Active'] = 'TRUE';
         $data['Created_By'] = \App\Support\ActorIdentity::required();
+        $data['Updated_By'] = $data['Created_By'];
         $data['Created_At'] = now()->toDateTimeString();
         $data['Updated_At'] = now()->toDateTimeString();
 
@@ -155,31 +149,24 @@ class AccountService
         $this->repository->clearCache();
         $this->clearFinanceCaches();
 
-        $this->enterpriseEvent->dispatch(
-            'ACCOUNT',
-            'CREATE',
-            'ACCOUNT',
-            $data['Account_ID'],
-            \App\Support\ActorIdentity::required(),
-            ['FINANCE'],
-            [],
-            $data
-        );
+        $this->dispatchEventSafe('CREATE', $data['Account_ID'], $data);
 
         return $this->formatAccountRecord($data);
     }
 
     public function update($id, array $data)
     {
-        $account = $this->repository->findById($id);
+        $this->assertFinanceMutationActor();
+        $account = method_exists($this->repository, 'findByIdFresh') ? $this->repository->findByIdFresh($id) : $this->repository->findById($id);
         if (!$account) {
             throw new Exception("Akun tidak ditemukan.");
         }
 
         if (isset($data['Account_Code'])) {
             $code = trim($data['Account_Code']);
-            $all = collect($this->repository->fetchAll())->where('Is_Active', '!=', 'FALSE');
-            $existing = $all->firstWhere('Account_Code', $code);
+            $allRows = method_exists($this->repository, 'fetchAllFresh') ? $this->repository->fetchAllFresh() : $this->repository->fetchAll();
+            $all = collect($allRows)->where('Is_Active', '!=', 'FALSE');
+            $existing = $all->first(fn ($row) => strcasecmp(trim((string) ($row['Account_Code'] ?? '')), $code) === 0);
             if ($existing && ($existing['Account_ID'] ?? '') !== $id) {
                 throw new Exception("Kode Akun '{$code}' sudah digunakan oleh akun lain.");
             }
@@ -192,6 +179,14 @@ class AccountService
             $data['Normal_Balance'] = $this->getNormalBalance($category);
         }
 
+        if (!empty($data['Parent_Account_ID'])) {
+            $parent = $this->repository->findById($data['Parent_Account_ID']);
+            if (!$parent || strtoupper(trim((string) ($parent['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                throw new \App\Exceptions\FinancialIntegrityException("Parent account {$data['Parent_Account_ID']} tidak ditemukan atau tidak aktif.");
+            }
+        }
+
+        $data['Updated_By'] = \App\Support\ActorIdentity::required();
         $data['Updated_At'] = now()->toDateTimeString();
         $res = $this->repository->update($id, $data);
         if ($res === false || $res === null) {
@@ -200,23 +195,15 @@ class AccountService
         $this->repository->clearCache();
         $this->clearFinanceCaches();
 
-        $this->enterpriseEvent->dispatch(
-            'ACCOUNT',
-            'UPDATE',
-            'ACCOUNT',
-            $id,
-            \App\Support\ActorIdentity::required(),
-            ['FINANCE'],
-            [],
-            $data
-        );
+        $this->dispatchEventSafe('UPDATE', $id, $data);
 
         return $this->formatAccountRecord(array_merge($account, $data));
     }
 
     public function delete($id)
     {
-        $account = $this->repository->findById($id);
+        $this->assertFinanceMutationActor();
+        $account = method_exists($this->repository, 'findByIdFresh') ? $this->repository->findByIdFresh($id) : $this->repository->findById($id);
         if (!$account) {
             throw new Exception("Akun tidak ditemukan.");
         }
@@ -228,16 +215,7 @@ class AccountService
         $this->repository->clearCache();
         $this->clearFinanceCaches();
 
-        $this->enterpriseEvent->dispatch(
-            'ACCOUNT',
-            'DELETE',
-            'ACCOUNT',
-            $id,
-            \App\Support\ActorIdentity::required(),
-            ['FINANCE'],
-            [],
-            $account
-        );
+        $this->dispatchEventSafe('DELETE', $id, $account);
 
         return $res;
     }
@@ -246,5 +224,35 @@ class AccountService
     {
         Cache::forget('finance_dashboard');
         Cache::forget('dashboard_finance');
+    }
+
+    private function assertFinanceMutationActor(): string
+    {
+        $actor = \App\Support\ActorIdentity::required();
+        $user = auth()->user();
+        $role = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
+        if ($role === '' && $user && !empty($user->Role_ID)) {
+            try {
+                $role = strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)
+                    ->getRoleById($user->Role_ID)['Role_Name'] ?? '')));
+            } catch (\Throwable) {
+                $role = '';
+            }
+        }
+        if (!in_array($role, ['FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('Role pengguna tidak diizinkan melakukan mutasi account.');
+        }
+        return $actor;
+    }
+
+    private function dispatchEventSafe(string $action, string $id, array $metadata): void
+    {
+        try {
+            $this->enterpriseEvent->dispatch('ACCOUNT', $action, 'ACCOUNT', $id, \App\Support\ActorIdentity::required(), ['FINANCE'], [], $metadata);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Account side effect failed after primary persistence', [
+                'account_id' => $id, 'action' => $action, 'exception' => get_class($e),
+            ]);
+        }
     }
 }

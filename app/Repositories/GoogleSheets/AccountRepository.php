@@ -20,6 +20,11 @@ class AccountRepository extends BaseSheetRepository implements AccountRepository
         return $this->fetchAll()->firstWhere($this->primaryKey, $id);
     }
 
+    public function findByIdFresh($id)
+    {
+        return parent::findByIdFresh($id);
+    }
+
     public function create(array $data)
     {
         return $this->append($data);

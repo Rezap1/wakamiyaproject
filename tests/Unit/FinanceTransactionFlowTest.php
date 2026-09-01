@@ -20,7 +20,7 @@ class FinanceTransactionFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE']));
+        $this->actingAs(new GenericUser(['id' => 'USR-FINANCE', 'User_ID' => 'USR-FINANCE', 'Role' => 'FINANCE']));
     }
 
     public function test_manual_expense_is_saved_as_expense_with_free_text_category(): void
@@ -36,6 +36,9 @@ class FinanceTransactionFlowTest extends TestCase
         $repository->shouldReceive('clearCache')->once();
 
         $accountRepository = Mockery::mock(AccountRepositoryInterface::class);
+        $accountRepository->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Account_ID' => 'ACC-CASH', 'Account_Code' => '101', 'Is_Active' => 'TRUE'],
+        ]));
         $event = Mockery::mock(EnterpriseEventService::class);
         $event->shouldReceive('dispatch')->once();
 

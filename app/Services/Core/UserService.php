@@ -110,6 +110,10 @@ class UserService
 
         $res = $this->userRepository->update($id, $mappedData);
 
+        // Never send credentials (including hashes) to audit/notification
+        // metadata. The password has already been persisted by this point.
+        $eventData = array_diff_key($mappedData, array_flip(['Password']));
+
         $this->enterpriseEvent->dispatch(
             'USER',
             'UPDATE',
@@ -118,7 +122,7 @@ class UserService
             \App\Support\ActorIdentity::required(),
             ['ADMINISTRATOR'],
             [],
-            $mappedData
+            $eventData
         );
 
         return $res;
@@ -285,6 +289,45 @@ class UserService
         $this->clearUserCascadeCaches($employeeIds, $studentIds);
 
         return $res;
+    }
+
+    /**
+     * Verify and persist a password for the identified account. The lookup is
+     * authoritative (MASTER_USER), rather than relying on a stale session copy.
+     */
+    public function changePassword(string $id, string $currentPassword, string $newPassword): bool
+    {
+        $storedUser = $this->userRepository->findById($id);
+        $storedHash = is_array($storedUser) ? ($storedUser['Password'] ?? $storedUser['password'] ?? '') : '';
+
+        if (!$storedUser || $storedHash === '' || !Hash::check($currentPassword, $storedHash)) {
+            return false;
+        }
+
+        $newHash = Hash::make($newPassword);
+        $updated = $this->userRepository->update($id, [
+            'Password' => $newHash,
+            'Last_Password_Change' => now()->toDateTimeString(),
+            'Updated_At' => now()->toDateTimeString(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
+        ]);
+
+        if ($updated === false || $updated === null) {
+            return false;
+        }
+
+        $this->enterpriseEvent->dispatch(
+            'USER',
+            'UPDATE',
+            'USER',
+            $id,
+            \App\Support\ActorIdentity::required(),
+            ['ADMINISTRATOR'],
+            [],
+            ['Password_Changed' => true]
+        );
+
+        return true;
     }
 
     private function repoRows(object $repository)

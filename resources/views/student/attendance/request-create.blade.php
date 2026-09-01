@@ -17,7 +17,10 @@
             <!-- Tanggal -->
             <div>
                 <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Tanggal Presensi <span class="text-rose-500">*</span></label>
-                <input type="date" name="Attendance_Date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none" value="{{ date('Y-m-d') }}">
+                <input type="date" name="Attendance_Date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none" value="{{ now()->toDateString() }}">
+                <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mt-3 mb-2">Sampai Tanggal (opsional)</label>
+                <input type="date" name="End_Date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none" value="{{ old('End_Date') }}">
+                <p class="text-xs text-slate-500 mt-2">Untuk izin beberapa hari, pilih tanggal akhir. Setiap tanggal akan dicatat dan diproses secara terpisah.</p>
             </div>
 
             <!-- Target attendance -->

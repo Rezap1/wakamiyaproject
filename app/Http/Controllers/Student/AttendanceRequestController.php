@@ -10,6 +10,7 @@ use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Helpers\StoragePathHelper;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 
 class AttendanceRequestController extends Controller
 {
@@ -82,7 +83,10 @@ class AttendanceRequestController extends Controller
         }
 
         $request->validate([
-            'Attendance_Date' => 'required|date',
+            'Attendance_Date' => 'required_without:Attendance_Dates|nullable|date',
+            'Attendance_Dates' => 'nullable|array|min:1',
+            'Attendance_Dates.*' => 'date',
+            'End_Date' => 'nullable|date|after_or_equal:Attendance_Date',
             'Schedule_ID' => 'nullable|string',
             'Request_Type' => 'required|in:SAKIT,IZIN',
             'Reason' => 'required|string|max:500',
@@ -99,32 +103,43 @@ class AttendanceRequestController extends Controller
             }
         }
 
-        // Handle File Upload
+        $startDate = Carbon::parse($request->input('Attendance_Date') ?: $request->input('Attendance_Dates.0'), config('app.timezone'))->startOfDay();
+        $endDate = Carbon::parse($request->input('End_Date') ?: $startDate, config('app.timezone'))->startOfDay();
+        $dates = collect(CarbonPeriod::create($startDate, $endDate))
+            ->map(fn (Carbon $date) => $date->toDateString());
+        foreach ((array) $request->input('Attendance_Dates', []) as $date) {
+            $dates->push(Carbon::parse($date, config('app.timezone'))->toDateString());
+        }
+        $dates = $dates->unique()->sort()->values();
+
+        // Handle File Upload once; the same evidence may be referenced by each
+        // per-date request row without changing the existing sheet schema.
         $file = $request->file('Evidence');
         $extension = $file->getClientOriginalExtension();
         $filename = Str::uuid() . '.' . $extension;
         $path = $file->storeAs('attendance-evidence', $filename);
 
-        // Keep the legacy schedule shape compatible, while making class-based
-        // identity explicit and independent from Schedule_ID.
-        $dateKey = Carbon::parse($request->Attendance_Date)->format('Ymd');
-        $attendanceId = $attendanceType === 'SCHEDULE'
-            // Preserve the existing schedule-based ID format.
-            ? 'ATT-' . $studentId . '-' . $dateKey . '-' . $scheduleId
-            : 'ATT-' . $studentId . '-' . $dateKey . '-CLASS-' . $classId . '-CLASS_QR';
-
         try {
-            $this->requestService->createRequest([
-                'Attendance_ID' => $attendanceId,
-                'Student_ID' => $studentId,
-                'Class_ID' => $classId,
-                'Schedule_ID' => $scheduleId,
-                'Attendance_Type' => $attendanceType,
-                'Attendance_Date' => $request->Attendance_Date,
-                'Request_Type' => $request->Request_Type,
-                'Reason' => $request->Reason,
-                'Evidence_URL' => 'storage/' . $path,
-            ], auth()->user());
+            foreach ($dates as $date) {
+                // Keep the legacy schedule shape compatible, while making
+                // class-based identity explicit and independent from Schedule_ID.
+                $dateKey = Carbon::parse($date, config('app.timezone'))->format('Ymd');
+                $attendanceId = $attendanceType === 'SCHEDULE'
+                    ? 'ATT-' . $studentId . '-' . $dateKey . '-' . $scheduleId
+                    : 'ATT-' . $studentId . '-' . $dateKey . '-CLASS-' . $classId . '-CLASS_QR';
+
+                $this->requestService->createRequest([
+                    'Attendance_ID' => $attendanceId,
+                    'Student_ID' => $studentId,
+                    'Class_ID' => $classId,
+                    'Schedule_ID' => $scheduleId,
+                    'Attendance_Type' => $attendanceType,
+                    'Attendance_Date' => $date,
+                    'Request_Type' => $request->Request_Type,
+                    'Reason' => $request->Reason,
+                    'Evidence_URL' => 'storage/' . $path,
+                ], auth()->user());
+            }
 
             return redirect()->route('student.attendance.requests.index')->with('success', 'Pengajuan berhasil dikirim dan sedang menunggu review.');
         } catch (\Exception $e) {

@@ -116,6 +116,57 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame(0, $resource->appendCalls);
     }
 
+    public function test_financial_schema_guard_rejects_critical_field_loss_before_append(): void
+    {
+        $resource = new FakeSheetsValuesResource([
+            ['Payment_ID', 'Amount_Paid'],
+        ]);
+        $repository = new FinancialSchemaGuardRepository($resource, 'FINANCE_PAYMENT');
+
+        $this->expectException(\App\Exceptions\FinancialIntegrityException::class);
+        $repository->append([
+            'Payment_ID' => 'PAY-001',
+            'Amount_Paid' => 100,
+            'Status' => 'Verified',
+        ]);
+
+        $this->assertSame(0, $resource->appendCalls);
+    }
+
+    public function test_financial_schema_guard_allows_optional_omissions(): void
+    {
+        $resource = new FakeSheetsValuesResource([
+            [
+                'Payment_ID', 'Invoice_ID', 'Student_ID', 'Amount_Paid',
+                'Payment_Date', 'Payment_Method', 'Reference_Number', 'Proof_Image',
+                'Status', 'Verified_By', 'Verified_At', 'Notes',
+                'Created_By', 'Created_At', 'Updated_By', 'Updated_At',
+                'Idempotency_Key', 'Idempotency_Fingerprint', 'Receipt_Number',
+                'Payment_Type', 'Is_Active',
+            ],
+        ]);
+        $repository = new FinancialSchemaGuardRepository($resource, 'FINANCE_PAYMENT');
+
+        $this->assertTrue($repository->append([
+            'Payment_ID' => 'PAY-002',
+            'Amount_Paid' => 100,
+        ]));
+        $this->assertSame(1, $resource->appendCalls);
+    }
+
+    public function test_financial_schema_guard_rejects_update_when_required_column_is_missing(): void
+    {
+        $resource = new FakeSheetsValuesResource([
+            ['Payment_ID', 'Amount_Paid'],
+            ['PAY-003', 100],
+        ]);
+        $repository = new FinancialSchemaGuardRepository($resource, 'FINANCE_PAYMENT');
+
+        $this->expectException(\App\Exceptions\FinancialIntegrityException::class);
+        $repository->update('PAY-003', ['Amount_Paid' => 101]);
+        $this->assertNull($resource->updateBody);
+    }
+
     public function test_update_of_missing_record_throws_without_false_success(): void
     {
         $resource = new FakeSheetsValuesResource([
@@ -173,6 +224,19 @@ class TestSheetRepository extends BaseSheetRepository
         $this->sheetName = 'TEST_SHEET';
         $this->cacheKey = 'test_sheet_' . spl_object_id($this);
         $this->primaryKey = 'Record_ID';
+        $this->cacheTtl = 1;
+    }
+}
+
+class FinancialSchemaGuardRepository extends BaseSheetRepository
+{
+    public function __construct(FakeSheetsValuesResource $resource, string $sheetName)
+    {
+        $this->service = (object) ['spreadsheets_values' => $resource];
+        $this->spreadsheetId = 'spreadsheet-test';
+        $this->sheetName = $sheetName;
+        $this->cacheKey = 'schema_guard_' . spl_object_id($this);
+        $this->primaryKey = $sheetName === 'FINANCE_INVOICE' ? 'Invoice_ID' : 'Payment_ID';
         $this->cacheTtl = 1;
     }
 }

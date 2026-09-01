@@ -300,6 +300,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/create', [\App\Http\Controllers\Finance\PaymentController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Finance\PaymentController::class, 'store'])->name('store');
         Route::post('/{id}/verify', [\App\Http\Controllers\Finance\PaymentController::class, 'verify'])->name('verify');
+        Route::post('/{id}/reverse', [\App\Http\Controllers\Finance\PaymentController::class, 'reverse'])->name('reverse');
+        Route::post('/{id}/reconcile-ledger', [\App\Http\Controllers\Finance\PaymentController::class, 'reconcileLedger'])->name('reconcile-ledger');
+        Route::post('/{id}/reconcile-reversal', [\App\Http\Controllers\Finance\PaymentController::class, 'reconcileReversal'])->name('reconcile-reversal');
         Route::get('/{id}/receipt', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadReceiptPdf'])->name('receipt');
         Route::get('/{id}/proof', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadProof'])->name('proof');
         Route::get('/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'show'])->name('show');
@@ -434,6 +437,8 @@ Route::middleware('auth')->group(function () {
     // Student Billing (Invoices)
     Route::prefix('student/billing')->name('student.billing.')->middleware('role:STUDENT')->group(function () {
         Route::get('/', [\App\Http\Controllers\Finance\StudentBillingController::class, 'index'])->name('index');
+        Route::get('/self-service', [\App\Http\Controllers\Finance\StudentBillingController::class, 'selfService'])->name('self-service');
+        Route::post('/self-service', [\App\Http\Controllers\Finance\StudentBillingController::class, 'selfServicePay'])->name('self-service.pay');
         Route::get('/payments/{paymentId}/proof', [\App\Http\Controllers\Finance\StudentBillingController::class, 'downloadPaymentProof'])->name('payment-proof');
         Route::get('/{id}/pdf', [\App\Http\Controllers\Finance\StudentBillingController::class, 'downloadInvoicePdf'])->name('invoice-pdf');
         Route::get('/{id}', [\App\Http\Controllers\Finance\StudentBillingController::class, 'show'])->name('show');

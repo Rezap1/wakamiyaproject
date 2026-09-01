@@ -303,6 +303,9 @@ class InvoiceController extends Controller
                 return back()->with('error', 'Pengingat pembayaran hanya dapat dikirim untuk invoice siswa yang memiliki Student_ID.');
             }
 
+            $notificationDelivered = true;
+            $eventDispatched = true;
+
             // Create notification record using Service to ensure cache clearing
             try {
                 $notifService = app(\App\Services\Core\NotificationService::class);
@@ -316,7 +319,14 @@ class InvoiceController extends Controller
                     'Is_Read'         => 'FALSE',
                     'Created_At'      => now()->toDateTimeString()
                 ]);
-            } catch (\Exception $e) {}
+            } catch (\Throwable $e) {
+                $notificationDelivered = false;
+                \Illuminate\Support\Facades\Log::warning('Invoice notification delivery failed', [
+                    'invoice_id' => $id,
+                    'student_id' => $studentId,
+                    'exception' => get_class($e),
+                ]);
+            }
 
             // Dispatch Enterprise Event
             try {
@@ -331,9 +341,19 @@ class InvoiceController extends Controller
                     array_filter([$studentId]),
                     ['Message' => $message, 'Amount' => $invoice['Amount'] ?? 0]
                 );
-            } catch (\Exception $e) {}
+            } catch (\Throwable $e) {
+                $eventDispatched = false;
+                \Illuminate\Support\Facades\Log::warning('Invoice notification event dispatch failed', [
+                    'invoice_id' => $id,
+                    'student_id' => $studentId,
+                    'exception' => get_class($e),
+                ]);
+            }
 
-            return redirect()->route('invoices.index')->with('success', "Pengingat penagihan untuk invoice #{$id} berhasil dikirim.");
+            $message = ($notificationDelivered && $eventDispatched)
+                ? "Pengingat penagihan untuk invoice #{$id} berhasil dikirim."
+                : "Operasi invoice #{$id} berhasil, tetapi pengiriman pengingat tertunda/gagal dan dapat dicoba kembali.";
+            return redirect()->route('invoices.index')->with($notificationDelivered && $eventDispatched ? 'success' : 'warning', $message);
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal mengirim pengingat: ' . $this->safeExceptionMessage($e)]);
         }

@@ -24,6 +24,16 @@ class PaymentRepository extends BaseSheetRepository implements PaymentRepository
         return $items->firstWhere($this->primaryKey, $id);
     }
 
+    public function getAllFresh()
+    {
+        return $this->fetchAllFresh();
+    }
+
+    public function getByIdFresh($id)
+    {
+        return $this->findByIdFresh($id);
+    }
+
     public function create(array $data)
     {
         return $this->append($data);

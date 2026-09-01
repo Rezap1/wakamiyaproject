@@ -4,6 +4,7 @@ namespace App\Services\Core;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
 use App\Support\ActorIdentity;
+use App\Exceptions\FinancialIntegrityException;
 
 class NotificationService
 {
@@ -21,8 +22,56 @@ class NotificationService
 
     public function getById($id) { return $this->repo->getById($id); }
 
+    /**
+     * Deterministic, same-day reminder lookup used by the invoice scheduler.
+     * Prefer a fresh repository read so reruns cannot be fooled by stale cache.
+     */
+    public function hasReminder(string $invoiceId, int $daysToDue, string $date): bool
+    {
+        if ($invoiceId === '') {
+            return false;
+        }
+        if (method_exists($this->repo, 'fetchHeadersFresh')) {
+            $headers = $this->repo->fetchHeadersFresh();
+            $missing = array_values(array_diff(['Reference_Type', 'Reference_ID'], $headers));
+            if ($missing !== []) {
+                throw new FinancialIntegrityException(
+                    'Notification schema tidak mendukung durable reminder identity: ' . implode(', ', $missing)
+                );
+            }
+        }
+        $rows = method_exists($this->repo, 'getAllFresh')
+            ? $this->repo->getAllFresh()
+            : $this->repo->getAll();
+        // Do not claim durable deduplication when the production schema
+        // cannot expose the identity columns required for it.
+        if (collect($rows)->isNotEmpty()
+            && !collect($rows)->contains(fn ($row) => array_key_exists('Reference_Type', (array) $row)
+                || array_key_exists('Reference_ID', (array) $row))) {
+            throw new FinancialIntegrityException('Notification schema tidak mendukung durable reminder identity.');
+        }
+        $title = "Reminder Tagihan (H-{$daysToDue})";
+        return collect($rows)->contains(function ($row) use ($invoiceId, $title, $date) {
+            if (strcasecmp((string) ($row['Reference_Type'] ?? ''), 'Invoice') !== 0
+                || trim((string) ($row['Reference_ID'] ?? '')) !== $invoiceId) {
+                return false;
+            }
+            if (($row['Title'] ?? '') !== $title) {
+                return false;
+            }
+            $created = (string) ($row['Created_At'] ?? '');
+            return $created !== '' && str_starts_with($created, $date);
+        });
+    }
+
     public function CreateNotification(array $data)
     {
+        // The production sheet calls this column Link; older callers used
+        // Action_URL. Preserve the URL in the persisted equivalent instead
+        // of silently dropping it.
+        if (!array_key_exists('Link', $data) && array_key_exists('Action_URL', $data)) {
+            $data['Link'] = $data['Action_URL'];
+        }
         $data['Created_By'] = ActorIdentity::resolve($data['Created_By'] ?? null);
         $data['Notification_ID'] = $data['Notification_ID'] ?? uniqid('NOTIF_');
         $data['Status'] = $data['Status'] ?? 'Pending';

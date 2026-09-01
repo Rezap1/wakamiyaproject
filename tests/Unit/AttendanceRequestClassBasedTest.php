@@ -37,7 +37,17 @@ class AttendanceRequestClassBasedTest extends TestCase
         }))->andReturn(true);
         $requestRepo->shouldReceive('clearCache')->once();
 
-        $service = $this->service($requestRepo);
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('findById')->once()->with('ATT-STU-A-20260831-CLASS-CLS-A-CLASS_QR')->andReturn(null);
+        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $attendanceRepo->shouldReceive('create')->once()->with(Mockery::on(function ($data) {
+            return $data['Student_ID'] === 'STU-A'
+                && $data['Attendance_Date'] === '2026-08-31'
+                && $data['Status'] === 'IZIN';
+        }))->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->once();
+
+        $service = $this->service($requestRepo, $attendanceRepo);
         $result = $service->createRequest([
             'Attendance_ID' => 'ATT-STU-A-20260831-CLASS-CLS-A-CLASS_QR',
             'Student_ID' => 'STU-A',
@@ -50,6 +60,31 @@ class AttendanceRequestClassBasedTest extends TestCase
             'Evidence_URL' => 'storage/evidence.png',
         ], new GenericUser(['User_ID' => 'USR-A']));
         $this->assertTrue($result);
+    }
+
+    public function test_future_request_is_persisted_as_pending_attendance_immediately(): void
+    {
+        $requestRepo = Mockery::mock(AttendanceRequestRepositoryInterface::class);
+        $requestRepo->shouldReceive('findByStudent')->once()->with('STU-A')->andReturn(collect());
+        $requestRepo->shouldReceive('generateNewId')->once()->andReturn('REQ-FUTURE');
+        $requestRepo->shouldReceive('create')->once()->andReturn(true);
+        $requestRepo->shouldReceive('clearCache')->once();
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('findById')->once()->andReturn(null);
+        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $attendanceRepo->shouldReceive('create')->once()->with(Mockery::on(fn ($row) =>
+            $row['Attendance_Date'] === '2099-01-02' && $row['Status'] === 'IZIN'
+        ))->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->once();
+
+        $service = $this->service($requestRepo, $attendanceRepo);
+        $this->assertTrue($service->createRequest([
+            'Attendance_ID' => 'ATT-STU-A-20990102-CLASS-CLS-A-CLASS_QR',
+            'Student_ID' => 'STU-A', 'Class_ID' => 'CLS-A', 'Schedule_ID' => '',
+            'Attendance_Type' => 'CLASS_QR', 'Attendance_Date' => '2099-01-02',
+            'Request_Type' => 'IZIN', 'Reason' => 'Keperluan', 'Evidence_URL' => 'storage/evidence.png',
+        ], new GenericUser(['User_ID' => 'USR-A'])));
     }
 
     public function test_student_controller_ignores_client_identity_fields_for_class_request(): void
@@ -78,6 +113,33 @@ class AttendanceRequestClassBasedTest extends TestCase
             'Attendance_Type' => 'SCHEDULE',
             'Request_Type' => 'IZIN',
             'Reason' => 'Keperluan',
+        ]);
+        $httpRequest->files->set('Evidence', UploadedFile::fake()->image('evidence.png'));
+
+        $controller = new AttendanceRequestController($requestService, $studentRepo, $scheduleRepo);
+        $response = $controller->store($httpRequest);
+
+        $this->assertSame(302, $response->getStatusCode());
+    }
+
+    public function test_student_controller_expands_end_date_into_one_request_per_date(): void
+    {
+        Storage::fake('local');
+        $requestService = Mockery::mock(AttendanceRequestService::class);
+        $requestService->shouldReceive('createRequest')->times(3)->withArgs(function ($data) {
+            return in_array($data['Attendance_Date'], ['2099-01-01', '2099-01-02', '2099-01-03'], true)
+                && $data['Student_ID'] === 'STU-A';
+        })->andReturn(true);
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Student_ID' => 'STU-A', 'User_ID' => 'USR-A', 'Class_ID' => 'CLS-A'],
+        ]));
+        $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
+
+        $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
+        $httpRequest = Request::create('/student/attendance/requests', 'POST', [
+            'Attendance_Date' => '2099-01-01', 'End_Date' => '2099-01-03',
+            'Schedule_ID' => '', 'Request_Type' => 'IZIN', 'Reason' => 'Keperluan',
         ]);
         $httpRequest->files->set('Evidence', UploadedFile::fake()->image('evidence.png'));
 

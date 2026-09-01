@@ -14,6 +14,7 @@ class NotificationRepository extends BaseSheetRepository implements Notification
     }
 
     public function getAll() { return $this->fetchAll(); }
+    public function getAllFresh() { return $this->fetchAllFresh(); }
     public function getById($id) { return $this->fetchAll()->firstWhere($this->primaryKey, $id); }
     public function create(array $data) { return $this->append($data); }
     public function update($id, array $data) { return $this->updateRow($id, $data); }

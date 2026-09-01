@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Services\Core\SystemSettingService;
 use App\Services\Core\AuditLogService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class FinanceSettingsController extends Controller
 {
@@ -54,14 +55,16 @@ class FinanceSettingsController extends Controller
         foreach ($settingsData as $id => $value) {
             if ($this->settingService->set($id, $value, $userEmail)) {
                 $changes++;
-                try { $this->auditService->log('Finance_Settings', 'Update_Setting', 'Setting', $id, null, $value); } catch (\Exception $e) {}
+                try { $auditResult = $this->auditService->log('Finance_Settings', 'Update_Setting', 'Setting', $id, null, $value); if ($auditResult === false) { Log::warning('finance.settings_audit_failed', ['entity' => 'Setting', 'id' => (string) $id, 'reason' => 'audit_service_returned_false']); } }
+                catch (\Throwable $e) { Log::warning('finance.settings_audit_failed', ['entity' => 'Setting', 'id' => (string) $id, 'exception' => get_class($e)]); }
             }
         }
 
         foreach ($parametersData as $id => $value) {
             if ($this->settingService->updateParameter($id, $value)) {
                 $changes++;
-                try { $this->auditService->log('Finance_Settings', 'Update_Parameter', 'Parameter', $id, null, $value); } catch (\Exception $e) {}
+                try { $auditResult = $this->auditService->log('Finance_Settings', 'Update_Parameter', 'Parameter', $id, null, $value); if ($auditResult === false) { Log::warning('finance.settings_audit_failed', ['entity' => 'Parameter', 'id' => (string) $id, 'reason' => 'audit_service_returned_false']); } }
+                catch (\Throwable $e) { Log::warning('finance.settings_audit_failed', ['entity' => 'Parameter', 'id' => (string) $id, 'exception' => get_class($e)]); }
             }
         }
 
