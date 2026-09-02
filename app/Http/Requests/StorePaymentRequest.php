@@ -20,7 +20,7 @@ class StorePaymentRequest extends FormRequest
             'Payment_Date' => 'nullable|date',
             'Payment_Method' => 'required|string',
             'Account_ID' => 'nullable|string',
-            'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120),
             'Sender_Name' => 'nullable|string|max:255',
             'Notes' => 'nullable|string'
         ];

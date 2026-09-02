@@ -35,7 +35,7 @@ class StoreEmployeeRequest extends FormRequest
             'Gender' => 'nullable|string|max:20',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',
-            'Profile_Photo' => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'Profile_Photo' => 'nullable|file|image|mimes:jpeg,png,jpg,webp|max:' . config('upload.max_kb', 5120),
             'National_ID' => [
                 'nullable',
                 'string',

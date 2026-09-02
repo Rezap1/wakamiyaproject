@@ -54,7 +54,7 @@ class UpdateStudentRequest extends FormRequest
             'Graduation_Status' => 'nullable|string|max:50',
             'Is_Active' => 'nullable|in:TRUE,FALSE',
             'Notes' => 'nullable|string',
-            'Photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'Photo' => 'nullable|image|mimes:jpeg,png,jpg|max:' . config('upload.max_kb', 5120),
             'Phone_Number' => 'nullable|string|max:20',
             'Email' => 'nullable|email|max:100'
         ];
@@ -67,7 +67,7 @@ class UpdateStudentRequest extends FormRequest
             'Batch_ID.required' => 'Angkatan (Batch) wajib dipilih.',
             'Class_ID.required' => 'Kelas wajib dipilih.',
             'Photo.image' => 'File harus berupa gambar.',
-            'Photo.max' => 'Ukuran gambar maksimal 2MB.',
+            'Photo.max' => 'Ukuran gambar maksimal 5MB.',
             'Registration_Date.required' => 'Tanggal registrasi wajib diisi.',
             'User_ID.required' => 'Akun Pengguna (User) wajib dipilih.'
         ];

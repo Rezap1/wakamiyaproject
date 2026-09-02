@@ -90,7 +90,7 @@ class AttendanceRequestController extends Controller
             'Schedule_ID' => 'nullable|string',
             'Request_Type' => 'required|in:SAKIT,IZIN',
             'Reason' => 'required|string|max:500',
-            'Evidence' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'Evidence' => 'required|image|mimes:jpeg,png,jpg,webp|max:' . config('upload.max_kb', 5120),
         ]);
 
         $scheduleId = trim((string) ($request->input('Schedule_ID') ?? ''));

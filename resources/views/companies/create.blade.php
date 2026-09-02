@@ -55,8 +55,8 @@
                                 <img id="logo-preview" src="#" alt="Logo Preview" class="hidden h-full w-full object-cover">
                             </div>
                             <div class="flex-grow">
-                                <input type="file" name="Company_Logo" id="Company_Logo" accept="image/jpeg,image/png,image/svg+xml" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors">
-                                <p class="mt-1.5 text-xs text-slate-500">Maks. 2MB (JPG, PNG, SVG)</p>
+                                <input type="file" name="Company_Logo" id="Company_Logo" accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors">
+                                <p class="mt-1.5 text-xs text-slate-500">Maks. 5MB (JPG, PNG, WEBP)</p>
                             </div>
                         </div>
                     </div>
@@ -69,8 +69,8 @@
                                 <img id="stamp-preview" src="#" alt="Stamp Preview" class="hidden h-full w-full object-cover">
                             </div>
                             <div class="flex-grow">
-                                <input type="file" name="Company_Stamp" id="Company_Stamp" accept="image/jpeg,image/png,image/svg+xml" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors">
-                                <p class="mt-1.5 text-xs text-slate-500">Maks. 2MB (JPG, PNG, SVG)</p>
+                                <input type="file" name="Company_Stamp" id="Company_Stamp" accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors">
+                                <p class="mt-1.5 text-xs text-slate-500">Maks. 5MB (JPG, PNG, WEBP)</p>
                             </div>
                         </div>
                     </div>

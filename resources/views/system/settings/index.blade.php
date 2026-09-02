@@ -667,7 +667,7 @@
                                                 </div>
                                             @endif
                                             <input type="file" name="setting_files[{{ $s['Setting_ID'] }}]" accept="image/jpeg,image/png,image/jpg,image/webp" class="block w-full text-xs text-slate-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-sky-500 file:text-slate-950 hover:file:bg-sky-400 transition-all cursor-pointer min-h-[46px] border-2 border-dashed border-slate-300 rounded-xl p-2 bg-slate-50 hover:bg-white">
-                                            <p class="text-[11px] text-slate-500 font-medium">Format: JPG, PNG, WEBP. Maksimal file: 2MB.</p>
+                                            <p class="text-[11px] text-slate-500 font-medium">Format: JPG, PNG, WEBP. Maksimal file: 5MB.</p>
                                         </div>
                                     @else
                                         <input type="{{ ($s['Value_Type'] ?? 'text') == 'number' ? 'number' : 'text' }}" name="settings[{{ $s['Setting_ID'] }}]" value="{{ $s['Setting_Value'] }}" class="w-full rounded-xl border-2 border-slate-300 hover:border-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 bg-white text-slate-900 text-xs font-semibold p-3 min-h-[46px] shadow-sm transition-all outline-none placeholder:text-slate-400">

@@ -182,7 +182,7 @@
                             name="Photo" 
                             label="Pas Foto Siswa (Opsional)" 
                             type="file"
-                            helper="Foto ini akan otomatis digunakan sebagai foto profil akun Siswa. Format: JPG, PNG. Maks: 2MB."
+                            helper="Foto ini akan otomatis digunakan sebagai foto profil akun Siswa. Format: JPG, PNG. Maks: 5MB."
                         />
                     </div>
                     

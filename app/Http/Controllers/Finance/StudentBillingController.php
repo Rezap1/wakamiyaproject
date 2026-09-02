@@ -128,7 +128,7 @@ class StudentBillingController extends Controller
                 'Transfer_Date' => 'required|date_format:Y-m-d',
                 'Payment_Method' => 'required|string|in:TRANSFER,CASH',
                 'Idempotency_Key' => 'required|uuid',
-                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120),
             ]);
             if ($request->hasFile('Proof_File')) {
                 $proofFile = $request->file('Proof_File')->store('payments');
@@ -241,7 +241,7 @@ class StudentBillingController extends Controller
                 'Sender_Name' => 'required|string|max:255',
                 'Transfer_Date' => 'required|date',
                 'Idempotency_Key' => 'nullable|uuid',
-                'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120'
+                'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120)
             ]);
 
             if ($request->hasFile('Proof_File')) {

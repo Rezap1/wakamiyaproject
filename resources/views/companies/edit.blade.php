@@ -64,8 +64,8 @@
                                 @endif
                             </div>
                             <div class="flex-grow">
-                                <input type="file" name="Company_Logo" id="Company_Logo" accept="image/jpeg,image/png,image/svg+xml" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors mb-2">
-                                <p class="text-xs text-slate-500 mb-2">Pilih file baru untuk mengganti logo lama.</p>
+                                <input type="file" name="Company_Logo" id="Company_Logo" accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors mb-2">
+                                <p class="text-xs text-slate-500 mb-2">JPG, PNG, atau WEBP; maksimum 5MB. Pilih file baru untuk mengganti logo lama.</p>
                                 
                                 @if(!empty($company['Company_Logo']))
                                 <label class="inline-flex items-center text-sm text-rose-600 font-medium cursor-pointer">
@@ -91,8 +91,8 @@
                                 @endif
                             </div>
                             <div class="flex-grow">
-                                <input type="file" name="Company_Stamp" id="Company_Stamp" accept="image/jpeg,image/png,image/svg+xml" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors mb-2">
-                                <p class="text-xs text-slate-500 mb-2">Pilih file baru untuk mengganti stempel lama.</p>
+                                <input type="file" name="Company_Stamp" id="Company_Stamp" accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors mb-2">
+                                <p class="text-xs text-slate-500 mb-2">JPG, PNG, atau WEBP; maksimum 5MB. Pilih file baru untuk mengganti stempel lama.</p>
                                 
                                 @if(!empty($company['Company_Stamp']))
                                 <label class="inline-flex items-center text-sm text-rose-600 font-medium cursor-pointer">

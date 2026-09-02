@@ -194,7 +194,7 @@ class PayrollController extends Controller
         try {
             $user = $this->authenticatedActor();
             $request->validate([
-                'Payment_Proof' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120'
+                'Payment_Proof' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120)
             ]);
 
             if ($request->hasFile('Payment_Proof')) {

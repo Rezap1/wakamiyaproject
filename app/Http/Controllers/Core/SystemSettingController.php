@@ -106,7 +106,7 @@ class SystemSettingController extends Controller
         // Handle file uploads for settings with Value_Type = 'file'
         if ($request->hasFile('setting_files')) {
             $allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-            $maxSize = 2 * 1024 * 1024; // 2MB
+            $maxSize = (int) config('upload.max_bytes', 5 * 1024 * 1024);
 
             foreach ($request->file('setting_files') as $settingId => $file) {
                 if (!$file->isValid()) {
@@ -120,7 +120,7 @@ class SystemSettingController extends Controller
 
                 // Validate file size
                 if ($file->getSize() > $maxSize) {
-                    return back()->withErrors(['error' => "File untuk {$settingId} maksimal 2MB."])->withInput();
+                    return back()->withErrors(['error' => "File untuk {$settingId} maksimal 5MB."])->withInput();
                 }
 
                 // Determine storage subdirectory based on setting key

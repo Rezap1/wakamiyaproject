@@ -63,9 +63,9 @@ class UpdateCompanyRequest extends FormRequest
             'Email' => 'nullable|email|max:150',
             'Website' => 'nullable|url|max:255',
             'Director_Name' => 'nullable|string|max:150',
-            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'Company_Logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:' . config('upload.max_kb', 5120),
             'remove_logo' => 'nullable|in:0,1',
-            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'Company_Stamp' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:' . config('upload.max_kb', 5120),
             'remove_stamp' => 'nullable|in:0,1',
             'Is_Active' => 'required|in:TRUE,FALSE',
             'Notes' => 'nullable|string'
@@ -82,11 +82,11 @@ class UpdateCompanyRequest extends FormRequest
             'Email.email' => 'Format alamat email tidak valid.',
             'Website.url' => 'Format URL website tidak valid (gunakan http:// atau https://).',
             'Company_Logo.image' => 'Logo harus berupa file gambar.',
-            'Company_Logo.mimes' => 'Format logo yang diizinkan hanya JPG, JPEG, PNG, dan SVG.',
-            'Company_Logo.max' => 'Ukuran logo maksimal adalah 2MB.',
+            'Company_Logo.mimes' => 'Format logo yang diizinkan hanya JPG, JPEG, PNG, dan WEBP.',
+            'Company_Logo.max' => 'Ukuran logo maksimal adalah 5MB.',
             'Company_Stamp.image' => 'Stempel harus berupa file gambar.',
-            'Company_Stamp.mimes' => 'Format stempel yang diizinkan hanya JPG, JPEG, PNG, dan SVG.',
-            'Company_Stamp.max' => 'Ukuran stempel maksimal adalah 2MB.'
+            'Company_Stamp.mimes' => 'Format stempel yang diizinkan hanya JPG, JPEG, PNG, dan WEBP.',
+            'Company_Stamp.max' => 'Ukuran stempel maksimal adalah 5MB.'
         ];
     }
 }
