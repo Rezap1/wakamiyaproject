@@ -569,6 +569,18 @@ class FinanceHardeningIntegrityTest extends TestCase
         $service->resolvePaymentAccount('CASH');
     }
 
+    public function test_transfer_reporting_uses_single_active_asset_without_bank_dependency(): void
+    {
+        config(['finance.accounts.cash_id' => null, 'finance.accounts.bank_id' => null]);
+        $repo = Mockery::mock(AccountRepositoryInterface::class);
+        $repo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Account_ID' => 'ACC-1', 'Account_Code' => '101', 'Account_Name' => 'Kas Utama', 'Account_Category' => 'ASSET', 'Is_Active' => 'TRUE'],
+        ]));
+        $service = new PaymentService(new IntegrityPaymentRepository(), new IntegrityInvoiceRepository(), new IntegrityStudentRepository(), new IntegrityCompanyRepository(), $repo, new IntegrityTransactionRepository(), Mockery::mock(EnterpriseEventService::class));
+
+        $this->assertSame('101', $service->resolvePaymentAccount('TRANSFER'));
+    }
+
     public function test_transaction_allocator_uses_persisted_max_over_stale_counter(): void
     {
         $repo = new class extends ConcreteTransactionRepository {

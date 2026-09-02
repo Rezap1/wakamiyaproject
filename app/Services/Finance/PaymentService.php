@@ -265,6 +265,16 @@ class PaymentService
             if ($bankCandidates->count() === 1) return $bankCandidates->first()['Account_Code'] ?? $bankCandidates->first()['Account_ID'];
         }
 
+        // Payment_Method is reporting metadata; WMS does not connect to a
+        // bank. When no method-named account is configured, a single active
+        // asset account is an unambiguous internal ledger destination for
+        // either CASH or TRANSFER. Keep failing closed when multiple assets
+        // exist, because automatic selection would then be ambiguous.
+        if ($assets->count() === 1) {
+            $fallback = $assets->first();
+            return $fallback['Account_Code'] ?? $fallback['Account_ID'];
+        }
+
         throw new FinancialIntegrityException('Tidak ada akun asset aktif yang valid untuk pembayaran ini.');
     }
 
