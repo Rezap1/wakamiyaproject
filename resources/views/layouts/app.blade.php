@@ -44,7 +44,7 @@
 </head>
 <body style="background-color: var(--color-page-bg, #E2E8F0);" class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
 
-    <div class="flex h-screen overflow-hidden">
+    <div class="wms-shell flex min-h-screen lg:h-screen lg:overflow-hidden">
         
         <!-- Sidebar Overlay (Visible on all screens when sidebar is open) -->
         <div id="mobile-sidebar-overlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 hidden transition-opacity duration-300 opacity-0" onclick="toggleSidebar()"></div>
@@ -53,7 +53,7 @@
         <x-dashboard.sidebar :userRole="$userRole ?? 'Unknown'" />
 
         <!-- Main Content -->
-        <main class="main-content flex-1 flex flex-col relative z-0 overflow-y-auto bg-gray-300">
+        <main class="main-content flex-1 flex flex-col relative z-0 bg-gray-300">
             
             <!-- Framework Component: Topbar -->
             <x-dashboard.topbar :userRole="$userRole ?? 'Unknown'">
@@ -63,7 +63,7 @@
             </x-dashboard.topbar>
 
             <!-- Content -->
-            <div class="p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
+            <div class="wms-page-content p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
 
 
                 @yield('content')

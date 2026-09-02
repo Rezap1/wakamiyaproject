@@ -38,3 +38,46 @@
     display: block !important;
   }
 }
+
+/*
+ * Mobile pages use the document as the single vertical scroll container.
+ * The fixed bottom navigation is deliberately paired with this reserved
+ * inset so the final form control/card is always reachable above the home
+ * indicator. Desktop keeps the established bounded content scroller.
+ */
+html,
+body {
+  min-height: 100%;
+}
+
+.wms-shell {
+  min-height: 100dvh;
+}
+
+@media (min-width: 1024px) {
+  .wms-shell {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-content {
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 1023px) {
+  .main-content {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 767px) {
+  .wms-page-content {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-bottom-nav {
+    min-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  }
+}
