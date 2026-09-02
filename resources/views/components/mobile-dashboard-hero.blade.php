@@ -38,28 +38,30 @@
     $totalCompanies = 0;
     
     try {
-        $heroCounts = \Illuminate\Support\Facades\Cache::remember('mobile_dashboard_hero_counts', (int) config('cache.wms.dashboard', 60), function () {
-            $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
-            $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
-            $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
-            $batchRepo = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class);
+        if (in_array($role, ['HR', 'ACADEMIC', 'MARKETING', 'ADMINISTRATOR'], true)) {
+            $heroCounts = \Illuminate\Support\Facades\Cache::remember('mobile_dashboard_hero_counts', (int) config('cache.wms.dashboard', 60), function () {
+                $userRepo = app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class);
+                $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+                $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
+                $batchRepo = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class);
 
-            $employees = collect($employeeRepo->fetchAll());
+                $employees = collect($employeeRepo->fetchAll());
 
-            return [
-                'totalUsers' => collect($userRepo->fetchAll())->count(),
-                'totalStudents' => collect($studentRepo->fetchAll())->count(),
-                'totalHrEmployees' => $employees->count(),
-                'totalTeachers' => $employees->filter(fn ($e) => str_contains(strtoupper($e['Position_ID'] ?? $e['Department_ID'] ?? ''), 'TEACHER') || str_contains(strtoupper($e['Job_Title'] ?? ''), 'GURU'))->count(),
-                'totalBatches' => collect($batchRepo->fetchAll())->count(),
-            ];
-        });
+                return [
+                    'totalUsers' => collect($userRepo->fetchAll())->count(),
+                    'totalStudents' => collect($studentRepo->fetchAll())->count(),
+                    'totalHrEmployees' => $employees->count(),
+                    'totalTeachers' => $employees->filter(fn ($e) => str_contains(strtoupper($e['Position_ID'] ?? $e['Department_ID'] ?? ''), 'TEACHER') || str_contains(strtoupper($e['Job_Title'] ?? ''), 'GURU'))->count(),
+                    'totalBatches' => collect($batchRepo->fetchAll())->count(),
+                ];
+            });
 
-        $totalUsers = $heroCounts['totalUsers'] ?? 0;
-        $totalStudents = $heroCounts['totalStudents'] ?? 0;
-        $totalHrEmployees = $heroCounts['totalHrEmployees'] ?? 0;
-        $totalTeachers = $heroCounts['totalTeachers'] ?? 0;
-        $totalBatches = $heroCounts['totalBatches'] ?? 0;
+            $totalUsers = $heroCounts['totalUsers'] ?? 0;
+            $totalStudents = $heroCounts['totalStudents'] ?? 0;
+            $totalHrEmployees = $heroCounts['totalHrEmployees'] ?? 0;
+            $totalTeachers = $heroCounts['totalTeachers'] ?? 0;
+            $totalBatches = $heroCounts['totalBatches'] ?? 0;
+        }
     } catch (\Throwable $e) {}
 
     if ($role === 'FINANCE' || isset($kpiData['cash_balance'])) {
@@ -89,8 +91,14 @@
 
         <div class="flex items-center gap-2.5">
             @php
-                $notifService = app(\App\Services\Core\NotificationService::class);
-                $unreadCount = $notifService->UnreadCount();
+                $notificationUnavailable = false;
+                try {
+                    $notifService = app(\App\Services\Core\NotificationService::class);
+                    $unreadCount = $notifService->summarizeForUser(null, $role, 1)['unreadCount'] ?? 0;
+                } catch (\Throwable $e) {
+                    $notificationUnavailable = true;
+                    $unreadCount = 0;
+                }
             @endphp
             <a href="{{ route('notifications.index') }}" class="relative p-2 rounded-2xl bg-white border border-slate-200/80 shadow-xs text-slate-700 hover:text-sky-600 transition-colors shrink-0">
                 <svg class="w-5.5 h-5.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -98,6 +106,9 @@
                 </svg>
                 @if($unreadCount > 0)
                     <span class="absolute top-0.5 right-0.5 min-w-4.5 h-4.5 px-1 bg-rose-500 text-white text-[9px] font-black rounded-full border-2 border-white flex items-center justify-center shadow-xs">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                @endif
+                @if($notificationUnavailable)
+                    <span class="absolute -bottom-1 -right-1 text-[8px] font-bold text-slate-400">!</span>
                 @endif
             </a>
             <a href="{{ route('profile.index') }}" class="block">

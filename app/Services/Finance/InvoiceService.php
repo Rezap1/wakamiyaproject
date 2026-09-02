@@ -41,27 +41,71 @@ class InvoiceService
         $this->paymentRepository = $paymentRepository;
     }
 
-    public function getVerifiedPaymentTotal(string $invoiceId): float
+    public function getVerifiedPaymentTotal(string $invoiceId, ?iterable $paymentSnapshot = null): float
     {
         if (empty($invoiceId)) return 0.0;
-        
-        $allPayments = method_exists($this->paymentRepository, 'getAllFresh')
-            ? $this->paymentRepository->getAllFresh()
-            : $this->paymentRepository->getAll();
+
+        $allPayments = $paymentSnapshot ?? $this->freshPaymentSnapshot();
         return (float) collect($allPayments)
             ->where('Invoice_ID', $invoiceId)
             ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
             ->sum(fn ($payment) => Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
     }
 
-    public function calculateRemainingAmount(array $invoice): float
+    private function freshPaymentSnapshot(): \Illuminate\Support\Collection
+    {
+        return collect(method_exists($this->paymentRepository, 'getAllFresh')
+            ? $this->paymentRepository->getAllFresh()
+            : $this->paymentRepository->getAll());
+    }
+
+    private function verifiedPaymentTotalsByInvoice(iterable $payments, array $invoiceIds): array
+    {
+        $invoiceIdSet = array_fill_keys(array_map('strval', $invoiceIds), true);
+        $totals = [];
+
+        foreach ($payments as $payment) {
+            $invoiceId = (string) ($payment['Invoice_ID'] ?? '');
+            if ($invoiceId === '' || !isset($invoiceIdSet[$invoiceId])) {
+                continue;
+            }
+
+            if (!PaymentStatus::verified($payment['Status'] ?? null)) {
+                continue;
+            }
+
+            $totals[$invoiceId] = ($totals[$invoiceId] ?? 0)
+                + Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran');
+        }
+
+        foreach ($totals as $invoiceId => $cents) {
+            $totals[$invoiceId] = $cents / 100;
+        }
+
+        return $totals;
+    }
+
+    private function verifiedPaymentTotalFromIndex(string $invoiceId, ?array $verifiedPaymentTotalsByInvoice, ?iterable $paymentSnapshot): float
+    {
+        if ($invoiceId === '') {
+            return 0.0;
+        }
+
+        if ($verifiedPaymentTotalsByInvoice !== null) {
+            return (float) ($verifiedPaymentTotalsByInvoice[$invoiceId] ?? 0.0);
+        }
+
+        return $this->getVerifiedPaymentTotal($invoiceId, $paymentSnapshot);
+    }
+
+    public function calculateRemainingAmount(array $invoice, ?array $verifiedPaymentTotalsByInvoice = null, ?iterable $paymentSnapshot = null): float
     {
         $amount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
-        $paid = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
+        $paid = $this->verifiedPaymentTotalFromIndex((string) ($invoice['Invoice_ID'] ?? ''), $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
         return max(0.0, round($amount - Money::value($paid, 'Verified payment total'), Money::SCALE));
     }
 
-    public function resolveDynamicStatus(array $invoice): string
+    public function resolveDynamicStatus(array $invoice, ?array $verifiedPaymentTotalsByInvoice = null, ?iterable $paymentSnapshot = null): string
     {
         $currentStatus = trim($invoice['Status'] ?? 'Draft');
 
@@ -73,7 +117,7 @@ class InvoiceService
             return 'Draft';
         }
 
-        $remaining = $this->calculateRemainingAmount($invoice);
+        $remaining = $this->calculateRemainingAmount($invoice, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
         
         if ($remaining <= 0) {
             return 'Paid';
@@ -93,7 +137,7 @@ class InvoiceService
             return 'OVERDUE';
         }
 
-        $paid = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
+        $paid = $this->verifiedPaymentTotalFromIndex((string) ($invoice['Invoice_ID'] ?? ''), $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
         
         if ($paid > 0 && $remaining > 0) {
             return 'Partial Paid';
@@ -102,7 +146,7 @@ class InvoiceService
         return 'Waiting Payment';
     }
 
-    public function formatInvoiceRecord(array $invoice): array
+    public function formatInvoiceRecord(array $invoice, ?array $verifiedPaymentTotalsByInvoice = null, ?iterable $paymentSnapshot = null): array
     {
         // Process Line Items
         $lineItems = [];
@@ -150,8 +194,9 @@ class InvoiceService
 
         // Resolve status and balances only after canonical Amount is known.
         $invoice['Amount'] = $grandTotal;
-        $dynamicStatus = $this->resolveDynamicStatus($invoice);
-        $paidAmount = $this->getVerifiedPaymentTotal($invoice['Invoice_ID'] ?? '');
+        $invoiceId = (string) ($invoice['Invoice_ID'] ?? '');
+        $dynamicStatus = $this->resolveDynamicStatus($invoice, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
+        $paidAmount = $this->verifiedPaymentTotalFromIndex($invoiceId, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
         $remainingAmount = max(0.0, round($grandTotal - Money::value($paidAmount, 'Verified payment total'), Money::SCALE));
 
         $invoice['Parsed_Line_Items'] = $lineItems;
@@ -265,22 +310,31 @@ class InvoiceService
         return false;
     }
 
-    public function getStudentTuitionFee(string $studentId): float
+    public function getStudentTuitionFee(
+        string $studentId,
+        ?array $studentSnapshot = null,
+        ?iterable $programSnapshot = null,
+        ?iterable $batchSnapshot = null
+    ): float
     {
         $settingService = app(\App\Services\Core\SystemSettingService::class);
         $tuitionFee = (float) $settingService->getDefaultTuitionFee();
-        $student = $this->studentRepository->findById($studentId);
+        $student = $studentSnapshot ?? $this->studentRepository->findById($studentId);
 
         if ($student) {
             if (!empty($student['Program_ID'])) {
-                $program = app(\App\Interfaces\GoogleSheets\ProgramRepositoryInterface::class)->findById($student['Program_ID']);
+                $program = $programSnapshot !== null
+                    ? collect($programSnapshot)->firstWhere('Program_ID', $student['Program_ID'])
+                    : app(\App\Interfaces\GoogleSheets\ProgramRepositoryInterface::class)->findById($student['Program_ID']);
                 if ($program && !empty($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
                     $tuitionFee = (float) $program['Tuition_Fee'];
                 }
             }
 
             if (!empty($student['Batch_ID'])) {
-                $batch = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->findById($student['Batch_ID']);
+                $batch = $batchSnapshot !== null
+                    ? collect($batchSnapshot)->firstWhere('Batch_ID', $student['Batch_ID'])
+                    : app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->findById($student['Batch_ID']);
                 if ($batch && !empty($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
                     $tuitionFee = (float) $batch['Tuition_Fee'];
                 }
@@ -290,12 +344,24 @@ class InvoiceService
         return max(0.0, $tuitionFee);
     }
 
-    public function getStudentEducationBillingSummary(string $studentId, ?string $excludeInvoiceId = null): array
+    public function getStudentEducationBillingSummary(
+        string $studentId,
+        ?string $excludeInvoiceId = null,
+        ?iterable $invoiceSnapshot = null,
+        ?iterable $paymentSnapshot = null,
+        ?array $studentSnapshot = null,
+        ?iterable $programSnapshot = null,
+        ?iterable $batchSnapshot = null
+    ): array
     {
-        $tuitionFee = $this->getStudentTuitionFee($studentId);
-        $educationInvoices = collect(method_exists($this->repository, 'getAllFresh')
-            ? $this->repository->getAllFresh()
-            : $this->repository->getAll())->filter(function ($invoice) use ($studentId, $excludeInvoiceId) {
+        $tuitionFee = $this->getStudentTuitionFee($studentId, $studentSnapshot, $programSnapshot, $batchSnapshot);
+        $invoiceRows = $invoiceSnapshot !== null
+            ? collect($invoiceSnapshot)
+            : collect(method_exists($this->repository, 'getAllFresh')
+                ? $this->repository->getAllFresh()
+                : $this->repository->getAll());
+
+        $educationInvoices = $invoiceRows->filter(function ($invoice) use ($studentId, $excludeInvoiceId) {
             $status = strtolower(trim($invoice['Status'] ?? ''));
 
             return ($invoice['Student_ID'] ?? '') === $studentId
@@ -307,14 +373,26 @@ class InvoiceService
 
         $invoiceIds = $educationInvoices->pluck('Invoice_ID')->filter()->values()->all();
         $billedCents = $educationInvoices->sum(fn($invoice) => Money::cents($this->rawInvoiceAmount($invoice), 'Invoice Amount'));
-        $paidCents = collect(method_exists($this->paymentRepository, 'getAllFresh')
-            ? $this->paymentRepository->getAllFresh()
-            : $this->paymentRepository->getAll())
-            ->whereIn('Invoice_ID', $invoiceIds)
-            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-            ->sum(fn($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
-        $billed = $billedCents / 100;
-        $paid = $paidCents / 100;
+        $paidCents = 0;
+        $canUseInvoicePaidAmounts = $paymentSnapshot === null
+            && $invoiceSnapshot !== null
+            && $educationInvoices->every(fn ($invoice) => array_key_exists('Paid_Amount', (array) $invoice));
+
+        if ($canUseInvoicePaidAmounts) {
+            $paidCents = $educationInvoices->sum(fn ($invoice) => Money::cents($invoice['Paid_Amount'] ?? 0, 'Verified payment total'));
+        } else {
+            $paymentRows = $paymentSnapshot !== null
+                ? collect($paymentSnapshot)
+                : collect(method_exists($this->paymentRepository, 'getAllFresh')
+                    ? $this->paymentRepository->getAllFresh()
+                    : $this->paymentRepository->getAll());
+            $paidCents = $paymentRows
+                ->whereIn('Invoice_ID', $invoiceIds)
+                ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+                ->sum(fn($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        }
+        $billed = (float) ($billedCents / 100);
+        $paid = (float) ($paidCents / 100);
 
         return [
             'tuition_fee' => $tuitionFee,
@@ -403,8 +481,14 @@ class InvoiceService
             }
         }
 
-        return $invoices->map(function($inv) {
-            return $this->formatInvoiceRecord($inv);
+        $paymentSnapshot = $this->freshPaymentSnapshot();
+        $verifiedPaymentTotalsByInvoice = $this->verifiedPaymentTotalsByInvoice(
+            $paymentSnapshot,
+            $invoices->pluck('Invoice_ID')->filter()->values()->all()
+        );
+
+        return $invoices->map(function($inv) use ($verifiedPaymentTotalsByInvoice, $paymentSnapshot) {
+            return $this->formatInvoiceRecord($inv, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
         });
     }
 

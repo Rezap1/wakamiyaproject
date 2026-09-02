@@ -35,22 +35,29 @@ class StudentBillingController extends Controller
         $this->batchRepo = $batchRepo;
     }
 
-    private function getStudentId()
+    private function getStudentProfile(): array
     {
         $user = auth()->user();
         if ($user && isset($user->User_ID)) {
             $student = collect($this->studentRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
             if ($student) {
-                return $student['Student_ID'];
+                return (array) $student;
             }
         }
 
         abort(403, 'Profil siswa tidak ditemukan.');
     }
 
+    private function getStudentId()
+    {
+        $student = $this->getStudentProfile();
+        return $student['Student_ID'];
+    }
+
     public function index()
     {
-        $studentId = $this->getStudentId();
+        $student = $this->getStudentProfile();
+        $studentId = $student['Student_ID'];
         
         $allInvoices = $this->invoiceService->getAll();
         $myInvoices = $allInvoices->filter(function($inv) use ($studentId) {
@@ -72,7 +79,13 @@ class StudentBillingController extends Controller
             ->sum('Remaining_Amount');
         $totalPaid = $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))->sum('Amount_Paid');
 
-        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary($studentId);
+        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary(
+            $studentId,
+            null,
+            $myInvoices,
+            $myPayments,
+            $student
+        );
         $biayaBelajar = $educationSummary['tuition_fee'];
         $totalDibayarPendidikan = $educationSummary['education_paid'];
         $sisaTagihan = $educationSummary['remaining_to_pay'];

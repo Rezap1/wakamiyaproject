@@ -303,6 +303,44 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertSame(Command::FAILURE, $command->handle($invoiceService, $notification));
     }
 
+    public function test_student_billing_invoice_list_reads_payments_once_for_multiple_invoices(): void
+    {
+        $invoiceRepo = Mockery::mock(InvoiceRepositoryInterface::class);
+        $invoiceRepo->shouldReceive('getAll')->once()->andReturn(collect([
+            ['Invoice_ID' => 'INV-1', 'Student_ID' => 'STU-1', 'Amount' => 100, 'Status' => 'Waiting Payment', 'Due_Date' => now()->addDays(7)->toDateString(), 'Is_Active' => 'TRUE'],
+            ['Invoice_ID' => 'INV-2', 'Student_ID' => 'STU-1', 'Amount' => 200, 'Status' => 'Waiting Payment', 'Due_Date' => now()->addDays(7)->toDateString(), 'Is_Active' => 'TRUE'],
+            ['Invoice_ID' => 'INV-3', 'Student_ID' => 'STU-1', 'Amount' => 300, 'Status' => 'Waiting Payment', 'Due_Date' => now()->addDays(7)->toDateString(), 'Is_Active' => 'TRUE'],
+        ]));
+
+        $paymentRepo = new CountingFreshPaymentRepository([
+            ['Payment_ID' => 'PAY-1', 'Invoice_ID' => 'INV-1', 'Amount_Paid' => 40, 'Status' => 'Verified'],
+            ['Payment_ID' => 'PAY-2', 'Invoice_ID' => 'INV-2', 'Amount_Paid' => 200, 'Status' => 'Verified'],
+            ['Payment_ID' => 'PAY-3', 'Invoice_ID' => 'INV-2', 'Amount_Paid' => 25, 'Status' => 'Waiting Verification'],
+            ['Payment_ID' => 'PAY-4', 'Invoice_ID' => 'INV-3', 'Amount_Paid' => 25, 'Status' => 'Verified'],
+        ]);
+
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldNotReceive('fetchAll');
+        $companyRepo = Mockery::mock(CompanyRepositoryInterface::class);
+        $events = Mockery::mock(EnterpriseEventService::class);
+        $events->shouldReceive('dispatch')->zeroOrMoreTimes()->andReturnTrue();
+
+        $service = new InvoiceService($invoiceRepo, $events, $studentRepo, $companyRepo, $paymentRepo);
+        $invoices = $service->getAll();
+
+        $this->assertCount(3, $invoices);
+        $this->assertSame('Partial Paid', $invoices[0]['Display_Status']);
+        $this->assertSame(40.0, (float) $invoices[0]['Paid_Amount']);
+        $this->assertSame(60.0, (float) $invoices[0]['Remaining_Amount']);
+        $this->assertSame('Paid', $invoices[1]['Display_Status']);
+        $this->assertSame(200.0, (float) $invoices[1]['Paid_Amount']);
+        $this->assertSame(0.0, (float) $invoices[1]['Remaining_Amount']);
+        $this->assertSame('Partial Paid', $invoices[2]['Display_Status']);
+        $this->assertSame(25.0, (float) $invoices[2]['Paid_Amount']);
+        $this->assertSame(275.0, (float) $invoices[2]['Remaining_Amount']);
+        $this->assertSame(1, $paymentRepo->freshReads);
+    }
+
     public function test_dashboard_excludes_draft_cancelled_and_future_cash(): void
     {
         $invoiceService = Mockery::mock(InvoiceService::class);
@@ -771,6 +809,52 @@ class IntegrityPaymentRepository implements PaymentRepositoryInterface
     public function update($id, array $data) { foreach ($this->rows as &$row) if (($row['Payment_ID'] ?? '') === $id) $row = array_merge($row, $data); return true; }
     public function delete($id) { return false; }
     public function clearCache() {}
+}
+
+class CountingFreshPaymentRepository implements PaymentRepositoryInterface
+{
+    public int $freshReads = 0;
+
+    public function __construct(public array $rows = [])
+    {
+    }
+
+    public function getAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function getAllFresh()
+    {
+        $this->freshReads++;
+        return collect($this->rows);
+    }
+
+    public function getById($id)
+    {
+        return collect($this->rows)->firstWhere('Payment_ID', $id);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+        return $data;
+    }
+
+    public function update($id, array $data)
+    {
+        foreach ($this->rows as &$row) {
+            if (($row['Payment_ID'] ?? '') === $id) {
+                $row = array_merge($row, $data);
+            }
+        }
+        return true;
+    }
+
+    public function delete($id)
+    {
+        return false;
+    }
 }
 
 class IntegrityInvoiceRepository implements InvoiceRepositoryInterface

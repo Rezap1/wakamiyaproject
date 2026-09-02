@@ -16,6 +16,15 @@ class UserResolverHelper
         }
 
         $trimmed = trim($identifier);
+        $cacheKey = 'user_resolver_name_' . md5($trimmed);
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request && $request->attributes->has($cacheKey)) {
+                    return (string) $request->attributes->get($cacheKey);
+                }
+            } catch (\Throwable) {}
+        }
 
         // 1. Check Employees
         $employees = Cache::remember('all_employees_lookup_map', 300, function () {
@@ -102,7 +111,25 @@ class UserResolverHelper
         // 5. If Email format, format prettily
         if (filter_var($trimmed, FILTER_VALIDATE_EMAIL)) {
             $parts = explode('@', $trimmed);
-            return ucwords(str_replace(['.', '_', '-'], ' ', $parts[0]));
+            $resolved = ucwords(str_replace(['.', '_', '-'], ' ', $parts[0]));
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request) {
+                    $request->attributes->set($cacheKey, $resolved);
+                }
+            } catch (\Throwable) {}
+        }
+        return $resolved;
+        }
+
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request) {
+                    $request->attributes->set($cacheKey, $trimmed);
+                }
+            } catch (\Throwable) {}
         }
 
         return $trimmed;
@@ -118,6 +145,15 @@ class UserResolverHelper
         }
 
         $trimmed = trim($roleId);
+        $cacheKey = 'user_resolver_role_' . md5($trimmed);
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request && $request->attributes->has($cacheKey)) {
+                    return (string) $request->attributes->get($cacheKey);
+                }
+            } catch (\Throwable) {}
+        }
 
         try {
             $rolesMap = Cache::remember('all_roles_lookup_map', 300, function () {
@@ -131,7 +167,16 @@ class UserResolverHelper
                     return '';
                 }
 
-                return trim((string) ($role['Role_Name'] ?? ''));
+                $resolved = trim((string) ($role['Role_Name'] ?? ''));
+                if (function_exists('request')) {
+                    try {
+                        $request = request();
+                        if ($request) {
+                            $request->attributes->set($cacheKey, $resolved);
+                        }
+                    } catch (\Throwable) {}
+                }
+                return $resolved;
             }
         } catch (\Exception $e) {}
 
@@ -156,6 +201,16 @@ class UserResolverHelper
         }
 
         $trimmed = trim($identifier);
+        $cacheKey = 'user_resolver_student_detail_' . md5($trimmed);
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request && $request->attributes->has($cacheKey)) {
+                    $cached = $request->attributes->get($cacheKey);
+                    return is_array($cached) ? $cached : $default;
+                }
+            } catch (\Throwable) {}
+        }
 
         $students = Cache::remember('all_students_lookup_map', 300, function () {
             try {
@@ -227,12 +282,23 @@ class UserResolverHelper
             $formattedInfo .= ' (' . implode(' | ', $details) . ')';
         }
 
-        return [
+        $result = [
             'name' => $studentName,
             'class_name' => $className,
             'batch_name' => $batchName,
             'formatted' => $formattedInfo
         ];
+
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request) {
+                    $request->attributes->set($cacheKey, $result);
+                }
+            } catch (\Throwable) {}
+        }
+
+        return $result;
     }
 
     /**
@@ -248,4 +314,5 @@ class UserResolverHelper
         Cache::forget('all_classes_lookup_map');
         Cache::forget('all_batches_lookup_map');
     }
+
 }

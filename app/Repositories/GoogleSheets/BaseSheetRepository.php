@@ -61,10 +61,25 @@ abstract class BaseSheetRepository
         }
 
         $startTime = microtime(true);
-        $isHit = Cache::has($this->cacheKey . '_all');
+        $cacheKey = $this->cacheKey . '_all';
+        $isHit = Cache::has($cacheKey);
 
         try {
-            $data = Cache::remember($this->cacheKey . '_all', $this->cacheTtl, fn () => $this->fetchAllFresh());
+            if ($isHit) {
+                $data = Cache::get($cacheKey);
+            } else {
+                $lockKey = $cacheKey . '_read_lock';
+                $data = Cache::lock($lockKey, 45)->block(10, function () use ($cacheKey) {
+                    if (Cache::has($cacheKey)) {
+                        return Cache::get($cacheKey);
+                    }
+
+                    $fresh = $this->fetchAllFresh();
+                    Cache::put($cacheKey, $fresh, $this->cacheTtl);
+
+                    return $fresh;
+                });
+            }
 
             $duration = round((microtime(true) - $startTime) * 1000, 2);
             Log::info("Google Sheets FetchAll on {$this->sheetName}", [

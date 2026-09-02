@@ -28,8 +28,12 @@
         <!-- RIGHT: NOTIFICATION, PROFILE AVATAR & LOGOUT BUTTON -->
         <div class="flex items-center gap-2">
             @php
-                $notifService = app(\App\Services\Core\NotificationService::class);
-                $unreadCount = $notifService->UnreadCount();
+                try {
+                    $notifService = app(\App\Services\Core\NotificationService::class);
+                    $unreadCount = $notifService->summarizeForUser(null, null, 1)['unreadCount'] ?? 0;
+                } catch (\Throwable $e) {
+                    $unreadCount = 0;
+                }
             @endphp
             <a href="{{ route('notifications.index') }}" class="relative p-2 rounded-xl text-slate-600 hover:text-sky-600 transition-colors" title="Notifikasi System">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

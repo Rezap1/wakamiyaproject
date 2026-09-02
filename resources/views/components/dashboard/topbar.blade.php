@@ -167,9 +167,17 @@
 
         <!-- Notification Bell -->
         @php
-            $notifService = app(\App\Services\Core\NotificationService::class);
-            $unreadCount = $notifService->UnreadCount();
-            $recentNotifs = $notifService->RecentNotification(null, null, 6);
+            $notificationUnavailable = false;
+            try {
+                $notifService = app(\App\Services\Core\NotificationService::class);
+                $notifSummary = $notifService->summarizeForUser(null, null, 6);
+                $unreadCount = $notifSummary['unreadCount'] ?? 0;
+                $recentNotifs = $notifSummary['recent'] ?? collect();
+            } catch (\Throwable $e) {
+                $notificationUnavailable = true;
+                $unreadCount = 0;
+                $recentNotifs = collect();
+            }
         @endphp
         <div class="relative flex items-center justify-center" x-data="{ openNotif: false }">
             <button @click="openNotif = !openNotif" @click.outside="openNotif = false" class="relative p-2 text-slate-500 hover:text-slate-800 transition-colors focus:outline-none" title="Notifikasi System">
@@ -196,6 +204,11 @@
                     @endif
                 </div>
                 <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                    @if($notificationUnavailable)
+                        <div class="p-4 text-xs text-slate-500">
+                            Notifikasi sementara tidak tersedia.
+                        </div>
+                    @endif
                     @forelse($recentNotifs as $n)
                     @php
                         $isUnread = strtoupper(trim($n['Is_Read'] ?? 'FALSE')) !== 'TRUE';

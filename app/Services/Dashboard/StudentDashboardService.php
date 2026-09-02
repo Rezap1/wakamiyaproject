@@ -101,7 +101,13 @@ class StudentDashboardService
         $latestInvoice = $outstandingBills->sortByDesc('Created_At')->first();
 
         // === Payment Progress ===
-        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary($studentId);
+        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary(
+            $studentId,
+            null,
+            $allInvoices,
+            $allPayments,
+            $student
+        );
         $totalPaid = $educationSummary['education_paid'];
         $totalBilled = $educationSummary['tuition_fee'];
         $sisaTagihan = $educationSummary['remaining_to_pay'];

@@ -1,9 +1,17 @@
 @php
     $userId = auth()->user()->email ?? (auth()->user()->User_ID ?? null);
     $userRole = session('role') ?? 'GUEST';
-    $notifService = app(\App\Services\Core\NotificationService::class);
-    $criticalNotif = $notifService->CriticalNotification($userId, $userRole);
-    $recentNotifs = $notifService->RecentNotification($userId, $userRole, 5);
+    $notificationUnavailable = false;
+    try {
+        $notifService = app(\App\Services\Core\NotificationService::class);
+        $summary = $notifService->summarizeForUser($userId, $userRole, 5);
+        $criticalNotif = $summary['critical'] ?? null;
+        $recentNotifs = $summary['recent'] ?? collect();
+    } catch (\Throwable $e) {
+        $notificationUnavailable = true;
+        $criticalNotif = null;
+        $recentNotifs = collect();
+    }
 @endphp
 
 <div class="space-y-6">
@@ -29,6 +37,9 @@
     @endif
 
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+        @if($notificationUnavailable)
+            <div class="mb-4 text-xs text-slate-500">Notifikasi sementara tidak tersedia.</div>
+        @endif
         <div class="flex justify-between items-center mb-6">
             <h3 class="font-bold text-slate-800 text-lg">Recent Notifications</h3>
             <a href="{{ route('notifications.index') }}" class="text-sm font-bold text-emerald-600 hover:underline">View All</a>

@@ -18,9 +18,19 @@ class NotificationService
         $this->repo = $repo;
     }
 
-    public function getAll() { return $this->repo->getAll(); }
+    public function getAll()
+    {
+        return $this->rememberRequestLookup('notification_all', function () {
+            return $this->repo->getAll();
+        });
+    }
 
-    public function getById($id) { return $this->repo->getById($id); }
+    public function getById($id)
+    {
+        return $this->rememberRequestLookup('notification_by_id_' . md5((string) $id), function () use ($id) {
+            return $this->repo->getById($id);
+        });
+    }
 
     /**
      * Deterministic, same-day reminder lookup used by the invoice scheduler.
@@ -313,6 +323,48 @@ class NotificationService
             })->first();
     }
 
+    /**
+     * Shared read-only snapshot for notification UI components.
+     * This keeps topbar/mobile/dashboard widgets from triggering multiple
+     * Google Sheets reads for the same data in a single request.
+     */
+    public function summarizeForUser($userId = null, $role = null, int $limit = 6): array
+    {
+        $user = auth()->user();
+        $notifications = $this->getAll();
+
+        $visible = $notifications->filter(function ($n) use ($user) {
+            return $this->isForUser($n, $user) &&
+                strtolower(trim($n['Status'] ?? '')) !== 'archived';
+        })->values();
+
+        $critical = $visible->first(function ($n) {
+            return strcasecmp($n['Priority'] ?? '', 'Critical') === 0 &&
+                strtoupper(trim($n['Is_Read'] ?? '')) !== 'TRUE';
+        });
+
+        $recent = $visible
+            ->sortByDesc(function ($n) {
+                try {
+                    return \Carbon\Carbon::parse($n['Created_At'] ?? null)->timestamp;
+                } catch (\Throwable) {
+                    return 0;
+                }
+            })
+            ->take($limit)
+            ->values();
+
+        $unreadCount = $visible->filter(function ($n) {
+            return strtoupper(trim($n['Is_Read'] ?? '')) !== 'TRUE';
+        })->count();
+
+        return [
+            'unreadCount' => $unreadCount,
+            'critical' => $critical,
+            'recent' => $recent,
+        ];
+    }
+
     public function GenerateSystemNotification($message)
     {
         $this->CreateNotification([
@@ -347,6 +399,29 @@ class NotificationService
     private function notificationCacheVersion(): int
     {
         return (int) Cache::get(self::CACHE_VERSION_KEY, 1);
+    }
+
+    private function rememberRequestLookup(string $key, callable $callback)
+    {
+        if (function_exists('request')) {
+            try {
+                $request = request();
+                if ($request && $request->attributes->has($key)) {
+                    return $request->attributes->get($key);
+                }
+
+                $value = $callback();
+                if ($request) {
+                    $request->attributes->set($key, $value);
+                }
+
+                return $value;
+            } catch (\Throwable) {
+                return $callback();
+            }
+        }
+
+        return $callback();
     }
 
     // External Hooks Preparation
