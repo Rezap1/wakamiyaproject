@@ -390,6 +390,20 @@ class InvoiceService
                 ->whereIn('Invoice_ID', $invoiceIds)
                 ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
                 ->sum(fn($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+
+            // Student self-service payments are deliberately invoice-less. They
+            // remain financially effective only after verification and are
+            // associated to the student through the server-owned Student_ID.
+            // Include them in the same education summary without fabricating an
+            // invoice or changing invoice-linked aggregation.
+            $selfServicePaidCents = $paymentRows
+                ->where('Student_ID', $studentId)
+                ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
+                ->filter(fn ($payment) => strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0)
+                ->filter(fn ($payment) => trim((string) ($payment['Invoice_ID'] ?? '')) === '')
+                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran mandiri'));
+
+            $paidCents += $selfServicePaidCents;
         }
         $billed = (float) ($billedCents / 100);
         $paid = (float) ($paidCents / 100);

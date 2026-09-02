@@ -637,7 +637,46 @@ class PaymentService
             Cache::forget('dashboard_finance');
 
             if ($status === 'Verified') {
-                $this->reconcileVerifiedPaymentLedger($paymentId, $explicitAccountId);
+                try {
+                    $this->reconcileVerifiedPaymentLedger($paymentId, $explicitAccountId);
+                } catch (\Throwable $ledgerException) {
+                    // Google Sheets does not provide a cross-sheet transaction.
+                    // Never leave a payment visibly Verified when its required
+                    // income ledger could not be confirmed. Roll the payment
+                    // back to its prior review state and verify that rollback
+                    // persisted; otherwise fail loudly for manual recovery.
+                    try {
+                        $rolledBack = $this->paymentRepository->update($paymentId, [
+                            'Status' => $currentStatus,
+                            'Verified_By' => '',
+                            'Verified_At' => '',
+                            'Updated_By' => $actorId,
+                            'Updated_At' => now()->toDateTimeString(),
+                        ]);
+                        if (!$rolledBack) {
+                            throw new FinancialIntegrityException('Rollback status pembayaran gagal disimpan.');
+                        }
+                        $this->paymentRepository->clearCache();
+                        $persistedRollback = $this->freshPayment($paymentId);
+                        if (!$persistedRollback || PaymentStatus::canonical($persistedRollback['Status'] ?? null) !== $currentStatus) {
+                            throw new FinancialIntegrityException('Rollback status pembayaran tidak dapat dikonfirmasi.');
+                        }
+                    } catch (\Throwable $rollbackException) {
+                        Log::critical('finance.payment_verification_ledger_gap_requires_manual_recovery', [
+                            'payment_id' => $paymentId,
+                            'prior_status' => $currentStatus,
+                            'ledger_exception' => get_class($ledgerException),
+                            'rollback_exception' => get_class($rollbackException),
+                        ]);
+                        throw new FinancialIntegrityException(
+                            "Verifikasi pembayaran #{$paymentId} gagal dan rollback tidak dapat dikonfirmasi.",
+                            0,
+                            $rollbackException
+                        );
+                    }
+
+                    throw $ledgerException;
+                }
 
                 try {
                     $this->enterpriseEvent->dispatch(

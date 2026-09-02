@@ -786,6 +786,66 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertSame('Verified', $payments->getById('PAY-SELF')['Status']);
         $this->assertCount(1, $transactions->rows);
         $this->assertSame('Payment', $transactions->rows[0]['Reference_Type']);
+        $this->assertSame('TRX-PAY-' . strtoupper(substr(hash('sha256', 'PAY-SELF'), 0, 20)), $transactions->rows[0]['Transaction_ID']);
+    }
+
+    public function test_verification_rolls_back_status_when_ledger_creation_fails(): void
+    {
+        $payments = new IntegrityPaymentRepository([[
+            'Payment_ID' => 'PAY-GAP', 'Invoice_ID' => '', 'Student_ID' => 'STU-1',
+            'Amount_Paid' => 250, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01',
+            'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE',
+        ]]);
+        $transactions = new IntegrityTransactionRepository();
+        $txService = Mockery::mock(TransactionService::class);
+        $txService->shouldReceive('create')->once()->andThrow(new \RuntimeException('ledger unavailable'));
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+
+        $service = new PaymentService(
+            $payments,
+            new IntegrityInvoiceRepository(),
+            new IntegrityStudentRepository(),
+            new IntegrityCompanyRepository(),
+            new IntegrityAccountRepository(),
+            $transactions,
+            Mockery::mock(EnterpriseEventService::class),
+            $txService
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('ledger unavailable');
+        try {
+            $service->verifyPayment('PAY-GAP', 'spoofed', 'Verified');
+        } finally {
+            $this->assertSame('Waiting Verification', $payments->getById('PAY-GAP')['Status']);
+            $this->assertCount(0, $transactions->rows);
+        }
+    }
+
+    public function test_cash_and_transfer_verified_payments_use_the_same_ledger_engine(): void
+    {
+        config(['finance.accounts.cash_id' => null, 'finance.accounts.bank_id' => null]);
+        $payments = new IntegrityPaymentRepository([
+            ['Payment_ID' => 'PAY-CASH', 'Invoice_ID' => '', 'Student_ID' => 'STU-1', 'Amount_Paid' => 100, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01', 'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE'],
+            ['Payment_ID' => 'PAY-TRANSFER', 'Invoice_ID' => '', 'Student_ID' => 'STU-1', 'Amount_Paid' => 200, 'Payment_Method' => 'TRANSFER', 'Payment_Date' => '2026-09-01', 'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE'],
+        ]);
+        $accounts = Mockery::mock(AccountRepositoryInterface::class);
+        $accounts->shouldReceive('fetchAll')->andReturn(collect([
+            ['Account_ID' => 'ACC-CASH', 'Account_Code' => '101', 'Account_Name' => 'Kas Utama', 'Account_Category' => 'ASSET', 'Is_Active' => 'TRUE'],
+            ['Account_ID' => 'ACC-BANK', 'Account_Code' => '102', 'Account_Name' => 'Bank Utama', 'Account_Category' => 'ASSET', 'Is_Active' => 'TRUE'],
+        ]));
+        $transactions = new IntegrityTransactionRepository();
+        $txService = Mockery::mock(TransactionService::class);
+        $txService->shouldReceive('create')->twice()->andReturnUsing(function ($data) use ($transactions) { $transactions->rows[] = $data; return $data; });
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+        $service = new PaymentService($payments, new IntegrityInvoiceRepository(), new IntegrityStudentRepository(), new IntegrityCompanyRepository(), $accounts, $transactions, Mockery::mock(EnterpriseEventService::class), $txService);
+
+        $service->verifyPayment('PAY-CASH', 'spoofed', 'Verified');
+        $service->verifyPayment('PAY-TRANSFER', 'spoofed', 'Verified');
+
+        $this->assertCount(2, $transactions->rows);
+        $this->assertSame(['101', '102'], collect($transactions->rows)->pluck('Account_ID')->all());
+        $this->assertSame(['Payment', 'Payment'], collect($transactions->rows)->pluck('Reference_Type')->all());
     }
 }
 
