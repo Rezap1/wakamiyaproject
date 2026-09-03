@@ -175,7 +175,9 @@ class ScoreController extends Controller
         $teachers = $teacherRepo->fetchAll();
         $assessments = $assessmentRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
-        return view('academic.scores.create', compact('students', 'teachers', 'assessments', 'subjects'));
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
+        $assessmentConfigs = $assessmentConfigService->getActiveCategories();
+        return view('academic.scores.create', compact('students', 'teachers', 'assessments', 'subjects', 'assessmentConfigs'));
     }
 
     public function store(\App\Http\Requests\StoreScoreRequest $request)
@@ -228,8 +230,10 @@ class ScoreController extends Controller
         $score['Assessment_Title'] = $assessment ? ($assessment['Title'] ?? $assessment['Assessment_Name'] ?? $score['Assessment_ID']) : ($score['Assessment_ID'] ?? '-');
 
         $score['Parsed_Details'] = $this->scoreService->parseEvaluationDetails($score);
+        $score['Assessment_ID'] = $score['Assessment_ID'] ?? ($score['Assignment_ID'] ?? null);
+        $assessmentConfig = app(\App\Services\Academic\AssessmentConfigService::class)->getCategoryConfig($score['Assessment_Category'] ?? '');
 
-        return view('academic.scores.show', compact('score'));
+        return view('academic.scores.show', compact('score', 'assessmentConfig'));
     }
 
     public function edit(
@@ -250,8 +254,10 @@ class ScoreController extends Controller
         $subjects = $subjectRepo->fetchAll();
         
         $score['Parsed_Details'] = $this->scoreService->parseEvaluationDetails($score);
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
+        $assessmentConfigs = $assessmentConfigService->getActiveCategories();
 
-        return view('academic.scores.edit', compact('score', 'students', 'teachers', 'assessments', 'subjects'));
+        return view('academic.scores.edit', compact('score', 'students', 'teachers', 'assessments', 'subjects', 'assessmentConfigs'));
     }
 
     public function update(\App\Http\Requests\UpdateScoreRequest $request, $id)

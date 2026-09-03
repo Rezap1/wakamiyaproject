@@ -12,12 +12,13 @@
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <form action="{{ route('teacher.workspace.scores.store') }}" method="POST" class="p-6 md:p-8 space-y-6">
             @csrf
+            <input type="hidden" name="Score_ID" value="{{ old('Score_ID', 'SCR-' . \Illuminate\Support\Str::uuid()) }}">
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Siswa -->
                 <div class="space-y-2">
-                    <label class="block text-sm font-bold text-slate-700">Pilih Siswa</label>
-                    <select name="Student_ID" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                    <label for="score-student" class="block text-sm font-bold text-slate-700">Pilih Siswa</label>
+                    <select id="score-student" name="Student_ID" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
                         <option value="">-- Pilih Siswa --</option>
                         @foreach($students as $student)
                             <option value="{{ $student['Student_ID'] }}">{{ $student['Full_Name'] ?? $student['Username'] }} ({{ $student['Class_Name'] ?? $student['Class_ID'] }})</option>
@@ -27,14 +28,27 @@
 
                 <!-- Tanggal -->
                 <div class="space-y-2">
-                    <label class="block text-sm font-bold text-slate-700">Tanggal Penilaian</label>
-                    <input type="date" name="Date" required value="{{ date('Y-m-d') }}" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                    <label for="score-schedule" class="block text-sm font-bold text-slate-700">Kelas / Jadwal <span class="text-rose-600" aria-hidden="true">*</span></label>
+                    <select id="score-schedule" name="Schedule_ID" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                        <option value="">-- Pilih Jadwal Pengajaran --</option>
+                        @foreach($schedules as $schedule)
+                            <option value="{{ $schedule['Schedule_ID'] }}" @selected(old('Schedule_ID') === $schedule['Schedule_ID'])>{{ $schedule['label'] }}</option>
+                        @endforeach
+                    </select>
+                    @if($schedules->isEmpty())
+                        <p class="text-xs font-semibold text-amber-700">Belum ada jadwal pengajaran aktif dalam scope Anda.</p>
+                    @endif
+                </div>
+
+                <div class="space-y-2">
+                    <label for="score-date" class="block text-sm font-bold text-slate-700">Tanggal Penilaian</label>
+                    <input id="score-date" type="date" name="Date" required value="{{ old('Date', date('Y-m-d')) }}" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
                 </div>
 
                 <!-- Kategori Penilaian -->
                 <div class="space-y-2 md:col-span-2">
-                    <label class="block text-sm font-bold text-slate-700">Kategori Penilaian</label>
-                    <select name="Assessment_Category" x-model="category" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                    <label for="score-category" class="block text-sm font-bold text-slate-700">Kategori Penilaian</label>
+                    <select id="score-category" name="Assessment_Category" x-model="category" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
                         <option value="">-- Pilih Kategori --</option>
                         @foreach($assessmentConfigs as $config)
                             <option value="{{ $config['Category_ID'] }}">{{ strtoupper($config['Category_Name']) }}</option>

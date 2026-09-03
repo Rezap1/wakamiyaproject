@@ -559,6 +559,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/scores', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scores'])->name('scores');
         Route::get('/scores/create', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresCreate'])->name('scores.create');
         Route::post('/scores', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresStore'])->name('scores.store');
+        Route::get('/scores/{id}/edit', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresEdit'])->name('scores.edit');
+        Route::put('/scores/{id}', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresUpdate'])->name('scores.update');
         Route::get('/assignments', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'assignments'])->name('assignments');
 
         Route::get('/calendar', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'calendar'])->name('calendar');

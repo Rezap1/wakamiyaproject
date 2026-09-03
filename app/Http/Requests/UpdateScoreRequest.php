@@ -13,7 +13,7 @@ class UpdateScoreRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'Student_ID' => 'nullable|string',
             'Assessment_ID' => 'nullable|string',
             'Assessment_Category' => 'nullable|string',
@@ -26,5 +26,13 @@ class UpdateScoreRequest extends FormRequest
             'Notes' => 'nullable|string',
             'Remarks' => 'nullable|string',
         ];
+
+        $category = strtoupper(trim((string) $this->input('Assessment_Category', '')));
+        foreach (app(\App\Services\Academic\AssessmentConfigService::class)->getAspects($category) as $aspect) {
+            $id = trim((string) ($aspect['id'] ?? ''));
+            if ($id !== '') $rules[$id] = 'required|integer|between:1,5';
+        }
+
+        return $rules;
     }
 }

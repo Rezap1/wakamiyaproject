@@ -1,216 +1,36 @@
 @extends('layouts.app')
-@section('header', 'Edit Nilai & Evaluasi')
+@section('header', 'Edit Nilai')
 @section('content')
-
 @php
-    $category = strtoupper($score['Assessment_Category'] ?? 'GENERAL');
-    $details = $score['Parsed_Details'] ?? [];
+    $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
+    $details = is_array($score['Parsed_Details'] ?? null) ? $score['Parsed_Details'] : (json_decode($score['Evaluation_Details'] ?? '', true) ?: []);
 @endphp
-
-<div class="max-w-4xl mx-auto space-y-6" x-data="academicScoreEditEngine()">
-    <x-universal.form 
-        action="{{ route('scores.update', $score['Score_ID'] ?? '') }}" 
-        method="PUT"
-        title="Edit Data Nilai & Evaluasi" 
-        description="Perbarui metrik dan evaluasi siswa (ID: {{ $score['Score_ID'] ?? '-' }})."
-        buttonText="Perbarui Data Nilai"
-    >
-        <div class="space-y-8">
-            <div>
-                <h3 class="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Informasi Referensi</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <x-universal.input 
-                        name="Score_ID" 
-                        label="ID Nilai" 
-                        value="{{ $score['Score_ID'] ?? '-' }}"
-                        readonly
-                    />
-                    <x-universal.input 
-                        name="Assessment_ID" 
-                        label="ID Assessment" 
-                        value="{{ $score['Assessment_ID'] ?? '-' }}"
-                        readonly
-                    />
-                    <x-universal.input 
-                        name="Student_ID" 
-                        label="ID Siswa" 
-                        value="{{ $score['Student_ID'] ?? '-' }}"
-                        readonly
-                    />
-                </div>
+<div class="max-w-4xl mx-auto space-y-6" x-data="scoreEditForm(@js($assessmentConfigs ?? []), @js($category), @js($details))">
+    <x-page-header title="Edit Nilai" description="Kategori dan aspek berasal dari MASTER_ASSESSMENT_CONFIG." :breadcrumbs="['Dasbor' => route('dashboard'), 'Nilai' => route('scores.index'), 'Edit' => '#']" />
+    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <form x-ref="form" action="{{ route('scores.update', $score['Score_ID'] ?? '') }}" method="POST" class="space-y-6 p-4 sm:p-6 md:p-8">
+            @csrf @method('PUT')
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div><label class="mb-1 block text-xs font-bold text-slate-500">ID Nilai</label><input value="{{ $score['Score_ID'] ?? '-' }}" readonly class="w-full rounded-xl border-slate-200 bg-slate-100"></div>
+                <div><label class="mb-1 block text-xs font-bold text-slate-500">Siswa</label><input value="{{ $score['Student_ID'] ?? '-' }}" readonly class="w-full rounded-xl border-slate-200 bg-slate-100"></div>
+                <div><label class="mb-1 block text-xs font-bold text-slate-500">Kategori</label><select name="Assessment_Category" x-model="category" required class="w-full rounded-xl border-slate-200 bg-slate-50"><option value="">-- Pilih --</option>@foreach($assessmentConfigs as $config)<option value="{{ $config['Category_ID'] }}">{{ $config['Category_Name'] ?? $config['Category_ID'] }}</option>@endforeach</select></div>
             </div>
-
-            <!-- CATEGORY DISPLAY & INPUTS -->
-            <div>
-                <input type="hidden" name="Assessment_Category" value="{{ $category }}">
-                
-                <div class="mb-6 p-4 rounded-xl border flex items-center justify-between {{ $category === 'SPORTS' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : ($category === 'LANGUAGE' ? 'bg-purple-50 border-purple-200 text-purple-800' : 'bg-blue-50 border-blue-200 text-blue-800') }}">
-                    <div>
-                        <span class="text-xs font-bold uppercase tracking-wider">Kategori Penilaian</span>
-                        <h4 class="text-lg font-black mt-0.5">
-                            @if($category === 'SPORTS') 🏀 OLAHRAGA (SPORTS)
-                            @elseif($category === 'LANGUAGE') 🗣️ BAHASA (LANGUAGE)
-                            @else 📚 AKADEMIK UMUM (GENERAL)
-                            @endif
-                        </h4>
-                    </div>
-                    <span class="px-3 py-1 text-xs font-bold rounded-lg bg-white shadow-sm border">Fixed Category</span>
-                </div>
-
-                <!-- CATEGORY 1: GENERAL ACADEMIC SCORE -->
-                @if($category === 'GENERAL')
-                    <div class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Nilai Akhir (0 - 100) <span class="text-rose-500 font-black">*</span></label>
-                                <input type="number" name="Score_Value" x-model="scoreGeneral" @input="recalculate()" min="0" max="100" class="block w-full text-xl font-black text-center rounded-xl bg-slate-50 border-slate-200 text-slate-800 focus:ring-2 focus:border-blue-500 px-4 py-2.5 shadow-sm">
-                            </div>
-                        </div>
-                    </div>
-                @endif
-
-                <!-- CATEGORY 2: SPORTS EVALUATION METRICS -->
-                @if($category === 'SPORTS')
-                    <div class="space-y-6">
-                        <h3 class="text-sm font-bold text-emerald-800 mb-4 border-b border-emerald-100 pb-2">Metrik Evaluasi Olahraga</h3>
-                        <div class="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Jarak Lari (km)</label>
-                                <input type="number" step="0.1" min="0" name="running_distance" x-model="sports.running_distance" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Waktu Lari (menit)</label>
-                                <input type="number" step="0.1" min="0" name="running_time" x-model="sports.running_time" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Push Up</label>
-                                <input type="number" min="0" name="push_up" x-model="sports.push_up" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Sit Up</label>
-                                <input type="number" min="0" name="sit_up" x-model="sports.sit_up" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                        </div>
-                    </div>
-                @endif
-
-                <!-- CATEGORY 3: LANGUAGE EVALUATION RUBRICS -->
-                @if($category === 'LANGUAGE')
-                    <div class="space-y-6">
-                        <h3 class="text-sm font-bold text-purple-800 mb-4 border-b border-purple-100 pb-2">Rubrik Evaluasi Kemampuan Bahasa</h3>
-                        <div class="bg-purple-50/50 p-4 rounded-xl border border-purple-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Speaking</label>
-                                <input type="number" min="0" max="100" name="speaking" x-model="lang.speaking" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Writing</label>
-                                <input type="number" min="0" max="100" name="writing" x-model="lang.writing" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Listening</label>
-                                <input type="number" min="0" max="100" name="listening" x-model="lang.listening" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Reading</label>
-                                <input type="number" min="0" max="100" name="reading" x-model="lang.reading" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Ethics</label>
-                                <input type="number" min="0" max="100" name="ethics" x-model="lang.ethics" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Motivation</label>
-                                <input type="number" min="0" max="100" name="motivation" x-model="lang.motivation" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Attendance</label>
-                                <input type="number" min="0" max="100" name="attendance" x-model="lang.attendance" @input="recalculate()" class="w-full text-sm font-bold text-center rounded-xl border-slate-200">
-                            </div>
-                        </div>
-                    </div>
-                @endif
-
-                <!-- SCORE SUMMARY PREVIEW CARD -->
-                <div class="mt-6 bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-lg">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Kalkulasi Skor Terkini</p>
-                        <h4 class="text-2xl font-black mt-1" x-text="computedScore + ' / 100'"></h4>
-                    </div>
-                    <div class="text-right">
-                        <span class="px-3 py-1 text-xs font-bold rounded-lg uppercase"
-                              :class="computedScore >= 65 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'"
-                              x-text="computedScore >= 65 ? 'PASS (LULUS)' : 'FAIL (TIDAK LULUS)'"></span>
-                    </div>
-                </div>
-
-                <!-- NOTES -->
-                <div class="mt-6">
-                    <x-universal.textarea 
-                        name="Notes" 
-                        label="Catatan Evaluator" 
-                        value="{{ $score['Remarks'] ?? ($score['Notes'] ?? ($details['notes'] ?? '')) }}"
-                    />
-                </div>
+            <div x-show="activeAspects.length > 0" class="grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2">
+                <template x-for="aspect in activeAspects" :key="aspect.id"><div><label class="mb-1 block text-sm font-semibold text-slate-700"><span x-text="aspect.label"></span> <span class="text-rose-600">*</span></label><select :name="aspect.id" required class="w-full rounded-xl border-slate-200 bg-slate-50"><option value="">-- Pilih Tingkat --</option><template x-for="level in [1,2,3,4,5]" :key="level"><option :value="level" x-text="level + ' - ' + levelLabels[level]"></option></template></select></div></template>
             </div>
-        </div>
-    </x-universal.form>
+            <div x-show="activeConfig && activeAspects.length === 0" class="border-t border-slate-100 pt-5"><label class="mb-1 block text-sm font-bold text-slate-700">Nilai (0–100) <span class="text-rose-600">*</span></label><input name="Score_Value" type="number" min="0" max="100" step="0.01" :value="{{ $score['Score_Value'] ?? ($score['Score'] ?? '') }}" :required="!!activeConfig && activeAspects.length === 0" class="w-full rounded-xl border-slate-200 bg-slate-50 text-lg font-bold"></div>
+            <div class="border-t border-slate-100 pt-5"><label class="mb-1 block text-sm font-bold text-slate-700">Catatan (Opsional)</label><textarea name="Notes" maxlength="2000" rows="3" class="w-full rounded-xl border-slate-200 bg-slate-50">{{ old('Notes', $details['notes'] ?? ($score['Remarks'] ?? '')) }}</textarea></div>
+            <div class="flex justify-end border-t border-slate-100 pt-5"><button type="submit" :disabled="!activeConfig || submitting" class="min-h-12 rounded-xl bg-blue-600 px-6 font-bold text-white disabled:opacity-50"><span x-text="submitting ? 'Menyimpan...' : 'Perbarui Nilai'"></span></button></div>
+        </form>
+    </div>
 </div>
-
 <script>
-    function academicScoreEditEngine() {
-        return {
-            category: '{{ $category }}',
-            scoreGeneral: {{ $score['Score_Value'] ?? ($score['Score'] ?? 80) }},
-            sports: {
-                running_distance: {{ $details['running_distance'] ?? 0 }},
-                running_time: {{ $details['running_time'] ?? 0 }},
-                push_up: {{ $details['push_up'] ?? 0 }},
-                sit_up: {{ $details['sit_up'] ?? 0 }}
-            },
-            lang: {
-                speaking: {{ $details['speaking'] ?? 80 }},
-                writing: {{ $details['writing'] ?? 80 }},
-                listening: {{ $details['listening'] ?? 80 }},
-                reading: {{ $details['reading'] ?? 80 }},
-                ethics: {{ $details['ethics'] ?? 80 }},
-                motivation: {{ $details['motivation'] ?? 80 }},
-                attendance: {{ $details['attendance'] ?? 100 }}
-            },
-            computedScore: {{ $score['Score_Value'] ?? ($score['Score'] ?? 80) }},
-
-            init() {
-                this.recalculate();
-            },
-
-            recalculate() {
-                if (this.category === 'SPORTS') {
-                    const dist = parseFloat(this.sports.running_distance || 0);
-                    const push = parseInt(this.sports.push_up || 0);
-                    const sit = parseInt(this.sports.sit_up || 0);
-                    
-                    const distScore = Math.min(100, (dist / 5) * 100 * 0.3);
-                    const pushScore = Math.min(100, (push / 30) * 100 * 0.35);
-                    const sitScore = Math.min(100, (sit / 30) * 100 * 0.35);
-                    
-                    this.computedScore = Math.min(100, Math.round(distScore + pushScore + sitScore));
-                } else if (this.category === 'LANGUAGE') {
-                    const rubrics = [
-                        parseFloat(this.lang.speaking || 0),
-                        parseFloat(this.lang.writing || 0),
-                        parseFloat(this.lang.listening || 0),
-                        parseFloat(this.lang.reading || 0),
-                        parseFloat(this.lang.ethics || 0),
-                        parseFloat(this.lang.motivation || 0),
-                        parseFloat(this.lang.attendance || 0)
-                    ];
-                    const sum = rubrics.reduce((a, b) => a + b, 0);
-                    this.computedScore = Math.round(sum / rubrics.length);
-                } else {
-                    this.computedScore = Math.min(100, Math.max(0, parseInt(this.scoreGeneral || 0)));
-                }
-            }
-        }
-    }
+document.addEventListener('alpine:init', () => Alpine.data('scoreEditForm', (configs, category, details) => ({
+    configs, category, details, submitting: false,
+    levelLabels: {1:'Sangat Kurang',2:'Kurang',3:'Cukup',4:'Baik',5:'Sangat Baik'},
+    get activeConfig() { return this.configs.find(c => String(c.Category_ID).toUpperCase() === String(this.category).toUpperCase()); },
+    get activeAspects() { if (!this.activeConfig || !this.activeConfig.Aspects_JSON) return []; try { const a = JSON.parse(this.activeConfig.Aspects_JSON); return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+    init() { this.$nextTick(() => this.activeAspects.forEach(a => { const f = document.querySelector('[name="' + a.id + '"]'); if (f && this.details[a.id] !== undefined) f.value = this.details[a.id]; })); this.$refs.form?.addEventListener('submit', () => { this.submitting = true; }); }
+})));
 </script>
 @endsection

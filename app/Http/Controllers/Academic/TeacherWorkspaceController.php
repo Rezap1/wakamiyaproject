@@ -511,15 +511,32 @@ class TeacherWorkspaceController extends Controller
             return $s;
         });
 
-        return view('academic.teacher.scores', compact('scores', 'teacherId'));
+        $assessmentConfigs = collect($this->assessmentConfigService->getActiveCategories())
+            ->keyBy(fn ($config) => strtoupper(trim((string) ($config['Category_ID'] ?? ''))))
+            ->toArray();
+
+        return view('academic.teacher.scores', compact('scores', 'teacherId', 'assessmentConfigs'));
     }
 
     public function scoresCreate()
     {
         $teacherId = $this->verifyTeacherAccess();
 
-        $mySchedules = collect($this->scheduleService->getAll())->where('Teacher_ID', $teacherId);
-        $myClassIds = $mySchedules->pluck('Class_ID')->filter()->unique()->toArray();
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+        $myClassIds = $scope['class_ids'];
+
+        $schedulesById = collect($this->scheduleService->getAll())
+            ->filter(fn ($schedule) => in_array(trim((string) ($schedule['Schedule_ID'] ?? '')), $scope['schedule_ids'], true))
+            ->keyBy('Schedule_ID');
+        $schedules = $schedulesById->map(function ($schedule) {
+            return [
+                'Schedule_ID' => $schedule['Schedule_ID'],
+                'Class_ID' => $schedule['Class_ID'] ?? '',
+                'Subject_ID' => $schedule['Subject_ID'] ?? '',
+                'label' => trim((string) ($schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Jadwal'))
+                    . ' — ' . trim((string) ($schedule['Class_ID'] ?? '')),
+            ];
+        })->values();
 
         $classesById = collect($this->classService->getAllClasses())->keyBy('Class_ID');
         $classes = collect($myClassIds)->map(function ($cid) use ($classesById) {
@@ -541,30 +558,56 @@ class TeacherWorkspaceController extends Controller
 
         $assessmentConfigs = $this->assessmentConfigService->getActiveCategories();
 
-        return view('academic.teacher.scores-create', compact('classes', 'students', 'teacherId', 'assessmentConfigs'));
+        return view('academic.teacher.scores-create', compact('classes', 'students', 'schedules', 'teacherId', 'assessmentConfigs'));
     }
 
     public function scoresStore(Request $request)
     {
         $teacherId = $this->verifyTeacherAccess();
 
-        $request->validate([
+        $validated = $request->validate([
             'Student_ID' => 'required|string',
+            'Schedule_ID' => 'required|string',
             'Assessment_Category' => 'required|string',
             'Date' => 'required|date',
-            'Notes' => 'nullable|string'
+            'Assessment_ID' => 'nullable|string',
+            'Score_ID' => ['nullable', 'string', 'regex:/^SCR-[0-9a-f-]{36}$/i'],
+            'Notes' => 'nullable|string|max:2000'
         ]);
 
-        $category = $request->input('Assessment_Category');
+        $category = strtoupper(trim((string) $validated['Assessment_Category']));
+        $categoryConfig = $this->assessmentConfigService->getCategoryConfig($category);
+        if (!$categoryConfig || empty($this->assessmentConfigService->getAspects($category))) {
+            return redirect()->back()->with('error', 'Kategori penilaian belum tersedia di MASTER_ASSESSMENT_CONFIG.')->withInput();
+        }
 
-        $studentId = $request->input('Student_ID');
-        if (!$this->scoreService->isStudentInTeacherScope($studentId, $teacherId)) {
+        $studentId = trim((string) $validated['Student_ID']);
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+        $scheduleId = trim((string) $validated['Schedule_ID']);
+        if (!in_array($scheduleId, $scope['schedule_ids'], true)
+            || !$this->scoreService->isStudentInSchedule($studentId, $scheduleId, $scope)) {
             return redirect()->back()->with('error', 'Siswa tidak berada di dalam kelas yang Anda ajar. (IDOR Protected)')->withInput();
+        }
+
+        $assessmentId = trim((string) ($validated['Assessment_ID'] ?? ''));
+        if ($assessmentId !== '' && !in_array($assessmentId, $scope['assessment_ids'], true)) {
+            return redirect()->back()->with('error', 'Assessment tidak berada dalam scope pengajaran Anda.')->withInput();
         }
 
         // Validate aspects against SSOT
         $data = $request->except(['_token', '_method']);
-        $aspectKeys = collect($data)->except(['Student_ID', 'Assessment_Category', 'Date', 'Notes'])->keys()->toArray();
+        // Ownership identity is always resolved from the authenticated actor;
+        // a client-supplied Teacher_ID is never evidence of authorization.
+        $data['Teacher_ID'] = $teacherId;
+        $data['Student_ID'] = $studentId;
+        $data['Schedule_ID'] = $scheduleId;
+        $data['Assessment_Category'] = $category;
+        $data['Assessment_Date'] = $validated['Date'];
+        $aspectKeys = collect($data)->except([
+            'Student_ID', 'Teacher_ID', 'Assessment_Category', 'Date',
+            'Assessment_Date', 'Assessment_ID', 'Score_ID', 'Notes',
+            'Schedule_ID', 'Class_ID',
+        ])->keys()->toArray();
         $evaluationDetails = [];
         foreach ($aspectKeys as $key) {
             if (isset($data[$key]) && $data[$key] !== '') {
@@ -577,6 +620,8 @@ class TeacherWorkspaceController extends Controller
             if (!$isValid) {
                 return redirect()->back()->with('error', 'Aspek penilaian tidak valid atau tidak terdaftar untuk kategori ini.')->withInput();
             }
+        } else {
+            return redirect()->back()->with('error', 'Seluruh aspek penilaian wajib diisi.')->withInput();
         }
 
         try {
@@ -588,6 +633,66 @@ class TeacherWorkspaceController extends Controller
             return redirect()->route('teacher.workspace.scores')->with('success', 'Penilaian berhasil disimpan.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal menyimpan penilaian: ' . $this->safeExceptionMessage($e))->withInput();
+        }
+    }
+
+    public function scoresEdit(string $id)
+    {
+        $teacherId = $this->verifyTeacherAccess();
+        $score = $this->scoreService->getById($id);
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+
+        if (!$score || !$this->scoreService->isScoreInTeacherScope($score, $teacherId, $scope)) {
+            abort(403, 'Anda tidak memiliki akses untuk mengubah nilai ini.');
+        }
+
+        $assessmentConfigs = $this->assessmentConfigService->getActiveCategories();
+        return view('academic.teacher.scores-edit', compact('score', 'teacherId', 'assessmentConfigs'));
+    }
+
+    public function scoresUpdate(Request $request, string $id)
+    {
+        $teacherId = $this->verifyTeacherAccess();
+        $existing = $this->scoreService->getById($id);
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+
+        if (!$existing || !$this->scoreService->isScoreInTeacherScope($existing, $teacherId, $scope)) {
+            abort(403, 'Anda tidak memiliki akses untuk mengubah nilai ini.');
+        }
+
+        $validated = $request->validate([
+            'Assessment_Category' => 'required|string',
+            'Date' => 'required|date',
+            'Notes' => 'nullable|string|max:2000',
+        ]);
+        $category = strtoupper(trim((string) $validated['Assessment_Category']));
+        if (!$this->assessmentConfigService->getCategoryConfig($category)
+            || empty($this->assessmentConfigService->getAspects($category))) {
+            return redirect()->back()->with('error', 'Kategori penilaian belum tersedia di MASTER_ASSESSMENT_CONFIG.')->withInput();
+        }
+
+        // Scope/ownership references are immutable during a teacher edit;
+        // never let a client move an existing score to another schedule or
+        // assignment after the authorization check.
+        $data = $request->except(['_token', '_method', 'Student_ID', 'Score_ID', 'Teacher_ID', 'Assessment_ID', 'Schedule_ID', 'Class_ID', 'Assignment_ID']);
+        $data['Student_ID'] = $existing['Student_ID'];
+        $data['Teacher_ID'] = $teacherId;
+        $data['Assessment_Category'] = $category;
+        $data['Assessment_Date'] = $validated['Date'];
+        $evaluationDetails = collect($data)
+            ->except(['Student_ID', 'Teacher_ID', 'Assessment_Category', 'Date', 'Assessment_Date', 'Notes'])
+            ->filter(fn ($value) => $value !== '' && $value !== null)
+            ->toArray();
+
+        if (!$this->assessmentConfigService->validateAspectPayload($category, $evaluationDetails)) {
+            return redirect()->back()->with('error', 'Aspek penilaian tidak valid atau belum lengkap.')->withInput();
+        }
+
+        try {
+            $this->scoreService->update($id, $data);
+            return redirect()->route('teacher.workspace.scores')->with('success', 'Penilaian berhasil diperbarui.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Gagal memperbarui penilaian: ' . $this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -633,40 +738,9 @@ class TeacherWorkspaceController extends Controller
 
     private function teacherScopedScores(string $teacherId)
     {
-        $teacherAssessmentIds = collect([]);
-
-        try {
-            $assessmentRepo = app(\App\Interfaces\GoogleSheets\AssessmentRepositoryInterface::class);
-            try {
-                $assessments = $assessmentRepo->getAll();
-            } catch (\Throwable $e) {
-                $assessments = is_callable([$assessmentRepo, 'fetchAll']) ? $assessmentRepo->fetchAll() : collect([]);
-            }
-
-            $teacherAssessmentIds = collect($assessments)
-                ->where('Teacher_ID', $teacherId)
-                ->pluck('Assessment_ID')
-                ->filter()
-                ->unique()
-                ->values();
-        } catch (\Exception $e) {
-            $teacherAssessmentIds = collect([]);
-        }
-
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
         return collect($this->scoreService->getAll())
-            ->filter(function ($score) use ($teacherId, $teacherAssessmentIds) {
-                $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? ''));
-                if ($scoreTeacherId !== '') {
-                    return $scoreTeacherId === $teacherId;
-                }
-
-                $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
-                if ($assessmentId !== '') {
-                    return $teacherAssessmentIds->contains($assessmentId);
-                }
-
-                return false;
-            })
+            ->filter(fn ($score) => $this->scoreService->isScoreInTeacherScope($score, $teacherId, $scope))
             ->values();
     }
 }

@@ -38,6 +38,38 @@ class TeacherWorkspaceScoreScopeTest extends TestCase
         ]));
         $this->app->instance(AssessmentRepositoryInterface::class, $assessmentRepo);
 
+        $scores = collect([
+            ['Score_ID' => 'SCR-OWN-ASM', 'Assessment_ID' => 'ASM-A', 'Student_ID' => 'STU-1'],
+            ['Score_ID' => 'SCR-OTHER-ASM', 'Assessment_ID' => 'ASM-B', 'Student_ID' => 'STU-2'],
+            ['Score_ID' => 'SCR-OWN-DIRECT', 'Teacher_ID' => 'TCH-A', 'Student_ID' => 'STU-2'],
+            ['Score_ID' => 'SCR-OTHER-DIRECT', 'Teacher_ID' => 'TCH-B', 'Student_ID' => 'STU-1'],
+            ['Score_ID' => 'SCR-UNOWNED', 'Student_ID' => 'STU-1'],
+        ]);
+
+        $scoreService = $this->mockService(ScoreService::class, [
+            'getAll' => $scores,
+            'getTeacherScoreScope' => [
+                'schedule_ids' => ['SCH-A'],
+                'class_ids' => ['CLS-A'],
+                'student_ids' => ['STU-1', 'STU-2'],
+                'assessment_ids' => ['ASM-A'],
+                'schedule_student_ids' => ['SCH-A' => ['STU-1', 'STU-2']],
+            ],
+        ]);
+        $scoreService->shouldReceive('isScoreInTeacherScope')
+            ->zeroOrMoreTimes()
+            ->andReturnUsing(function (array $score, string $teacherId): bool {
+                if (($score['Teacher_ID'] ?? null) !== null) {
+                    return ($score['Teacher_ID'] ?? '') === $teacherId;
+                }
+
+                return ($score['Assessment_ID'] ?? null) === 'ASM-A';
+            });
+
+        $assessmentConfig = $this->mockService(AssessmentConfigService::class, [
+            'getActiveCategories' => [],
+        ]);
+
         $controller = new TeacherWorkspaceController(
             $this->mockService(TeacherService::class, ['getAllTeachers' => collect([
                 ['Teacher_ID' => 'TCH-A', 'User_ID' => 'USR-A'],
@@ -53,14 +85,8 @@ class TeacherWorkspaceScoreScopeTest extends TestCase
             $this->mockService(SubjectService::class, []),
             $this->mockService(BatchService::class, []),
             $this->mockService(AssignmentService::class, []),
-            $this->mockService(ScoreService::class, ['getAll' => collect([
-                ['Score_ID' => 'SCR-OWN-ASM', 'Assessment_ID' => 'ASM-A', 'Student_ID' => 'STU-1'],
-                ['Score_ID' => 'SCR-OTHER-ASM', 'Assessment_ID' => 'ASM-B', 'Student_ID' => 'STU-2'],
-                ['Score_ID' => 'SCR-OWN-DIRECT', 'Teacher_ID' => 'TCH-A', 'Student_ID' => 'STU-2'],
-                ['Score_ID' => 'SCR-OTHER-DIRECT', 'Teacher_ID' => 'TCH-B', 'Student_ID' => 'STU-1'],
-                ['Score_ID' => 'SCR-UNOWNED', 'Student_ID' => 'STU-1'],
-            ])]),
-            $this->mockService(AssessmentConfigService::class, [])
+            $scoreService,
+            $assessmentConfig
         );
 
         $view = $controller->scores();

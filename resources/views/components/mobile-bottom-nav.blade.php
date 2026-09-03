@@ -17,7 +17,7 @@
             ['label' => 'Dashboard', 'route' => 'dashboard.teacher', 'icon' => 'home', 'active' => request()->routeIs('dashboard.teacher')],
             ['label' => 'Tugas', 'route' => 'assignments.index', 'icon' => 'document-duplicate', 'active' => request()->routeIs('assignments.*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
-            ['label' => 'Nilai', 'route' => 'scores.index', 'icon' => 'academic-cap', 'active' => request()->routeIs('scores.*')],
+            ['label' => 'Nilai', 'route' => 'teacher.workspace.scores', 'icon' => 'academic-cap', 'active' => request()->routeIs('teacher.workspace.scores*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
     } elseif ($role === 'HR') {

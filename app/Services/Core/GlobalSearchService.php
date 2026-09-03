@@ -196,6 +196,7 @@ class GlobalSearchService
         try {
             $schedules = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll())
                 ->where('Teacher_ID', $teacherId);
+            $scheduleIds = $schedules->pluck('Schedule_ID')->filter()->map(fn ($id) => trim((string) $id))->all();
             $classIds = $schedules->pluck('Class_ID')->filter()->unique()->values()->all();
             $students = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
                 ->whereIn('Class_ID', $classIds)
@@ -217,10 +218,15 @@ class GlobalSearchService
             $teacherAssessmentIds = $this->teacherAssessmentIds($teacherId);
             $scores = collect(app(\App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class)->fetchAll())
                 ->whereIn('Student_ID', $studentIds)
-                ->filter(function ($score) use ($teacherId, $teacherAssessmentIds) {
+                ->filter(function ($score) use ($teacherId, $teacherAssessmentIds, $scheduleIds) {
                     $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? ''));
                     if ($scoreTeacherId !== '') {
                         return $scoreTeacherId === $teacherId;
+                    }
+
+                    $scheduleId = trim((string) ($score['Schedule_ID'] ?? ''));
+                    if ($scheduleId !== '') {
+                        return in_array($scheduleId, $scheduleIds, true);
                     }
 
                     $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));

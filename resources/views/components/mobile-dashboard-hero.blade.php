@@ -443,7 +443,7 @@
                     <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center text-lg">📷</div>
                     <span class="text-[11px] font-bold text-slate-700">Scan QR</span>
                 </a>
-                <a href="{{ Route::has('scores.index') ? route('scores.index') : '#' }}" class="p-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col items-center gap-1 active:scale-95 transition-transform">
+                <a href="{{ Route::has('teacher.workspace.scores') ? route('teacher.workspace.scores') : '#' }}" class="p-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col items-center gap-1 active:scale-95 transition-transform">
                     <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center text-lg">🎓</div>
                     <span class="text-[11px] font-bold text-slate-700">Input Nilai</span>
                 </a>

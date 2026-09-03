@@ -31,9 +31,10 @@ class AssessmentConfigService
 
     public function getCategoryConfig($categoryId)
     {
+        $needle = strtoupper(trim((string) $categoryId));
         $configs = $this->getActiveCategories();
         foreach ($configs as $config) {
-            if ($config['Category_ID'] === $categoryId) {
+            if (strtoupper(trim((string) ($config['Category_ID'] ?? ''))) === $needle) {
                 return $config;
             }
         }
@@ -63,15 +64,30 @@ class AssessmentConfigService
             return false;
         }
 
-        $validKeys = collect($aspects)->pluck('id')->toArray();
+        $validKeys = collect($aspects)->pluck('id')->filter()->map(fn ($id) => strtolower(trim((string) $id)))->values()->all();
+        $providedKeys = collect($evaluationDetails)
+            ->keys()
+            ->map(fn ($key) => strtolower(trim((string) $key)))
+            ->filter(fn ($key) => $key !== 'notes')
+            ->values()
+            ->all();
+
+        // Every configured aspect is required. This prevents a forged request
+        // from silently persisting an incomplete evaluation.
+        if (count($providedKeys) !== count(array_unique($providedKeys))
+            || array_diff($validKeys, $providedKeys)
+            || array_diff($providedKeys, $validKeys)) {
+            return false;
+        }
+
         foreach ($evaluationDetails as $key => $value) {
-            // Ignore valid system keys that aren't aspects if they somehow leak in, but we shouldn't have them in evaluationDetails
-            if (in_array(strtolower($key), ['notes'])) continue;
-            
-            if (!in_array($key, $validKeys)) {
+            if (strtolower(trim((string) $key)) === 'notes') continue;
+
+            if (!in_array(strtolower(trim((string) $key)), $validKeys, true)) {
                 return false;
             }
-            if (!is_numeric($value) || $value < 1 || $value > 5) {
+            $normalized = trim((string) $value);
+            if ($normalized === '' || !ctype_digit($normalized) || (int) $normalized < 1 || (int) $normalized > 5) {
                 return false;
             }
         }

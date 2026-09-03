@@ -26,11 +26,14 @@ class StoreScoreRequest extends FormRequest
             'Remarks' => 'nullable|string',
         ];
 
-        // The TeacherWorkspaceController now handles dynamic aspect validation using AssessmentConfigService.
-        // We only enforce legacy non-aspect scores here.
-        if (!in_array($category, ['GENERAL', 'SPORTS', 'LANGUAGE'])) {
-            $rules['Subject_ID'] = 'required|string';
-            $rules['Score_Value'] = 'required|numeric|min:1|max:100';
+        // Dynamic aspect fields are allow-listed from the SSOT; arbitrary
+        // request keys must never become part of the validated payload.
+        $configService = app(\App\Services\Academic\AssessmentConfigService::class);
+        foreach ($configService->getAspects($category) as $aspect) {
+            $id = trim((string) ($aspect['id'] ?? ''));
+            if ($id !== '') {
+                $rules[$id] = 'required|integer|between:1,5';
+            }
         }
 
         return $rules;
