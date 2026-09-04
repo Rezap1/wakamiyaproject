@@ -186,11 +186,11 @@
                     <div class="card-title">Informasi Pegawai</div>
                     <div class="field-row">
                         <span class="field-label">Nama Lengkap:</span>
-                        <span class="field-value">{{ $employee['Full_Name'] ?? $payroll['Employee_ID'] ?? '-' }}</span>
+                        <span class="field-value">{{ $employee['Full_Name'] ?? 'Data pegawai tidak ditemukan' }}</span>
                     </div>
                     <div class="field-row">
-                        <span class="field-label">ID Pegawai:</span>
-                        <span class="field-value">{{ $payroll['Employee_ID'] ?? '-' }}</span>
+                        <span class="field-label">No. Pegawai:</span>
+                        <span class="field-value">{{ $employee['Employee_Number'] ?? $employee['NIP'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">NIP / No. Pegawai:</span>

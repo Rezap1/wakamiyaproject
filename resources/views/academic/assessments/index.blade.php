@@ -56,15 +56,15 @@
             @endphp
             <tr class="hover:bg-slate-50 transition-colors">
                 <td class="px-6 py-4">
-                    <span class="font-bold text-slate-800 block">{{ $item['Assessment_ID'] ?? '' }}</span>
-                    <span class="text-xs text-slate-500 font-medium mt-1">{{ $item['Name'] ?? '' }}</span>
+                    <span class="font-bold text-slate-800 block">{{ $item['Name'] ?? 'Penilaian tidak ditemukan' }}</span>
+                    <span class="text-xs text-slate-500 font-medium mt-1">{{ $item['Assessment_Code'] ?? $item['Category'] ?? '-' }}</span>
                 </td>
                 <td class="px-6 py-4">
                     <x-badge color="blue">{{ $cat }}</x-badge>
-                    <span class="block text-xs font-semibold text-slate-600 mt-1">{{ $item['Subject_ID'] ?? '' }}</span>
+                    <span class="block text-xs font-semibold text-slate-600 mt-1">{{ $item['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}</span>
                 </td>
                 <td class="px-6 py-4">
-                    <span class="font-semibold text-slate-800 text-sm block">{{ $item['Class_ID'] ?? '' }}</span>
+                    <span class="font-semibold text-slate-800 text-sm block">{{ $item['Class_Name'] ?? 'Kelas tidak ditemukan' }}</span>
                     <span class="text-[10px] text-slate-400 font-bold uppercase">{{ $item['Program_ID'] ?? '' }}</span>
                 </td>
                 <td class="px-6 py-4 text-center">

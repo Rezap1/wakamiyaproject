@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\SubjectService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class SubjectController extends Controller
 {
@@ -25,17 +26,20 @@ class SubjectController extends Controller
             })->values();
         }
         
+        $programsById = collect($this->programService->getAllPrograms())->keyBy('Program_ID');
+
         return [
             'moduleName' => 'Materi',
             'data' => collect(array_values($subjects->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Mapel', 'Kode', 'Nama Materi', 'Deskripsi'],
-            'mapRow' => function($row) {
+            'headers' => ['Kode', 'Nama Materi', 'Program', 'Deskripsi'],
+            'mapRow' => function($row) use ($programsById) {
+                $program = $programsById[$row['Program_ID'] ?? ''] ?? null;
 
                 return [
-                    $row['Subject_ID'] ?? '-',
                     $row['Subject_Code'] ?? '-',
                     $row['Subject_Name'] ?? '-',
+                    HumanReadableResolver::value($program['Program_Name'] ?? $program['Program_Code'] ?? '', 'Program tidak ditemukan'),
                     $row['Description'] ?? '-'
                 ];
                     },

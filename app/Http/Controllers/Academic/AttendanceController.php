@@ -8,6 +8,7 @@ use App\Helpers\AttendanceStatusHelper;
 use App\Services\Academic\AttendanceService;
 use App\Services\Academic\AttendanceLegacyClassifier;
 use App\Services\Core\ActivityLogService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class AttendanceController extends Controller
 {
@@ -23,20 +24,29 @@ class AttendanceController extends Controller
         $students = $studentRepo->fetchAll()->keyBy('Student_ID');
         
         $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
-        $classes = $classRepo->fetchAll()->keyBy('Class_ID');
+        $classRows = $classRepo->fetchAll();
+        $classes = $classRows->keyBy('Class_ID');
+
+        $scheduleRepo = app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class);
+        $scheduleRows = $scheduleRepo->fetchAll();
+        $schedules = $scheduleRows->keyBy('Schedule_ID');
+
+        $subjectRepo = app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class);
+        $subjects = $subjectRepo->fetchAll()->keyBy('Subject_ID');
+
+        $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
+        $teachers = $teacherRepo->fetchAll()->keyBy('Teacher_ID');
+
+        $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
+        $employees = $employeeRepo->fetchAll()->keyBy('Employee_ID');
+        $classifier = new AttendanceLegacyClassifier();
         
         return [
             'moduleName' => 'Kehadiran (Attendance)',
             'data' => collect(array_values($attendances->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Tanggal', 'Siswa', 'Kelas / Jadwal', 'Guru', 'Status', 'Time In', 'Time Out', 'Catatan'],
-            'mapRow' => function($row) use ($students, $classes) {
-                $studentId = $row['Student_ID'] ?? null;
-                $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
-                
-                $classId = $row['Class_ID'] ?? null;
-                $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
-                
+            'mapRow' => function($row) use ($students, $classes, $classRows, $schedules, $scheduleRows, $subjects, $teachers, $employees, $classifier) {
                 $date = '-';
                 if (isset($row['Attendance_Date']) && !empty($row['Attendance_Date'])) {
                     try {
@@ -44,11 +54,24 @@ class AttendanceController extends Controller
                     } catch (\Exception $e) { }
                 }
 
+                $classified = $classifier->classify($row, $classRows, $scheduleRows);
+                $scheduleId = trim((string) ($classified['schedule_id'] ?? ''));
+                $classId = trim((string) ($classified['class_id'] ?? ($row['Class_ID'] ?? '')));
+                $target = ($classified['is_schedule_based'] ?? false) && $scheduleId !== ''
+                    ? HumanReadableResolver::scheduleLabel($scheduleId, $schedules, $classes, $subjects, $teachers)
+                    : HumanReadableResolver::className($classId, $classes) . ' / Absensi Kelas';
+
+                $teacherId = trim((string) ($row['Teacher_ID'] ?? ''));
+                $employeeId = trim((string) ($row['Employee_ID'] ?? ''));
+                $actorName = $teacherId !== ''
+                    ? HumanReadableResolver::teacherName($teacherId, $teachers)
+                    : ($employeeId !== '' ? HumanReadableResolver::employeeName($employeeId, $employees) : '-');
+
                 return [
                     $date,
-                    $studentName . ($studentId ? " ($studentId)" : ''),
-                    trim($className . ' ' . ($row['Schedule_ID'] ?? '')) ?: '-',
-                    $row['Teacher_ID'] ?? $row['Employee_ID'] ?? '-',
+                    HumanReadableResolver::studentName($row['Student_ID'] ?? '', $students),
+                    $target,
+                    $actorName,
                     AttendanceStatusHelper::label($row['Status'] ?? ''),
                     $row['Check_In_Time'] ?? $row['Time_In'] ?? '-',
                     $row['Check_Out_Time'] ?? $row['Time_Out'] ?? '-',
@@ -189,6 +212,29 @@ public function create()
     public function show($id)
     {
         $attendance = $this->attendanceService->getById($id);
+        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+        $employeesById = collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll())->keyBy('Employee_ID');
+        $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
+        $schedulesById = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll())->keyBy('Schedule_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
+
+        $studentId = trim((string) ($attendance['Student_ID'] ?? ''));
+        $employeeId = trim((string) ($attendance['Employee_ID'] ?? ''));
+        $scheduleId = trim((string) ($attendance['Schedule_ID'] ?? ''));
+
+        $attendance['Target_Name'] = $studentId !== ''
+            ? HumanReadableResolver::studentName($studentId, $studentsById)
+            : HumanReadableResolver::employeeName($employeeId, $employeesById);
+        $attendance['Target_Number'] = $studentId !== ''
+            ? HumanReadableResolver::studentNumber($studentId, $studentsById)
+            : (($employeesById->get($employeeId)['Employee_Number'] ?? $employeesById->get($employeeId)['NIP'] ?? '') ?: '');
+        $attendance['Target_Type'] = $studentId !== '' ? 'Siswa' : 'Karyawan';
+        $attendance['Schedule_Label'] = $scheduleId !== ''
+            ? HumanReadableResolver::scheduleLabel($scheduleId, $schedulesById, $classesById, $subjectsById, $teachersById)
+            : HumanReadableResolver::className($attendance['Class_ID'] ?? '', $classesById);
+        $attendance['Status_Label'] = AttendanceStatusHelper::label($attendance['Status'] ?? '');
+
         return view('academic.attendances.show', compact('attendance'));
     }
 
@@ -216,32 +262,35 @@ public function create()
         $attendances = $this->attendanceService->getAll();
         $classes = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll());
         $schedules = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll());
+        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+        $classesById = $classes->keyBy('Class_ID');
+        $schedulesById = $schedules->keyBy('Schedule_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
         $classifier = new AttendanceLegacyClassifier();
         $file = fopen('php://temp', 'r+');
         $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
 
         fputcsv($file, array_map($sanitize, [
-            'Attendance_ID',
-            'Schedule_ID',
-            'Original_Schedule_ID',
-            'Class_ID',
-            'Classification',
-            'Student_ID',
+            'Tanggal',
+            'Siswa',
+            'Kelas',
+            'Jadwal',
+            'Klasifikasi',
             'Status',
-            'Date',
         ]));
 
         foreach ($attendances as $att) {
             $classified = $classifier->classify($att, $classes, $schedules);
+            $scheduleId = $classified['schedule_id'] ?? '';
+            $classId = $classified['class_id'] ?? ($att['Class_ID'] ?? '');
             fputcsv($file, array_map($sanitize, [
-                $att['Attendance_ID'] ?? '',
-                $classified['schedule_id'] ?? '',
-                $classified['original_schedule_id'] ?? '',
-                $classified['class_id'] ?? '',
-                $classified['classification'] ?? 'UNKNOWN',
-                $att['Student_ID'] ?? '',
-                $att['Status'] ?? '',
                 $att['Attendance_Date'] ?? '',
+                HumanReadableResolver::studentName($att['Student_ID'] ?? '', $studentsById),
+                HumanReadableResolver::className($classId, $classesById),
+                $scheduleId !== '' ? HumanReadableResolver::scheduleLabel($scheduleId, $schedulesById, $classesById, $subjectsById, $teachersById) : 'Absensi Kelas / QR',
+                $classified['classification'] ?? 'UNKNOWN',
+                AttendanceStatusHelper::label($att['Status'] ?? ''),
             ]));
         }
 

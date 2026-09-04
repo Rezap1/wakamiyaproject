@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Core\AssignmentService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class AssignmentController extends Controller
 {
@@ -40,19 +41,18 @@ class AssignmentController extends Controller
 
         $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
         $classes = $classRepo->fetchAll()->keyBy('Class_ID');
+        $teachers = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
 
         return [
             'moduleName' => 'Tugas Harian (Assignments)',
             'data' => collect(array_values($assignments->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Tugas', 'Judul', 'Kelas', 'Deadline', 'Status'],
-            'mapRow' => function($row) use ($classes) {
-                $classId = $row['Class_ID'] ?? null;
-                $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
+            'headers' => ['Judul', 'Kelas', 'Guru', 'Deadline', 'Status'],
+            'mapRow' => function($row) use ($classes, $teachers) {
                 return [
-                    $row['Assignment_ID'] ?? '-',
                     $row['Title'] ?? '-',
-                    $className ?? '-',
+                    HumanReadableResolver::className($row['Class_ID'] ?? '', $classes),
+                    HumanReadableResolver::teacherName($row['Teacher_ID'] ?? '', $teachers),
                     $row['Deadline'] ?? '-',
                     $row['Status'] ?? 'Active'
                 ];

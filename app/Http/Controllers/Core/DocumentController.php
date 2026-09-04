@@ -26,11 +26,10 @@ class DocumentController extends Controller
             'moduleName' => 'Dokumen (Document)',
             'data' => collect(array_values($documents->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Dokumen', 'Nama Dokumen', 'Kategori', 'Tipe', 'Status'],
+            'headers' => ['Nama Dokumen', 'Kategori', 'Tipe', 'Status'],
             'mapRow' => function($row) {
 
                 return [
-                    $row['Document_ID'] ?? '-',
                     $row['Document_Name'] ?? '-',
                     $row['Category'] ?? '-',
                     $row['Type'] ?? '-',

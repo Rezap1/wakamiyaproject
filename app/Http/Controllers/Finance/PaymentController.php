@@ -10,6 +10,7 @@ use App\Http\Requests\UpdatePaymentRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\UserResolverHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class PaymentController extends Controller
 {
@@ -39,19 +40,26 @@ class PaymentController extends Controller
                 return false;
             });
         }
+
+        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
+            ->keyBy('Student_ID');
+        $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())
+            ->keyBy('Company_ID');
         
         return [
             'moduleName' => 'Pembayaran (Payments)',
             'data' => collect(array_values($payments->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Pembayaran', 'No. Kwitansi', 'Tagihan (Invoice)', 'Siswa / Pembayar', 'Tanggal', 'Metode', 'Jumlah (Rp)', 'Status'],
-            'mapRow' => function($row) {
-                $stdName = UserResolverHelper::getName($row['Student_ID'] ?? '');
+            'headers' => ['No. Pembayaran', 'No. Kwitansi', 'Tagihan (Invoice)', 'Siswa / Pembayar', 'Tanggal', 'Metode', 'Jumlah (Rp)', 'Status'],
+            'mapRow' => function($row) use ($studentsById, $companiesById) {
+                $payerName = trim((string) ($row['Company_ID'] ?? '')) !== ''
+                    ? HumanReadableResolver::companyName($row['Company_ID'] ?? '', $companiesById)
+                    : HumanReadableResolver::studentName($row['Student_ID'] ?? '', $studentsById);
                 return [
-                    $row['Payment_ID'] ?? '-', 
-                    $row['Receipt_Number'] ?? '-', 
-                    $row['Invoice_ID'] ?? '-', 
-                    $stdName !== '-' ? $stdName : ($row['Student_ID'] ?? '-'), 
+                    $row['Payment_ID'] ?? '-',
+                    $row['Receipt_Number'] ?? '-',
+                    $row['Invoice_ID'] ?? '-',
+                    $payerName,
                     isset($row['Payment_Date']) ? \Carbon\Carbon::parse($row['Payment_Date'])->format('d M Y') : '-',
                     $row['Payment_Method'] ?? 'Bank Transfer',
                     'Rp ' . number_format((float)($row['Amount_Paid'] ?? $row['Amount'] ?? 0), 0, ',', '.'),
@@ -179,7 +187,11 @@ class PaymentController extends Controller
     {
         try {
             $docData = $this->paymentService->getReceiptDocumentData($id);
-            $docData['payment']['student_name'] = UserResolverHelper::getName($docData['payment']['Student_ID'] ?? '');
+            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $docData['payment']['student_name'] = trim((string) ($docData['payment']['Company_ID'] ?? '')) !== ''
+                ? HumanReadableResolver::companyName($docData['payment']['Company_ID'] ?? '', $companiesById)
+                : HumanReadableResolver::studentName($docData['payment']['Student_ID'] ?? '', $studentsById);
             
             return ReportHelper::export(
                 'pdf',
@@ -200,7 +212,11 @@ class PaymentController extends Controller
     {
         try {
             $docData = $this->paymentService->getReceiptDocumentData($id, true);
-            $docData['payment']['student_name'] = UserResolverHelper::getName($docData['payment']['Student_ID'] ?? '');
+            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $docData['payment']['student_name'] = trim((string) ($docData['payment']['Company_ID'] ?? '')) !== ''
+                ? HumanReadableResolver::companyName($docData['payment']['Company_ID'] ?? '', $companiesById)
+                : HumanReadableResolver::studentName($docData['payment']['Student_ID'] ?? '', $studentsById);
             return view('finance.payments.verify_receipt_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $this->safeExceptionMessage($e, 'Bukti pembayaran tidak ditemukan atau tidak tersedia.'));

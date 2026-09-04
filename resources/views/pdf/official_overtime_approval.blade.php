@@ -150,8 +150,8 @@
                         <span class="field-value">{{ $employee['Full_Name'] ?? $overtime['Employee_Name'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
-                        <span class="field-label">ID Pegawai:</span>
-                        <span class="field-value">{{ $overtime['Employee_ID'] ?? '-' }}</span>
+                        <span class="field-label">No. Pegawai:</span>
+                        <span class="field-value">{{ $employee['Employee_Number'] ?? $employee['NIP'] ?? '-' }}</span>
                     </div>
                 </div>
             </td>

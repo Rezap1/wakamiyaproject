@@ -2,14 +2,18 @@
 
 namespace App\Services\Attendance;
 
+use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Auth\Access\AuthorizationException;
 use Carbon\Carbon;
 use Exception;
 
@@ -21,6 +25,8 @@ class AttendanceRequestService
     protected $studentRepo;
     protected $scheduleRepo;
     protected $notificationService;
+    protected $teacherRepo;
+    protected $classRepo;
 
     public function __construct(
         AttendanceRequestRepositoryInterface $requestRepo,
@@ -28,7 +34,9 @@ class AttendanceRequestService
         ActivityLogService $activityLog,
         ?StudentRepositoryInterface $studentRepo = null,
         ?ScheduleRepositoryInterface $scheduleRepo = null,
-        ?NotificationService $notificationService = null
+        ?NotificationService $notificationService = null,
+        ?TeacherRepositoryInterface $teacherRepo = null,
+        ?ClassRepositoryInterface $classRepo = null
     ) {
         $this->requestRepo = $requestRepo;
         $this->attendanceRepo = $attendanceRepo;
@@ -36,11 +44,15 @@ class AttendanceRequestService
         $this->studentRepo = $studentRepo;
         $this->scheduleRepo = $scheduleRepo;
         $this->notificationService = $notificationService;
+        $this->teacherRepo = $teacherRepo;
+        $this->classRepo = $classRepo;
     }
 
     public function getAllPending()
     {
-        return collect($this->requestRepo->fetchAll())->where('Status', 'PENDING')->values();
+        return collect($this->requestRepo->fetchAll())
+            ->filter(fn ($row) => $this->isPendingRequestStatus($row['Status'] ?? ''))
+            ->values();
     }
 
     public function getAll()
@@ -56,6 +68,30 @@ class AttendanceRequestService
     public function findById($requestId)
     {
         return $this->requestRepo->findById($requestId);
+    }
+
+    public function getTeacherRequests($user)
+    {
+        $scope = $this->teacherScopeForUser($user);
+
+        return collect($this->requestRepo->fetchAll())
+            ->filter(fn ($request) => $this->requestAllowedForTeacherFromSnapshot($request, $scope))
+            ->values();
+    }
+
+    public function assertTeacherCanReviewRequest($requestId, $user): array
+    {
+        $request = $this->findById($requestId);
+        if (!$request) {
+            throw new Exception('Pengajuan tidak ditemukan.');
+        }
+
+        $scope = $this->teacherScopeForUser($user);
+        if (!$this->requestAllowedForTeacherFromSnapshot($request, $scope)) {
+            throw new AuthorizationException('Anda tidak memiliki akses untuk memproses pengajuan ini.');
+        }
+
+        return $request;
     }
 
     public function createRequest(array $data, $user)
@@ -82,92 +118,98 @@ class AttendanceRequestService
             }
         }
 
-        // 1. Validation for Duplicate Request
-        $existing = $this->getStudentRequests($data['Student_ID'])->first(function ($item) use ($data, $target) {
-            if (($item['Student_ID'] ?? '') !== ($data['Student_ID'] ?? '')
-                || ($item['Attendance_Date'] ?? '') !== ($data['Attendance_Date'] ?? '')) {
-                return false;
-            }
-
-            $itemTarget = $this->normalizeTarget($item, false);
-            return $itemTarget['Attendance_Type'] === $target['Attendance_Type']
-                && ($target['Attendance_Type'] === 'CLASS_QR'
-                    ? (($itemTarget['Class_ID'] ?? '') === ''
-                        || ($itemTarget['Class_ID'] ?? '') === ($target['Class_ID'] ?? ''))
-                    : ($itemTarget['Schedule_ID'] ?? '') === ($target['Schedule_ID'] ?? ''));
-        });
-        if ($existing) {
-            if (in_array($existing['Status'], ['PENDING', 'APPROVED'])) {
-                throw new Exception("Anda sudah memiliki pengajuan aktif untuk presensi ini.");
-            }
-        }
-
-        // 2. Insert Request
-        $requestId = $this->requestRepo->generateNewId('REQ', 7);
-        $insertData = [
-            'Request_ID' => $requestId,
-            'Attendance_ID' => $data['Attendance_ID'],
-            'Student_ID' => $data['Student_ID'],
-            'Class_ID' => $target['Class_ID'],
-            'Schedule_ID' => $target['Schedule_ID'],
-            'Attendance_Type' => $target['Attendance_Type'],
-            'Attendance_Date' => $data['Attendance_Date'],
-            'Request_Type' => $data['Request_Type'], // SAKIT or IZIN
-            'Reason' => $data['Reason'],
-            'Evidence_URL' => $data['Evidence_URL'],
-            'Status' => 'PENDING',
-            'Academic_Notes' => '',
-            'Reviewed_By' => '',
-            'Reviewed_At' => '',
-            'Created_At' => now()->toDateTimeString(),
-            'Updated_At' => now()->toDateTimeString(),
-        ];
-
-        $result = $this->requestRepo->create($insertData);
-        $this->requestRepo->clearCache();
-
-        // A pending request is already a valid attendance exception. Persist it
-        // immediately so future dates cannot be marked PRESENT/ABSENT before review.
         $attendanceScope = $target['Attendance_Type'] === 'CLASS_QR' ? $target['Class_ID'] : $target['Schedule_ID'];
-        $attendanceLockKey = 'attendance_request_sync_' . md5(implode('|', [
-            $insertData['Student_ID'], $insertData['Attendance_Date'], $target['Attendance_Type'], $attendanceScope,
+        $createLockKey = 'attendance_request_create_' . md5(implode('|', [
+            $data['Student_ID'] ?? '',
+            $data['Attendance_Date'] ?? '',
+            $target['Attendance_Type'],
+            $attendanceScope,
         ]));
-        Cache::lock($attendanceLockKey, 15)->block(10, function () use ($insertData, $target) {
-            $existingAttendance = $this->resolveOfficialAttendance($insertData, $target);
-            $this->syncOfficialAttendance($insertData, $target, $insertData['Request_Type'], $existingAttendance);
-        });
 
-        // Keep the existing approval semantics, but make a newly submitted
-        // request visible to Master immediately.
-        if ($this->notificationService) {
-            try {
-                $this->notificationService->NotifyRole(
-                    'MASTER',
-                    'PENGAJUAN IZIN SISWA BARU',
-                    "Pengajuan {$insertData['Request_ID']} untuk tanggal {$insertData['Attendance_Date']} menunggu review.",
-                    'ATTENDANCE',
-                    'Normal',
-                    '/academic/attendance/requests/' . $insertData['Request_ID'],
-                    $user->User_ID ?? null
-                );
-            } catch (\Throwable $notificationFailure) {
-                Log::warning('Failed to notify Master about attendance request', [
-                    'request_id' => $requestId,
-                    'exception' => get_class($notificationFailure),
-                ]);
+        return Cache::lock($createLockKey, 15)->block(10, function () use ($data, $target, $attendanceScope, $user) {
+            $existing = $this->getStudentRequests($data['Student_ID'])->first(function ($item) use ($data, $target) {
+                if (($item['Student_ID'] ?? '') !== ($data['Student_ID'] ?? '')
+                    || ($item['Attendance_Date'] ?? '') !== ($data['Attendance_Date'] ?? '')) {
+                    return false;
+                }
+
+                try {
+                    $itemTarget = $this->normalizeTarget($item, false);
+                } catch (\Throwable) {
+                    return false;
+                }
+
+                return $itemTarget['Attendance_Type'] === $target['Attendance_Type']
+                    && ($target['Attendance_Type'] === 'CLASS_QR'
+                        ? (($itemTarget['Class_ID'] ?? '') === ''
+                            || ($itemTarget['Class_ID'] ?? '') === ($target['Class_ID'] ?? ''))
+                        : ($itemTarget['Schedule_ID'] ?? '') === ($target['Schedule_ID'] ?? ''));
+            });
+
+            if ($existing && $this->isActiveDuplicateStatus($existing['Status'] ?? '')) {
+                throw new Exception('Anda sudah memiliki pengajuan aktif untuk presensi ini.');
             }
-        }
 
-        // 3. Audit Log
-        $this->activityLog->log(
-            'ATTENDANCE',
-            'ATTENDANCE_REQUEST_CREATED',
-            "Student {$data['Student_ID']} created request {$requestId}",
-            null,
-            ['Request_ID' => $requestId, 'Student_ID' => $data['Student_ID']]
-        );
+            $requestType = strtoupper(trim((string) ($data['Request_Type'] ?? '')));
+            if (!in_array($requestType, ['SAKIT', 'IZIN'], true)) {
+                throw new Exception('Tipe pengajuan harus SAKIT atau IZIN.');
+            }
 
-        return $result;
+            $requestId = $this->requestRepo->generateNewId('REQ', 7);
+            $insertData = [
+                'Request_ID' => $requestId,
+                'Attendance_ID' => $data['Attendance_ID'],
+                'Student_ID' => $data['Student_ID'],
+                'Class_ID' => $target['Class_ID'],
+                'Schedule_ID' => $target['Schedule_ID'],
+                'Attendance_Type' => $target['Attendance_Type'],
+                'Attendance_Date' => $data['Attendance_Date'],
+                'Request_Type' => $requestType,
+                'Reason' => $data['Reason'],
+                'Evidence_URL' => $data['Evidence_URL'],
+                'Status' => 'PENDING',
+                'Academic_Notes' => '',
+                'Reviewed_By' => '',
+                'Reviewed_At' => '',
+                'Created_At' => now()->toDateTimeString(),
+                'Updated_At' => now()->toDateTimeString(),
+            ];
+
+            $result = $this->requestRepo->create($insertData);
+            if ($result === false) {
+                throw new Exception('Pengajuan gagal disimpan.');
+            }
+            $this->requestRepo->clearCache();
+
+            if ($this->notificationService) {
+                try {
+                    $this->notificationService->NotifyRole(
+                        'MASTER',
+                        'PENGAJUAN IZIN SISWA BARU',
+                        "Pengajuan {$insertData['Request_ID']} untuk tanggal {$insertData['Attendance_Date']} menunggu review guru.",
+                        'ATTENDANCE',
+                        'Normal',
+                        '/academic/attendance/requests/' . $insertData['Request_ID'],
+                        $this->actorId($user)
+                    );
+                } catch (\Throwable $notificationFailure) {
+                    Log::warning('Failed to notify Master about attendance request', [
+                        'request_id' => $requestId,
+                        'exception' => get_class($notificationFailure),
+                    ]);
+                }
+            }
+
+            $this->activityLog->log(
+                'ATTENDANCE',
+                'ATTENDANCE_REQUEST_CREATED',
+                "Student {$data['Student_ID']} created request {$requestId}",
+                null,
+                ['Request_ID' => $requestId, 'Student_ID' => $data['Student_ID']]
+            );
+
+            return $result;
+        });
     }
 
     private function normalizeDate($date): string
@@ -177,88 +219,109 @@ class AttendanceRequestService
 
     public function approveRequest($requestId, $statusToApply, $notes, $user)
     {
-        $request = $this->findById($requestId);
-        if (!$request) {
-            throw new Exception("Pengajuan tidak ditemukan.");
-        }
-        if ($request['Status'] !== 'PENDING') {
-            throw new Exception("Pengajuan sudah diproses sebelumnya.");
+        $statusToApply = strtoupper(trim((string) $statusToApply));
+        if (!in_array($statusToApply, ['SAKIT', 'IZIN'], true)) {
+            throw new Exception('Status approval harus berupa SAKIT atau IZIN.');
         }
 
-        if (!in_array($statusToApply, ['SAKIT', 'IZIN'])) {
-            throw new Exception("Status approval harus berupa SAKIT atau IZIN.");
-        }
+        return Cache::lock('attendance_request_status_' . md5((string) $requestId), 15)->block(10, function () use ($requestId, $statusToApply, $notes, $user) {
+            $request = $this->assertTeacherCanReviewRequest($requestId, $user);
+            $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
+            $target = $this->resolveRequestTarget($request);
+            $existingAttendance = $this->resolveOfficialAttendance($request, $target);
 
-        $target = $this->resolveRequestTarget($request);
-        $existingAttendance = $this->resolveOfficialAttendance($request, $target);
+            if ($currentStatus === 'APPROVED') {
+                if ($existingAttendance && !$this->attendanceStatusMatches($existingAttendance['Status'] ?? '', $statusToApply)) {
+                    throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
+                }
 
-        // Update Request Status
-        $updateData = [
-            'Status' => 'APPROVED',
-            'Academic_Notes' => $notes,
-            'Reviewed_By' => $user->User_ID,
-            'Reviewed_At' => now()->toDateTimeString(),
-            'Updated_At' => now()->toDateTimeString(),
-        ];
-        
-        $this->requestRepo->update($requestId, $updateData);
-        $this->requestRepo->clearCache();
+                $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+                return true;
+            }
 
-        $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+            if ($currentStatus === 'REJECTED') {
+                throw new Exception('Pengajuan sudah ditolak sebelumnya.');
+            }
 
-        // Audit Log
-        $this->activityLog->log(
-            'ATTENDANCE',
-            'ATTENDANCE_REQUEST_APPROVED',
-            "Academic {$user->User_ID} approved request {$requestId} as {$statusToApply}",
-            null,
-            ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'APPROVED', 'Notes' => $notes]
-        );
+            $updateData = [
+                'Status' => 'APPROVED',
+                'Academic_Notes' => $notes,
+                'Reviewed_By' => $this->actorId($user),
+                'Reviewed_At' => now()->toDateTimeString(),
+                'Updated_At' => now()->toDateTimeString(),
+            ];
 
-        return true;
+            $updated = $this->requestRepo->update($requestId, $updateData);
+            if ($updated === false) {
+                throw new Exception('Status pengajuan gagal diperbarui.');
+            }
+            $this->requestRepo->clearCache();
+
+            $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+
+            $this->notifyStudentDecision($request, 'APPROVED', $statusToApply, (string) $notes, $user);
+
+            $this->activityLog->log(
+                'ATTENDANCE',
+                'ATTENDANCE_REQUEST_APPROVED',
+                'Teacher ' . $this->actorId($user) . " approved request {$requestId} as {$statusToApply}",
+                null,
+                ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'APPROVED', 'Notes' => $notes]
+            );
+
+            return true;
+        });
     }
 
     public function rejectRequest($requestId, $notes, $user)
     {
-        $request = $this->findById($requestId);
-        if (!$request) {
-            throw new Exception("Pengajuan tidak ditemukan.");
-        }
-        if ($request['Status'] !== 'PENDING') {
-            throw new Exception("Pengajuan sudah diproses sebelumnya.");
-        }
-
         if (empty(trim($notes))) {
-            throw new Exception("Alasan penolakan wajib diisi.");
+            throw new Exception('Alasan penolakan wajib diisi.');
         }
 
-        $target = $this->resolveRequestTarget($request);
-        $existingAttendance = $this->resolveOfficialAttendance($request, $target);
+        return Cache::lock('attendance_request_status_' . md5((string) $requestId), 15)->block(10, function () use ($requestId, $notes, $user) {
+            $request = $this->assertTeacherCanReviewRequest($requestId, $user);
+            $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
+            $target = $this->resolveRequestTarget($request);
+            $existingAttendance = $this->resolveOfficialAttendance($request, $target);
 
-        // Update Request Status
-        $updateData = [
-            'Status' => 'REJECTED',
-            'Academic_Notes' => $notes,
-            'Reviewed_By' => $user->User_ID,
-            'Reviewed_At' => now()->toDateTimeString(),
-            'Updated_At' => now()->toDateTimeString(),
-        ];
-        
-        $this->requestRepo->update($requestId, $updateData);
-        $this->requestRepo->clearCache();
+            if ($currentStatus === 'REJECTED') {
+                $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+                return true;
+            }
 
-        $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+            if ($currentStatus === 'APPROVED') {
+                throw new Exception('Pengajuan sudah disetujui sebelumnya.');
+            }
 
-        // Audit Log
-        $this->activityLog->log(
-            'ATTENDANCE',
-            'ATTENDANCE_REQUEST_REJECTED',
-            "Academic {$user->User_ID} rejected request {$requestId}",
-            null,
-            ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'REJECTED', 'Notes' => $notes]
-        );
+            $updateData = [
+                'Status' => 'REJECTED',
+                'Academic_Notes' => $notes,
+                'Reviewed_By' => $this->actorId($user),
+                'Reviewed_At' => now()->toDateTimeString(),
+                'Updated_At' => now()->toDateTimeString(),
+            ];
 
-        return true;
+            $updated = $this->requestRepo->update($requestId, $updateData);
+            if ($updated === false) {
+                throw new Exception('Status pengajuan gagal diperbarui.');
+            }
+            $this->requestRepo->clearCache();
+
+            $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+
+            $this->notifyStudentDecision($request, 'REJECTED', 'ALPA', (string) $notes, $user);
+
+            $this->activityLog->log(
+                'ATTENDANCE',
+                'ATTENDANCE_REQUEST_REJECTED',
+                'Teacher ' . $this->actorId($user) . " rejected request {$requestId}",
+                null,
+                ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'REJECTED', 'Notes' => $notes]
+            );
+
+            return true;
+        });
     }
 
     /**
@@ -336,15 +399,22 @@ class AttendanceRequestService
         $attendanceId = trim((string) ($request['Attendance_ID'] ?? ''));
 
         if ($attendance) {
-            $this->attendanceRepo->update($attendance['Attendance_ID'], [
+            if ($this->attendanceStatusMatches($attendance['Status'] ?? '', $status)) {
+                return;
+            }
+
+            $updated = $this->attendanceRepo->update($attendance['Attendance_ID'], [
                 'Status' => $status,
                 'Updated_At' => now()->toDateTimeString(),
             ]);
+            if ($updated === false) {
+                throw new Exception('Data presensi resmi gagal diperbarui.');
+            }
             $this->attendanceRepo->clearCache();
             return;
         }
 
-        $this->attendanceRepo->create([
+        $created = $this->attendanceRepo->create([
             'Attendance_ID' => $attendanceId !== '' ? $attendanceId : $this->deterministicAttendanceId($request, $target),
             'Student_ID' => $request['Student_ID'],
             'Class_ID' => $target['Class_ID'],
@@ -356,6 +426,9 @@ class AttendanceRequestService
             'Updated_At' => now()->toDateTimeString(),
             'Is_Active' => 'TRUE',
         ]);
+        if ($created === false) {
+            throw new Exception('Data presensi resmi gagal disimpan.');
+        }
         $this->attendanceRepo->clearCache();
     }
 
@@ -421,5 +494,186 @@ class AttendanceRequestService
             return 'ATT-' . $safe[0] . '-' . preg_replace('/[^0-9]/', '', (string) ($request['Attendance_Date'] ?? '')) . '-' . $safe[2];
         }
         return 'ATT-' . implode('-', $safe);
+    }
+
+    private function teacherScopeForUser($user): array
+    {
+        if (!$this->isTeacherActor($user)) {
+            throw new AuthorizationException('Hanya guru yang dapat memproses pengajuan izin/sakit siswa.');
+        }
+
+        if (!$this->teacherRepo || !$this->studentRepo || !$this->scheduleRepo || !$this->classRepo) {
+            throw new AuthorizationException('Master scope guru tidak tersedia.');
+        }
+
+        $userId = $this->actorId($user);
+        $teacher = collect($this->teacherRepo->fetchAll())->firstWhere('User_ID', $userId);
+        $teacherId = trim((string) ($teacher['Teacher_ID'] ?? ''));
+        if (!$teacher || $teacherId === '') {
+            throw new AuthorizationException('Profil guru tidak ditemukan.');
+        }
+
+        $schedules = collect($this->scheduleRepo->fetchAll());
+        $classes = collect($this->classRepo->fetchAll());
+        $students = collect($this->studentRepo->fetchAll());
+        $teacherSchedules = $schedules->where('Teacher_ID', $teacherId)->values();
+        $scheduleClassIds = $teacherSchedules->pluck('Class_ID')->filter()->unique();
+        $homeroomClassIds = $classes->where('Homeroom_Teacher_ID', $teacherId)->pluck('Class_ID')->filter()->unique();
+        $classIds = $scheduleClassIds->merge($homeroomClassIds)->filter()->unique()->values();
+
+        return [
+            'teacher_id' => $teacherId,
+            'schedule_ids' => $teacherSchedules->pluck('Schedule_ID')->filter()->unique()->values(),
+            'class_ids' => $classIds,
+            'students_by_id' => $students->keyBy('Student_ID'),
+            'schedules_by_id' => $schedules->keyBy('Schedule_ID'),
+        ];
+    }
+
+    private function requestAllowedForTeacherFromSnapshot(array $request, array $scope): bool
+    {
+        $student = $scope['students_by_id']->get($request['Student_ID'] ?? '');
+        if (!$student) {
+            return false;
+        }
+
+        $studentClassId = trim((string) ($student['Class_ID'] ?? ''));
+        if ($studentClassId === '' || !$scope['class_ids']->contains($studentClassId)) {
+            return false;
+        }
+
+        try {
+            $target = $this->normalizeTarget($request, false);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if ($target['Attendance_Type'] === 'CLASS_QR') {
+            $requestedClassId = trim((string) ($request['Class_ID'] ?? ''));
+            return $requestedClassId === '' || $requestedClassId === $studentClassId;
+        }
+
+        $schedule = $scope['schedules_by_id']->get($target['Schedule_ID'] ?? '');
+        if (!$schedule) {
+            return false;
+        }
+
+        return $scope['schedule_ids']->contains($target['Schedule_ID'] ?? '')
+            && trim((string) ($schedule['Class_ID'] ?? '')) === $studentClassId;
+    }
+
+    private function isTeacherActor($user): bool
+    {
+        $role = $this->roleNameForUser($user);
+
+        return str_contains($role, 'TEACHER') || str_contains($role, 'GURU');
+    }
+
+    private function roleNameForUser($user): string
+    {
+        if (!$user) {
+            return '';
+        }
+
+        $role = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
+        if ($role !== '') {
+            return $role;
+        }
+
+        $roleId = trim((string) ($user->Role_ID ?? ''));
+        if ($roleId === '') {
+            return '';
+        }
+
+        try {
+            return strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)->getRoleById($roleId)['Role_Name'] ?? '')));
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function actorId($user): string
+    {
+        return trim((string) ($user->User_ID ?? $user->Email ?? $user->email ?? ''));
+    }
+
+    private function isPendingRequestStatus(?string $status): bool
+    {
+        try {
+            return $this->canonicalRequestStatus($status) === 'PENDING';
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function isActiveDuplicateStatus(?string $status): bool
+    {
+        try {
+            return in_array($this->canonicalRequestStatus($status), ['PENDING', 'APPROVED'], true);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function canonicalRequestStatus(?string $status): string
+    {
+        $value = strtoupper(trim((string) $status));
+        $value = str_replace([' ', '-'], '_', $value);
+
+        if ($value === '' || in_array($value, ['PENDING', 'WAITING', 'WAITING_APPROVAL', 'WAITING_REVIEW', 'SUBMITTED'], true)) {
+            return 'PENDING';
+        }
+
+        if (in_array($value, ['APPROVED', 'REJECTED'], true)) {
+            return $value;
+        }
+
+        throw new Exception('Status pengajuan tidak valid.');
+    }
+
+    private function attendanceStatusMatches(?string $current, string $expected): bool
+    {
+        return AttendanceStatusHelper::normalize($current, '') === AttendanceStatusHelper::normalize($expected, '');
+    }
+
+    private function notifyStudentDecision(array $request, string $decision, string $attendanceStatus, string $notes, $user): void
+    {
+        if (!$this->notificationService || !$this->studentRepo) {
+            return;
+        }
+
+        $student = collect($this->studentRepo->fetchAll())->firstWhere('Student_ID', $request['Student_ID'] ?? '');
+        $studentUserId = trim((string) ($student['User_ID'] ?? ''));
+        if ($studentUserId === '') {
+            return;
+        }
+
+        $isApproved = $decision === 'APPROVED';
+        $statusLabel = AttendanceStatusHelper::label($attendanceStatus);
+        $date = $request['Attendance_Date'] ?? '-';
+        $message = $isApproved
+            ? "Pengajuan presensi tanggal {$date} disetujui sebagai {$statusLabel}."
+            : "Pengajuan presensi tanggal {$date} ditolak. Status presensi menjadi {$statusLabel}.";
+        if (trim($notes) !== '') {
+            $message .= ' Catatan: ' . trim($notes);
+        }
+
+        try {
+            $this->notificationService->NotifyUser(
+                $studentUserId,
+                $isApproved ? 'PENGAJUAN PRESENSI DISETUJUI' : 'PENGAJUAN PRESENSI DITOLAK',
+                $message,
+                'ATTENDANCE',
+                'Normal',
+                '/student/attendance/requests',
+                $this->actorId($user)
+            );
+        } catch (\Throwable $notificationFailure) {
+            Log::warning('Failed to notify student about attendance request decision', [
+                'request_id' => $request['Request_ID'] ?? null,
+                'student_id' => $request['Student_ID'] ?? null,
+                'exception' => get_class($notificationFailure),
+            ]);
+        }
     }
 }

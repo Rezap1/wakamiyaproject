@@ -16,7 +16,7 @@
 
             <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm">
                 <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Siswa</p>
-                <p class="mt-1 font-extrabold text-slate-800">{{ $score['Student_ID'] }}</p>
+                <p class="mt-1 font-extrabold text-slate-800">{{ $score['Student_Name'] ?? 'Data siswa tidak ditemukan' }}</p>
                 <p class="text-xs text-slate-500">Identitas siswa dikunci oleh server untuk mencegah perubahan lintas scope.</p>
             </div>
 

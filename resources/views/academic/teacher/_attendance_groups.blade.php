@@ -8,7 +8,6 @@
             <div class="p-5 border-b border-slate-100 bg-slate-50">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
-                        <p class="text-xs font-black text-indigo-500 uppercase tracking-wider">{{ $group['Class_ID'] }}</p>
                         <h3 class="text-lg font-bold text-slate-900">{{ $group['Class_Name'] }}</h3>
                         <p class="text-xs text-slate-500 mt-1">{{ $group['Date_Display'] ?: 'Semua tanggal' }} &middot; {{ $group['Total'] }} siswa</p>
                     </div>
@@ -52,7 +51,9 @@
                             <tr class="hover:bg-slate-50 transition-colors">
                                 <td class="px-5 py-3">
                                     <p class="font-bold text-slate-900">{{ $student['Student_Name'] }}</p>
-                                    <p class="text-[10px] text-slate-500 font-mono">{{ $student['Student_ID'] }}</p>
+                                    @if(!empty($student['Student_Number']))
+                                        <p class="text-[10px] text-slate-500 font-mono">{{ $student['Student_Number'] }}</p>
+                                    @endif
                                 </td>
                                 <td class="px-5 py-3 text-slate-600">{{ $attendance['Attendance_Date'] ?? ($dateFilter ?? '-') }}</td>
                                 <td class="px-5 py-3 text-slate-600">{{ $student['Check_In_Time'] ?? '--:--' }}</td>

@@ -22,9 +22,10 @@ class PositionController extends Controller
     {
         $positions = $this->positionService->getAllPositions();
         $departments = $this->departmentService->getAllDepartments();
+        $departmentsById = $departments->keyBy('Department_ID');
         
-        $positions = $positions->map(function ($position) use ($departments) {
-            $dept = $departments->firstWhere('Department_ID', $position['Department_ID']);
+        $positions = $positions->map(function ($position) use ($departmentsById) {
+            $dept = $departmentsById[$position['Department_ID'] ?? ''] ?? null;
             $position['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
             return $position;
         });
@@ -47,10 +48,9 @@ class PositionController extends Controller
             'moduleName' => 'POSITIONS',
             'data' => $positions,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID', 'Nama Posisi', 'Departemen', 'Status'],
+            'headers' => ['Nama Posisi', 'Departemen', 'Status'],
             'mapRow' => function($row) {
                 return [
-                    $row['Position_ID'] ?? '-', 
                     $row['Position_Name'] ?? '-', 
                     $row['Department_Name'] ?? '-',
                     ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'

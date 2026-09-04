@@ -37,11 +37,11 @@
         </div>
         <div>
             <p class="text-[11px] font-bold text-slate-400 uppercase">Mata Pelajaran</p>
-            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $assessment['Subject_ID'] ?? '-' }}</p>
+            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $assessment['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}</p>
         </div>
         <div>
             <p class="text-[11px] font-bold text-slate-400 uppercase">Pengajar</p>
-            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $assessment['Teacher_ID'] ?? '-' }}</p>
+            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $assessment['Teacher_Name'] ?? 'Pengajar tidak ditemukan' }}</p>
         </div>
         <div>
             <p class="text-[11px] font-bold text-slate-400 uppercase">Tanggal Ujian</p>
@@ -56,7 +56,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase">Kelas / Batch</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ $assessment['Class_ID'] ?? '-' }} / {{ $assessment['Batch_ID'] ?? '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ $assessment['Class_Name'] ?? 'Kelas tidak ditemukan' }} / {{ $assessment['Batch_Name'] ?? $assessment['Batch_ID'] ?? '-' }}</p>
                     </div>
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase">Program</p>
@@ -78,8 +78,8 @@
             <h3 class="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">System Logs</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase">Record ID</p>
-                    <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $assessment['Assessment_ID'] ?? '-' }}</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase">Kode Penilaian</p>
+                    <p class="text-sm font-bold text-slate-800 mt-1">{{ $assessment['Assessment_Code'] ?? '-' }}</p>
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>

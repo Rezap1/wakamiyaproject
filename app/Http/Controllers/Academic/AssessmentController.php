@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\AssessmentService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class AssessmentController extends Controller
 {
@@ -26,18 +27,24 @@ class AssessmentController extends Controller
             })->values();
         }
         
+        $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
+
         return [
             'moduleName' => 'Evaluasi/Assessment',
             'data' => collect(array_values($assessments->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Evaluasi', 'Tipe', 'Tanggal', 'Judul', 'Status'],
-            'mapRow' => function($row) {
+            'headers' => ['Tipe', 'Tanggal', 'Judul', 'Kelas', 'Mata Pelajaran', 'Guru', 'Status'],
+            'mapRow' => function($row) use ($classesById, $subjectsById, $teachersById) {
 
                 return [
-                    $row['Assessment_ID'] ?? '-',
                     $row['Type'] ?? '-',
                     isset($row['Assessment_Date']) ? \Carbon\Carbon::parse($row['Assessment_Date'])->format('d M Y') : '-',
                     $row['Title'] ?? '-',
+                    HumanReadableResolver::className($row['Class_ID'] ?? '', $classesById),
+                    HumanReadableResolver::subjectName($row['Subject_ID'] ?? '', $subjectsById),
+                    HumanReadableResolver::teacherName($row['Teacher_ID'] ?? '', $teachersById),
                     $row['Status'] ?? 'Draft'
                 ];
                     },
@@ -67,14 +74,14 @@ class AssessmentController extends Controller
             $subjId = $item['Subject_ID'] ?? null;
             $classId = $item['Class_ID'] ?? null;
             
-            $subjName = $subjId && isset($subjects[$subjId]) ? $subjects[$subjId]['Subject_Name'] : $subjId;
-            $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
+            $subjName = HumanReadableResolver::subjectName($subjId, $subjects);
+            $className = HumanReadableResolver::className($classId, $classes);
             $progId = $item['Program_ID'] ?? '';
             
             $item['Name'] = $item['Title'] ?? '';
             $item['Exam_Date'] = isset($item['Assessment_Date']) ? \Carbon\Carbon::parse($item['Assessment_Date'])->format('d M Y') : '-';
-            $item['Subject_ID'] = $subjName;
-            $item['Class_ID'] = $className;
+            $item['Subject_Name'] = $subjName;
+            $item['Class_Name'] = $className;
             $item['Program_ID'] = $progId;
             
             return $item;
@@ -128,6 +135,15 @@ class AssessmentController extends Controller
     public function show($id)
     {
         $assessment = $this->assessmentService->getById($id);
+        $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
+
+        $assessment['Assessment_Name'] = $assessment['Assessment_Name'] ?? $assessment['Title'] ?? 'Penilaian';
+        $assessment['Subject_Name'] = HumanReadableResolver::subjectName($assessment['Subject_ID'] ?? '', $subjectsById);
+        $assessment['Class_Name'] = HumanReadableResolver::className($assessment['Class_ID'] ?? '', $classesById);
+        $assessment['Teacher_Name'] = HumanReadableResolver::teacherName($assessment['Teacher_ID'] ?? '', $teachersById);
+
         return view('academic.assessments.show', compact('assessment'));
     }
 

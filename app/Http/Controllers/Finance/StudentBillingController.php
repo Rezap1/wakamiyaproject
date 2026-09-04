@@ -207,7 +207,7 @@ class StudentBillingController extends Controller
 
         try {
             $docData = $this->invoiceService->getInvoiceDocumentData($id);
-            $docData['invoice']['student_name'] = \App\Helpers\UserResolverHelper::getName($docData['invoice']['Student_ID'] ?? '');
+            $docData['invoice']['student_name'] = $docData['customer']['name'] ?? 'Data siswa tidak ditemukan';
 
             return ReportHelper::export(
                 'pdf',

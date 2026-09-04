@@ -11,19 +11,20 @@
         'absent' => 'red',
         default => 'slate',
     };
-    $statusText = $attendance['Status'] ?? 'Present';
-    $targetId = $attendance['Student_ID'] ?? $attendance['Employee_ID'] ?? 'Pengguna Tidak Diketahui';
+    $statusText = $attendance['Status_Label'] ?? ($attendance['Status'] ?? 'Present');
+    $targetName = $attendance['Target_Name'] ?? 'Pengguna tidak ditemukan';
+    $targetNumber = $attendance['Target_Number'] ?? '';
     $attendanceId = $attendance['Attendance_ID'] ?? '-';
     
     $tab = request('tab', 'informasi');
 @endphp
 
-<x-universal.detail-layout 
-    title="{{ $targetId }}" 
-    subtitle="ID Kehadiran: {{ $attendanceId }} | {{ isset($attendance['Student_ID']) ? 'Siswa' : 'Karyawan' }}"
+<x-universal.detail-layout
+    title="{{ $targetName }}"
+    subtitle="{{ trim(($targetNumber ? 'No: ' . $targetNumber . ' | ' : '') . ($attendance['Target_Type'] ?? (isset($attendance['Student_ID']) ? 'Siswa' : 'Karyawan'))) }}"
     status="{{ $statusText }}"
     statusColor="{{ $badgeColor }}"
-    avatarInitials="{{ substr($targetId, 0, 1) }}"
+    avatarInitials="{{ substr($targetName, 0, 1) }}"
     activeTab="{{ $tab }}"
     :breadcrumbs="['Dashboard' => route('dashboard'), 'Kehadiran' => route('attendances.index'), 'Detail' => '#']"
 >
@@ -40,8 +41,8 @@
             <p class="text-sm font-bold text-slate-800 mt-0.5">{{ $attendance['Attendance_Date'] ?? date('d M Y') }}</p>
         </div>
         <div>
-            <p class="text-[11px] font-bold text-slate-400 uppercase">Schedule ID</p>
-            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $attendance['Schedule_ID'] ?? '-' }}</p>
+            <p class="text-[11px] font-bold text-slate-400 uppercase">Jadwal / Kelas</p>
+            <p class="text-sm font-medium text-slate-800 mt-0.5">{{ $attendance['Schedule_Label'] ?? 'Jadwal tidak ditemukan' }}</p>
         </div>
         <div>
             <p class="text-[11px] font-bold text-slate-400 uppercase">Status</p>
@@ -90,8 +91,8 @@
             <h3 class="text-sm font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">System Logs</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase">Record ID</p>
-                    <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $attendance['Attendance_ID'] ?? '-' }}</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase">Sumber Data</p>
+                    <p class="text-sm font-medium text-slate-800 mt-1">Presensi resmi</p>
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>

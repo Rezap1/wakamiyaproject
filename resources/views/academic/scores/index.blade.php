@@ -44,8 +44,8 @@
                         @foreach($group['items'] as $score)
                             <a href="{{ route('scores.show', $score['Score_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
                                 <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $score['Student_Display'] ?? $score['Student_ID'] ?? '-' }}</p>
-                                    <p class="text-[11px] text-slate-500 font-mono">{{ $score['Score_ID'] ?? '-' }} | {{ $score['Assessment_Title'] ?? $score['Assessment_ID'] ?? '-' }}</p>
+                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $score['Student_Display'] ?? 'Data siswa tidak ditemukan' }}</p>
+                                    <p class="text-[11px] text-slate-500">{{ $score['Assessment_Title'] ?? 'Penilaian tidak ditemukan' }}</p>
                                 </div>
                                 <span class="text-sm font-black text-slate-800 shrink-0">{{ $score['Score'] ?? $score['Score_Value'] ?? '-' }}</span>
                             </a>
@@ -58,7 +58,7 @@
 
     <x-universal.data-table :empty="count($scores) === 0" empty-title="Data Nilai Kosong" empty-description="Belum ada data nilai atau evaluasi yang tercatat.">
         <x-slot:header>
-            <th class="px-6 py-4">ID Nilai & Siswa</th>
+            <th class="px-6 py-4">Siswa</th>
             <th class="px-6 py-4">Kategori & Assessment</th>
             <th class="px-6 py-4 text-center">Nilai Komposit</th>
             <th class="px-6 py-4 text-center">Grade</th>
@@ -76,13 +76,12 @@
             @endphp
             <tr class="hover:bg-slate-50 transition-colors">
                 <td class="px-6 py-4">
-                    <div class="font-bold text-slate-800">{{ $item['Student_Display'] ?? $item['Student_ID'] ?? 'Unknown' }}</div>
-                    <div class="text-xs font-mono text-slate-400 mt-0.5">{{ $item['Score_ID'] ?? '-' }}</div>
+                    <div class="font-bold text-slate-800">{{ $item['Student_Display'] ?? 'Data siswa tidak ditemukan' }}</div>
                 </td>
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-2">
                         <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 uppercase">{{ $category }}</span>
-                        <span class="font-bold text-slate-700 text-xs">{{ $item['Assessment_Title'] ?? $item['Assessment_ID'] ?? '-' }}</span>
+                        <span class="font-bold text-slate-700 text-xs">{{ $item['Assessment_Title'] ?? 'Penilaian tidak ditemukan' }}</span>
                     </div>
                     <div class="text-[11px] text-slate-500 mt-1 truncate max-w-xs">
                         @php

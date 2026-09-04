@@ -556,6 +556,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/students', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'students'])->name('students');
         Route::get('/attendances', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'attendances'])->name('attendances');
         Route::get('/attendance-requests', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'attendanceRequests'])->name('attendance-requests');
+        Route::get('/attendance-requests/{id}', [\App\Http\Controllers\Academic\AttendanceRequestController::class, 'show'])->name('attendance-requests.show');
+        Route::post('/attendance-requests/{id}/approve', [\App\Http\Controllers\Academic\AttendanceRequestController::class, 'approve'])->name('attendance-requests.approve');
+        Route::post('/attendance-requests/{id}/reject', [\App\Http\Controllers\Academic\AttendanceRequestController::class, 'reject'])->name('attendance-requests.reject');
+        Route::get('/attendance-requests/{id}/evidence', [\App\Http\Controllers\Academic\AttendanceRequestController::class, 'downloadEvidence'])->name('attendance-requests.evidence');
         Route::get('/scores', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scores'])->name('scores');
         Route::get('/scores/create', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresCreate'])->name('scores.create');
         Route::post('/scores', [\App\Http\Controllers\Academic\TeacherWorkspaceController::class, 'scoresStore'])->name('scores.store');

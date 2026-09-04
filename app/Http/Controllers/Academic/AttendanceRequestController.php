@@ -10,8 +10,12 @@ use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Helpers\AttendanceStatusHelper;
 use App\Helpers\CollectionHelper;
 use App\Helpers\StoragePathHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class AttendanceRequestController extends Controller
 {
@@ -21,6 +25,8 @@ class AttendanceRequestController extends Controller
     protected $batchRepo;
     protected $classRepo;
     protected $attendanceRepo;
+    protected $subjectRepo;
+    protected $teacherRepo;
 
     public function __construct(
         AttendanceRequestService $requestService,
@@ -28,7 +34,9 @@ class AttendanceRequestController extends Controller
         ScheduleRepositoryInterface $scheduleRepo,
         BatchRepositoryInterface $batchRepo,
         ClassRepositoryInterface $classRepo,
-        ?AttendanceRepositoryInterface $attendanceRepo = null
+        ?AttendanceRepositoryInterface $attendanceRepo = null,
+        ?SubjectRepositoryInterface $subjectRepo = null,
+        ?TeacherRepositoryInterface $teacherRepo = null
     ) {
         $this->requestService = $requestService;
         $this->studentRepo = $studentRepo;
@@ -36,6 +44,8 @@ class AttendanceRequestController extends Controller
         $this->batchRepo = $batchRepo;
         $this->classRepo = $classRepo;
         $this->attendanceRepo = $attendanceRepo;
+        $this->subjectRepo = $subjectRepo;
+        $this->teacherRepo = $teacherRepo;
     }
 
     public function index(Request $request)
@@ -43,22 +53,20 @@ class AttendanceRequestController extends Controller
         $allRequests = collect($this->requestService->getAll());
         $students = collect($this->studentRepo->fetchAll());
         $classes = collect($this->classRepo->fetchAll());
+        $schedules = collect($this->scheduleRepo->fetchAll());
+        $subjects = $this->subjectRepo ? collect($this->subjectRepo->fetchAll()) : collect();
+        $studentsById = $students->keyBy('Student_ID');
+        $classesById = $classes->keyBy('Class_ID');
+        $schedulesById = $schedules->keyBy('Schedule_ID');
+        $subjectsById = $subjects->keyBy('Subject_ID');
         
-        // Enrich data
-        $enrichedRequests = $allRequests->map(function($req) use ($students, $classes) {
-            $student = $students->firstWhere('Student_ID', $req['Student_ID'] ?? '');
-            $class = $classes->firstWhere('Class_ID', $student['Class_ID'] ?? '');
-            
-            $req['Student_Name'] = $student['Full_Name'] ?? 'Unknown';
-            $req['Class_Name'] = $class['Class_Name'] ?? 'Unknown';
-            $req['Batch_ID'] = $student['Batch_ID'] ?? 'Unknown';
-            $req['Attendance_Type'] = strtoupper(trim((string) ($req['Attendance_Type'] ?? '')))
-                ?: (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE');
-            $req['Target_Display'] = $req['Attendance_Type'] === 'CLASS_QR'
-                ? 'Class Attendance / QR'
-                : ($req['Schedule_ID'] ?? 'Tidak tersedia');
-            return $req;
-        });
+        $enrichedRequests = $allRequests->map(fn ($req) => $this->enrichRequest(
+            $req,
+            $studentsById,
+            $classesById,
+            $schedulesById,
+            $subjectsById
+        ));
 
         // Default Filter to PENDING if not specified
         $statusFilter = $request->query('status', 'PENDING');
@@ -76,41 +84,49 @@ class AttendanceRequestController extends Controller
 
     public function show($id)
     {
-        $request = $this->requestService->findById($id);
+        $isTeacher = $this->isTeacherUser();
+        $request = $isTeacher
+            ? $this->requestService->assertTeacherCanReviewRequest($id, auth()->user())
+            : $this->requestService->findById($id);
         if (!$request) {
-            return redirect()->route('academic.attendance.requests.index')->with('error', 'Pengajuan tidak ditemukan.');
+            return redirect()->route($this->indexRouteName())->with('error', 'Pengajuan tidak ditemukan.');
         }
 
         $students = collect($this->studentRepo->fetchAll());
         $classes = collect($this->classRepo->fetchAll());
         $schedules = collect($this->scheduleRepo->fetchAll());
+        $subjects = $this->subjectRepo ? collect($this->subjectRepo->fetchAll()) : collect();
 
-        $student = $students->firstWhere('Student_ID', $request['Student_ID']);
-        $class = $classes->firstWhere('Class_ID', $student['Class_ID'] ?? '');
-        $requestType = strtoupper(trim((string) ($request['Attendance_Type'] ?? '')));
-        $isClassBased = $requestType === 'CLASS_QR'
-            || ($requestType === '' && empty($request['Schedule_ID']));
-        $schedule = $isClassBased ? null : $schedules->firstWhere('Schedule_ID', $request['Schedule_ID']);
+        $request = $this->enrichRequest(
+            $request,
+            $students->keyBy('Student_ID'),
+            $classes->keyBy('Class_ID'),
+            $schedules->keyBy('Schedule_ID'),
+            $subjects->keyBy('Subject_ID')
+        );
         $existingAttendance = null;
         if ($this->attendanceRepo && !empty($request['Attendance_ID'])) {
             $existingAttendance = $this->attendanceRepo->findById($request['Attendance_ID']);
         }
-
-        $request['Student_Name'] = $student['Full_Name'] ?? 'Unknown';
-        $request['Class_Name'] = $class['Class_Name'] ?? 'Unknown';
-        $request['Attendance_Type'] = $requestType !== ''
-            ? $requestType
-            : ($existingAttendance['Attendance_Type'] ?? ($isClassBased ? 'CLASS_QR' : 'SCHEDULE'));
-        $request['Class_ID'] = $student['Class_ID'] ?? $request['Class_ID'] ?? '';
-        $request['Schedule_Display'] = $request['Attendance_Type'] === 'CLASS_QR'
-            ? 'Class Attendance / QR'
-            : ($schedule['Schedule_ID'] ?? $request['Schedule_ID'] ?? 'Tidak tersedia');
-        $request['Subject_Name'] = $request['Attendance_Type'] === 'CLASS_QR'
-            ? 'Class Attendance / QR'
-            : ($schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Unknown');
         $request['Existing_Attendance'] = $existingAttendance;
+        $request['Existing_Attendance_Status_Label'] = AttendanceStatusHelper::label($existingAttendance['Status'] ?? '');
 
-        return view('academic.attendance.request-show', compact('request'));
+        $canReview = $isTeacher && ($request['Status_Normalized'] ?? '') === 'PENDING';
+        $routePrefix = $isTeacher ? 'teacher.workspace.attendance-requests' : 'academic.attendance.requests';
+        $backRoute = route($this->indexRouteName());
+        $evidenceRoute = $routePrefix . '.evidence';
+        $approveRoute = $routePrefix . '.approve';
+        $rejectRoute = $routePrefix . '.reject';
+
+        return view('academic.attendance.request-show', compact(
+            'request',
+            'canReview',
+            'backRoute',
+            'evidenceRoute',
+            'approveRoute',
+            'rejectRoute',
+            'isTeacher'
+        ));
     }
 
     public function approve(Request $request, $id)
@@ -128,7 +144,7 @@ class AttendanceRequestController extends Controller
                 auth()->user()
             );
 
-            return redirect()->route('academic.attendance.requests.index')->with('success', 'Pengajuan berhasil disetujui.');
+            return redirect()->route($this->indexRouteName())->with('success', 'Pengajuan berhasil disetujui.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
         }
@@ -147,7 +163,7 @@ class AttendanceRequestController extends Controller
                 auth()->user()
             );
 
-            return redirect()->route('academic.attendance.requests.index')->with('success', 'Pengajuan berhasil ditolak.');
+            return redirect()->route($this->indexRouteName())->with('success', 'Pengajuan berhasil ditolak.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
         }
@@ -155,7 +171,9 @@ class AttendanceRequestController extends Controller
 
     public function downloadEvidence(Request $httpRequest, $id)
     {
-        $request = $this->requestService->findById($id);
+        $request = $this->isTeacherUser()
+            ? $this->requestService->assertTeacherCanReviewRequest($id, auth()->user())
+            : $this->requestService->findById($id);
         if (!$request || empty($request['Evidence_URL'])) {
             abort(404, 'Bukti tidak ditemukan.');
         }
@@ -179,5 +197,98 @@ class AttendanceRequestController extends Controller
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
         return 'surat-' . $type . '-' . $requestId . ($extension ? '.' . $extension : '');
+    }
+
+    private function enrichRequest($request, $studentsById, $classesById, $schedulesById, $subjectsById): array
+    {
+        $request = is_array($request) ? $request : (array) $request;
+        $student = $studentsById->get($request['Student_ID'] ?? '');
+        $studentClassId = trim((string) ($student['Class_ID'] ?? $request['Class_ID'] ?? ''));
+        $attendanceType = strtoupper(trim((string) ($request['Attendance_Type'] ?? '')))
+            ?: (empty($request['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE');
+        $isClassBased = in_array($attendanceType, ['CLASS_QR', 'CLASS_MANUAL'], true);
+        $schedule = $isClassBased ? null : $schedulesById->get($request['Schedule_ID'] ?? '');
+
+        $request['Student_Name'] = HumanReadableResolver::studentName($request['Student_ID'] ?? '', $studentsById);
+        $request['Class_Name'] = HumanReadableResolver::className($studentClassId, $classesById);
+        $request['Batch_ID'] = $student['Batch_ID'] ?? '';
+        $request['Attendance_Type'] = $isClassBased ? 'CLASS_QR' : 'SCHEDULE';
+        $request['Target_Display'] = $isClassBased
+            ? 'Absensi Kelas / QR'
+            : HumanReadableResolver::scheduleLabel($request['Schedule_ID'] ?? '', $schedulesById, $classesById, $subjectsById);
+        $request['Schedule_Display'] = $request['Target_Display'];
+        $request['Subject_Name'] = $isClassBased
+            ? 'Absensi Kelas / QR'
+            : HumanReadableResolver::subjectName($schedule['Subject_ID'] ?? '', $subjectsById);
+        $request['Status_Normalized'] = $this->requestStatus($request['Status'] ?? '');
+        $request['Status_Label'] = $this->requestStatusLabel($request['Status'] ?? '');
+        $request['Request_Type_Label'] = AttendanceStatusHelper::label($request['Request_Type'] ?? '');
+        $request['Reviewed_By_Name'] = $this->reviewerName($request['Reviewed_By'] ?? '');
+
+        return $request;
+    }
+
+    private function indexRouteName(): string
+    {
+        return $this->isTeacherUser()
+            ? 'teacher.workspace.attendance-requests'
+            : 'academic.attendance.requests.index';
+    }
+
+    private function isTeacherUser(): bool
+    {
+        $role = $this->currentRoleName();
+
+        return str_contains($role, 'TEACHER') || str_contains($role, 'GURU');
+    }
+
+    private function currentRoleName(): string
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return '';
+        }
+
+        $roleName = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
+        if ($roleName !== '') {
+            return $roleName;
+        }
+
+        try {
+            return strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)->getRoleById($user->Role_ID ?? '')['Role_Name'] ?? '')));
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function requestStatus(?string $status): string
+    {
+        $status = strtoupper(trim((string) $status));
+        $status = str_replace([' ', '-'], '_', $status);
+
+        return in_array($status, ['', 'PENDING', 'WAITING', 'WAITING_APPROVAL', 'WAITING_REVIEW', 'SUBMITTED'], true)
+            ? 'PENDING'
+            : $status;
+    }
+
+    private function requestStatusLabel(?string $status): string
+    {
+        return match ($this->requestStatus($status)) {
+            'APPROVED' => 'Disetujui',
+            'REJECTED' => 'Ditolak',
+            default => 'Menunggu Review',
+        };
+    }
+
+    private function reviewerName(?string $reviewedBy): string
+    {
+        $reviewedBy = trim((string) $reviewedBy);
+        if ($reviewedBy === '' || !$this->teacherRepo) {
+            return 'Belum direview';
+        }
+
+        $teacher = collect($this->teacherRepo->fetchAll())->firstWhere('User_ID', $reviewedBy);
+
+        return trim((string) ($teacher['Full_Name'] ?? $teacher['Teacher_Name'] ?? '')) ?: 'Reviewer tidak ditemukan';
     }
 }

@@ -11,6 +11,8 @@ use App\Services\Academic\AttendanceService;
 use App\Services\Attendance\AttendanceRequestService;
 use App\Services\Academic\AssessmentConfigService;
 use App\Helpers\ReportHelper;
+use App\Helpers\AttendanceStatusHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class StudentWorkspaceController extends Controller
 {
@@ -177,7 +179,7 @@ class StudentWorkspaceController extends Controller
             ->whereIn('Subject_ID', $subjectIds->all())
             ->map(function($sub) {
             return [
-                'code' => $sub['Subject_ID'] ?? '',
+                'code' => $sub['Subject_Code'] ?? '',
                 'name' => $sub['Subject_Name'] ?? '',
                 'credits' => $sub['Credit'] ?? 3
             ];
@@ -246,13 +248,19 @@ class StudentWorkspaceController extends Controller
     {
         $studentId = $this->getStudentId();
         $scores = collect($this->scoreService->getAll())->where('Student_ID', $studentId);
+        $assessmentsById = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
+        $assignmentsById = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
 
         $rows = [];
 
         foreach ($scores as $s) {
             $date = $this->formatCsvDate($s['Created_At'] ?? null);
             $category = strtoupper($s['Assessment_Category'] ?? 'Tidak dikategorikan');
-            $assessment = $s['Assessment_ID'] ?? $s['Assignment_ID'] ?? '-';
+            $assessmentId = trim((string) ($s['Assessment_ID'] ?? ''));
+            $assignmentId = trim((string) ($s['Assignment_ID'] ?? ''));
+            $assessment = $assessmentId !== ''
+                ? HumanReadableResolver::assessmentTitle($assessmentId, $assessmentsById)
+                : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian tidak ditemukan');
 
             $detailsRaw = $s['Evaluation_Details'] ?? null;
             if (!empty($detailsRaw)) {
@@ -311,14 +319,7 @@ class StudentWorkspaceController extends Controller
             $date = $att['Attendance_Date'] ?? $att['Date'] ?? '-';
             $status = $att['Resolved_Status'];
 
-            $translatedStatus = match($status) {
-                'PRESENT', 'HADIR' => 'Hadir',
-                'LATE', 'TERLAMBAT' => 'Terlambat',
-                'SICK', 'SAKIT' => 'Sakit',
-                'PERMITTED', 'IZIN' => 'Izin',
-                'ABSENT', 'ALPHA', 'ALPA' => 'Alpa',
-                default => 'Status tidak diketahui'
-            };
+            $translatedStatus = AttendanceStatusHelper::label($status);
 
             $rows[] = [$date, $translatedStatus];
         }
@@ -380,11 +381,12 @@ class StudentWorkspaceController extends Controller
         $events = [];
         if ($classId) {
             $allSchedules = collect($this->scheduleService->getAll());
+            $subjectsById = collect($this->subjectService->getAll())->keyBy('Subject_ID');
             // Map schedules into events for the calendar
-            $events = $allSchedules->where('Class_ID', $classId)->map(function($s) {
+            $events = $allSchedules->where('Class_ID', $classId)->map(function($s) use ($subjectsById) {
                 return [
                     'date' => $s['Date'] ?? date('Y-m-d'),
-                    'title' => ($s['Subject_ID'] ?? 'Class') . ' - ' . ($s['Topic'] ?? ''),
+                    'title' => HumanReadableResolver::subjectName($s['Subject_ID'] ?? '', $subjectsById) . ' - ' . ($s['Topic'] ?? ''),
                     'type' => $s['Type'] ?? 'Class'
                 ];
             })->values()->toArray();

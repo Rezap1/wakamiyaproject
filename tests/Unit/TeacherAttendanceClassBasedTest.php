@@ -281,7 +281,7 @@ class TeacherAttendanceClassBasedTest extends TestCase
         $attendanceService = new AttendanceService($attendanceRepo, Mockery::mock(EnterpriseEventService::class));
 
         return new TeacherWorkspaceController(
-            Mockery::mock(TeacherService::class)->shouldReceive('getAllTeachers')->once()->andReturn(collect([
+            Mockery::mock(TeacherService::class)->shouldReceive('getAllTeachers')->zeroOrMoreTimes()->andReturn(collect([
                 ['Teacher_ID' => 'T1', 'User_ID' => 'USR-T1'],
             ]))->getMock(),
             Mockery::mock(ClassService::class)->shouldReceive('getAllClasses')->once()->andReturn(collect($this->classes()))->getMock(),
@@ -289,7 +289,7 @@ class TeacherAttendanceClassBasedTest extends TestCase
             Mockery::mock(StudentService::class)->shouldReceive('getAllStudents')->once()->andReturn(collect($this->students()))->getMock(),
             $attendanceService,
             Mockery::mock(AttendanceRequestService::class),
-            Mockery::mock(SubjectService::class),
+            Mockery::mock(SubjectService::class)->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect())->getMock(),
             Mockery::mock(BatchService::class),
             Mockery::mock(AssignmentService::class),
             Mockery::mock(ScoreService::class),

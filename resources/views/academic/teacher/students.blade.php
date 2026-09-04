@@ -20,8 +20,8 @@
                 <div class="p-4 bg-white space-y-2">
                     <div class="flex justify-between items-start">
                         <div>
-                            <p class="text-sm font-extrabold text-slate-900">{{ $s['Full_Name'] ?? $s['Username'] ?? $s['Student_ID'] }}</p>
-                            <p class="text-xs text-slate-500 font-medium">{{ $s['Student_ID'] }}</p>
+                            <p class="text-sm font-extrabold text-slate-900">{{ $s['Full_Name'] ?? $s['Username'] ?? 'Data siswa tidak ditemukan' }}</p>
+                            <p class="text-xs text-slate-500 font-medium">{{ $s['Student_Number'] ?? $s['NIS'] ?? '-' }}</p>
                         </div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ strtoupper($s['Is_Active'] ?? '') === 'TRUE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700' }}">
                             {{ strtoupper($s['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif' }}
@@ -54,7 +54,7 @@
             <table class="w-full text-left text-sm whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-500">
                     <tr>
-                        <th class="px-6 py-4 font-bold uppercase text-xs tracking-wider">Student ID</th>
+                        <th class="px-6 py-4 font-bold uppercase text-xs tracking-wider">No. Siswa</th>
                         <th class="px-6 py-4 font-bold uppercase text-xs tracking-wider">Nama Siswa</th>
                         <th class="px-6 py-4 font-bold uppercase text-xs tracking-wider">Gender</th>
                         <th class="px-6 py-4 font-bold uppercase text-xs tracking-wider">Kelas</th>
@@ -64,10 +64,10 @@
                 <tbody class="divide-y divide-slate-100">
                     @forelse($students as $s)
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $s['Student_ID'] }}</td>
-                        <td class="px-6 py-4 font-bold text-slate-900">{{ $s['Full_Name'] ?? $s['Username'] ?? $s['Student_ID'] }}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $s['Student_Number'] ?? $s['NIS'] ?? '-' }}</td>
+                        <td class="px-6 py-4 font-bold text-slate-900">{{ $s['Full_Name'] ?? $s['Username'] ?? 'Data siswa tidak ditemukan' }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ $s['Gender'] ?? '-' }}</td>
-                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $s['Class_Name'] ?? $s['Class_ID'] ?? '-' }}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $s['Class_Name'] ?? 'Kelas tidak ditemukan' }}</td>
                         <td class="px-6 py-4">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase {{ strtoupper($s['Is_Active'] ?? '') === 'TRUE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700' }}">
                                 {{ strtoupper($s['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif' }}

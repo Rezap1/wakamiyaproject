@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use Exception;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Reporting\HumanReadableResolver;
 use App\Exceptions\FinancialIntegrityException;
 use App\Exceptions\DuplicatePrimaryKeyException;
 
@@ -109,15 +110,15 @@ class PaymentService
 
         if ($customerType === 'STUDENT' && !empty($payment['Student_ID'])) {
             $student = $this->studentRepository->findById($payment['Student_ID']);
-            $customerName = $student['Full_Name'] ?? $payment['Student_ID'];
-            $customerCode = $student['Student_Number'] ?? $payment['Student_ID'];
+            $customerName = $student['Full_Name'] ?? 'Data siswa tidak ditemukan';
+            $customerCode = $student['Student_Number'] ?? $student['NIS'] ?? '-';
         } elseif ($customerType === 'COMPANY' && !empty($payment['Company_ID'])) {
             $company = $this->companyRepository->findById($payment['Company_ID']);
-            $customerName = $company['Company_Name'] ?? $payment['Company_ID'];
-            $customerCode = $company['Company_Code'] ?? $payment['Company_ID'];
+            $customerName = $company['Company_Name'] ?? 'Data perusahaan tidak ditemukan';
+            $customerCode = $company['Company_Code'] ?? '-';
         } else {
-            $customerName = $payment['Sender_Name'] ?? ($payment['Student_ID'] ?? 'Pelanggan');
-            $customerCode = $payment['Student_ID'] ?? $payment['Company_ID'] ?? '-';
+            $customerName = HumanReadableResolver::value($payment['Sender_Name'] ?? '', 'Pelanggan tidak ditemukan');
+            $customerCode = HumanReadableResolver::value($payment['Sender_Code'] ?? '', '-');
         }
 
         // Receiving Account Lookup

@@ -30,7 +30,7 @@
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="text-sm font-extrabold text-slate-900">{{ $assignment['Title'] ?? 'No Title' }}</p>
-                            <p class="text-xs font-semibold text-blue-600">Kelas: {{ $assignment['Class_Name'] ?? $assignment['Class_ID'] ?? '-' }}</p>
+                            <p class="text-xs font-semibold text-blue-600">Kelas: {{ $assignment['Class_Name'] ?? 'Kelas tidak ditemukan' }}</p>
                         </div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
                             {{ !empty($assignment['Status']) ? $assignment['Status'] : 'Published' }}
@@ -71,7 +71,7 @@
                     @forelse($assignments as $assignment)
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="px-6 py-4 font-bold text-slate-900">{{ $assignment['Title'] ?? '-' }}</td>
-                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $assignment['Class_Name'] ?? $assignment['Class_ID'] ?? '-' }}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-600">{{ $assignment['Class_Name'] ?? 'Kelas tidak ditemukan' }}</td>
                         <td class="px-6 py-4 text-slate-500 italic max-w-xs truncate">{{ $assignment['Description'] ?? '-' }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ $assignment['Deadline'] ?? '-' }}</td>
                         <td class="px-6 py-4">

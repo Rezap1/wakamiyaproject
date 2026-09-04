@@ -6,6 +6,7 @@ use App\Services\Academic\AssessmentService;
 use App\Services\Academic\ScoreService;
 use App\Services\Academic\ScheduleService;
 use Illuminate\Support\Facades\Cache;
+use App\Support\Reporting\HumanReadableResolver;
 
 class AcademicWorkspaceController extends Controller
 {
@@ -48,10 +49,11 @@ class AcademicWorkspaceController extends Controller
     {
         $events = Cache::remember('academic_calendar_events', 60, function() {
             $allSchedules = collect($this->scheduleService->getAll());
-            return $allSchedules->map(function($s) {
+            $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+            return $allSchedules->map(function($s) use ($subjectsById) {
                 return [
                     'date' => $s['Date'] ?? date('Y-m-d'),
-                    'title' => ($s['Subject_ID'] ?? 'Class') . ' - ' . ($s['Topic'] ?? ''),
+                    'title' => HumanReadableResolver::subjectName($s['Subject_ID'] ?? '', $subjectsById) . ' - ' . ($s['Topic'] ?? ''),
                     'type' => $s['Type'] ?? 'Class'
                 ];
             })->values()->toArray();

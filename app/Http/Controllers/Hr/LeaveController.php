@@ -8,6 +8,7 @@ use App\Services\HR\LeaveService;
 use App\Http\Requests\StoreLeaveRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\UserResolverHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class LeaveController extends Controller
 {
@@ -18,16 +19,17 @@ class LeaveController extends Controller
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
         $leaves = collect($this->leaveService->getAllLeaves());
+        $employeesById = collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll())
+            ->keyBy('Employee_ID');
 
         return [
             'moduleName' => 'Pengajuan Cuti (Leave Requests)',
             'data' => $leaves,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Cuti', 'Pegawai', 'Tipe Cuti', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi', 'Status'],
-            'mapRow' => function($row) {
+            'headers' => ['Pegawai', 'Tipe Cuti', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi', 'Status'],
+            'mapRow' => function($row) use ($employeesById) {
                 return [
-                    $row['Leave_ID'] ?? '-',
-                    UserResolverHelper::getName($row['Employee_ID'] ?? ''),
+                    HumanReadableResolver::employeeName($row['Employee_ID'] ?? '', $employeesById),
                     $row['Leave_Type'] ?? '-',
                     $row['Start_Date'] ?? '-',
                     $row['End_Date'] ?? '-',

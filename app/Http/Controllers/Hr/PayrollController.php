@@ -10,6 +10,7 @@ use App\Http\Requests\GenerateBatchPayrollRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\UserResolverHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class PayrollController extends Controller
 {
@@ -36,20 +37,19 @@ class PayrollController extends Controller
                 return false;
             });
         }
+
+        $employeesById = collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll())
+            ->keyBy('Employee_ID');
         
         return [
             'moduleName' => 'Penggajian (Payroll)',
             'data' => collect(array_values($payrolls->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Payroll', 'No. Payroll', 'Pegawai', 'Periode', 'Gaji Pokok', 'Potongan', 'Gaji Bersih', 'Status'],
-            'mapRow' => function($row) {
-                $empId = $row['Employee_ID'] ?? null;
-                $empName = UserResolverHelper::getName($empId);
-                
+            'headers' => ['No. Payroll', 'Pegawai', 'Periode', 'Gaji Pokok', 'Potongan', 'Gaji Bersih', 'Status'],
+            'mapRow' => function($row) use ($employeesById) {
                 return [
-                    $row['Payroll_ID'] ?? '-',
                     $row['Payroll_Number'] ?? '-',
-                    $empName,
+                    HumanReadableResolver::employeeName($row['Employee_ID'] ?? '', $employeesById),
                     $row['Payroll_Period'] ?? '-',
                     'Rp ' . number_format((float)($row['Base_Salary'] ?? 0), 0, ',', '.'),
                     'Rp ' . number_format((float)($row['Total_Deductions'] ?? 0), 0, ',', '.'),

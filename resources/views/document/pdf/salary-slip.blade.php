@@ -8,8 +8,8 @@
     <div class="mb-8">
         <table class="w-full text-sm">
             <tr>
-                <td class="py-1 w-1/4 font-bold text-slate-700">Employee ID</td>
-                <td class="py-1 w-1/4">: {{ $document['Reference_ID'] ?? 'EMP-XXXX' }}</td>
+                <td class="py-1 w-1/4 font-bold text-slate-700">No. Pegawai</td>
+                <td class="py-1 w-1/4">: {{ $document['Employee_Number'] ?? $document['NIP'] ?? '-' }}</td>
                 <td class="py-1 w-1/4 font-bold text-slate-700">Department</td>
                 <td class="py-1 w-1/4">: {{ $document['Department'] ?? 'General' }}</td>
             </tr>

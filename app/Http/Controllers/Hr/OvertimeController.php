@@ -8,6 +8,7 @@ use App\Services\HR\OvertimeService;
 use App\Http\Requests\StoreOvertimeRequest;
 use App\Helpers\ReportHelper;
 use App\Helpers\UserResolverHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class OvertimeController extends Controller
 {
@@ -18,16 +19,17 @@ class OvertimeController extends Controller
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
         $overtimes = collect($this->overtimeService->getAllOvertimes());
+        $employeesById = collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll())
+            ->keyBy('Employee_ID');
 
         return [
             'moduleName' => 'Pengajuan Lembur (Overtime Requests)',
             'data' => $overtimes,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Lembur', 'Pegawai', 'Tanggal', 'Jam Mulai', 'Jam Selesai', 'Durasi (Jam)', 'Upah Lembur (Rp)', 'Status'],
-            'mapRow' => function($row) {
+            'headers' => ['Pegawai', 'Tanggal', 'Jam Mulai', 'Jam Selesai', 'Durasi (Jam)', 'Upah Lembur (Rp)', 'Status'],
+            'mapRow' => function($row) use ($employeesById) {
                 return [
-                    $row['Overtime_ID'] ?? '-',
-                    UserResolverHelper::getName($row['Employee_ID'] ?? ''),
+                    HumanReadableResolver::employeeName($row['Employee_ID'] ?? '', $employeesById),
                     $row['Date'] ?? '-',
                     $row['Start_Time'] ?? '-',
                     $row['End_Time'] ?? '-',

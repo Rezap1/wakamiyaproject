@@ -5,8 +5,7 @@
     <tr>
         <td style="border: none; width: 50%;">
             <strong>Ditagihkan Kepada:</strong><br>
-            ID: {{ $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? '-' }}<br>
-            Nama: {{ $student['Full_Name'] ?? $company['Company_Name'] ?? 'Tidak diketahui' }}
+            Nama: {{ $invoice['student_name'] ?? $student['Full_Name'] ?? $company['Company_Name'] ?? 'Tidak diketahui' }}
         </td>
         <td style="border: none; width: 50%; text-align: right;">
             <strong>Detail Faktur:</strong><br>

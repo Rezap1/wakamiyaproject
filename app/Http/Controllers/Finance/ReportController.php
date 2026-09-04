@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Finance;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Finance\FinanceReportService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class ReportController extends Controller
 {
@@ -70,9 +71,9 @@ class ReportController extends Controller
                 'mapRow' => function($row) {
                     $tujuan = '-';
                     if (($row['Invoice_Type'] ?? '') === 'STUDENT') {
-                        $tujuan = 'Siswa: ' . ($row['Student_Name'] ?? $row['Student_ID'] ?? '-');
+                        $tujuan = 'Siswa: ' . ($row['Student_Name'] ?? 'Data siswa tidak ditemukan');
                     } elseif (($row['Invoice_Type'] ?? '') === 'COMPANY') {
-                        $tujuan = 'Perusahaan: ' . ($row['Company_Name'] ?? $row['Company_ID'] ?? '-');
+                        $tujuan = 'Perusahaan: ' . ($row['Company_Name'] ?? 'Data perusahaan tidak ditemukan');
                     } else {
                         $tujuan = $row['Invoice_Type'] ?? '-';
                     }
@@ -99,6 +100,17 @@ class ReportController extends Controller
         $category = $request->input('category', 'ALL');
 
         $data = $this->reportService->getCashFlow($startDate, $endDate, $accountId, $category);
+        $accountsById = collect($data['accounts'] ?? [])->flatMap(function ($account) {
+            $keys = [];
+            foreach (['Account_ID', 'Account_Code'] as $field) {
+                $key = trim((string) ($account[$field] ?? ''));
+                if ($key !== '') {
+                    $keys[$key] = $account;
+                }
+            }
+
+            return $keys;
+        });
 
         $this->exportDateField = 'Transaction_Date';
 
@@ -107,10 +119,10 @@ class ReportController extends Controller
             'data' => collect($data['transactions'] ?? collect([]))->values(),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Tanggal', 'Akun', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'],
-            'mapRow' => function($row) {
+            'mapRow' => function($row) use ($accountsById) {
                 return [
                     $row['Transaction_Date'] ?? '-',
-                    $row['Account_ID'] ?? '-',
+                    HumanReadableResolver::accountName(trim((string) ($row['Account_ID'] ?? '')) ?: ($row['Account_Code'] ?? ''), $accountsById),
                     $row['Type'] ?? '-',
                     $row['Category'] ?? '-',
                     $row['Description'] ?? '-',

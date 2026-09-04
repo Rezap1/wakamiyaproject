@@ -61,8 +61,8 @@
                         @foreach($group['items'] as $schedule)
                             <a href="{{ route('schedules.edit', $schedule['Schedule_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
                                 <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $schedule['Class_Name'] ?? $schedule['Class_ID'] ?? '-' }} | {{ $schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? '-' }}</p>
-                                    <p class="text-[11px] text-slate-500">{{ $schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? '-' }}</p>
+                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $schedule['Class_Name'] ?? 'Kelas tidak ditemukan' }} | {{ $schedule['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}</p>
+                                    <p class="text-[11px] text-slate-500">{{ $schedule['Teacher_Name'] ?? 'Pengajar tidak ditemukan' }}</p>
                                 </div>
                                 <span class="text-xs font-black text-slate-700 shrink-0">{{ $schedule['Start_Time'] ?? '--:--' }} - {{ $schedule['End_Time'] ?? '--:--' }}</span>
                             </a>
@@ -88,15 +88,15 @@
             data-day="{{ $schedule['Day_Of_Week'] ?? '' }}">
             
             <td class="px-6 py-4">
-                <x-badge color="purple" class="mb-1 block w-max">{{ $schedule['Subject_Name'] ?? $schedule['Subject_ID'] ?? 'Unknown Subject' }}</x-badge>
-                <div class="font-bold text-slate-800">{{ $schedule['Class_Name'] ?? $schedule['Class_ID'] ?? 'Unknown Class' }}</div>
+                <x-badge color="purple" class="mb-1 block w-max">{{ $schedule['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}</x-badge>
+                <div class="font-bold text-slate-800">{{ $schedule['Class_Name'] ?? 'Kelas tidak ditemukan' }}</div>
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center">
                     <div class="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs mr-3">
-                        {{ substr($schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? 'T', 0, 1) }}
+                        {{ substr($schedule['Teacher_Name'] ?? 'P', 0, 1) }}
                     </div>
-                    <div class="text-sm font-bold text-slate-800">{{ $schedule['Teacher_Name'] ?? $schedule['Teacher_ID'] ?? '-' }}</div>
+                    <div class="text-sm font-bold text-slate-800">{{ $schedule['Teacher_Name'] ?? 'Pengajar tidak ditemukan' }}</div>
                 </div>
             </td>
             <td class="px-6 py-4">

@@ -33,9 +33,9 @@
                     ];
                 @endphp
                 <select name="Schedule_ID" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all outline-none">
-                    <option value="">Absensi Kelas / QR ({{ $student['Class_ID'] }})</option>
+                    <option value="">Absensi Kelas / QR ({{ $className ?? 'Kelas tidak ditemukan' }})</option>
                     @foreach($schedules as $s)
-                        <option value="{{ $s['Schedule_ID'] }}">{{ $dayMap[$s['Day'] ?? $s['Day_Of_Week'] ?? ''] ?? $s['Day'] ?? $s['Day_Of_Week'] }} ({{ $s['Start_Time'] }} - {{ $s['End_Time'] }}) - {{ $s['Subject_Name'] ?? $s['Subject_ID'] }}</option>
+                        <option value="{{ $s['Schedule_ID'] }}">{{ $dayMap[$s['Day'] ?? $s['Day_Of_Week'] ?? ''] ?? $s['Day'] ?? $s['Day_Of_Week'] }} ({{ $s['Start_Time'] }} - {{ $s['End_Time'] }}) - {{ $s['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}</option>
                     @endforeach
                 </select>
                 <p class="text-xs text-slate-500 mt-2">Pilih Absensi Kelas / QR untuk pengajuan umum kelas. Jadwal hanya diperlukan untuk pengajuan berbasis jadwal.</p>

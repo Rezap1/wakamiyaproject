@@ -71,7 +71,7 @@ class TeacherController extends Controller
 
                 return [
                     $row['NUPTK'] ?? '-',
-                    $row['Full_Name'] ?? ($row['Teacher_ID'] ?? '-'),
+                    $row['Full_Name'] ?? 'Pengajar tidak ditemukan',
                     $row['Email'] ?? '-',
                     $row['Department_Name'] ?? '-',
                     $row['Position_Name'] ?? '-',

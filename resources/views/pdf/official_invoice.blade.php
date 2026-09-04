@@ -188,7 +188,7 @@
                         <span class="field-value">{{ $customer['name'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
-                        <span class="field-label">Nomor ID:</span>
+                        <span class="field-label">Nomor Pihak:</span>
                         <span class="field-value">{{ $customer['code'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">

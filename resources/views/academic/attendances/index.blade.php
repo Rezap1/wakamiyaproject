@@ -144,7 +144,7 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
-                        <th class="px-6 py-4 w-1/4">ID KELAS</th>
+                        <th class="px-6 py-4 w-1/4">KELAS</th>
                         <th class="px-6 py-4 w-1/3">NAMA KELAS</th>
                         <th class="px-6 py-4">TANGGAL</th>
                         <th class="px-6 py-4 text-center">STATISTIK KEHADIRAN</th>
@@ -154,8 +154,8 @@
                 <tbody class="divide-y divide-slate-100 text-sm">
                     @forelse($paginatedClasses ?? [] as $item)
                         <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="px-6 py-4 font-mono text-slate-600 font-medium">
-                                {{ $item['Class_ID'] }}
+                            <td class="px-6 py-4 font-semibold text-slate-600">
+                                {{ $item['Class_Code'] ?? $item['Class_Name'] ?? 'Kelas tidak ditemukan' }}
                             </td>
                             <td class="px-6 py-4 font-bold text-slate-800">
                                 {{ $item['Class_Name'] }}
@@ -191,7 +191,7 @@
                                     <table class="w-full text-left text-sm">
                                         <thead>
                                             <tr class="bg-white border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase">
-                                                <th class="px-4 py-2">ID Siswa</th>
+                                                <th class="px-4 py-2">No. Siswa</th>
                                                 <th class="px-4 py-2">Nama Siswa</th>
                                                 <th class="px-4 py-2">Status</th>
                                                 <th class="px-4 py-2">Check-In</th>
@@ -207,7 +207,7 @@
                                                     $displayStatus = $student['Display_Status'] ?? 'Belum Absen';
                                                 @endphp
                                                 <tr class="hover:bg-slate-50/80 transition-colors">
-                                                    <td class="px-4 py-3 font-mono text-xs text-slate-500">{{ $student['Student_ID'] }}</td>
+                                                    <td class="px-4 py-3 text-xs text-slate-500">{{ $student['Student_Number'] ?? '-' }}</td>
                                                     <td class="px-4 py-3 font-bold text-slate-700">{{ $student['Student_Name'] }}</td>
                                                     <td class="px-4 py-3"><x-badge color="{{ $badgeColor }}">{{ $displayStatus }}</x-badge></td>
                                                     <td class="px-4 py-3 text-slate-600 text-xs">{{ $student['Check_In_Time'] ?? '-' }}</td>
@@ -264,7 +264,7 @@
                 <div class="p-4 border-b border-slate-100">
                     <div class="flex justify-between items-start mb-2">
                         <div>
-                            <span class="text-[10px] font-black text-indigo-500 uppercase tracking-wider">{{ $item['Class_ID'] }}</span>
+                            <span class="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Kelas</span>
                             <h4 class="text-base font-bold text-slate-800 leading-tight">{{ $item['Class_Name'] }}</h4>
                         </div>
                         <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded-md">{{ $item['Date_Display'] }}</span>
@@ -315,7 +315,7 @@
                                 <div class="flex justify-between items-start mb-2">
                                     <div>
                                         <h6 class="text-sm font-bold text-slate-800 leading-tight">{{ $student['Student_Name'] }}</h6>
-                                        <p class="text-[10px] font-mono text-slate-500 mt-0.5">{{ $student['Student_ID'] }}</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">{{ $student['Student_Number'] ?? '-' }}</p>
                                     </div>
                                     <x-badge color="{{ $badgeColor }}">{{ $displayStatus }}</x-badge>
                                 </div>

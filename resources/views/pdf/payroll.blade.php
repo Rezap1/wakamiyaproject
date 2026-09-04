@@ -5,7 +5,7 @@
     <tr>
         <td style="border: none; width: 50%;">
             <strong>Detail Karyawan:</strong><br>
-            ID: {{ $payroll['Employee_ID'] ?? '-' }}<br>
+            No. Pegawai: {{ $employee['Employee_Number'] ?? $employee['NIP'] ?? '-' }}<br>
             Nama: {{ $employee['Full_Name'] ?? 'Tidak diketahui' }}<br>
             Departemen: {{ $employee['Department'] ?? '-' }}
         </td>

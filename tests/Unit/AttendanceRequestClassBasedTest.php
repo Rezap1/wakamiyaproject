@@ -4,8 +4,10 @@ namespace Tests\Unit;
 
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Http\Controllers\Student\AttendanceRequestController;
 use App\Services\Attendance\AttendanceRequestService;
 use App\Services\Core\ActivityLogService;
@@ -38,14 +40,6 @@ class AttendanceRequestClassBasedTest extends TestCase
         $requestRepo->shouldReceive('clearCache')->once();
 
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
-        $attendanceRepo->shouldReceive('findById')->once()->with('ATT-STU-A-20260831-CLASS-CLS-A-CLASS_QR')->andReturn(null);
-        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
-        $attendanceRepo->shouldReceive('create')->once()->with(Mockery::on(function ($data) {
-            return $data['Student_ID'] === 'STU-A'
-                && $data['Attendance_Date'] === '2026-08-31'
-                && $data['Status'] === 'IZIN';
-        }))->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $service = $this->service($requestRepo, $attendanceRepo);
         $result = $service->createRequest([
@@ -62,7 +56,7 @@ class AttendanceRequestClassBasedTest extends TestCase
         $this->assertTrue($result);
     }
 
-    public function test_future_request_is_persisted_as_pending_attendance_immediately(): void
+    public function test_future_request_is_persisted_as_pending_request_without_attendance_side_effect(): void
     {
         $requestRepo = Mockery::mock(AttendanceRequestRepositoryInterface::class);
         $requestRepo->shouldReceive('findByStudent')->once()->with('STU-A')->andReturn(collect());
@@ -71,12 +65,6 @@ class AttendanceRequestClassBasedTest extends TestCase
         $requestRepo->shouldReceive('clearCache')->once();
 
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
-        $attendanceRepo->shouldReceive('findById')->once()->andReturn(null);
-        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
-        $attendanceRepo->shouldReceive('create')->once()->with(Mockery::on(fn ($row) =>
-            $row['Attendance_Date'] === '2099-01-02' && $row['Status'] === 'IZIN'
-        ))->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $service = $this->service($requestRepo, $attendanceRepo);
         $this->assertTrue($service->createRequest([
@@ -163,7 +151,7 @@ class AttendanceRequestClassBasedTest extends TestCase
         $attendanceRepo->shouldReceive('update')->once()->with('ATT-CLASS', Mockery::on(fn ($data) => $data['Status'] === 'IZIN'))->andReturn(true);
         $attendanceRepo->shouldReceive('clearCache')->once();
 
-        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC'])));
+        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser()));
     }
 
     public function test_class_approval_creates_class_identity_when_attendance_is_missing(): void
@@ -182,7 +170,7 @@ class AttendanceRequestClassBasedTest extends TestCase
         }))->andReturn(true);
         $attendanceRepo->shouldReceive('clearCache')->once();
 
-        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'SAKIT', '', new GenericUser(['User_ID' => 'USR-AC'])));
+        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'SAKIT', '', $this->teacherUser()));
     }
 
     public function test_schedule_approval_requires_schedule_in_student_class(): void
@@ -196,13 +184,14 @@ class AttendanceRequestClassBasedTest extends TestCase
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
         $studentRepo = $this->studentRepo();
         $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
-        $scheduleRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
-            ['Schedule_ID' => 'SCH-B', 'Class_ID' => 'CLS-B'],
+        $scheduleRepo->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
+            ['Schedule_ID' => 'SCH-A', 'Class_ID' => 'CLS-A', 'Teacher_ID' => 'TCH-AC'],
+            ['Schedule_ID' => 'SCH-B', 'Class_ID' => 'CLS-B', 'Teacher_ID' => 'TCH-AC'],
         ]));
 
         $this->expectException(\Exception::class);
         $this->service($requestRepo, $attendanceRepo, $studentRepo, $scheduleRepo)
-            ->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC']));
+            ->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser());
     }
 
     public function test_schedule_approval_creates_schedule_identity_for_valid_schedule(): void
@@ -222,12 +211,12 @@ class AttendanceRequestClassBasedTest extends TestCase
         ))->andReturn(true);
         $attendanceRepo->shouldReceive('clearCache')->once();
         $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
-        $scheduleRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
-            ['Schedule_ID' => 'SCH-A', 'Class_ID' => 'CLS-A'],
+        $scheduleRepo->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
+            ['Schedule_ID' => 'SCH-A', 'Class_ID' => 'CLS-A', 'Teacher_ID' => 'TCH-AC'],
         ]));
 
         $this->assertTrue($this->service($requestRepo, $attendanceRepo, $this->studentRepo(), $scheduleRepo)
-            ->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC'])));
+            ->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser()));
     }
 
     public function test_attendance_id_of_another_student_is_rejected(): void
@@ -244,7 +233,7 @@ class AttendanceRequestClassBasedTest extends TestCase
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Attendance_ID bukan milik student');
         $this->service($requestRepo, $attendanceRepo)
-            ->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC']));
+            ->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser());
     }
 
     public function test_class_approval_does_not_create_duplicate_when_identity_exists(): void
@@ -261,7 +250,7 @@ class AttendanceRequestClassBasedTest extends TestCase
         $attendanceRepo->shouldReceive('update')->once()->with('ATT-EXISTING', Mockery::type('array'))->andReturn(true);
         $attendanceRepo->shouldReceive('clearCache')->once();
 
-        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC'])));
+        $this->assertTrue($this->service($requestRepo, $attendanceRepo)->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser()));
     }
 
     public function test_legacy_request_with_schedule_id_is_validated_as_schedule_not_class(): void
@@ -271,11 +260,11 @@ class AttendanceRequestClassBasedTest extends TestCase
         $requestRepo->shouldReceive('findById')->once()->andReturn($request);
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
         $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
-        $scheduleRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $scheduleRepo->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect());
 
         $this->expectException(\Exception::class);
         $this->service($requestRepo, $attendanceRepo, $this->studentRepo(), $scheduleRepo)
-            ->approveRequest('REQ-1', 'IZIN', '', new GenericUser(['User_ID' => 'USR-AC']));
+            ->approveRequest('REQ-1', 'IZIN', '', $this->teacherUser());
     }
 
     private function service($requestRepo, $attendanceRepo = null, $studentRepo = null, $scheduleRepo = null): AttendanceRequestService
@@ -285,8 +274,16 @@ class AttendanceRequestClassBasedTest extends TestCase
             $attendanceRepo ?: Mockery::mock(AttendanceRepositoryInterface::class),
             Mockery::mock(ActivityLogService::class)->shouldReceive('log')->andReturn(true)->getMock(),
             $studentRepo ?: $this->studentRepo(),
-            $scheduleRepo ?: Mockery::mock(ScheduleRepositoryInterface::class)
+            $scheduleRepo ?: $this->scheduleRepo(),
+            null,
+            $this->teacherRepo(),
+            $this->classRepo()
         );
+    }
+
+    private function teacherUser(): GenericUser
+    {
+        return new GenericUser(['User_ID' => 'USR-AC', 'Role' => 'TEACHER']);
     }
 
     private function studentRepo()
@@ -304,6 +301,30 @@ class AttendanceRequestClassBasedTest extends TestCase
         $repo->shouldReceive('update')->once()->andReturn(true);
         $repo->shouldReceive('clearCache')->once();
         return $repo;
+    }
+
+    private function scheduleRepo()
+    {
+        return Mockery::mock(ScheduleRepositoryInterface::class)
+            ->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
+                ['Schedule_ID' => 'SCH-A', 'Class_ID' => 'CLS-A', 'Teacher_ID' => 'TCH-AC'],
+            ]))->getMock();
+    }
+
+    private function teacherRepo()
+    {
+        return Mockery::mock(TeacherRepositoryInterface::class)
+            ->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
+                ['Teacher_ID' => 'TCH-AC', 'User_ID' => 'USR-AC'],
+            ]))->getMock();
+    }
+
+    private function classRepo()
+    {
+        return Mockery::mock(ClassRepositoryInterface::class)
+            ->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
+                ['Class_ID' => 'CLS-A', 'Class_Name' => 'Class A'],
+            ]))->getMock();
     }
 
     private function request(array $overrides = []): array

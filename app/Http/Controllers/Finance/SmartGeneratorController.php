@@ -382,7 +382,7 @@ class SmartGeneratorController extends Controller
         $userRepo = app(UserRepositoryInterface::class);
         $student = $studentRepo->findById($invoice['Student_ID']);
 
-        $studentName = $student['Full_Name'] ?? UserResolverHelper::getName($invoice['Student_ID']);
+        $studentName = $student['Full_Name'] ?? 'Data siswa tidak ditemukan';
         $studentEmail = $student['Email'] ?? '';
         if (empty($studentEmail) && !empty($student['User_ID'])) {
             $user = $userRepo->findById($student['User_ID']);
@@ -416,7 +416,7 @@ class SmartGeneratorController extends Controller
             'due_date' => $invoice['Due_Date'] ?? date('Y-m-d', strtotime('+14 days')),
             'status' => $status,
 
-            'client_name' => $studentName === '-' ? $invoice['Student_ID'] : $studentName,
+            'client_name' => $studentName,
             'client_email' => $studentEmail,
             'client_address' => $student['Address'] ?? '',
 

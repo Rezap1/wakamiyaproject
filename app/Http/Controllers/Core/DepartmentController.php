@@ -9,6 +9,7 @@ use App\Services\Core\DepartmentService;
 use App\Helpers\UserResolverHelper;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
+use App\Support\Reporting\HumanReadableResolver;
 
 class DepartmentController extends Controller
 {
@@ -31,16 +32,19 @@ class DepartmentController extends Controller
                 $departments = $departments->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
             }
         }
+
+        $employeesById = collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll())
+            ->keyBy('Employee_ID');
         
         return [
             'moduleName' => 'DEPARTMENTS',
             'data' => $departments,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID', 'Nama Departemen', 'Manajer', 'Status'],
-            'mapRow' => function($row) {
-                $mgr = UserResolverHelper::getName($row['Manager_Employee_ID'] ?? '');
+            'headers' => ['Nama Departemen', 'Manajer', 'Status'],
+            'mapRow' => function($row) use ($employeesById) {
+                $managerId = trim((string) ($row['Manager_Employee_ID'] ?? ''));
+                $mgr = $managerId === '' ? '-' : HumanReadableResolver::employeeName($managerId, $employeesById);
                 return [
-                    $row['Department_ID'] ?? '-', 
                     $row['Department_Name'] ?? '-', 
                     $mgr ?: '-',
                     ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'

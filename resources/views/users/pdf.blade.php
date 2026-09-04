@@ -5,8 +5,7 @@
         <thead>
             <tr>
                 <th width="5%">No</th>
-                <th width="15%">User ID</th>
-                <th width="20%">Nama Lengkap</th>
+                <th width="25%">Nama Lengkap</th>
                 <th width="20%">Email</th>
                 <th width="15%">Username</th>
                 <th width="15%">Role</th>
@@ -17,7 +16,6 @@
             @forelse($users as $index => $user)
                 <tr>
                     <td style="text-align: center;">{{ $loop->iteration }}</td>
-                    <td>{{ $user['User_ID'] ?? '-' }}</td>
                     <td>{{ $user['Full_Name'] ?? '-' }}</td>
                     <td>{{ $user['Email'] ?? '-' }}</td>
                     <td>{{ $user['Username'] ?? '-' }}</td>
@@ -36,7 +34,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" style="text-align: center;">Tidak ada data pengguna tersedia</td>
+                    <td colspan="6" style="text-align: center;">Tidak ada data pengguna tersedia</td>
                 </tr>
             @endforelse
         </tbody>

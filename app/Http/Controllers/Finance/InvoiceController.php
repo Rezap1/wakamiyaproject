@@ -13,6 +13,7 @@ use App\Services\Core\SystemSettingService;
 use App\Exceptions\AmbiguousSheetWriteException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Log;
+use App\Support\Reporting\HumanReadableResolver;
 
 class InvoiceController extends Controller
 {
@@ -28,18 +29,22 @@ class InvoiceController extends Controller
         if (!empty($search)) {
             $invoices = \App\Helpers\CollectionHelper::search($invoices, $search, ['Invoice_ID', 'Category', 'Student_ID']);
         }
+
+        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
+            ->keyBy('Student_ID');
+        $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())
+            ->keyBy('Company_ID');
         
         return [
             'moduleName' => 'Invoice Tagihan (Invoices)',
             'data' => collect(array_values($invoices->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Invoice', 'Tipe', 'Pihak Tagihan (Nama)', 'Kategori', 'Jumlah Total', 'Sisa Tagihan', 'Jatuh Tempo', 'Status'],
-            'mapRow' => function($row) {
-                $studentName = UserResolverHelper::getName($row['Student_ID'] ?? '');
+            'headers' => ['No. Invoice', 'Tipe', 'Pihak Tagihan (Nama)', 'Kategori', 'Jumlah Total', 'Sisa Tagihan', 'Jatuh Tempo', 'Status'],
+            'mapRow' => function($row) use ($studentsById, $companiesById) {
                 return [
-                    $row['Invoice_ID'] ?? '-', 
-                    $row['Invoice_Type'] ?? 'STUDENT', 
-                    $studentName !== '-' ? $studentName : ($row['Company_Name'] ?? $row['Student_ID'] ?? '-'), 
+                    $row['Invoice_ID'] ?? '-',
+                    $row['Invoice_Type'] ?? 'STUDENT',
+                    HumanReadableResolver::studentOrCompanyPayer($row, $studentsById, $companiesById),
                     $row['Category'] ?? '-',
                     'Rp ' . number_format((float)($row['Amount'] ?? 0), 0, ',', '.'),
                     'Rp ' . number_format((float)($row['Remaining_Amount'] ?? 0), 0, ',', '.'),
@@ -236,7 +241,9 @@ class InvoiceController extends Controller
     {
         try {
             $docData = $this->invoiceService->getInvoiceDocumentData($id);
-            $docData['invoice']['student_name'] = UserResolverHelper::getName($docData['invoice']['Student_ID'] ?? '');
+            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $docData['invoice']['student_name'] = HumanReadableResolver::studentOrCompanyPayer($docData['invoice'], $studentsById, $companiesById);
             
             return ReportHelper::export(
                 'pdf',
@@ -262,7 +269,9 @@ class InvoiceController extends Controller
     {
         try {
             $docData = $this->invoiceService->getInvoiceDocumentData($id, true);
-            $docData['invoice']['student_name'] = UserResolverHelper::getName($docData['invoice']['Student_ID'] ?? '');
+            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $docData['invoice']['student_name'] = HumanReadableResolver::studentOrCompanyPayer($docData['invoice'], $studentsById, $companiesById);
             return view('finance.invoices.verify_invoice_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $this->safeExceptionMessage($e, 'Invoice tidak ditemukan atau tidak tersedia.'));

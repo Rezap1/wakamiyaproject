@@ -65,18 +65,18 @@
                             <div class="text-lg font-black text-slate-800 mt-0.5">{{ $req['Attendance_Date'] }}</div>
                         </div>
                         <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border {{ $badgeClass }}">
-                            {{ $req['Status'] }}
+                            {{ $req['Status_Label'] ?? $req['Status'] }}
                         </span>
                     </div>
                     
                     <div class="bg-slate-50 rounded-xl p-3 pl-4 border border-slate-100 mt-2">
                         <div class="mb-2">
                             <span class="text-[10px] text-slate-500 block">Tipe Pengajuan</span>
-                            <span class="text-sm font-bold text-indigo-700 block">{{ $req['Request_Type'] }}</span>
+                            <span class="text-sm font-bold text-indigo-700 block">{{ $req['Request_Type_Label'] ?? $req['Request_Type'] }}</span>
                         </div>
                         <div class="mb-2">
                             <span class="text-[10px] text-slate-500 block">Target Presensi</span>
-                            <span class="text-xs font-semibold text-slate-700 block">{{ ($req['Attendance_Type'] ?? (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE')) === 'CLASS_QR' ? 'Class Attendance / QR' : ($req['Schedule_ID'] ?? '-') }}</span>
+                            <span class="text-xs font-semibold text-slate-700 block">{{ $req['Target_Display'] ?? 'Target tidak tersedia' }}</span>
                         </div>
                         <div class="mb-2">
                             <span class="text-[10px] text-slate-500 block">Alasan</span>
@@ -84,7 +84,7 @@
                         </div>
                         @if(!empty($req['Academic_Notes']))
                         <div class="mt-2 pt-2 border-t border-slate-200/60">
-                            <span class="text-[10px] text-rose-500 block">Catatan Academic</span>
+                            <span class="text-[10px] text-rose-500 block">Catatan Guru</span>
                             <span class="text-xs font-bold text-slate-700 block">{{ $req['Academic_Notes'] }}</span>
                         </div>
                         @endif
@@ -107,7 +107,7 @@
                             <th class="p-4">Tanggal Presensi</th>
                             <th class="p-4">Tipe</th>
                             <th class="p-4">Alasan</th>
-                            <th class="p-4">Catatan Academic</th>
+                            <th class="p-4">Catatan Guru</th>
                             <th class="p-4 text-center">Status</th>
                             <th class="p-4 text-right">Bukti</th>
                         </tr>
@@ -117,8 +117,8 @@
                             <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                 <td class="p-4 font-bold text-slate-800">{{ $req['Attendance_Date'] }}</td>
                                 <td class="p-4 font-extrabold text-indigo-600">
-                                    <div>{{ $req['Request_Type'] }}</div>
-                                    <div class="text-[10px] text-slate-500">{{ ($req['Attendance_Type'] ?? (empty($req['Schedule_ID']) ? 'CLASS_QR' : 'SCHEDULE')) === 'CLASS_QR' ? 'Class Attendance / QR' : ($req['Schedule_ID'] ?? '-') }}</div>
+                                    <div>{{ $req['Request_Type_Label'] ?? $req['Request_Type'] }}</div>
+                                    <div class="text-[10px] text-slate-500">{{ $req['Target_Display'] ?? 'Target tidak tersedia' }}</div>
                                 </td>
                                 <td class="p-4 text-slate-600 max-w-xs truncate">{{ $req['Reason'] }}</td>
                                 <td class="p-4 text-slate-600 text-xs">{{ $req['Academic_Notes'] ?? '-' }}</td>
@@ -129,7 +129,7 @@
                                         if ($req['Status'] === 'REJECTED') $badgeClass = 'bg-rose-50 text-rose-600 border-rose-200';
                                     @endphp
                                     <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold border {{ $badgeClass }}">
-                                        {{ $req['Status'] }}
+                                        {{ $req['Status_Label'] ?? $req['Status'] }}
                                     </span>
                                 </td>
                                 <td class="p-4 text-right">

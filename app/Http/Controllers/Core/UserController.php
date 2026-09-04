@@ -10,6 +10,7 @@ use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Support\Reporting\HumanReadableResolver;
 
 class UserController extends Controller
 {
@@ -161,13 +162,13 @@ class UserController extends Controller
         $inactiveCount = $users->where('Is_Active', 'FALSE')->count();
         $summary = "<tr><td>Total Users</td><td>: {$users->count()}</td><td width='20px'></td><td>Active Users</td><td>: {$activeCount}</td><td width='20px'></td><td>Inactive Users</td><td>: {$inactiveCount}</td></tr>";
 
-        $headers = ['User ID', 'Username', 'Email', 'Role', 'Status'];
+        $headers = ['Username', 'Nama', 'Email', 'Role', 'Status'];
         $mapRow = function($user) use ($roles) {
-            $roleName = isset($roles[$user['Role_ID']]) ? $roles[$user['Role_ID']]['Role_Name'] : 'Unknown';
+            $roleName = isset($roles[$user['Role_ID']]) ? $roles[$user['Role_ID']]['Role_Name'] : 'Role tidak ditemukan';
             $isActive = ($user['Is_Active'] ?? 'FALSE') === 'TRUE' ? 'Active' : 'Inactive';
             return [
-                $user['User_ID'] ?? '-',
                 $user['Username'] ?? '-',
+                HumanReadableResolver::value($user['Full_Name'] ?? $user['Name'] ?? '', '-'),
                 $user['Email'] ?? '-',
                 $roleName,
                 $isActive
@@ -177,7 +178,7 @@ class UserController extends Controller
         return [
             'moduleName' => 'USERS',
             'data' => $users,
-            'pdfView' => 'users.pdf',
+            'pdfView' => 'pdf.generic_table',
             'headers' => $headers,
             'mapRow' => $mapRow,
             'isLandscape' => false,

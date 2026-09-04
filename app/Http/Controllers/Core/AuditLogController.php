@@ -20,11 +20,10 @@ class AuditLogController extends Controller
             'moduleName' => 'Audit Log',
             'data' => collect(array_values($logs->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Log', 'Waktu', 'Aksi', 'Modul', 'Pengguna', 'IP Address'],
+            'headers' => ['Waktu', 'Aksi', 'Modul', 'Pengguna', 'IP Address'],
             'mapRow' => function($row) {
 
                 return [
-                    $row['Audit_ID'] ?? '-',
                     isset($row['Created_At']) ? \Carbon\Carbon::parse($row['Created_At'])->format('d M Y H:i:s') : '-',
                     $row['Action'] ?? '-',
                     $row['Module'] ?? '-',

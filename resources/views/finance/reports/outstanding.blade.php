@@ -58,9 +58,9 @@
                     </td>
                     <td class="px-6 py-4 text-sm font-bold text-slate-800">
                         @if(($inv['Invoice_Type'] ?? '') == 'STUDENT')
-                            Siswa: {{ $inv['Student_Name'] ?? ($inv['Student_ID'] ?? '-') }}
+                            Siswa: {{ $inv['Student_Name'] ?? 'Data siswa tidak ditemukan' }}
                         @elseif(($inv['Invoice_Type'] ?? '') == 'COMPANY')
-                            Perusahaan: {{ $inv['Company_Name'] ?? ($inv['Company_ID'] ?? '-') }}
+                            Perusahaan: {{ $inv['Company_Name'] ?? 'Data perusahaan tidak ditemukan' }}
                         @else
                             {{ $inv['Invoice_Type'] ?? '-' }}
                         @endif

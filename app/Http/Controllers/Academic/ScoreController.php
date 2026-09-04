@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Academic;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\ScoreService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class ScoreController extends Controller
 {
@@ -26,16 +27,15 @@ class ScoreController extends Controller
         
         $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
         $students = $studentRepo->fetchAll()->keyBy('Student_ID');
+        $assessments = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
+        $assignments = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
         
         return [
             'moduleName' => 'Nilai (Score)',
             'data' => collect(array_values($scores->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Nilai', 'Siswa', 'Kategori', 'Penilaian', 'Nilai', 'Grade', 'Status', 'Metrik Evaluasi'],
-            'mapRow' => function($row) use ($students) {
-                $studentId = $row['Student_ID'] ?? null;
-                $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
-                
+            'headers' => ['Siswa', 'Kategori', 'Penilaian', 'Nilai', 'Grade', 'Status', 'Metrik Evaluasi'],
+            'mapRow' => function($row) use ($students, $assessments, $assignments) {
                 $category = strtoupper($row['Assessment_Category'] ?? 'GENERAL');
                 $details = $this->scoreService->parseEvaluationDetails($row);
                 $metricSummary = '-';
@@ -55,11 +55,16 @@ class ScoreController extends Controller
                     $metricSummary = $details['notes'] ?? $row['Remarks'] ?? '-';
                 }
 
+                $assessmentId = trim((string) ($row['Assessment_ID'] ?? ''));
+                $assignmentId = trim((string) ($row['Assignment_ID'] ?? ''));
+                $assessmentTitle = $assessmentId !== ''
+                    ? HumanReadableResolver::assessmentTitle($assessmentId, $assessments)
+                    : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignments) : 'Penilaian tidak ditemukan');
+
                 return [
-                    $row['Score_ID'] ?? '-',
-                    $studentName . ($studentId ? " ($studentId)" : ''),
+                    HumanReadableResolver::studentName($row['Student_ID'] ?? '', $students),
                     $category,
-                    $row['Assessment_ID'] ?? $row['Assignment_ID'] ?? '-',
+                    $assessmentTitle,
                     $row['Score'] ?? $row['Score_Value'] ?? '-',
                     $row['Grade'] ?? '-',
                     $row['Status'] ?? '-',
@@ -103,13 +108,13 @@ class ScoreController extends Controller
         
         $scores = $scores->map(function($item) use ($students, $assessments) {
             $studentId = $item['Student_ID'] ?? null;
-            $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : $studentId;
+            $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : 'Data siswa tidak ditemukan';
             
             $asmId = $item['Assessment_ID'] ?? null;
-            $asmTitle = $asmId && isset($assessments[$asmId]) ? ($assessments[$asmId]['Title'] ?? $assessments[$asmId]['Assessment_Name'] ?? $asmId) : $asmId;
+            $asmTitle = $asmId && isset($assessments[$asmId]) ? ($assessments[$asmId]['Title'] ?? $assessments[$asmId]['Assessment_Name'] ?? 'Penilaian tidak ditemukan') : 'Penilaian tidak ditemukan';
 
             $item['Student_Name'] = $studentName;
-            $item['Student_Display'] = $studentName . ($studentId ? " ($studentId)" : '');
+            $item['Student_Display'] = $studentName;
             $item['Assessment_Title'] = $asmTitle;
             $item['Assessment_Category'] = strtoupper($item['Assessment_Category'] ?? 'GENERAL');
             
@@ -223,11 +228,11 @@ class ScoreController extends Controller
 
         $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
         $student = $studentRepo->findById($score['Student_ID'] ?? '');
-        $score['Student_Name'] = $student ? $student['Full_Name'] : ($score['Student_ID'] ?? 'Siswa Tidak Diketahui');
+        $score['Student_Name'] = $student ? $student['Full_Name'] : 'Data siswa tidak ditemukan';
 
         $assessmentRepo = app(\App\Repositories\GoogleSheets\AssessmentRepository::class);
         $assessment = $assessmentRepo->getById($score['Assessment_ID'] ?? '');
-        $score['Assessment_Title'] = $assessment ? ($assessment['Title'] ?? $assessment['Assessment_Name'] ?? $score['Assessment_ID']) : ($score['Assessment_ID'] ?? '-');
+        $score['Assessment_Title'] = $assessment ? ($assessment['Title'] ?? $assessment['Assessment_Name'] ?? 'Penilaian tidak ditemukan') : 'Penilaian tidak ditemukan';
 
         $score['Parsed_Details'] = $this->scoreService->parseEvaluationDetails($score);
         $score['Assessment_ID'] = $score['Assessment_ID'] ?? ($score['Assignment_ID'] ?? null);
@@ -283,18 +288,20 @@ class ScoreController extends Controller
     public function exportCSV()
     {
         $scores = $this->scoreService->getAll();
+        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+        $assessmentsById = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
+        $assignmentsById = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
         $file = fopen('php://temp', 'r+');
         $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
 
         fputcsv($file, array_map($sanitize, [
-            'Score_ID',
-            'Student_ID',
-            'Assessment_Category',
-            'Assessment_ID',
-            'Score',
+            'Siswa',
+            'Kategori',
+            'Penilaian',
+            'Nilai',
             'Grade',
             'Status',
-            'Evaluation_Details_Summary',
+            'Ringkasan Evaluasi',
         ]));
         
         foreach ($scores as $s) {
@@ -317,11 +324,16 @@ class ScoreController extends Controller
                 $summary = str_replace([",", "\n", "\r"], [" ", " ", " "], $details['notes'] ?? $s['Remarks'] ?? '');
             }
 
+            $assessmentId = trim((string) ($s['Assessment_ID'] ?? ''));
+            $assignmentId = trim((string) ($s['Assignment_ID'] ?? ''));
+            $assessmentTitle = $assessmentId !== ''
+                ? HumanReadableResolver::assessmentTitle($assessmentId, $assessmentsById)
+                : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian tidak ditemukan');
+
             fputcsv($file, array_map($sanitize, [
-                $s['Score_ID'] ?? '',
-                $s['Student_ID'] ?? '',
+                HumanReadableResolver::studentName($s['Student_ID'] ?? '', $studentsById),
                 $category,
-                $s['Assessment_ID'] ?? $s['Assignment_ID'] ?? '',
+                $assessmentTitle,
                 $s['Score'] ?? $s['Score_Value'] ?? '',
                 $s['Grade'] ?? '',
                 $s['Status'] ?? '',

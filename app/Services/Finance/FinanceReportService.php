@@ -13,6 +13,7 @@ use Exception;
 use App\Support\Finance\Money;
 use App\Exceptions\FinancialIntegrityException;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Reporting\HumanReadableResolver;
 use Illuminate\Support\Facades\Log;
 
 class FinanceReportService
@@ -199,8 +200,8 @@ class FinanceReportService
         $totalOutstanding = 0;
         $payments = collect($this->paymentRepo->fetchAll())
             ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null));
-        $students = collect($this->studentRepo->fetchAll());
-        $companies = collect($this->companyRepo->fetchAll());
+        $students = collect($this->studentRepo->fetchAll())->keyBy('Student_ID');
+        $companies = collect($this->companyRepo->fetchAll())->keyBy('Company_ID');
         $invoiceService = app(\App\Services\Finance\InvoiceService::class);
         
         $processedInvoices = $invoices->map(function($inv) use ($payments, $students, $companies, $invoiceService, &$totalOutstanding) {
@@ -233,11 +234,9 @@ class FinanceReportService
             $inv['Display_Status'] = $dynamicStatus;
 
             if ($inv['Invoice_Type'] === 'STUDENT' && isset($inv['Student_ID'])) {
-                $student = $students->firstWhere('Student_ID', $inv['Student_ID']);
-                $inv['Student_Name'] = $student['Full_Name'] ?? $inv['Student_ID'];
+                $inv['Student_Name'] = HumanReadableResolver::studentName($inv['Student_ID'] ?? '', $students);
             } elseif ($inv['Invoice_Type'] === 'COMPANY' && isset($inv['Company_ID'])) {
-                $company = $companies->firstWhere('Company_ID', $inv['Company_ID']);
-                $inv['Company_Name'] = $company['Company_Name'] ?? $inv['Company_ID'];
+                $inv['Company_Name'] = HumanReadableResolver::companyName($inv['Company_ID'] ?? '', $companies);
             }
 
             if ($sisa > 0 && !in_array($dynamicStatus, ['Draft', 'Paid', 'Cancelled'])) {

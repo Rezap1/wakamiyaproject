@@ -143,7 +143,8 @@ class AttendanceService
 
                 foreach ($classStudents as $student) {
                     $studentId = trim((string) $student['Student_ID']);
-                    $studentName = (string) ($student['Full_Name'] ?? $student['Name'] ?? $studentId);
+                    $studentName = (string) ($student['Full_Name'] ?? $student['Name'] ?? 'Data siswa tidak ditemukan');
+                    $studentNumber = trim((string) ($student['Student_Number'] ?? $student['NIS'] ?? ''));
                     if ($search !== ''
                         && !str_contains(strtolower($studentId), $search)
                         && !str_contains(strtolower($studentName), $search)) {
@@ -168,6 +169,7 @@ class AttendanceService
                         : AttendanceStatusHelper::normalize($attendance['Status'] ?? '');
                     $rows[] = [
                         'Student_ID' => $studentId,
+                        'Student_Number' => $studentNumber,
                         'Student_Name' => $studentName,
                         'Class_ID' => $classId,
                         'Status' => $attendance['Status'] ?? '',
@@ -190,7 +192,8 @@ class AttendanceService
 
                 return [
                     'Class_ID' => $classId,
-                    'Class_Name' => (trim((string) ($class['Class_Name'] ?? '')) ?: $classId)
+                    'Class_Code' => trim((string) ($class['Class_Code'] ?? '')),
+                    'Class_Name' => (trim((string) ($class['Class_Name'] ?? '')) ?: 'Kelas tidak ditemukan')
                         . (!empty($class['Class_Code']) ? ' (' . $class['Class_Code'] . ')' : ''),
                     'Date_Display' => $dateDisplay,
                     'Total' => $rows->count(),

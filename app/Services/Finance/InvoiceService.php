@@ -17,6 +17,7 @@ use App\Support\ActorIdentity;
 use Throwable;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Reporting\HumanReadableResolver;
 use App\Exceptions\FinancialIntegrityException;
 
 class InvoiceService
@@ -546,15 +547,15 @@ class InvoiceService
 
         if ($customerType === 'STUDENT' && !empty($invoice['Student_ID'])) {
             $student = $this->studentRepository->findById($invoice['Student_ID']);
-            $customerName = $student['Full_Name'] ?? $invoice['Student_ID'];
-            $customerCode = $student['Student_Number'] ?? $invoice['Student_ID'];
+            $customerName = $student['Full_Name'] ?? 'Data siswa tidak ditemukan';
+            $customerCode = $student['Student_Number'] ?? $student['NIS'] ?? '-';
         } elseif ($customerType === 'COMPANY' && !empty($invoice['Company_ID'])) {
             $company = $this->companyRepository->findById($invoice['Company_ID']);
-            $customerName = $company['Company_Name'] ?? $invoice['Company_ID'];
-            $customerCode = $company['Company_Code'] ?? $invoice['Company_ID'];
+            $customerName = $company['Company_Name'] ?? 'Data perusahaan tidak ditemukan';
+            $customerCode = $company['Company_Code'] ?? '-';
         } else {
-            $customerName = $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? 'Pelanggan';
-            $customerCode = $invoice['Student_ID'] ?? $invoice['Company_ID'] ?? '-';
+            $customerName = HumanReadableResolver::value($invoice['Customer_Name'] ?? '', 'Pelanggan tidak ditemukan');
+            $customerCode = HumanReadableResolver::value($invoice['Customer_Code'] ?? '', '-');
         }
 
         // QR Verification URL

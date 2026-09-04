@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Services\Core\ActivityService;
 use App\Services\Core\RoleService;
 use App\Helpers\ReportHelper;
+use App\Support\Reporting\HumanReadableResolver;
 
 class ActivityController extends Controller
 {
@@ -23,20 +24,22 @@ class ActivityController extends Controller
 
         $filters = $request->only(['keyword', 'module']);
         $activities = $this->activityService->getActivities($roleName, $userId, $filters);
+        $usersById = collect(app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class)->fetchAll())->keyBy('User_ID');
         
         return [
             'moduleName' => 'Log Aktivitas (Activity)',
             'data' => collect(array_values($activities->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID', 'Waktu', 'Modul', 'Aktivitas', 'Aktor'],
-            'mapRow' => function($row) {
+            'headers' => ['Waktu', 'Modul', 'Aktivitas', 'Aktor'],
+            'mapRow' => function($row) use ($usersById) {
+                $actor = trim((string) ($row['Actor'] ?? ''));
+                $userName = HumanReadableResolver::userName($row['User_ID'] ?? '', $usersById);
 
                 return [
-                    $row['Activity_ID'] ?? '-',
                     isset($row['Created_At']) ? \Carbon\Carbon::parse($row['Created_At'])->format('d M Y H:i:s') : '-',
                     $row['Module'] ?? '-',
                     $row['Action'] ?? '-',
-                    $row['Actor'] ?? '-'
+                    $actor !== '' ? $actor : $userName
                 ];
                     },
             'isLandscape' => true,
@@ -92,14 +95,17 @@ class ActivityController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use($activities) {
+        $usersById = collect(app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class)->fetchAll())->keyBy('User_ID');
+
+        $callback = function() use($activities, $usersById) {
             $file = fopen('php://output', 'w');
             $sanitize = [ReportHelper::class, 'sanitizeCsvCell'];
-            fputcsv($file, array_map($sanitize, ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Description', 'IP Address']));
+            fputcsv($file, array_map($sanitize, ['Timestamp', 'Aktor', 'Role', 'Module', 'Action', 'Description', 'IP Address']));
             foreach ($activities as $a) {
+                $actor = trim((string) ($a['Actor'] ?? ''));
                 fputcsv($file, array_map($sanitize, [
                     $a['Timestamp'] ?? '',
-                    $a['User_ID'] ?? '',
+                    $actor !== '' ? $actor : HumanReadableResolver::userName($a['User_ID'] ?? '', $usersById),
                     $a['Role'] ?? '',
                     $a['Module'] ?? '',
                     $a['Action'] ?? '',

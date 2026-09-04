@@ -5,8 +5,7 @@
     <tr>
         <td style="border: none; width: 50%;">
             <strong>Diterima Dari:</strong><br>
-            ID: {{ $payment['Student_ID'] ?? $payment['Company_ID'] ?? '-' }}<br>
-            Nama: {{ $student['Full_Name'] ?? $company['Company_Name'] ?? 'Tidak diketahui' }}
+            Nama: {{ $payment['student_name'] ?? $student['Full_Name'] ?? $company['Company_Name'] ?? 'Tidak diketahui' }}
         </td>
         <td style="border: none; width: 50%; text-align: right;">
             <strong>Detail Kwitansi:</strong><br>

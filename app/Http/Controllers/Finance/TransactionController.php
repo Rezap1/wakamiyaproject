@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Finance\TransactionService;
 use App\Services\Finance\AccountService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class TransactionController extends Controller
 {
@@ -34,16 +35,27 @@ class TransactionController extends Controller
                 return isset($item['Transaction_Date']) && \Carbon\Carbon::parse($item['Transaction_Date']) <= \Carbon\Carbon::parse($request->date_to);
             });
         }
+
+        $accountsById = collect($this->accountService->getAll())->flatMap(function ($account) {
+            $keys = [];
+            foreach (['Account_ID', 'Account_Code'] as $field) {
+                $key = trim((string) ($account[$field] ?? ''));
+                if ($key !== '') {
+                    $keys[$key] = $account;
+                }
+            }
+
+            return $keys;
+        });
         
         return [
             'moduleName' => 'Transaksi (Transactions)',
             'data' => collect(array_values($transactions->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Transaksi', 'Akun', 'Tanggal', 'Tipe', 'Kategori', 'Nominal', 'Deskripsi'],
-            'mapRow' => function($row) {
+            'headers' => ['Akun', 'Tanggal', 'Tipe', 'Kategori', 'Nominal', 'Deskripsi'],
+            'mapRow' => function($row) use ($accountsById) {
                 return [
-                    $row['Transaction_ID'] ?? '-', 
-                    $row['Account_Code'] ?? '-', 
+                    HumanReadableResolver::accountName(trim((string) ($row['Account_ID'] ?? '')) ?: ($row['Account_Code'] ?? ''), $accountsById),
                     isset($row['Transaction_Date']) ? \Carbon\Carbon::parse($row['Transaction_Date'])->format('d M Y') : '-',
                     $row['Type'] ?? '-',
                     $row['Category'] ?? '-',

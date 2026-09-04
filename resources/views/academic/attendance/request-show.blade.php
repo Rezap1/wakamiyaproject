@@ -4,8 +4,15 @@
 
 @section('content')
 @php
-    $evidenceInlineUrl = route('academic.attendance.requests.evidence', ['id' => $request['Request_ID'], 'inline' => 1]);
-    $evidenceDownloadUrl = route('academic.attendance.requests.evidence', $request['Request_ID']);
+    $evidenceRoute = $evidenceRoute ?? 'academic.attendance.requests.evidence';
+    $approveRoute = $approveRoute ?? 'academic.attendance.requests.approve';
+    $rejectRoute = $rejectRoute ?? 'academic.attendance.requests.reject';
+    $backRoute = $backRoute ?? route('academic.attendance.requests.index');
+    $canReview = $canReview ?? false;
+    $evidenceInlineUrl = route($evidenceRoute, ['id' => $request['Request_ID'], 'inline' => 1]);
+    $evidenceDownloadUrl = route($evidenceRoute, $request['Request_ID']);
+    $approveUrl = route($approveRoute, $request['Request_ID']);
+    $rejectUrl = route($rejectRoute, $request['Request_ID']);
 @endphp
 <div class="max-w-4xl mx-auto w-full">
     
@@ -14,6 +21,12 @@
             {{ session('error') }}
         </div>
     @endif
+
+    <div class="mb-4">
+        <a href="{{ $backRoute }}" class="inline-flex items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
+            Kembali
+        </a>
+    </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Informasi Detail -->
@@ -25,11 +38,10 @@
                         {{ $request['Status'] === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : '' }}
                         {{ $request['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : '' }}
                         {{ $request['Status'] === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-200' : '' }}">
-                        {{ $request['Status'] }}
+                        {{ $request['Status_Label'] ?? $request['Status'] }}
                     </span>
                 </div>
                 <h3 class="text-xl font-black text-slate-800">{{ $request['Student_Name'] }}</h3>
-                <p class="text-sm text-slate-500 font-semibold">{{ $request['Student_ID'] }}</p>
             </div>
             <div class="p-6 space-y-4 flex-grow">
                 <div>
@@ -42,17 +54,17 @@
                 </div>
                 <div>
                     <span class="text-[10px] font-bold text-slate-400 uppercase">Target Presensi</span>
-                    <p class="text-sm font-semibold text-slate-700">{{ $request['Attendance_Type'] ?? 'SCHEDULE' }} &middot; {{ $request['Schedule_Display'] ?? ($request['Schedule_ID'] ?? 'Tidak tersedia') }}</p>
+                    <p class="text-sm font-semibold text-slate-700">{{ $request['Target_Display'] ?? $request['Schedule_Display'] ?? 'Target tidak tersedia' }}</p>
                 </div>
                 @if(!empty($request['Existing_Attendance']))
                     <div>
                         <span class="text-[10px] font-bold text-slate-400 uppercase">Attendance Saat Ini</span>
-                        <p class="text-sm font-semibold text-slate-700">{{ $request['Existing_Attendance']['Status'] ?? 'Tersedia' }}</p>
+                        <p class="text-sm font-semibold text-slate-700">{{ $request['Existing_Attendance_Status_Label'] ?? 'Tersedia' }}</p>
                     </div>
                 @endif
                 <div>
                     <span class="text-[10px] font-bold text-slate-400 uppercase">Tipe Pengajuan</span>
-                    <p class="text-sm font-black text-indigo-700">{{ $request['Request_Type'] }}</p>
+                    <p class="text-sm font-black text-indigo-700">{{ $request['Request_Type_Label'] ?? $request['Request_Type'] }}</p>
                 </div>
                 <div>
                     <span class="text-[10px] font-bold text-slate-400 uppercase">Alasan</span>
@@ -62,7 +74,7 @@
                 </div>
                 @if(!empty($request['Academic_Notes']))
                     <div>
-                        <span class="text-[10px] font-bold text-rose-400 uppercase">Catatan Academic ({{ $request['Reviewed_By'] }})</span>
+                        <span class="text-[10px] font-bold text-rose-400 uppercase">Catatan Guru ({{ $request['Reviewed_By_Name'] ?? 'Reviewer tidak ditemukan' }})</span>
                         <div class="bg-rose-50 border border-rose-100 rounded-xl p-3 text-sm text-rose-800 font-semibold">
                             {{ $request['Academic_Notes'] }}
                         </div>
@@ -88,9 +100,9 @@
             </div>
 
             <!-- Keputusan (Hanya jika PENDING) -->
-            @if($request['Status'] === 'PENDING')
+            @if($canReview && ($request['Status_Normalized'] ?? $request['Status']) === 'PENDING')
                 <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
-                    <h4 class="text-sm font-black text-slate-800 mb-4">Keputusan Academic</h4>
+                    <h4 class="text-sm font-black text-slate-800 mb-4">Keputusan Guru</h4>
                     
                     <form id="approval-form" method="POST" action="">
                         @csrf
@@ -98,23 +110,28 @@
                         
                         <div class="grid grid-cols-2 gap-3">
                             <!-- APPROVE SAKIT -->
-                            <button type="button" onclick="submitDecision('{{ route('academic.attendance.requests.approve', $request['Request_ID']) }}', 'SAKIT')" class="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold py-2.5 rounded-xl transition-colors text-xs flex items-center justify-center gap-1">
+                            <button type="button" onclick="submitDecision('{{ $approveUrl }}', 'SAKIT')" class="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold py-2.5 rounded-xl transition-colors text-xs flex items-center justify-center gap-1">
                                 <span>🤒</span> Approve Sakit
                             </button>
 
                             <!-- APPROVE IZIN -->
-                            <button type="button" onclick="submitDecision('{{ route('academic.attendance.requests.approve', $request['Request_ID']) }}', 'IZIN')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold py-2.5 rounded-xl transition-colors text-xs flex items-center justify-center gap-1">
+                            <button type="button" onclick="submitDecision('{{ $approveUrl }}', 'IZIN')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold py-2.5 rounded-xl transition-colors text-xs flex items-center justify-center gap-1">
                                 <span>📝</span> Approve Izin
                             </button>
 
                             <!-- REJECT (ALPA) -->
-                            <button type="button" onclick="submitReject('{{ route('academic.attendance.requests.reject', $request['Request_ID']) }}')" class="col-span-2 mt-1 bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 rounded-xl shadow-lg shadow-rose-500/30 transition-colors text-sm">
+                            <button type="button" onclick="submitReject('{{ $rejectUrl }}')" class="col-span-2 mt-1 bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 rounded-xl shadow-lg shadow-rose-500/30 transition-colors text-sm">
                                 Tolak Pengajuan (Alpa)
                             </button>
                         </div>
                         
                         <input type="hidden" name="Approve_As" id="approve_as_input" value="">
                     </form>
+                </div>
+            @else
+                <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
+                    <h4 class="text-sm font-black text-slate-800 mb-2">Status Keputusan</h4>
+                    <p class="text-sm font-semibold text-slate-600">{{ $request['Status_Label'] ?? $request['Status'] ?? 'Menunggu Review' }}</p>
                 </div>
             @endif
         </div>
@@ -133,7 +150,7 @@
     function submitReject(actionUrl) {
         const notes = document.getElementById('academic_notes').value;
         if (!notes || notes.trim() === '') {
-            alert('Alasan penolakan (Catatan Academic) wajib diisi.');
+            alert('Alasan penolakan (Catatan Guru) wajib diisi.');
             document.getElementById('academic_notes').focus();
             return;
         }

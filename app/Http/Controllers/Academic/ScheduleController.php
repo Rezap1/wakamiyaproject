@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\ScheduleService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Reporting\HumanReadableResolver;
 
 class ScheduleController extends Controller
 {
@@ -24,18 +25,21 @@ class ScheduleController extends Controller
             })->values();
         }
         
+        $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
+
         return [
             'moduleName' => 'Jadwal (Schedule)',
             'data' => collect(array_values($schedules->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['ID Jadwal', 'Kelas', 'Mata Pelajaran', 'Guru', 'Hari', 'Jam'],
-            'mapRow' => function($row) {
+            'headers' => ['Kelas', 'Mata Pelajaran', 'Guru', 'Hari', 'Jam'],
+            'mapRow' => function($row) use ($classesById, $subjectsById, $teachersById) {
 
                 return [
-                    $row['Schedule_ID'] ?? '-',
-                    $row['Class_ID'] ?? '-',
-                    $row['Subject_ID'] ?? '-',
-                    $row['Teacher_ID'] ?? '-',
+                    HumanReadableResolver::className($row['Class_ID'] ?? '', $classesById),
+                    HumanReadableResolver::subjectName($row['Subject_ID'] ?? '', $subjectsById),
+                    HumanReadableResolver::teacherName($row['Teacher_ID'] ?? '', $teachersById),
                     $row['Day_Of_Week'] ?? '-',
                     ($row['Start_Time'] ?? '') . ' - ' . ($row['End_Time'] ?? '')
                 ];
