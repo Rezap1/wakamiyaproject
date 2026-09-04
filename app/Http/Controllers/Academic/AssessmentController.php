@@ -118,7 +118,7 @@ class AssessmentController extends Controller
     public function store(\App\Http\Requests\StoreAssessmentRequest $request)
     {
         try {
-            $this->assessmentService->create($request->except('_token'));
+            $this->assessmentService->create($request->validated());
             return redirect()->route('assessments.index')->with('success', 'Assessment created successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
@@ -161,7 +161,7 @@ class AssessmentController extends Controller
     public function update(\App\Http\Requests\UpdateAssessmentRequest $request, $id)
     {
         try {
-            $this->assessmentService->update($id, $request->except(['_token', '_method']));
+            $this->assessmentService->update($id, $request->validated());
             return redirect()->route('assessments.index')->with('success', 'Assessment updated successfully.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();

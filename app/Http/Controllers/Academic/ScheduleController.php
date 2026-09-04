@@ -126,10 +126,7 @@ class ScheduleController extends Controller
     public function store(\App\Http\Requests\StoreScheduleRequest $request)
     {
         try {
-            $data = $request->only([
-                'Class_ID', 'Subject_ID', 'Teacher_ID', 'Academic_Year_ID',
-                'Day_Of_Week', 'Start_Time', 'End_Time', 'Room', 'Is_Active'
-            ]);
+            $data = $request->validated();
             
             $days = is_array($data['Day_Of_Week'] ?? '') ? $data['Day_Of_Week'] : [$data['Day_Of_Week']];
             
@@ -189,10 +186,7 @@ class ScheduleController extends Controller
     public function update(\App\Http\Requests\UpdateScheduleRequest $request, $id)
     {
         try {
-            $data = $request->only([
-                'Class_ID', 'Subject_ID', 'Teacher_ID', 'Academic_Year_ID',
-                'Day_Of_Week', 'Start_Time', 'End_Time', 'Room', 'Is_Active'
-            ]);
+            $data = $request->validated();
             $this->scheduleService->update($id, $data);
             return redirect()->route('schedules.index')->with('success', 'Schedule updated successfully.');
         } catch (\Exception $e) {

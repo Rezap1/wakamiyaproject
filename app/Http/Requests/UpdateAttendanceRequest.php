@@ -23,10 +23,8 @@ class UpdateAttendanceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Student_ID' => 'nullable|string',
-            'Employee_ID' => 'nullable|string',
             'Attendance_Date' => 'nullable|date',
-            'Status' => 'nullable|string',
+            'Status' => 'nullable|in:Hadir,Terlambat,Sakit,Izin,Alpha,PRESENT,LATE,SICK,PERMITTED,ABSENT',
             'Check_In_Time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
             'Check_Out_Time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
             'Notes' => 'nullable|string|max:1000',

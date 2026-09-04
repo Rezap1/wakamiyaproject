@@ -452,6 +452,7 @@ abstract class BaseSheetRepository
      */
     public function updateRow($id, array $data)
     {
+        $data = $this->stripPrimaryKeyFromUpdateData($data);
         $startTime = microtime(true);
         $lockKey = $this->sheetName . '_write_lock';
 
@@ -576,6 +577,22 @@ abstract class BaseSheetRepository
             ]);
             return null;
         }
+    }
+
+    protected function stripPrimaryKeyFromUpdateData(array $data): array
+    {
+        $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
+        if ($primaryKeyClean === '') {
+            return $data;
+        }
+
+        foreach (array_keys($data) as $key) {
+            if (strtolower(trim((string) $key)) === $primaryKeyClean) {
+                unset($data[$key]);
+            }
+        }
+
+        return $data;
     }
 
     /**

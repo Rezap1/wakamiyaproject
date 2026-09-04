@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
+use App\Services\Core\ProgramService;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreSubjectRequest extends FormRequest
@@ -18,12 +18,34 @@ class StoreSubjectRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, ValidationRule|array<mixed>|string>
+     * @return array<string, array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-            //
+            'Subject_Code' => 'required|string|max:50',
+            'Subject_Name' => 'required|string|max:150',
+            'Program_ID' => ['required', 'string', $this->activeProgramRule()],
+            'Credit' => 'nullable|numeric|min:0',
+            'Duration' => 'nullable|numeric|min:0',
+            'Description' => 'nullable|string|max:1000',
+            'Is_Active' => 'nullable|in:TRUE,FALSE',
+            'Notes' => 'nullable|string|max:1000',
         ];
+    }
+
+    private function activeProgramRule(): \Closure
+    {
+        return function ($attribute, $value, $fail) {
+            $program = app(ProgramService::class)->getProgramById(trim((string) $value));
+            if (!$program) {
+                $fail('Program tidak ditemukan.');
+                return;
+            }
+
+            if (strtoupper(trim((string) ($program['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                $fail('Program tidak aktif.');
+            }
+        };
     }
 }

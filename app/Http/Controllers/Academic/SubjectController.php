@@ -81,7 +81,7 @@ class SubjectController extends Controller
     public function store(\App\Http\Requests\StoreSubjectRequest $request)
     {
         try {
-            $data = $request->except('_token');
+            $data = $request->validated();
             $this->subjectService->create($data);
             return redirect()->route('subjects.index')->with('success', 'Subject created successfully.');
         } catch (\Exception $e) {
@@ -106,7 +106,7 @@ class SubjectController extends Controller
     public function update(\App\Http\Requests\UpdateSubjectRequest $request, $id)
     {
         try {
-            $data = $request->except(['_token', '_method']);
+            $data = $request->validated();
             $this->subjectService->update($id, $data);
             return redirect()->route('subjects.index')->with('success', 'Subject updated successfully.');
         } catch (\Exception $e) {

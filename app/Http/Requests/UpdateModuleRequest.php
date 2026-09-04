@@ -18,14 +18,14 @@ class UpdateModuleRequest extends FormRequest
             'Module_Code' => ['required', 'string', 'max:50', function ($attribute, $value, $fail) {
                 $repository = app(ModuleRepositoryInterface::class);
                 $existing = $repository->findByCode($value);
-                if ($existing && $existing['Module_ID'] !== $this->route('module')) {
+                if ($existing && $existing['Module_ID'] !== $this->route('id')) {
                     $fail('Kode Modul sudah digunakan.');
                 }
             }],
             'Module_Name' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 $repository = app(ModuleRepositoryInterface::class);
                 $existing = $repository->findByName($value);
-                if ($existing && $existing['Module_ID'] !== $this->route('module')) {
+                if ($existing && $existing['Module_ID'] !== $this->route('id')) {
                     $fail('Nama Modul sudah digunakan.');
                 }
             }],

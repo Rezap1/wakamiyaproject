@@ -207,7 +207,7 @@ public function create()
 
     public function update(\App\Http\Requests\UpdateAttendanceRequest $request, $id)
     {
-        $this->attendanceService->update($id, $request->except(['_token', '_method']));
+        $this->attendanceService->update($id, $request->validated());
         return redirect()->route('attendances.index')->with('success', 'Attendance Updated.');
     }
 

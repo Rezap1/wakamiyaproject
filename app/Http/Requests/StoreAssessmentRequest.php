@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreAssessmentRequest extends FormRequest
 {
@@ -18,12 +18,19 @@ class StoreAssessmentRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, ValidationRule|array<mixed>|string>
+     * @return array<string, array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-            //
+            'Name' => 'required|string|max:255',
+            'Category' => 'required|string|max:100',
+            'Program_ID' => 'nullable|string|max:50',
+            'Class_ID' => 'nullable|string|max:50',
+            'Teacher_ID' => 'nullable|string|max:50',
+            'Exam_Date' => 'nullable|date',
+            'Status' => ['nullable', 'string', Rule::in(['Draft', 'Published', 'Closed', 'Archived'])],
+            'Description' => 'nullable|string|max:1000',
         ];
     }
 }

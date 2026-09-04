@@ -57,7 +57,7 @@ class AnnouncementController extends Controller
     public function store(\App\Http\Requests\StoreAnnouncementRequest $request)
     {
         try {
-            $data = $request->except('_token');
+            $data = $request->validated();
             $this->announcementService->create($data);
             return redirect()->route('announcements.index')->with('success', 'Announcement created successfully.');
         } catch (\Exception $e) {
@@ -82,7 +82,7 @@ class AnnouncementController extends Controller
     public function update(\App\Http\Requests\UpdateAnnouncementRequest $request, $id)
     {
         try {
-            $data = $request->except(['_token', '_method']);
+            $data = $request->validated();
             $this->announcementService->update($id, $data);
             return redirect()->route('announcements.index')->with('success', 'Announcement updated successfully.');
         } catch (\Exception $e) {

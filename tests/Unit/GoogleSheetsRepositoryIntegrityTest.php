@@ -91,6 +91,24 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame([['REC-001', '=SUM(A1:A2)']], $resource->updateBody->getValues());
     }
 
+    public function test_update_ignores_primary_key_payload_and_preserves_route_identity(): void
+    {
+        $resource = new FakeSheetsValuesResource([
+            ['Record_ID', 'Value', 'Created_At'],
+            ['REC-001', 'old', '2026-01-01 00:00:00'],
+        ]);
+        $repository = new TestSheetRepository($resource);
+
+        $this->assertTrue($repository->update('REC-001', [
+            'Record_ID' => 'REC-999',
+            'Value' => 'new',
+        ]));
+
+        $this->assertSame([
+            ['REC-001', 'new', '2026-01-01 00:00:00'],
+        ], $resource->updateBody->getValues());
+    }
+
     public function test_append_rejects_missing_and_duplicate_primary_keys_without_mutation(): void
     {
         $resource = new FakeSheetsValuesResource([
