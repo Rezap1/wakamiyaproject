@@ -121,7 +121,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tahun Ajaran <span class="text-red-500">*</span></label>
                             <input type="text" readonly value="{{ reset($ayOptions) }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            <input type="hidden" name="Academic_Year_ID" value="{{ array_key_first($ayOptions) }}">
+                            <input type="hidden" name="Academic_Year_ID" value="{{ old('Academic_Year_ID') ?: array_key_first($ayOptions) }}">
                         </div>
                     @else
                         <div>
@@ -130,7 +130,7 @@
                                 label="Tahun Ajaran" 
                                 :options="$ayOptions" 
                                 :required="true" 
-                                value="{{ old('Academic_Year_ID') }}" 
+                                value="{{ old('Academic_Year_ID') ?: array_key_first($ayOptions) }}"
                             />
                         </div>
                     @endif

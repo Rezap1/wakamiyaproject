@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\ScheduleService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Academic\AcademicYearResolver;
 use App\Support\Academic\AcademicSheetMapper;
 use App\Support\Reporting\HumanReadableResolver;
 
@@ -115,9 +116,7 @@ class ScheduleController extends Controller
         $classes = $classRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        $academicYears = $ayRepo->fetchAll()
-            ->filter(fn ($academicYear) => ($academicYear['Is_Active'] ?? 'TRUE') === 'TRUE')
-            ->values();
+        $academicYears = collect([AcademicYearResolver::current()]);
         
         $currentTeacherId = '';
         if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
@@ -178,12 +177,7 @@ class ScheduleController extends Controller
         $classes = $classRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        $academicYears = $ayRepo->fetchAll()
-            ->filter(function ($academicYear) use ($schedule) {
-                return ($academicYear['Is_Active'] ?? 'TRUE') === 'TRUE'
-                    || ($academicYear['Academic_Year_ID'] ?? '') === ($schedule['Academic_Year_ID'] ?? '');
-            })
-            ->values();
+        $academicYears = collect([AcademicYearResolver::current()]);
         
         $currentTeacherId = '';
         if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {

@@ -3,6 +3,7 @@
 namespace App\Services\Academic;
 
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Support\Academic\AcademicYearResolver;
 use App\Support\Academic\AcademicSheetMapper;
 
 class ScheduleService
@@ -110,6 +111,10 @@ class ScheduleService
 
     private function normalizePayload(array $data): array
     {
+        if (!array_key_exists('Academic_Year_ID', $data) || trim((string) $data['Academic_Year_ID']) === '') {
+            $data['Academic_Year_ID'] = AcademicYearResolver::currentId();
+        }
+
         foreach (['Class_ID', 'Subject_ID', 'Teacher_ID', 'Academic_Year_ID', 'Day_Of_Week', 'Room', 'Is_Active'] as $field) {
             if (array_key_exists($field, $data)) {
                 $data[$field] = trim((string) $data[$field]);

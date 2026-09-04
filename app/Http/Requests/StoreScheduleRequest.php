@@ -7,6 +7,7 @@ use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Helpers\SheetValue;
+use App\Support\Academic\AcademicYearResolver;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -33,7 +34,7 @@ class StoreScheduleRequest extends FormRequest
             'Class_ID' => ['required', 'string', 'max:50', $this->existingActiveRecord(ClassRepositoryInterface::class, 'Kelas')],
             'Subject_ID' => ['required', 'string', 'max:50', $this->existingActiveRecord(SubjectRepositoryInterface::class, 'Materi')],
             'Teacher_ID' => ['required', 'string', 'max:50', $this->existingActiveRecord(TeacherRepositoryInterface::class, 'Pengajar')],
-            'Academic_Year_ID' => ['required', 'string', 'max:50', $this->existingActiveRecord(AcademicYearRepositoryInterface::class, 'Tahun ajaran')],
+            'Academic_Year_ID' => ['required', 'string', 'max:50', $this->existingAcademicYearRecord()],
             'Day_Of_Week' => ['required', 'array', 'min:1'],
             'Day_Of_Week.*' => ['required', 'string', Rule::in(self::DAYS)],
             'Start_Time' => ['required', 'date_format:H:i'],
@@ -45,7 +46,10 @@ class StoreScheduleRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $academicYearId = trim((string) $this->input('Academic_Year_ID'));
+
         $this->merge([
+            'Academic_Year_ID' => $academicYearId === '' ? AcademicYearResolver::currentId() : $academicYearId,
             'Start_Time' => $this->timeForValidation($this->input('Start_Time')),
             'End_Time' => $this->timeForValidation($this->input('End_Time')),
         ]);
@@ -84,6 +88,26 @@ class StoreScheduleRequest extends FormRequest
 
             if (SheetValue::isInactive((array) $record)) {
                 $fail("{$label} tidak aktif.");
+            }
+        };
+    }
+
+    private function existingAcademicYearRecord(): \Closure
+    {
+        return function ($attribute, $value, $fail) {
+            $value = trim((string) $value);
+            if (AcademicYearResolver::isCurrentId($value)) {
+                return;
+            }
+
+            $record = app(AcademicYearRepositoryInterface::class)->findById($value);
+            if (!$record) {
+                $fail('Tahun ajaran tidak ditemukan.');
+                return;
+            }
+
+            if (SheetValue::isInactive((array) $record)) {
+                $fail('Tahun ajaran tidak aktif.');
             }
         };
     }

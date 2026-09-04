@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Http\Requests\StoreScheduleRequest;
 use App\Http\Requests\UpdateScheduleRequest;
 use App\Http\Requests\UpdateSubjectRequest;
 use App\Interfaces\GoogleSheets\AcademicYearRepositoryInterface;
@@ -14,7 +15,9 @@ use App\Services\Academic\ScheduleService;
 use App\Services\Academic\SubjectService;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\ProgramService;
+use App\Support\Academic\AcademicYearResolver;
 use App\Support\Academic\AcademicSheetMapper;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Routing\Route;
 use Illuminate\Support\ViewErrorBag;
@@ -28,6 +31,7 @@ class AcademicPersistenceIntegrityTest extends TestCase
 {
     protected function tearDown(): void
     {
+        Carbon::setTestNow();
         Mockery::close();
         parent::tearDown();
     }
@@ -45,6 +49,44 @@ class AcademicPersistenceIntegrityTest extends TestCase
         $this->assertSame('2026/2027', $row['Name']);
         $this->assertSame('Ganjil', $row['Semester']);
         $this->assertSame('TRUE', $row['Is_Active']);
+    }
+
+    public function test_current_academic_year_follows_real_world_academic_calendar(): void
+    {
+        $ganjil = AcademicYearResolver::current(Carbon::parse('2026-09-05 01:13:00', config('app.timezone')));
+        $genap = AcademicYearResolver::current(Carbon::parse('2027-02-01 08:00:00', config('app.timezone')));
+
+        $this->assertSame('ACY-2026-2027-GANJIL', $ganjil['Academic_Year_ID']);
+        $this->assertSame('2026/2027', $ganjil['Name']);
+        $this->assertSame('Ganjil', $ganjil['Semester']);
+        $this->assertSame('2026-07-01', $ganjil['Start_Date']);
+        $this->assertSame('2027-06-30', $ganjil['End_Date']);
+
+        $this->assertSame('ACY-2026-2027-GENAP', $genap['Academic_Year_ID']);
+        $this->assertSame('2026/2027', $genap['Name']);
+        $this->assertSame('Genap', $genap['Semester']);
+    }
+
+    public function test_schedule_create_auto_fills_current_academic_year_when_master_rows_are_empty(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-05 01:13:00', config('app.timezone')));
+        $this->bindScheduleReferenceRules(academicYear: null);
+
+        $request = $this->makeRequest(StoreScheduleRequest::class, [
+            'Class_ID' => 'CLS-001',
+            'Subject_ID' => 'SUB-001',
+            'Teacher_ID' => 'TCH-001',
+            'Academic_Year_ID' => '',
+            'Day_Of_Week' => ['Monday'],
+            'Start_Time' => '07:30',
+            'End_Time' => '17:00',
+            'Room' => 'Ruangan 1',
+        ], 'POST');
+
+        $validator = $this->preparedValidator($request);
+
+        $this->assertTrue($validator->passes(), var_export($validator->errors()->toArray(), true));
+        $this->assertSame('ACY-2026-2027-GANJIL', $validator->validated()['Academic_Year_ID']);
     }
 
     public function test_schedule_update_unchanged_values_preserves_references_room_day_and_times(): void
@@ -377,6 +419,18 @@ class AcademicPersistenceIntegrityTest extends TestCase
         $this->assertStringContainsString('name="Academic_Year_ID" value="AY-001"', $editHtml);
         $this->assertStringContainsString('value="09:00"', $editHtml);
         $this->assertStringContainsString('value="10:00"', $editHtml);
+
+        $automaticAcademicYear = AcademicYearResolver::current(Carbon::parse('2026-09-05 01:13:00', config('app.timezone')));
+        $createHtml = view('academic.schedules.create', [
+            'classes' => [['Class_ID' => 'CLS-001', 'Class_Name' => 'Kelas A']],
+            'subjects' => [['Subject_ID' => 'SUB-001', 'Subject_Name' => 'Bahasa Jepang', 'Subject_Code' => 'JP-01']],
+            'teachers' => [['Teacher_ID' => 'TCH-001', 'Full_Name' => 'Sensei A']],
+            'academicYears' => [$automaticAcademicYear],
+            'currentTeacherId' => '',
+        ])->render();
+
+        $this->assertStringContainsString('2026/2027 - Ganjil', $createHtml);
+        $this->assertStringContainsString('name="Academic_Year_ID" value="ACY-2026-2027-GANJIL"', $createHtml);
     }
 
     private function subjectRepository(): H839SubjectMemoryRepository
@@ -452,9 +506,29 @@ class AcademicPersistenceIntegrityTest extends TestCase
         return $request;
     }
 
+    /**
+     * @param class-string<FormRequest> $requestClass
+     */
+    private function makeRequest(string $requestClass, array $payload, string $method): FormRequest
+    {
+        $request = $requestClass::create('/test', $method, $payload);
+        $request->setContainer($this->app);
+
+        return $request;
+    }
+
     private function validator(FormRequest $request): \Illuminate\Contracts\Validation\Validator
     {
         return Validator::make($request->all(), $request->rules(), $request->messages());
+    }
+
+    private function preparedValidator(FormRequest $request): \Illuminate\Contracts\Validation\Validator
+    {
+        $method = new \ReflectionMethod($request, 'prepareForValidation');
+        $method->setAccessible(true);
+        $method->invoke($request);
+
+        return $this->validator($request);
     }
 }
 

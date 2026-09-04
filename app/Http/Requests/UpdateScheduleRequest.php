@@ -8,6 +8,7 @@ use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Helpers\SheetValue;
+use App\Support\Academic\AcademicYearResolver;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -48,7 +49,10 @@ class UpdateScheduleRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $academicYearId = trim((string) $this->input('Academic_Year_ID'));
+
         $this->merge([
+            'Academic_Year_ID' => $academicYearId === '' ? AcademicYearResolver::currentId() : $academicYearId,
             'Start_Time' => $this->timeForValidation($this->input('Start_Time')),
             'End_Time' => $this->timeForValidation($this->input('End_Time')),
         ]);
@@ -91,7 +95,12 @@ class UpdateScheduleRequest extends FormRequest
     private function existingAcademicYearRecord(): \Closure
     {
         return function ($attribute, $value, $fail) {
-            $record = app(AcademicYearRepositoryInterface::class)->findById(trim((string) $value));
+            $value = trim((string) $value);
+            if (AcademicYearResolver::isCurrentId($value)) {
+                return;
+            }
+
+            $record = app(AcademicYearRepositoryInterface::class)->findById($value);
             if (!$record) {
                 $fail('Tahun ajaran tidak ditemukan.');
                 return;
@@ -106,7 +115,7 @@ class UpdateScheduleRequest extends FormRequest
                 ? app(ScheduleRepositoryInterface::class)->findById($scheduleId)
                 : null;
 
-            if ($schedule && trim((string) ($schedule['Academic_Year_ID'] ?? '')) === trim((string) $value)) {
+            if ($schedule && trim((string) ($schedule['Academic_Year_ID'] ?? '')) === $value) {
                 return;
             }
 
