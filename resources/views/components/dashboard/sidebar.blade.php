@@ -78,13 +78,16 @@
 <aside id="sidebar" 
     x-data="sidebarEngine('{{ $activeGroup }}')"
     :class="{ 'w-64': expanded, 'w-20': !expanded, 'translate-x-0': mobileOpen, '-translate-x-full': !mobileOpen }"
+    x-bind:aria-hidden="(!mobileOpen && window.innerWidth < 1024).toString()"
+    role="navigation"
+    aria-label="Navigasi lengkap {{ $userRole }}"
     class="shadow-xl flex-shrink-0 z-50 flex flex-col transition-all duration-300 ease-in-out fixed inset-y-0 left-0 lg:relative lg:translate-x-0 border-r border-slate-800 w-64 -translate-x-full"
     style="background-color: var(--color-sidebar-bg, #111827); color: var(--color-sidebar-text, #94A3B8);">
     
     <!-- Mobile Close Overlay & Button (Hidden on Desktop) -->
-    <div x-show="mobileOpen" @click="mobileOpen = false" class="lg:hidden fixed inset-0 bg-black/50 -z-10 cursor-pointer" style="display: none;"></div>
+    <div x-show="mobileOpen" @click="mobileOpen = false" class="sr-only lg:hidden" style="display: none;"></div>
     
-    <button @click="mobileOpen = false" class="lg:hidden absolute top-4 right-[-48px] p-2 bg-slate-800 text-white rounded-r-md" style="display: none;" x-show="mobileOpen">
+    <button @click="mobileOpen = false" aria-label="Tutup navigasi" class="lg:hidden absolute top-4 right-[-48px] min-h-[44px] min-w-[44px] p-2 bg-slate-800 text-white rounded-r-md shadow-lg" style="display: none;" x-show="mobileOpen">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
     </button>
 
@@ -161,7 +164,6 @@
                     <x-sidebar.nav-link href="{{ route('modules.index') }}" active="{{ request()->routeIs('modules.*') }}" icon="puzzle-piece">Modul</x-sidebar.nav-link>
                 @elseif($userRole === 'HR')
                     <x-sidebar.nav-link href="{{ route('dashboard.hr') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('employees.index') }}" active="{{ request()->routeIs('employees.*') }}" icon="identification">Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.*') }}" icon="clock">Monitoring Kehadiran</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.qr.index') }}" active="{{ request()->routeIs('attendance.qr.*') }}" icon="qrcode">QR Presensi</x-sidebar.nav-link>
@@ -192,7 +194,7 @@
                     <x-sidebar.nav-link href="{{ route('dashboard.marketing') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('companies.index') }}" active="{{ request()->routeIs('companies.*') }}" icon="office-building">Perusahaan</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('documents.index') }}" active="{{ request()->routeIs('documents.*') }}" icon="folder-open">Arsip Dokumen</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
                 @elseif($userRole === 'FINANCE')
                     <x-sidebar.nav-link href="{{ route('dashboard.finance') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
@@ -207,8 +209,8 @@
                     <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('transactions.index') }}" active="{{ request()->routeIs('transactions.*') }}" icon="switch-horizontal">Transaksi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Finance</x-sidebar.nav-link>
                 @elseif($userRole === 'TEACHER')
                     <x-sidebar.nav-link href="{{ route('dashboard.teacher') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
@@ -218,19 +220,31 @@
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.students') }}" active="{{ request()->routeIs('teacher.workspace.students') }}" icon="user-group">Daftar Siswa</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Kehadiran</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendances') }}" active="{{ request()->routeIs('teacher.workspace.attendances') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Akademik</div>
-                    <x-sidebar.nav-link href="{{ route('teacher.workspace.scores') }}" active="{{ request()->routeIs('teacher.workspace.scores') }}" icon="chart-bar">Penilaian</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('teacher.workspace.assignments') }}" active="{{ request()->routeIs('teacher.workspace.assignments') }}" icon="clipboard-list">Tugas Harian</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.scores') }}" active="{{ request()->routeIs('teacher.workspace.scores*') }}" icon="chart-bar">Penilaian</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.assignments') }}" active="{{ request()->routeIs('teacher.workspace.assignments*') }}" icon="clipboard-list">Tugas Harian</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.calendar') }}" active="{{ request()->routeIs('teacher.workspace.calendar') }}" icon="calendar">Kalender Akademik</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.reports') }}" active="{{ request()->routeIs('teacher.workspace.reports') }}" icon="chart-bar">Laporan Pengajaran</x-sidebar.nav-link>
                 @elseif($userRole === 'STUDENT')
                     <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">📱 Presensi QR</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.calendar') }}" active="{{ request()->routeIs('student.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.subjects') }}" active="{{ request()->routeIs('student.subjects') }}" icon="book-open">Materi Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.assignments') }}" active="{{ request()->routeIs('student.portal.assignments*') }}" icon="document-text">Tugas</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.progress') }}" active="{{ request()->routeIs('student.progress') }}" icon="clipboard-check">Nilai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.materials') }}" active="{{ request()->routeIs('student.portal.materials*') }}" icon="book-open">Materi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.billing.index') }}" active="{{ request()->routeIs('student.billing.*') }}" icon="cash">Tagihan Saya</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.attendance.requests.index') }}" active="{{ request()->routeIs('student.attendance.requests.*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
+                @elseif($userRole === 'EMPLOYEE')
+                    <x-sidebar.nav-link href="{{ route('dashboard') }}" active="{{ request()->routeIs('dashboard') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.personal-payroll') }}" active="{{ request()->routeIs('dashboard.personal-payroll*') }}" icon="cash">Slip Gaji Saya</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('profile.index') }}" active="{{ request()->routeIs('profile.*') }}" icon="users">Profil</x-sidebar.nav-link>
                 @endif
             </div>
         @endif
@@ -240,13 +254,16 @@
     <!-- User Profile & Logout Footer -->
     <div class="p-3 border-t border-slate-800 shrink-0 mt-auto transition-all" style="background-color: var(--color-sidebar-bg, #111827);">
         <div class="flex items-center gap-2" :class="{ 'justify-between': expanded, 'justify-center flex-col': !expanded }">
-            <div class="flex items-center gap-2.5 min-w-0" :class="{ 'flex-col text-center': !expanded }">
+            <a href="{{ route('profile.index') }}"
+               class="flex items-center gap-2.5 min-w-0 rounded-xl p-1 -m-1 transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+               :class="{ 'flex-col text-center': !expanded }"
+               @click="if(window.innerWidth < 1024) window.dispatchEvent(new CustomEvent('close-sidebar-mobile'))">
                 <x-user-avatar class="w-9 h-9 shrink-0" text-size="text-xs" />
                 <div x-show="expanded" class="min-w-0 flex-1">
                     <p class="text-xs font-extrabold text-white truncate">{{ auth()->user()->Username ?? auth()->user()->Name ?? 'User' }}</p>
                     <p class="text-[10px] font-bold uppercase tracking-wider truncate" style="color: var(--color-primary, #38BDF8);">{{ auth()->user()->Role ?? $userRole }}</p>
                 </div>
-            </div>
+            </a>
             <form action="{{ route('logout') }}" method="POST" class="shrink-0">
                 @csrf
                 <button type="submit" class="p-2 text-rose-400 hover:text-white hover:bg-rose-600/30 rounded-xl transition-all flex items-center justify-center min-h-[36px] min-w-[36px]" title="Keluar / Logout">
@@ -277,17 +294,47 @@
                 openGroups: initialGroups,
                 
                 init() {
-                // Ensure active group is open
-                if (initialActiveGroup && !this.openGroups.includes(initialActiveGroup)) {
-                    this.openGroups.push(initialActiveGroup);
-                    this.saveGroups();
-                }
-                
-                // Handle global mobile toggle event if emitted from topbar
-                window.addEventListener('toggle-sidebar-mobile', () => {
-                    this.mobileOpen = !this.mobileOpen;
-                });
-            },
+                    if (initialActiveGroup && !this.openGroups.includes(initialActiveGroup)) {
+                        this.openGroups.push(initialActiveGroup);
+                        this.saveGroups();
+                    }
+
+                    const publishState = (open) => {
+                        const locked = Boolean(open) && window.innerWidth < 1024;
+                        document.body.classList.toggle('wms-mobile-drawer-open', locked);
+                        document.dispatchEvent(new CustomEvent('wms-sidebar-mobile-state', { detail: { open: Boolean(open) } }));
+                    };
+
+                    this.$watch('mobileOpen', (open) => {
+                        if (open && window.innerWidth < 1024) {
+                            this.expanded = true;
+                            this.$nextTick(() => {
+                                const firstLink = document.querySelector('#sidebar a[href]');
+                                if (firstLink) firstLink.focus({ preventScroll: true });
+                            });
+                        }
+                        publishState(open);
+                    });
+
+                    window.addEventListener('toggle-sidebar-mobile', () => {
+                        this.mobileOpen = !this.mobileOpen;
+                    });
+                    window.addEventListener('close-sidebar-mobile', () => {
+                        this.mobileOpen = false;
+                    });
+                    window.addEventListener('keydown', (event) => {
+                        if (event.key === 'Escape') {
+                            this.mobileOpen = false;
+                        }
+                    });
+                    window.addEventListener('resize', () => {
+                        if (window.innerWidth >= 1024) {
+                            this.mobileOpen = false;
+                        }
+                    });
+
+                    publishState(this.mobileOpen);
+                },
             
             toggleExpanded() {
                 this.expanded = !this.expanded;

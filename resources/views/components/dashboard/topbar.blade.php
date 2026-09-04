@@ -4,7 +4,7 @@
     <!-- Left Section: Header -->
     <div class="flex items-center gap-4 flex-1">
         <!-- Mobile Menu Button -->
-        <button onclick="toggleSidebar()" class="p-2.5 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 rounded-xl transition-all focus:outline-none border border-slate-200 shadow-sm flex items-center justify-center shrink-0 group lg:hidden">
+        <button type="button" onclick="toggleSidebar()" aria-controls="sidebar" aria-expanded="false" aria-label="Buka navigasi lengkap" class="wms-mobile-menu-trigger p-2.5 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 rounded-xl transition-all focus:outline-none border border-slate-200 shadow-sm flex items-center justify-center shrink-0 group lg:hidden">
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
 

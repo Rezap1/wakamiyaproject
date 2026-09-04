@@ -9,7 +9,9 @@ $classes = $active
     : 'flex items-center pl-8 pr-4 py-3 text-[14px] font-semibold rounded-r-xl hover:bg-white/10 hover:text-white transition-all';
 @endphp
 
-<a {{ $attributes->merge(['class' => $classes, 'style' => $activeStyle]) }}>
+<a {{ $attributes->merge(['class' => $classes, 'style' => $activeStyle]) }}
+   aria-current="{{ $active ? 'page' : 'false' }}"
+   @click="if(window.innerWidth < 1024) window.dispatchEvent(new CustomEvent('close-sidebar-mobile'))">
     <svg class="w-5 h-5 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         @switch($icon)
             @case('dashboard') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path> @break
@@ -36,6 +38,10 @@ $classes = $active
             @case('folder-open') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path> @break
             @case('document-duplicate') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path> @break
             @case('credit-card') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path> @break
+            @case('switch-horizontal') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path> @break
+            @case('qrcode') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v2h-2v-2z"></path> @break
+            @case('camera') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h2l1.5-2h7L17 7h2a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9zm9 7a4 4 0 100-8 4 4 0 000 8z"></path> @break
+            @case('sparkles') <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l1.5 3.5L10 8l-3.5 1.5L5 13 3.5 9.5 0 8l3.5-1.5L5 3zm12 2l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1L17 5zm-5 8l1.5 3.5L17 18l-3.5 1.5L12 23l-1.5-3.5L7 18l3.5-1.5L12 13z"></path> @break
             @default <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
         @endswitch
     </svg>

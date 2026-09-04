@@ -1,13 +1,13 @@
 @props(['search' => true, 'filter' => true, 'export' => true, 'refresh' => true])
 
-<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
     <!-- Left side: Bulk Actions or Custom Actions -->
-    <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
         {{ $left ?? '' }}
     </div>
 
     <!-- Right side: Cari...ilter, Export, Refresh -->
-    <div class="flex items-center gap-2 w-full md:w-auto">
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
         @if($search)
             @if(isset($searchSlot))
                 {{ $searchSlot }}

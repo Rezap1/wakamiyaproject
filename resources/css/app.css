@@ -48,10 +48,26 @@
 html,
 body {
   min-height: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .wms-shell {
   min-height: 100dvh;
+}
+
+.wms-mobile-header {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+
+.wms-mobile-drawer-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.wms-break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (min-width: 1024px) {
@@ -74,10 +90,39 @@ body {
 
 @media (max-width: 767px) {
   .wms-page-content {
-    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-bottom-nav {
-    min-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+    min-height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wms-page-content h1 {
+    overflow-wrap: anywhere;
+    line-height: 1.18;
+  }
+
+  .wms-page-content .overflow-x-auto > table {
+    min-width: 42rem;
+  }
+
+  .wms-page-content input,
+  .wms-page-content select,
+  .wms-page-content textarea {
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  .wms-page-content [class*="rounded-2xl"] {
+    border-radius: 1rem;
+  }
+
+  .wms-page-content [class*="space-y-8"] > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1.25rem;
+  }
+
+  .wms-page-content .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
 }

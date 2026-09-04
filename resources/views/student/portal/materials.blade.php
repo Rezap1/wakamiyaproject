@@ -25,11 +25,11 @@
                     <div class="border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-slate-50">
                         <div class="flex items-start gap-3">
                             <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
-                                {{ strtoupper(substr($subject['Subject_Code'] ?? $subject['Subject_ID'] ?? 'S', 0, 2)) }}
+                                {{ strtoupper(substr($subject['Subject_Code'] ?? $subject['Subject_Name'] ?? 'S', 0, 2)) }}
                             </div>
                             <div>
                                 <h4 class="font-bold text-slate-800 text-sm">{{ $subject['Subject_Name'] ?? 'Untitled' }}</h4>
-                                <p class="text-xs text-slate-500 mt-0.5">{{ $subject['Subject_Code'] ?? $subject['Subject_ID'] ?? '-' }}</p>
+                                <p class="text-xs text-slate-500 mt-0.5">{{ $subject['Subject_Code'] ?? 'Kode materi belum tersedia' }}</p>
                                 @if(!empty($subject['Credit']))
                                 <span class="inline-block mt-1 px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full">{{ $subject['Credit'] }} SKS</span>
                                 @endif

@@ -34,7 +34,7 @@
                         </div>
                         <div>
                             <span class="block text-slate-400">Batch</span>
-                            <span class="font-semibold text-slate-700">{{ $s['Batch_ID'] ?? '-' }}</span>
+                            <span class="font-semibold text-slate-700">{{ $s['Batch_Name'] ?? 'Batch tidak ditemukan' }}</span>
                         </div>
                     </div>
                 </div>

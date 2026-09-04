@@ -15,7 +15,7 @@
     } elseif ($role === 'TEACHER') {
         $items = [
             ['label' => 'Dashboard', 'route' => 'dashboard.teacher', 'icon' => 'home', 'active' => request()->routeIs('dashboard.teacher')],
-            ['label' => 'Tugas', 'route' => 'assignments.index', 'icon' => 'document-duplicate', 'active' => request()->routeIs('assignments.*')],
+            ['label' => 'Tugas', 'route' => 'teacher.workspace.assignments', 'icon' => 'document-duplicate', 'active' => request()->routeIs('teacher.workspace.assignments*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
             ['label' => 'Nilai', 'route' => 'teacher.workspace.scores', 'icon' => 'academic-cap', 'active' => request()->routeIs('teacher.workspace.scores*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
@@ -23,9 +23,17 @@
     } elseif ($role === 'HR') {
         $items = [
             ['label' => 'Dashboard', 'route' => 'dashboard.hr', 'icon' => 'home', 'active' => request()->routeIs('dashboard.hr')],
-            ['label' => 'Kehadiran', 'route' => 'attendances.index', 'icon' => 'clock', 'active' => request()->routeIs('attendances.*')],
+            ['label' => 'Kehadiran', 'route' => 'hr.attendance.monitoring', 'icon' => 'clock', 'active' => request()->routeIs('hr.attendance.*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
             ['label' => 'Payroll', 'route' => 'payrolls.index', 'icon' => 'cash', 'active' => request()->routeIs('payrolls.*')],
+            ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
+        ];
+    } elseif ($role === 'EMPLOYEE') {
+        $items = [
+            ['label' => 'Dashboard', 'route' => 'dashboard', 'icon' => 'home', 'active' => request()->routeIs('dashboard')],
+            ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
+            ['label' => 'Gaji', 'route' => 'dashboard.personal-payroll', 'icon' => 'cash', 'active' => request()->routeIs('dashboard.personal-payroll*')],
+            ['label' => 'Notifikasi', 'route' => 'notifications.index', 'icon' => 'inbox', 'active' => request()->routeIs('notifications.*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
     } elseif ($role === 'FINANCE') {
@@ -49,7 +57,7 @@
             ['label' => 'Dashboard', 'route' => 'dashboard.marketing', 'icon' => 'home', 'active' => request()->routeIs('dashboard.marketing')],
             ['label' => 'Perusahaan', 'route' => 'companies.index', 'icon' => 'office-building', 'active' => request()->routeIs('companies.*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
-            ['label' => 'Dokumen', 'route' => 'documents.index', 'icon' => 'folder-open', 'active' => request()->routeIs('documents.*')],
+            ['label' => 'Notifikasi', 'route' => 'notifications.index', 'icon' => 'inbox', 'active' => request()->routeIs('notifications.*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
     } elseif ($role === 'DIRECTOR') {
@@ -58,6 +66,14 @@
             ['label' => 'Persetujuan', 'route' => 'approvals.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('approvals.*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
             ['label' => 'Laporan', 'route' => 'reports.finance.index', 'icon' => 'chart-bar', 'active' => request()->routeIs('reports.*')],
+            ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
+        ];
+    } elseif ($role === 'MASTER') {
+        $items = [
+            ['label' => 'Dashboard', 'route' => 'dashboard.administrator', 'icon' => 'home', 'active' => request()->routeIs('dashboard.administrator')],
+            ['label' => 'Persetujuan', 'route' => 'approvals.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('approvals.*')],
+            ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
+            ['label' => 'Pengguna', 'route' => 'users.index', 'icon' => 'users', 'active' => request()->routeIs('users.*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
     } else {
@@ -73,7 +89,7 @@
 @endphp
 
 <!-- WMS MOBILE BOTTOM NAV BAR (Glassmorphism & Fixed Bottom) -->
-<nav aria-label="Navigasi utama mobile" class="mobile-bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] px-4 pt-2 flex items-center justify-around select-none" style="padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));">
+<nav aria-label="Navigasi utama mobile" class="mobile-bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] px-2 pt-2 flex items-center justify-around select-none" style="padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));">
     @foreach($items as $item)
         @php
             $url = Route::has($item['route']) ? route($item['route']) : '#';
@@ -85,7 +101,7 @@
             <!-- FLOATING ACTION BUTTON FOR SCAN QR -->
             <div class="relative -top-5 shrink-0 flex flex-col items-center justify-center">
                 <a href="{{ $url }}" 
-                   class="flex items-center justify-center w-[60px] h-[60px] bg-gradient-to-br from-sky-400 to-sky-600 text-white rounded-full shadow-[0_8px_20px_rgba(14,165,233,0.35)] border-4 border-white active:scale-95 transition-transform"
+                   class="flex items-center justify-center w-[56px] h-[56px] bg-gradient-to-br from-sky-400 to-sky-600 text-white rounded-full shadow-[0_8px_20px_rgba(14,165,233,0.35)] border-4 border-white active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                    title="Scan QR Presensi">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2M16 4h2a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-2" />
@@ -97,7 +113,9 @@
         @else
             <!-- REGULAR NAV ITEM -->
             <a href="{{ $url }}" 
-               class="flex flex-col items-center justify-center min-w-[64px] min-h-[44px] py-1 transition-all duration-200 relative {{ $isActive ? 'text-sky-500 font-bold' : 'text-slate-400 hover:text-slate-600' }}">
+               class="flex min-w-0 flex-1 flex-col items-center justify-center min-h-[44px] px-1 py-1 transition-all duration-200 relative {{ $isActive ? 'text-sky-500 font-bold' : 'text-slate-400 hover:text-slate-600' }}"
+               aria-label="{{ $item['label'] }}"
+               aria-current="{{ $isActive ? 'page' : 'false' }}">
                 
                 <div class="relative flex items-center justify-center">
                     @if($iconType === 'user')
@@ -130,7 +148,7 @@
                     @endif
                 </div>
 
-                <span class="text-[10px] font-medium mt-1 tracking-tight">{{ $item['label'] }}</span>
+                <span class="w-full truncate text-center text-[10px] font-medium mt-1 tracking-tight leading-tight">{{ $item['label'] }}</span>
 
                 @if($isActive)
                     <span class="absolute bottom-0 w-8 h-1 bg-sky-500 rounded-t-full"></span>
