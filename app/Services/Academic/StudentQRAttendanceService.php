@@ -131,22 +131,17 @@ class StudentQRAttendanceService
         }
 
         // 1. Decode Payload & Identify QR Type
-        if (str_contains($tokenString, 'WMS-ATT-EMP-')) {
+        if ($this->extractPermanentQrIdentifier($tokenString, 'EMP')) {
             throw new Exception("Akses Ditolak: QR Code ini khusus untuk Presensi Pegawai.");
         }
 
-        if (str_contains($tokenString, 'WMS-ATT-STU-')) {
+        $permanentIdentifier = $this->extractPermanentQrIdentifier($tokenString, 'STU');
+        if ($permanentIdentifier !== null) {
             // Support for Permanent QR Code (URL-based) scanned from inside the Student App
-            preg_match('/WMS-ATT-STU-[A-Z0-9]+/', $tokenString, $matches);
-            if (empty($matches)) {
-                throw new Exception("Format QR Code Permanen tidak valid.");
-            }
-            
-            $identifier = $matches[0];
             $permanentQrService = app(\App\Services\Core\PermanentQrService::class);
-            $qr = $permanentQrService->getQrByIdentifier($identifier);
+            $qr = $permanentQrService->getQrByIdentifier($permanentIdentifier);
             
-            if (!$qr || strtoupper($qr['QR_TYPE']) !== 'STUDENT' || strtoupper($qr['STATUS']) !== 'ACTIVE') {
+            if (!$qr || strtoupper(trim((string) ($qr['QR_TYPE'] ?? ''))) !== 'STUDENT' || strtoupper(trim((string) ($qr['STATUS'] ?? ''))) !== 'ACTIVE') {
                 throw new Exception("QR Code Permanen tidak valid atau sudah tidak aktif.");
             }
 
@@ -155,13 +150,10 @@ class StudentQRAttendanceService
                 throw new Exception($availability['message']);
             }
 
-            // Mock payload variables for Permanent QR to bypass dynamic checks
+            // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
+            // Do not make it depend on the short-lived dynamic classroom session.
             $qrType = 'STUDENT';
-            $session = $this->getOrCreateActiveStudentSession();
-            if (!$this->isStudentSessionOpen($session)) {
-                throw new Exception($this->studentSessionClosedMessage($session));
-            }
-
+            $session = $this->permanentStudentSessionContext();
             $sessionId = $session['Session_ID'];
             $nonce = 'PERM-' . Str::random(10);
             
@@ -411,6 +403,35 @@ class StudentQRAttendanceService
         }
 
         return null;
+    }
+
+    private function extractPermanentQrIdentifier(string $tokenString, string $expectedActorPrefix): ?string
+    {
+        $decoded = rawurldecode($tokenString);
+        $prefix = strtoupper($expectedActorPrefix);
+
+        if (!preg_match('/\bWMS-ATT-' . preg_quote($prefix, '/') . '-[A-Z0-9]+\b/i', $decoded, $matches)) {
+            return null;
+        }
+
+        return strtoupper($matches[0]);
+    }
+
+    private function permanentStudentSessionContext(): array
+    {
+        $today = now()->toDateString();
+
+        return [
+            'Session_ID' => "STUDENT-QRS-{$today}",
+            'Title' => 'Presensi Kehadiran Siswa LPK',
+            'Type' => 'STUDENT',
+            'Date' => $today,
+            'Start_Time' => $this->settingService->get('WORK_START_TIME', '07:00'),
+            'End_Time' => $this->settingService->get('WORK_END_TIME', '18:00'),
+            'Grace_Period' => (int) $this->settingService->get('LATE_TOLERANCE_MINUTES', 30),
+            'Status' => 'ACTIVE',
+            'Created_At' => now()->toDateTimeString(),
+        ];
     }
 
     private function signingKey(): string

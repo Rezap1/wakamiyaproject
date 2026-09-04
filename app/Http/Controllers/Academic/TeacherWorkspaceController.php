@@ -298,17 +298,32 @@ class TeacherWorkspaceController extends Controller
     private function teacherAttendanceRows(): array
     {
         $teacherId = $this->verifyTeacherAccess();
-        $mySchedules = collect($this->scheduleService->getAll())
-            ->where('Teacher_ID', $teacherId);
-        $myScheduleIds = $mySchedules->pluck('Schedule_ID')->filter()->values()->all();
+        $allSchedules = collect($this->scheduleService->getAll());
+        $mySchedules = $allSchedules->where('Teacher_ID', $teacherId)->values();
+        $myScheduleIds = $mySchedules->pluck('Schedule_ID')->filter()->values();
+        $myClassIds = $mySchedules->pluck('Class_ID')->filter()->unique()->values();
         $classesById = collect($this->classService->getAllClasses())->keyBy('Class_ID');
         $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
+        $classifier = new AttendanceLegacyClassifier();
 
         $rows = collect($this->attendanceService->getAll())
-            ->whereIn('Schedule_ID', $myScheduleIds)
-            ->map(function ($attendance) use ($studentsById, $classesById, $mySchedules) {
-                $schedule = $mySchedules->firstWhere('Schedule_ID', $attendance['Schedule_ID'] ?? '');
-                $classId = $attendance['Class_ID'] ?? ($schedule['Class_ID'] ?? '');
+            ->filter(function ($attendance) use ($classifier, $classesById, $allSchedules, $myScheduleIds, $myClassIds) {
+                $classified = $classifier->classify($attendance, $classesById->values(), $allSchedules);
+                if (in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)) {
+                    return false;
+                }
+                if (empty($attendance['Student_ID'])) {
+                    return false;
+                }
+                if ($classified['is_schedule_based']) {
+                    return $myScheduleIds->contains($classified['schedule_id'] ?? '');
+                }
+                return $myClassIds->contains($classified['class_id'] ?? '');
+            })
+            ->map(function ($attendance) use ($classifier, $studentsById, $classesById, $allSchedules) {
+                $classified = $classifier->classify($attendance, $classesById->values(), $allSchedules);
+                $scheduleId = $classified['schedule_id'] ?? '';
+                $classId = $classified['class_id'] ?? ($attendance['Class_ID'] ?? '');
                 $class = $classesById[$classId] ?? null;
                 $student = $studentsById[$attendance['Student_ID'] ?? ''] ?? null;
 
@@ -316,7 +331,7 @@ class TeacherWorkspaceController extends Controller
                     $attendance['Attendance_Date'] ?? $attendance['Date'] ?? '-',
                     $student['Full_Name'] ?? $attendance['Student_ID'] ?? '-',
                     ($class['Class_Name'] ?? $classId) ?: '-',
-                    $attendance['Schedule_ID'] ?? '-',
+                    $scheduleId ?: '-',
                     $this->translateAttendanceStatus($attendance['Status'] ?? ''),
                     $attendance['Time_In'] ?? $attendance['Check_In_Time'] ?? '-',
                     $attendance['Time_Out'] ?? $attendance['Check_Out_Time'] ?? '-',

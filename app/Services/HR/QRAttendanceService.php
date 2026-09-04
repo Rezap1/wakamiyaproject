@@ -138,21 +138,16 @@ class QRAttendanceService
     public function processScan(string $tokenString, ?string $deviceInfo = null, ?float $userLat = null, ?float $userLon = null): array
     {
         // 1. Decode Payload & Identify QR Type
-        if (str_contains($tokenString, 'WMS-ATT-STU-')) {
+        if ($this->extractPermanentQrIdentifier($tokenString, 'STU')) {
             throw new Exception("Akses Ditolak: QR Code ini khusus untuk Presensi Siswa.");
         }
 
-        if (str_contains($tokenString, 'WMS-ATT-EMP-')) {
-            preg_match('/WMS-ATT-EMP-[A-Z0-9]+/', $tokenString, $matches);
-            if (empty($matches)) {
-                throw new Exception("Format QR Code Permanen tidak valid.");
-            }
-            
-            $identifier = $matches[0];
+        $permanentIdentifier = $this->extractPermanentQrIdentifier($tokenString, 'EMP');
+        if ($permanentIdentifier !== null) {
             $permanentQrService = app(\App\Services\Core\PermanentQrService::class);
-            $qr = $permanentQrService->getQrByIdentifier($identifier);
+            $qr = $permanentQrService->getQrByIdentifier($permanentIdentifier);
             
-            if (!$qr || strtoupper($qr['QR_TYPE']) !== 'EMPLOYEE' || strtoupper($qr['STATUS']) !== 'ACTIVE') {
+            if (!$qr || strtoupper(trim((string) ($qr['QR_TYPE'] ?? ''))) !== 'EMPLOYEE' || strtoupper(trim((string) ($qr['STATUS'] ?? ''))) !== 'ACTIVE') {
                 throw new Exception("QR Code Permanen tidak valid atau sudah tidak aktif.");
             }
 
@@ -161,12 +156,9 @@ class QRAttendanceService
                 throw new Exception($availability['message']);
             }
 
-            // Must have an active session for Employee
-            $session = $this->getLatestOpenSession();
-            if (!$session) {
-                throw new Exception("Sesi Presensi Pegawai belum dibuka oleh HR.");
-            }
-            
+            // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
+            // It must not require HR to open a short-lived dynamic QR session.
+            $session = $this->getPermanentEmployeeSessionContext();
             $sessionId = $session['Session_ID'];
             $nonce = 'PERM-' . Str::random(10);
 
@@ -253,8 +245,7 @@ class QRAttendanceService
             throw new Exception("Anda berada di luar area LPK. Jarak Anda: {$distance} meter. Maksimal jarak yang diizinkan: {$maxRadius} meter.");
         }
 
-        $allEmployees = collect($this->employeeRepository->fetchAll());
-        $employee = $allEmployees->firstWhere('User_ID', $user->User_ID);
+        $employee = $this->resolveEmployeeForUser($user);
         if (!$employee || strtoupper(trim($employee['Is_Active'] ?? 'TRUE')) === 'FALSE') {
             throw new Exception("Akses Ditolak: Profil pegawai Anda tidak ditemukan atau sedang tidak aktif.");
         }
@@ -433,6 +424,63 @@ class QRAttendanceService
         }
 
         return $openSession;
+    }
+
+    private function getPermanentEmployeeSessionContext(): array
+    {
+        $session = $this->latestActiveSessionForToday() ?? $this->getOrCreateDefaultEmployeeSession();
+        $settingService = app(\App\Services\Core\SystemSettingService::class);
+
+        $session['Session_ID'] = $session['Session_ID'] ?? 'EMP-QRS-' . now()->toDateString();
+        $session['Date'] = now()->toDateString();
+        $session['Start_Time'] = $session['Start_Time'] ?? $settingService->get('WORK_START_TIME', '07:00');
+        $session['End_Time'] = $session['End_Time'] ?? $settingService->get('WORK_END_TIME', '18:00');
+        $session['Grace_Period'] = (int) $settingService->get('LATE_TOLERANCE_MINUTES', $session['Grace_Period'] ?? 30);
+        $session['Status'] = 'ACTIVE';
+
+        return $session;
+    }
+
+    private function latestActiveSessionForToday(): ?array
+    {
+        $today = now()->toDateString();
+
+        return collect(Cache::get('qr_sessions_list', []))
+            ->filter(function ($session) use ($today) {
+                return strtoupper(trim((string) ($session['Status'] ?? ''))) === 'ACTIVE'
+                    && (($session['Date'] ?? $today) === $today);
+            })
+            ->sortByDesc('Created_At')
+            ->values()
+            ->first();
+    }
+
+    private function extractPermanentQrIdentifier(string $tokenString, string $expectedActorPrefix): ?string
+    {
+        $decoded = rawurldecode($tokenString);
+        $prefix = strtoupper($expectedActorPrefix);
+
+        if (!preg_match('/\bWMS-ATT-' . preg_quote($prefix, '/') . '-[A-Z0-9]+\b/i', $decoded, $matches)) {
+            return null;
+        }
+
+        return strtoupper($matches[0]);
+    }
+
+    private function resolveEmployeeForUser($user): ?array
+    {
+        $userId = trim((string) ($user->User_ID ?? ''));
+        if ($userId === '') {
+            return null;
+        }
+
+        foreach ($this->employeeRepository->fetchAll() as $candidate) {
+            if (strcasecmp(trim((string) ($candidate['User_ID'] ?? '')), $userId) === 0) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function signingKey(): string

@@ -241,6 +241,24 @@ class TeacherAttendanceClassBasedTest extends TestCase
         $this->assertSame(1, $data['kpi']['attendance_today']);
     }
 
+    public function test_teacher_attendance_export_includes_class_qr_without_schedule_id(): void
+    {
+        $this->actingAs(new GenericUser(['id' => 'USR-T1', 'User_ID' => 'USR-T1', 'Role' => 'TEACHER']));
+
+        $controller = $this->makeController([
+            $this->attendance('STU-A', 'CLASS-A', 'CLASS_QR', 'PRESENT', ''),
+            $this->attendance('STU-B', 'CLASS-B', 'CLASS_QR', 'PRESENT', ''),
+        ]);
+
+        $response = $controller->exportAttendancesCsv();
+        $csv = $response->getContent();
+
+        $this->assertStringContainsString('Andi', $csv);
+        $this->assertStringContainsString('Kelas A', $csv);
+        $this->assertStringContainsString('Hadir', $csv);
+        $this->assertStringNotContainsString('Budi', $csv);
+    }
+
     private function teacherGroups(array $attendanceRows, ?string $classFilter = null)
     {
         $this->actingAs(new GenericUser(['id' => 'USR-T1', 'User_ID' => 'USR-T1', 'Role' => 'TEACHER']));

@@ -495,6 +495,138 @@ class AttendanceQrFlowTest extends TestCase
         $this->assertSame(['CLASS_QR', 'CLASS_QR', 'CLASS_QR'], array_column($created, 'Attendance_Type'));
     }
 
+    public function test_permanent_student_qr_url_is_universal_across_active_classes_and_ignores_qr_scope(): void
+    {
+        Cache::flush();
+        $identifier = 'WMS-ATT-STU-EXIST01';
+        $this->bindPermanentQrService($identifier, 'STUDENT', 4, [
+            'Class_ID' => 'LEGACY-CLASS-A',
+            'Schedule_ID' => 'LEGACY-SCHEDULE-A',
+            'Subject_ID' => 'LEGACY-SUBJECT-A',
+            'Teacher_ID' => 'LEGACY-TEACHER-A',
+        ]);
+
+        $students = $this->studentsAcrossFourClasses();
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->times(4)->andReturn($students);
+
+        $created = [];
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->times(4)->andReturn([], [], [], []);
+        $attendanceRepo->shouldReceive('create')
+            ->times(4)
+            ->with(Mockery::on(function ($record) use (&$created) {
+                $created[] = $record;
+                return true;
+            }))
+            ->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->times(4);
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->times(4);
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            $studentRepo,
+            $this->studentQrSettings(),
+            $enterpriseEvent
+        );
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        foreach ($students as $student) {
+            $this->actingAs(new GenericUser([
+                'id' => $student['User_ID'],
+                'User_ID' => $student['User_ID'],
+                'Role' => 'STUDENT',
+            ]));
+
+            $service->processStudentScan(
+                $this->permanentQrUrl('student', $identifier),
+                -6.81234,
+                107.19451,
+                'Student Device'
+            );
+        }
+
+        $this->assertSame(['STU-A', 'STU-B', 'STU-C', 'STU-D'], array_column($created, 'Student_ID'));
+        $this->assertSame(['CLASS-A', 'CLASS-B', 'CLASS-C', 'CLASS-D'], array_column($created, 'Class_ID'));
+        $this->assertSame(['', '', '', ''], array_column($created, 'Schedule_ID'));
+        $this->assertSame(['CLASS_QR', 'CLASS_QR', 'CLASS_QR', 'CLASS_QR'], array_column($created, 'Attendance_Type'));
+    }
+
+    public function test_permanent_student_qr_duplicate_scan_does_not_create_second_attendance(): void
+    {
+        Cache::flush();
+        $identifier = 'WMS-ATT-STU-EXIST01';
+        $this->bindPermanentQrService($identifier, 'STUDENT', 2);
+
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->twice()->andReturn([$this->studentsAcrossFourClasses()[0]]);
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->twice()->andReturn(
+            [],
+            [[
+                'Attendance_ID' => 'ATT-EXISTING',
+                'Student_ID' => 'STU-A',
+                'Class_ID' => 'CLASS-A',
+                'Attendance_Type' => 'CLASS_QR',
+                'Attendance_Date' => '2026-08-23',
+                'Is_Active' => 'TRUE',
+            ]]
+        );
+        $attendanceRepo->shouldReceive('create')->once()->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->once();
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->once();
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            $studentRepo,
+            $this->studentQrSettings(),
+            $enterpriseEvent
+        );
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
+        $service->processStudentScan($this->permanentQrUrl('student', $identifier), -6.81234, 107.19451, 'Device A');
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('sudah melakukan presensi');
+
+        $service->processStudentScan($this->permanentQrUrl('student', $identifier), -6.81234, 107.19451, 'Device A');
+    }
+
+    public function test_student_using_employee_permanent_qr_is_denied_before_attendance_write(): void
+    {
+        Cache::flush();
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldNotReceive('fetchAll');
+        $attendanceRepo->shouldNotReceive('create');
+
+        $service = new StudentQRAttendanceService(
+            $attendanceRepo,
+            Mockery::mock(StudentRepositoryInterface::class),
+            $this->studentQrSettings(),
+            Mockery::mock(EnterpriseEventService::class)
+        );
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('khusus untuk Presensi Pegawai');
+
+        $service->processStudentScan(
+            $this->permanentQrUrl('employee', 'wms-att-emp-exist01'),
+            -6.81234,
+            107.19451,
+            'Student Device'
+        );
+    }
+
     public function test_student_qr_without_student_mapping_is_denied_without_creating_attendance(): void
     {
         Cache::flush();
@@ -582,6 +714,113 @@ class AttendanceQrFlowTest extends TestCase
         $this->expectExceptionMessage('di luar area LPK');
 
         $service->processStudentScan($this->studentToken(), -6.80000, 107.19451, 'Student Device');
+    }
+
+    public function test_permanent_employee_qr_url_works_without_open_dynamic_session_for_multiple_employees(): void
+    {
+        Cache::flush();
+        $this->disableEmployeeGeofence();
+        $identifier = 'WMS-ATT-EMP-EXIST01';
+        $this->bindPermanentQrService($identifier, 'EMPLOYEE', 2);
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->twice()->andReturn(
+            [],
+            [[
+                'Attendance_ID' => 'ATT-EMP-A',
+                'Employee_ID' => 'EMP-A',
+                'Session_ID' => 'EMP-QRS-2026-08-23',
+                'Is_Active' => 'TRUE',
+            ]]
+        );
+        $attendanceRepo->shouldReceive('create')->twice()->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->twice();
+
+        $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
+        $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn($this->employeeRowsForQr());
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->twice();
+
+        $service = new QRAttendanceService($attendanceRepo, $employeeRepo, $enterpriseEvent);
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-EMP-A', 'User_ID' => 'USR-EMP-A', 'Role' => 'HR']));
+        $first = $service->processScan($this->permanentQrUrl('employee', $identifier), 'Device A', -6.81234, 107.19451);
+
+        $this->actingAs(new GenericUser(['id' => 'usr-emp-b', 'User_ID' => 'usr-emp-b', 'Role' => 'TEACHER']));
+        $second = $service->processScan($this->permanentQrUrl('employee', $identifier), 'Device B', -6.81234, 107.19451);
+
+        $this->assertSame('EMP-A', $first['employee']['id']);
+        $this->assertSame('EMP-B', $second['employee']['id']);
+        $this->assertSame('LATE', $first['status']);
+        $this->assertSame('LATE', $second['status']);
+    }
+
+    public function test_permanent_employee_qr_duplicate_scan_does_not_create_second_attendance(): void
+    {
+        Cache::flush();
+        $this->disableEmployeeGeofence();
+        $identifier = 'WMS-ATT-EMP-EXIST01';
+        $this->bindPermanentQrService($identifier, 'EMPLOYEE', 2);
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->twice()->andReturn(
+            [],
+            [[
+                'Attendance_ID' => 'ATT-EMP-A',
+                'Employee_ID' => 'EMP-A',
+                'Session_ID' => 'EMP-QRS-2026-08-23',
+                'Is_Active' => 'TRUE',
+            ]]
+        );
+        $attendanceRepo->shouldReceive('create')->once()->andReturn(true);
+        $attendanceRepo->shouldReceive('clearCache')->once();
+
+        $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
+        $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn([$this->employeeRowsForQr()[0]]);
+
+        $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEvent->shouldReceive('dispatch')->once();
+
+        $service = new QRAttendanceService($attendanceRepo, $employeeRepo, $enterpriseEvent);
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-EMP-A', 'User_ID' => 'USR-EMP-A', 'Role' => 'HR']));
+        $service->processScan($this->permanentQrUrl('employee', $identifier), 'Device A', -6.81234, 107.19451);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('sudah melakukan presensi');
+
+        $service->processScan($this->permanentQrUrl('employee', $identifier), 'Device A', -6.81234, 107.19451);
+    }
+
+    public function test_employee_using_student_permanent_qr_is_denied_before_attendance_write(): void
+    {
+        Cache::flush();
+
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldNotReceive('fetchAll');
+        $attendanceRepo->shouldNotReceive('create');
+
+        $service = new QRAttendanceService(
+            $attendanceRepo,
+            Mockery::mock(EmployeeRepositoryInterface::class),
+            Mockery::mock(EnterpriseEventService::class)
+        );
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-EMP-A', 'User_ID' => 'USR-EMP-A', 'Role' => 'HR']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('khusus untuk Presensi Siswa');
+
+        $service->processScan(
+            $this->permanentQrUrl('student', 'wms-att-stu-exist01'),
+            'Employee Device',
+            -6.81234,
+            107.19451
+        );
     }
 
     private function putOpenEmployeeSession(): void
@@ -683,6 +922,87 @@ class AttendanceQrFlowTest extends TestCase
         });
 
         return $settingService;
+    }
+
+    private function bindPermanentQrService(string $identifier, string $type, int $times, array $extra = []): void
+    {
+        $qrService = Mockery::mock(PermanentQrService::class);
+        $qrService->shouldReceive('getQrByIdentifier')
+            ->times($times)
+            ->with(strtoupper($identifier))
+            ->andReturn($this->permanentQrRecord($identifier, $type, $extra));
+        $qrService->shouldReceive('getAvailabilityStatus')
+            ->times($times)
+            ->andReturn(['usable' => true, 'state' => 'ACTIVE', 'message' => 'QR Presensi aktif.']);
+
+        $this->app->instance(PermanentQrService::class, $qrService);
+    }
+
+    private function permanentQrRecord(string $identifier, string $type, array $extra = []): array
+    {
+        return array_merge([
+            'QR_ID' => strtoupper($type) === 'STUDENT' ? 'QR00001' : 'QR00002',
+            'QR_TYPE' => strtoupper($type),
+            'IDENTIFIER' => strtoupper($identifier),
+            'LABEL' => 'Existing Admin QR',
+            'STATUS' => 'ACTIVE',
+            'CREATED_AT' => '2026-09-01 19:35:28',
+            'CREATED_BY' => 'USR-ADMIN',
+            'UPDATED_AT' => '2026-09-01 19:35:28',
+            'UPDATED_BY' => 'USR-ADMIN',
+            'DEACTIVATED_AT' => '',
+            'ACTIVE_FROM' => '2026-09-02 07:20:00',
+            'ACTIVE_UNTIL' => '2027-09-02 08:30:00',
+        ], $extra);
+    }
+
+    private function permanentQrUrl(string $type, string $identifier): string
+    {
+        return "https://wms.example.test/attendance/scan/{$type}/{$identifier}";
+    }
+
+    private function studentsAcrossFourClasses(): array
+    {
+        return [
+            [
+                'Student_ID' => 'STU-A', 'User_ID' => 'USR-A', 'Full_Name' => 'Student A',
+                'Batch_ID' => 'BATCH-A', 'Class_ID' => 'CLASS-A', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+            [
+                'Student_ID' => 'STU-B', 'User_ID' => 'USR-B', 'Full_Name' => 'Student B',
+                'Batch_ID' => 'BATCH-B', 'Class_ID' => 'CLASS-B', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+            [
+                'Student_ID' => 'STU-C', 'User_ID' => 'USR-C', 'Full_Name' => 'Student C',
+                'Batch_ID' => 'BATCH-C', 'Class_ID' => 'CLASS-C', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+            [
+                'Student_ID' => 'STU-D', 'User_ID' => 'USR-D', 'Full_Name' => 'Student D',
+                'Batch_ID' => 'BATCH-D', 'Class_ID' => 'CLASS-D', 'Enrollment_Status' => 'Aktif',
+                'Graduation_Status' => '', 'Is_Active' => 'TRUE',
+            ],
+        ];
+    }
+
+    private function employeeRowsForQr(): array
+    {
+        return [
+            [
+                'Employee_ID' => 'EMP-A',
+                'User_ID' => 'USR-EMP-A',
+                'Full_Name' => 'Employee A',
+                'Is_Active' => 'TRUE',
+            ],
+            [
+                'Employee_ID' => 'EMP-B',
+                'User_ID' => 'USR-EMP-B',
+                'Full_Name' => 'Employee B',
+                'Is_Active' => 'TRUE',
+            ],
+        ];
     }
 
     protected function tearDown(): void
