@@ -100,7 +100,7 @@
                 </div>
             </td>
             <td class="px-6 py-4">
-                <x-badge color="cyan">{{ $schedule['Room_Name'] ?? 'No Room' }}</x-badge>
+                <x-badge color="cyan">{{ $schedule['Room'] ?? 'Belum ditentukan' }}</x-badge>
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center gap-2 mb-1">

@@ -3,6 +3,7 @@
 namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Support\Academic\AcademicSheetMapper;
 
 class ScheduleRepository extends BaseSheetRepository implements ScheduleRepositoryInterface
 {
@@ -14,10 +15,20 @@ class ScheduleRepository extends BaseSheetRepository implements ScheduleReposito
         $this->primaryKey = 'Schedule_ID';
     }
 
+    public function fetchAllFresh()
+    {
+        return parent::fetchAllFresh()
+            ->map(fn ($row) => AcademicSheetMapper::normalizeScheduleRow((array) $row))
+            ->values();
+    }
+
     public function findById(string $id)
     {
-        $items = $this->fetchAll();
-        return $items->firstWhere($this->primaryKey, $id);
+        $needle = strtolower(trim($id));
+
+        return $this->fetchAll()->first(function ($row) use ($needle) {
+            return strtolower(trim((string) ($row['Schedule_ID'] ?? ''))) === $needle;
+        });
     }
 
     public function create(array $data)
@@ -34,4 +45,5 @@ class ScheduleRepository extends BaseSheetRepository implements ScheduleReposito
     {
         return $this->updateRow($id, ['Is_Active' => 'FALSE']);
     }
+
 }

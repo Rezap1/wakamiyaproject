@@ -3,6 +3,7 @@
 namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
+use App\Support\Academic\AcademicSheetMapper;
 
 class SubjectRepository extends BaseSheetRepository implements SubjectRepositoryInterface
 {
@@ -14,10 +15,20 @@ class SubjectRepository extends BaseSheetRepository implements SubjectRepository
         $this->primaryKey = 'Subject_ID';
     }
 
+    public function fetchAllFresh()
+    {
+        return parent::fetchAllFresh()
+            ->map(fn ($row) => AcademicSheetMapper::normalizeSubjectRow((array) $row))
+            ->values();
+    }
+
     public function findById(string $id)
     {
-        $items = $this->fetchAll();
-        return $items->firstWhere($this->primaryKey, $id);
+        $needle = strtolower(trim($id));
+
+        return $this->fetchAll()->first(function ($row) use ($needle) {
+            return strtolower(trim((string) ($row['Subject_ID'] ?? ''))) === $needle;
+        });
     }
 
     public function create(array $data)
@@ -34,4 +45,5 @@ class SubjectRepository extends BaseSheetRepository implements SubjectRepository
     {
         return $this->updateRow($id, ['Is_Active' => 'FALSE']);
     }
+
 }

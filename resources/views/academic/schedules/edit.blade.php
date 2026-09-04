@@ -28,9 +28,15 @@
     $ayOptions = [];
     if(isset($academicYears)) {
         foreach($academicYears as $ay) {
-            $ayOptions[$ay['Academic_Year_ID'] ?? ''] = ($ay['Name'] ?? 'Unknown') . ' - ' . ($ay['Semester'] ?? '');
+            $ayId = trim((string) ($ay['Academic_Year_ID'] ?? ''));
+            if($ayId === '') {
+                continue;
+            }
+            $ayOptions[$ayId] = trim(($ay['Name'] ?? 'Tahun ajaran') . ' - ' . ($ay['Semester'] ?? ''));
         }
     }
+    $startTimeValue = substr((string) old('Start_Time', $schedule['Start_Time'] ?? ''), 0, 5);
+    $endTimeValue = substr((string) old('End_Time', $schedule['End_Time'] ?? ''), 0, 5);
 @endphp
 
 <div class="space-y-6">
@@ -118,7 +124,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tahun Ajaran <span class="text-red-500">*</span></label>
                             <input type="text" readonly value="{{ reset($ayOptions) }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            <input type="hidden" name="Academic_Year_ID" value="{{ array_key_first($ayOptions) }}">
+                            <input type="hidden" name="Academic_Year_ID" value="{{ old('Academic_Year_ID', array_key_first($ayOptions)) }}">
                         </div>
                     @else
                         <div>
@@ -157,10 +163,10 @@
 
                     <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
-                            <x-input type="time" name="Start_Time" label="Waktu Mulai" required value="{{ old('Start_Time', $schedule['Start_Time'] ?? '') }}" />
+                            <x-input type="time" name="Start_Time" label="Waktu Mulai" required value="{{ $startTimeValue }}" />
                         </div>
                         <div>
-                            <x-input type="time" name="End_Time" label="Waktu Selesai" required value="{{ old('End_Time', $schedule['End_Time'] ?? '') }}" />
+                            <x-input type="time" name="End_Time" label="Waktu Selesai" required value="{{ $endTimeValue }}" />
                         </div>
                     </div>
                 </x-form-section>

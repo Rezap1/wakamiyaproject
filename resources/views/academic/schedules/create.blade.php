@@ -28,7 +28,11 @@
     $ayOptions = [];
     if(isset($academicYears)) {
         foreach($academicYears as $ay) {
-            $ayOptions[$ay['Academic_Year_ID'] ?? ''] = ($ay['Name'] ?? 'Unknown') . ' - ' . ($ay['Semester'] ?? '');
+            $ayId = trim((string) ($ay['Academic_Year_ID'] ?? ''));
+            if($ayId === '') {
+                continue;
+            }
+            $ayOptions[$ayId] = trim(($ay['Name'] ?? 'Tahun ajaran') . ' - ' . ($ay['Semester'] ?? ''));
         }
     }
 @endphp

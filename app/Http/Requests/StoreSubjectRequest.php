@@ -34,6 +34,24 @@ class StoreSubjectRequest extends FormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return [
+            'Subject_Code.required' => 'Kode materi wajib diisi.',
+            'Subject_Code.max' => 'Kode materi maksimal 50 karakter.',
+            'Subject_Name.required' => 'Nama materi wajib diisi.',
+            'Subject_Name.max' => 'Nama materi maksimal 150 karakter.',
+            'Program_ID.required' => 'Program wajib dipilih.',
+            'Credit.numeric' => 'SKS harus berupa angka yang valid.',
+            'Credit.min' => 'SKS tidak boleh bernilai negatif.',
+            'Duration.numeric' => 'Durasi harus berupa angka yang valid.',
+            'Duration.min' => 'Durasi harus lebih dari 0 menit.',
+            'Description.max' => 'Deskripsi maksimal 1000 karakter.',
+            'Is_Active.in' => 'Status materi tidak valid.',
+            'Notes.max' => 'Catatan maksimal 1000 karakter.',
+        ];
+    }
+
     private function activeProgramRule(): \Closure
     {
         return function ($attribute, $value, $fail) {

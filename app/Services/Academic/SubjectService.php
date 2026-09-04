@@ -5,6 +5,7 @@ namespace App\Services\Academic;
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
+use App\Support\Academic\AcademicSheetMapper;
 use Exception;
 
 class SubjectService
@@ -40,12 +41,12 @@ class SubjectService
 
     public function validateSubject(array $data, $ignoreId = null)
     {
-        $all = $this->getAll();
+        $all = $this->getAll()->map(fn ($row) => AcademicSheetMapper::normalizeSubjectRow((array) $row));
         
         if (isset($data['Subject_Code'])) {
             $existingCode = $all->firstWhere('Subject_Code', $data['Subject_Code']);
             if ($existingCode && $existingCode['Subject_ID'] !== $ignoreId) {
-                throw new \Exception('Subject Code already exists.');
+                throw new \Exception('Kode materi sudah digunakan.');
             }
         }
 
@@ -56,22 +57,26 @@ class SubjectService
                     && $item['Subject_ID'] !== $ignoreId;
             });
             if ($existingName) {
-                throw new \Exception('Subject Name already exists in this Program.');
+                throw new \Exception('Nama materi sudah digunakan pada program ini.');
             }
         }
     }
 
     public function create(array $data)
     {
+        unset($data['id']);
+        $data = $this->normalizePayload($data);
         $this->validateSubject($data);
         
         if (!isset($data['Subject_ID'])) {
             $data['Subject_ID'] = $this->generateId();
         }
+        $data['Is_Active'] = $data['Is_Active'] ?? 'TRUE';
         $data['Created_At'] = now()->toDateTimeString();
         
         $result = $this->repository->create($data);
         $this->repository->clearCache();
+        $this->assertReadBackMatches($data['Subject_ID'], $data);
 
         $this->enterpriseEvent->dispatch(
             'ACADEMIC',
@@ -89,11 +94,20 @@ class SubjectService
     
     public function update($id, array $data)
     {
-        $this->validateSubject($data, $id);
+        $existing = $this->getById($id);
+        if (!$existing) {
+            throw new \RuntimeException("Materi '{$id}' tidak ditemukan.");
+        }
+
+        unset($data['Subject_ID'], $data['id']);
+        $data = $this->normalizePayload($data);
+        $merged = array_merge(AcademicSheetMapper::normalizeSubjectRow((array) $existing), $data);
+        $this->validateSubject($merged, $id);
         
         $data['Updated_At'] = now()->toDateTimeString();
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
+        $this->assertReadBackMatches($id, $data);
 
         $this->enterpriseEvent->dispatch(
             'ACADEMIC',
@@ -135,5 +149,41 @@ class SubjectService
         );
 
         return $result;
+    }
+
+    private function normalizePayload(array $data): array
+    {
+        foreach (['Subject_Code', 'Subject_Name', 'Program_ID', 'Description', 'Is_Active', 'Notes'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $data[$field] = trim((string) $data[$field]);
+            }
+        }
+
+        foreach (['Credit', 'Duration'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== null) {
+                $data[$field] = trim((string) $data[$field]);
+            }
+        }
+
+        return $data;
+    }
+
+    private function assertReadBackMatches(string $id, array $expected): void
+    {
+        $fresh = $this->repository->findById($id);
+        if (!$fresh) {
+            throw new \RuntimeException("Materi '{$id}' tidak dapat diverifikasi setelah disimpan.");
+        }
+
+        $fresh = AcademicSheetMapper::normalizeSubjectRow((array) $fresh);
+        foreach (['Subject_Code', 'Subject_Name', 'Program_ID', 'Credit', 'Duration', 'Description', 'Is_Active'] as $field) {
+            if (!array_key_exists($field, $expected)) {
+                continue;
+            }
+
+            if ((string) ($fresh[$field] ?? '') !== (string) $expected[$field]) {
+                throw new \RuntimeException("Materi '{$id}' gagal diverifikasi: {$field} tidak sesuai setelah disimpan.");
+            }
+        }
     }
 }

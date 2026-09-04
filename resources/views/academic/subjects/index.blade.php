@@ -47,7 +47,7 @@
                 <div class="text-[11px] font-mono text-slate-500 mt-0.5">{{ $subject['Subject_Code'] ?? '-' }}</div>
             </td>
             <td class="px-6 py-4">
-                <x-badge color="purple" class="font-medium">{{ $subject['Program_ID'] ?? '-' }}</x-badge>
+                <x-badge color="purple" class="font-medium">{{ $subject['Program_Name'] ?? 'Program tidak ditemukan' }}</x-badge>
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center gap-2">

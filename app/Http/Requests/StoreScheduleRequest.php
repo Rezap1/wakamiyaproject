@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\AcademicYearRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Helpers\SheetValue;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -42,6 +43,36 @@ class StoreScheduleRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'Start_Time' => $this->timeForValidation($this->input('Start_Time')),
+            'End_Time' => $this->timeForValidation($this->input('End_Time')),
+        ]);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'Class_ID.required' => 'Kelas wajib dipilih.',
+            'Subject_ID.required' => 'Materi wajib dipilih.',
+            'Teacher_ID.required' => 'Pengajar wajib dipilih.',
+            'Academic_Year_ID.required' => 'Tahun ajaran wajib dipilih.',
+            'Day_Of_Week.required' => 'Hari wajib dipilih.',
+            'Day_Of_Week.array' => 'Hari harus dipilih dari daftar.',
+            'Day_Of_Week.min' => 'Pilih setidaknya satu hari.',
+            'Day_Of_Week.*.required' => 'Hari wajib dipilih.',
+            'Day_Of_Week.*.in' => 'Hari yang dipilih tidak valid.',
+            'Start_Time.required' => 'Waktu mulai wajib diisi.',
+            'Start_Time.date_format' => 'Waktu mulai harus dalam format jam yang valid.',
+            'End_Time.required' => 'Waktu selesai wajib diisi.',
+            'End_Time.date_format' => 'Waktu selesai harus dalam format jam yang valid.',
+            'End_Time.after' => 'Waktu selesai harus setelah waktu mulai.',
+            'Room.max' => 'Ruangan maksimal 100 karakter.',
+            'Is_Active.in' => 'Status jadwal tidak valid.',
+        ];
+    }
+
     private function existingActiveRecord(string $repositoryClass, string $label): \Closure
     {
         return function ($attribute, $value, $fail) use ($repositoryClass, $label) {
@@ -51,9 +82,16 @@ class StoreScheduleRequest extends FormRequest
                 return;
             }
 
-            if (strtoupper(trim((string) ($record['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            if (SheetValue::isInactive((array) $record)) {
                 $fail("{$label} tidak aktif.");
             }
         };
+    }
+
+    private function timeForValidation($value): mixed
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? $value : substr($value, 0, 5);
     }
 }

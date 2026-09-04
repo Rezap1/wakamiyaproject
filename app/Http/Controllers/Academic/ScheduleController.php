@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\ScheduleService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Academic\AcademicSheetMapper;
 use App\Support\Reporting\HumanReadableResolver;
 
 class ScheduleController extends Controller
@@ -70,17 +71,18 @@ class ScheduleController extends Controller
         $teachers = $teacherRepo->fetchAll()->keyBy('Teacher_ID');
 
         $schedules = $schedules->map(function($item) use ($classes, $subjects, $teachers) {
+            $item = AcademicSheetMapper::normalizeScheduleRow((array) $item);
             $classId = $item['Class_ID'] ?? null;
             $subjectId = $item['Subject_ID'] ?? null;
             $teacherId = $item['Teacher_ID'] ?? null;
             
-            $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : $classId;
-            $subjectName = $subjectId && isset($subjects[$subjectId]) ? $subjects[$subjectId]['Subject_Name'] : $subjectId;
-            $teacherName = $teacherId && isset($teachers[$teacherId]) ? $teachers[$teacherId]['Full_Name'] : $teacherId;
+            $className = $classId && isset($classes[$classId]) ? $classes[$classId]['Class_Name'] : null;
+            $subjectName = $subjectId && isset($subjects[$subjectId]) ? $subjects[$subjectId]['Subject_Name'] : null;
+            $teacherName = $teacherId && isset($teachers[$teacherId]) ? $teachers[$teacherId]['Full_Name'] : null;
             
-            $item['Class_Name'] = $className;
-            $item['Subject_Name'] = $subjectName;
-            $item['Teacher_Name'] = $teacherName;
+            $item['Class_Name'] = $className ?: 'Kelas tidak ditemukan';
+            $item['Subject_Name'] = $subjectName ?: 'Mata pelajaran tidak ditemukan';
+            $item['Teacher_Name'] = $teacherName ?: 'Pengajar tidak ditemukan';
             
             return $item;
         });
@@ -113,7 +115,9 @@ class ScheduleController extends Controller
         $classes = $classRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        $academicYears = $ayRepo->fetchAll();
+        $academicYears = $ayRepo->fetchAll()
+            ->filter(fn ($academicYear) => ($academicYear['Is_Active'] ?? 'TRUE') === 'TRUE')
+            ->values();
         
         $currentTeacherId = '';
         if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {
@@ -169,11 +173,17 @@ class ScheduleController extends Controller
     ) {
         $schedule = $this->scheduleService->getById($id);
         if (!$schedule) return redirect()->route('schedules.index')->withErrors(['error' => 'Not found']);
+        $schedule = AcademicSheetMapper::normalizeScheduleRow((array) $schedule);
         
         $classes = $classRepo->fetchAll();
         $subjects = $subjectRepo->fetchAll();
         $teachers = $teacherRepo->fetchAll();
-        $academicYears = $ayRepo->fetchAll();
+        $academicYears = $ayRepo->fetchAll()
+            ->filter(function ($academicYear) use ($schedule) {
+                return ($academicYear['Is_Active'] ?? 'TRUE') === 'TRUE'
+                    || ($academicYear['Academic_Year_ID'] ?? '') === ($schedule['Academic_Year_ID'] ?? '');
+            })
+            ->values();
         
         $currentTeacherId = '';
         if (auth()->check() && (auth()->user()->Role ?? '') === 'TEACHER') {

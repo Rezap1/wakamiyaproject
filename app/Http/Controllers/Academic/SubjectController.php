@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Academic\SubjectService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Academic\AcademicSheetMapper;
 use App\Support\Reporting\HumanReadableResolver;
 
 class SubjectController extends Controller
@@ -59,7 +60,8 @@ class SubjectController extends Controller
 
     public function index(Request $request)
     {
-        $subjects = $this->subjectService->getAll();
+        $subjects = $this->subjectService->getAll()
+            ->map(fn ($row) => AcademicSheetMapper::normalizeSubjectRow((array) $row));
         
         if ($request->filled('search')) {
             $search = strtolower($request->search);
@@ -72,6 +74,17 @@ class SubjectController extends Controller
         if ($request->filled('status') && $request->status !== 'ALL') {
             $subjects = $subjects->where('Is_Active', $request->status);
         }
+
+        $programsById = collect($this->programService->getAllPrograms())->keyBy('Program_ID');
+        $subjects = $subjects->map(function ($subject) use ($programsById) {
+            $program = $programsById->get($subject['Program_ID'] ?? '');
+            $subject['Program_Name'] = HumanReadableResolver::value(
+                $program['Program_Name'] ?? $program['Program_Code'] ?? '',
+                'Program tidak ditemukan'
+            );
+
+            return $subject;
+        });
 
         return view('academic.subjects.index', compact('subjects'));
     }
@@ -102,8 +115,14 @@ class SubjectController extends Controller
     {
         $subject = $this->subjectService->getById($id);
         if (!$subject) return redirect()->route('subjects.index')->withErrors(['error' => 'Not found']);
+        $subject = AcademicSheetMapper::normalizeSubjectRow((array) $subject);
         
-        $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
+        $programs = $this->programService->getAllPrograms()
+            ->filter(function ($program) use ($subject) {
+                return ($program['Is_Active'] ?? 'TRUE') === 'TRUE'
+                    || ($program['Program_ID'] ?? '') === ($subject['Program_ID'] ?? '');
+            })
+            ->values();
         return view('academic.subjects.edit', compact('subject', 'programs'));
     }
 
