@@ -40,7 +40,7 @@
 @endphp
 
 <!-- MOBILE DASHBOARD HERO (100% UNIFIED WMS DESIGN SYSTEM ON MOBILE) -->
-<x-mobile-dashboard-hero user-role="DIRECTOR" />
+<x-mobile-dashboard-hero user-role="DIRECTOR" :kpi-data="$summary ?? []" />
 
 <!-- DESKTOP DASHBOARD VIEW -->
 <div class="hidden lg:block">

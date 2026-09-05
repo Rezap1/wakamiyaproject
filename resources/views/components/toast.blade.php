@@ -1,5 +1,5 @@
 <!-- Global Toast Container -->
-<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none w-full max-w-sm"></div>
+<div id="toast-container" class="fixed left-3 right-3 top-[calc(0.75rem+env(safe-area-inset-top,0px))] z-[90] flex max-w-sm flex-col gap-3 pointer-events-none sm:left-auto sm:right-5" aria-live="polite" aria-atomic="true"></div>
 
 <script>
     window.showToast = function(type, title, message) {
@@ -27,16 +27,25 @@
             iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
         }
 
+        const escapeToastText = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+        const safeTitle = escapeToastText(title);
+        const safeMessage = escapeToastText(message);
+
         const toastHTML = `
-            <div id="${id}" class="pointer-events-auto flex items-start w-full overflow-hidden ${bgClass} border-l-4 rounded-xl shadow-lg transform transition-all duration-300 translate-x-full opacity-0">
+            <div id="${id}" role="${type === 'error' ? 'alert' : 'status'}" class="pointer-events-auto flex items-start w-full overflow-hidden ${bgClass} border-l-4 rounded-xl shadow-lg transform transition-all duration-300 translate-x-full opacity-0">
                 <div class="flex items-center justify-center p-4 ${iconClass}">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${iconSvg}</svg>
                 </div>
                 <div class="p-4 flex-1">
-                    <h4 class="text-sm font-bold text-slate-800 dark:text-white">${title}</h4>
-                    ${message ? `<p class="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">${message}</p>` : ''}
+                    <h4 class="text-sm font-bold text-slate-800 dark:text-white">${safeTitle}</h4>
+                    ${safeMessage ? `<p class="mt-1 break-words text-xs font-medium text-slate-500 dark:text-slate-400">${safeMessage}</p>` : ''}
                 </div>
-                <button onclick="dismissToast('${id}')" class="p-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none transition-colors">
+                <button onclick="dismissToast('${id}')" aria-label="Tutup notifikasi" class="flex min-h-11 min-w-11 items-center justify-center p-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -72,10 +81,10 @@
 
     // Auto-fire session flashes if present
     document.addEventListener('DOMContentLoaded', () => {
-        @if(session('success')) showToast('success', 'Berhasil', '{{ session('success') }}'); @endif
-        @if(session('error')) showToast('error', 'Terjadi Kesalahan', '{{ session('error') }}'); @endif
-        @if(session('warning')) showToast('warning', 'Peringatan', '{{ session('warning') }}'); @endif
-        @if(session('info')) showToast('info', 'Informasi', '{{ session('info') }}'); @endif
+        @if(session('success')) showToast('success', 'Berhasil', @json(session('success'))); @endif
+        @if(session('error')) showToast('error', 'Terjadi Kesalahan', @json(session('error'))); @endif
+        @if(session('warning')) showToast('warning', 'Peringatan', @json(session('warning'))); @endif
+        @if(session('info')) showToast('info', 'Informasi', @json(session('info'))); @endif
         
         @if(isset($errors) && $errors->any())
             showToast('error', 'Validasi Gagal', 'Harap periksa kembali inputan Anda.');

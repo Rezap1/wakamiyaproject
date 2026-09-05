@@ -11,7 +11,7 @@
     };
 @endphp
 
-<div id="{{ $id }}" class="fixed inset-0 z-50 overflow-y-auto {{ $show ? 'flex' : 'hidden' }} items-end sm:items-center justify-center p-3 sm:p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+<div id="{{ $id }}" class="fixed inset-0 z-[70] overflow-y-auto {{ $show ? 'flex' : 'hidden' }} items-end sm:items-center justify-center p-3 sm:p-4" aria-labelledby="{{ $id }}-title" role="dialog" aria-modal="true" tabindex="-1">
     
     <!-- Backdrop -->
     <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity opacity-0 modal-backdrop" aria-hidden="true" onclick="closeModal('{{ $id }}')"></div>
@@ -21,10 +21,10 @@
         
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0">
-            <h3 class="text-base sm:text-lg font-extrabold text-slate-800 break-words" id="modal-title">
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-800 break-words" id="{{ $id }}-title">
                 {{ $title }}
             </h3>
-            <button type="button" class="text-slate-400 bg-transparent hover:bg-slate-100 hover:text-slate-900 rounded-lg text-sm w-8 h-8 ml-auto inline-flex justify-center items-center transition-colors" onclick="closeModal('{{ $id }}')">
+            <button type="button" class="text-slate-400 bg-transparent hover:bg-slate-100 hover:text-slate-900 rounded-lg text-sm w-11 h-11 ml-auto inline-flex shrink-0 justify-center items-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500" onclick="closeModal('{{ $id }}')">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 <span class="sr-only">Tutup modal</span>
             </button>
@@ -68,7 +68,9 @@
                 panel.classList.add('opacity-100', 'scale-100');
             }
             
-            document.body.style.overflow = 'hidden';
+            window.wmsLastModalTrigger = document.activeElement;
+            document.body.classList.add('wms-modal-open');
+            modal.focus({ preventScroll: true });
         };
 
         window.closeModal = function(id) {
@@ -90,9 +92,21 @@
             setTimeout(() => {
                 modal.classList.remove('flex');
                 modal.classList.add('hidden');
-                document.body.style.overflow = '';
+                document.body.classList.remove('wms-modal-open');
+                if (window.wmsLastModalTrigger instanceof HTMLElement) {
+                    window.wmsLastModalTrigger.focus({ preventScroll: true });
+                }
             }, 200);
         };
+    }
+
+    if (!window.wmsModalEscapeBound) {
+        window.wmsModalEscapeBound = true;
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            const modal = document.querySelector('[role="dialog"].flex[id]');
+            if (modal && modal.querySelector('.modal-panel')) closeModal(modal.id);
+        });
     }
     
     // Check initial state

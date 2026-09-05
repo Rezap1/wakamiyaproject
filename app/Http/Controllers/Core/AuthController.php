@@ -71,8 +71,13 @@ class AuthController extends Controller
             elseif (str_contains($roleName, 'director')) $alias = 'director';
             elseif (str_contains($roleName, 'teacher')) $alias = 'teacher';
             elseif (str_contains($roleName, 'student')) $alias = 'student';
+            elseif (str_contains($roleName, 'employee')) $alias = 'employee';
             elseif (str_contains($roleName, 'admin')) $alias = 'administrator';
-            
+
+            if ($alias === 'employee') {
+                return redirect()->intended(route('dashboard'));
+            }
+
             $dashboardRoute = 'dashboard.' . $alias;
 
             if (\Illuminate\Support\Facades\Route::has($dashboardRoute)) {

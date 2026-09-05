@@ -228,14 +228,14 @@
                     </form>
                     @empty
                     <div class="p-8 text-center">
-                        <span class="text-2xl block mb-1">🔔</span>
+                        <svg class="mx-auto mb-2 h-6 w-6 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3A6 6 0 006 11v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 01-6 0"></path></svg>
                         <p class="text-xs font-bold text-slate-600">Belum ada notifikasi</p>
                         <p class="text-[11px] text-slate-400 mt-0.5">Semua pemberitahuan sistem akan muncul di sini.</p>
                     </div>
                     @endforelse
                 </div>
                 <div class="p-3 text-center border-t border-slate-100 bg-slate-50">
-                    <a href="{{ route('notifications.index') }}" class="text-[11px] font-extrabold text-sky-600 hover:text-sky-800 hover:underline uppercase tracking-wider">Lihat Semua Notifikasi →</a>
+                    <a href="{{ route('notifications.index') }}" class="text-[11px] font-extrabold text-sky-600 hover:text-sky-800 hover:underline uppercase tracking-wider">Lihat Semua Notifikasi &rarr;</a>
                 </div>
             </div>
         </div>

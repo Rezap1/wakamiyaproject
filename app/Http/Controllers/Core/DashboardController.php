@@ -37,11 +37,16 @@ class DashboardController extends Controller
         elseif (str_contains($roleName, 'director')) $alias = 'director';
         elseif (str_contains($roleName, 'teacher')) $alias = 'teacher';
         elseif (str_contains($roleName, 'student')) $alias = 'student';
+        elseif (str_contains($roleName, 'employee')) $alias = 'employee';
         elseif (str_contains($roleName, 'admin')) $alias = 'administrator';
         elseif (str_contains($roleName, 'master')) $alias = 'administrator';
 
         if (!$alias) {
             abort(403, 'Role akun tidak dikenali oleh sistem.');
+        }
+
+        if ($alias === 'employee') {
+            return view('dashboard.employee');
         }
 
         if ($alias !== 'administrator' && \Illuminate\Support\Facades\Route::has('dashboard.' . $alias)) {

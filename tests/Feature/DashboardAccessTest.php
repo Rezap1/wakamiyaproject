@@ -62,6 +62,38 @@ class DashboardAccessTest extends TestCase
         $this->get('/dashboard')->assertRedirect(route('dashboard.teacher'));
     }
 
+    public function test_employee_role_receives_personal_dashboard_without_admin_data(): void
+    {
+        $roleService = Mockery::mock(RoleService::class);
+        $roleService->shouldReceive('getRoleById')
+            ->with('ROLE-EMPLOYEE')
+            ->atLeast()
+            ->once()
+            ->andReturn([
+                'Role_ID' => 'ROLE-EMPLOYEE',
+                'Role_Name' => 'EMPLOYEE',
+                'Is_Active' => 'TRUE',
+            ]);
+        $this->app->instance(RoleService::class, $roleService);
+
+        $adminDashboard = Mockery::mock(AdminDashboardService::class);
+        $adminDashboard->shouldNotReceive('getDashboardData');
+        $this->app->instance(AdminDashboardService::class, $adminDashboard);
+
+        $this->actingAs(new GenericUser([
+            'id' => 'USR-EMPLOYEE',
+            'User_ID' => 'USR-EMPLOYEE',
+            'Role_ID' => 'ROLE-EMPLOYEE',
+            'Role' => 'EMPLOYEE',
+            'Username' => 'EmployeeUser',
+        ]));
+
+        $this->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Dashboard Pegawai')
+            ->assertSee(route('dashboard.personal-payroll'));
+    }
+
     protected function tearDown(): void
     {
         Mockery::close();

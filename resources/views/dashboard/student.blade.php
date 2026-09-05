@@ -22,7 +22,7 @@
 @endphp
 
 <!-- MOBILE HERO (VISIBLE ON MOBILE ONLY) -->
-<div class="block md:hidden mb-4">
+<div class="block md:hidden">
     <x-mobile-dashboard-hero user-role="STUDENT" :kpi-data="$kpi ?? []" />
 </div>
 

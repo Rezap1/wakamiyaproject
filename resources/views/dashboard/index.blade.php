@@ -18,8 +18,8 @@
 @else
 
 <!-- MOBILE HERO (VISIBLE ON MOBILE ONLY) -->
-<div class="block md:hidden mb-4">
-    <x-mobile-dashboard-hero user-role="ADMINISTRATOR" />
+<div class="block lg:hidden">
+    <x-mobile-dashboard-hero :user-role="$userRole ?? 'ADMINISTRATOR'" :kpi-data="$kpi ?? []" />
 </div>
 
 <!-- MAIN UNIFIED DASHBOARD VIEW (HIDDEN ON MOBILE, VISIBLE ON DESKTOP) -->

@@ -36,7 +36,7 @@
 @endphp
 
 <!-- MOBILE DASHBOARD HERO (100% UNIFIED WMS DESIGN SYSTEM ON MOBILE) -->
-<x-mobile-dashboard-hero user-role="ACADEMIC" />
+<x-mobile-dashboard-hero user-role="ACADEMIC" :kpi-data="$kpi ?? []" />
 
 <!-- DESKTOP DASHBOARD VIEW -->
 <div class="hidden lg:block">

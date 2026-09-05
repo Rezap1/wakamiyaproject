@@ -228,7 +228,7 @@
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.reports') }}" active="{{ request()->routeIs('teacher.workspace.reports') }}" icon="chart-bar">Laporan Pengajaran</x-sidebar.nav-link>
                 @elseif($userRole === 'STUDENT')
                     <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">📱 Presensi QR</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">Presensi QR</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.calendar') }}" active="{{ request()->routeIs('student.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>

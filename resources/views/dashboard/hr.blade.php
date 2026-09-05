@@ -34,7 +34,7 @@
 @endphp
 
 <!-- MOBILE-FIRST DASHBOARD HERO (100% MATCHING MOCKUP IMAGE ON MOBILE) -->
-<x-mobile-dashboard-hero user-role="HR" />
+<x-mobile-dashboard-hero user-role="HR" :kpi-data="$kpi ?? []" />
 
 <!-- DESKTOP DASHBOARD VIEW -->
 <div class="hidden lg:block">

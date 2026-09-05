@@ -41,7 +41,7 @@
     }"
     @click.away="open = false"
 >
-    <label class="block text-[13px] font-bold text-slate-700 mb-1.5">
+    <label for="{{ $name }}-trigger" class="block text-[13px] font-bold text-slate-700 mb-1.5">
         {{ $label }} 
         @if($required)
             <span class="text-rose-500 font-black ml-0.5" title="Wajib diisi">*</span>
@@ -52,8 +52,13 @@
         <input type="hidden" id="{{ $name }}" name="{{ $name }}" x-model="value" x-ref="hiddenInput" @if($required) x-bind:required="!value" @endif>
         
         <button 
+            id="{{ $name }}-trigger"
             type="button" 
             @click="!{{ $readonly ? 'true' : 'false' }} && (open = !open)"
+            @keydown.escape="open = false"
+            aria-haspopup="listbox"
+            :aria-expanded="open.toString()"
+            aria-controls="{{ $name }}-options"
             class="w-full flex justify-between items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
                    @if($readonly) bg-slate-50 text-slate-500 cursor-not-allowed @endif
                    @error($name) border-rose-500 focus:ring-rose-500/20 focus:border-rose-500 @enderror"
@@ -73,9 +78,9 @@
                     <input type="text" x-model="search" class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-blue-500 focus:bg-white focus:ring-0 transition-colors" placeholder="Cari nama atau role..." @keydown.escape="open = false">
                 </div>
             </div>
-            <ul class="max-h-60 overflow-y-auto p-1" style="scrollbar-width: thin;">
+            <ul id="{{ $name }}-options" role="listbox" class="max-h-60 overflow-y-auto p-1" style="scrollbar-width: thin;">
                 <template x-for="option in filteredOptions" :key="option.value">
-                    <li @click="selectOption(option.value, option.label)"
+                    <li @click="selectOption(option.value, option.label)" role="option" :aria-selected="(value === option.value).toString()"
                         class="px-3 py-2 cursor-pointer rounded-lg text-sm transition-colors hover:bg-blue-50 hover:text-blue-700"
                         :class="{'bg-blue-50 text-blue-700 font-bold': value === option.value, 'text-slate-700': value !== option.value}"
                     >

@@ -48,6 +48,8 @@
 html,
 body {
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
   overflow-x: clip;
 }
@@ -63,13 +65,85 @@ body {
   max-width: 100%;
 }
 
+.wms-page-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wms-page-content img,
+.wms-page-content video,
+.wms-page-content canvas,
+.wms-page-content iframe,
+.wms-page-content object,
+.wms-page-content embed {
+  max-width: 100%;
+}
+
+.wms-page-content pre,
+.wms-page-content code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .wms-mobile-header {
   padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
 }
 
-.wms-mobile-drawer-open {
+.wms-mobile-drawer-open,
+.wms-modal-open {
   overflow: hidden;
   touch-action: none;
+}
+
+.wms-mobile-dashboard {
+  display: grid;
+  width: 100%;
+  max-width: 48rem;
+  margin-inline: auto;
+  gap: 1rem;
+}
+
+.wms-mobile-greeting {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0.125rem;
+}
+
+.wms-mobile-summary {
+  min-width: 0;
+  overflow: hidden;
+  border-left-width: 4px;
+  border-radius: 0.75rem;
+  background: #172033;
+  padding: 1rem;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 0.12);
+}
+
+.wms-mobile-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.wms-mobile-action {
+  display: flex;
+  min-width: 0;
+  min-height: 4rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.75rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+}
+
+.wms-mobile-action:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
 }
 
 .wms-break-anywhere {
@@ -150,7 +224,7 @@ body {
     touch-action: pan-x pan-y;
   }
 
-  .wms-page-content input,
+  .wms-page-content input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   .wms-page-content select,
   .wms-page-content textarea {
     max-width: 100%;
@@ -190,5 +264,23 @@ body {
 
   .wms-action-group > form {
     display: inline-flex;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .wms-mobile-action-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 359px) {
+  .wms-mobile-greeting {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .wms-mobile-greeting time {
+    max-width: none;
+    text-align: left;
   }
 }

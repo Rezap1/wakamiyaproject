@@ -5,7 +5,6 @@
 @php
     $ctx = app(\App\Services\Dashboard\DashboardContextService::class)->getContext();
     $greeting = $ctx['greeting'] ?? 'Selamat datang';
-    $greetingIcon = $ctx['greeting_icon'] ?? '👋';
     $dateFormatted = $ctx['dateFormatted'] ?? date('l, d F Y');
     $timeFormatted = \Carbon\Carbon::now('Asia/Jakarta')->format('H:i');
 
