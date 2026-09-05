@@ -11,6 +11,7 @@ use App\Services\Core\BatchService;
 use App\Services\Core\TeacherService;
 use App\Services\Core\ActivityLogService;
 use App\Helpers\SheetValue;
+use App\Support\Academic\TeacherScopeResolver;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
@@ -296,6 +297,7 @@ class ClassController extends Controller
             $roleService = app(\App\Services\Core\RoleService::class);
             $role = collect($roleService->getAllRoles())->firstWhere('Role_ID', $user->Role_ID ?? '');
             $roleName = strtoupper(trim((string) ($role['Role_Name'] ?? $user->Role ?? session('role') ?? '')));
+            $allowedStudentIds = null;
 
             if (str_contains($roleName, 'TEACHER') || str_contains($roleName, 'GURU')) {
                 $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
@@ -304,18 +306,25 @@ class ClassController extends Controller
                     return response()->json(['error' => 'Profil pengajar tidak ditemukan.'], 403);
                 }
 
-                $scheduleService = app(\App\Services\Academic\ScheduleService::class);
-                $mySchedules = collect($scheduleService->getAll())->where('Teacher_ID', $teacher['Teacher_ID']);
-                $myClassIds = $mySchedules->pluck('Class_ID')->filter()->unique()->toArray();
-                if (!in_array($requestedClassId, $myClassIds)) {
+                $resolver = app(TeacherScopeResolver::class);
+                $scope = $resolver->resolveForTeacherId($teacher['Teacher_ID']);
+                if (!$resolver->classAllowed($scope, $requestedClassId)) {
                     return response()->json(['error' => 'Akses Ditolak: Kelas di luar wewenang Anda.'], 403);
                 }
+                $allowedStudentIds = $scope['students_by_class'][$requestedClassId] ?? [];
             }
 
             $students = $studentService->getAllStudents();
             $classStudents = $students
                 ->filter(fn ($student) => SheetValue::isActive($student))
-                ->filter(fn ($student) => SheetValue::id($student['Class_ID'] ?? '') === $requestedClassId)
+                ->filter(function ($student) use ($requestedClassId, $allowedStudentIds) {
+                    $studentId = SheetValue::id($student['Student_ID'] ?? '');
+                    if (is_array($allowedStudentIds)) {
+                        return in_array($studentId, $allowedStudentIds, true);
+                    }
+
+                    return SheetValue::id($student['Class_ID'] ?? '') === $requestedClassId;
+                })
                 ->map(function ($student) {
                     $student['Student_ID'] = trim((string) ($student['Student_ID'] ?? ''));
                     $student['Full_Name'] = trim((string) ($student['Full_Name'] ?? $student['Student_ID'] ?? 'Siswa'));

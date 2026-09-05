@@ -11,6 +11,7 @@ use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use App\Support\Academic\TeacherScopeResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -27,6 +28,7 @@ class AttendanceRequestService
     protected $notificationService;
     protected $teacherRepo;
     protected $classRepo;
+    protected $teacherScopeResolver;
 
     public function __construct(
         AttendanceRequestRepositoryInterface $requestRepo,
@@ -36,7 +38,8 @@ class AttendanceRequestService
         ?ScheduleRepositoryInterface $scheduleRepo = null,
         ?NotificationService $notificationService = null,
         ?TeacherRepositoryInterface $teacherRepo = null,
-        ?ClassRepositoryInterface $classRepo = null
+        ?ClassRepositoryInterface $classRepo = null,
+        ?TeacherScopeResolver $teacherScopeResolver = null
     ) {
         $this->requestRepo = $requestRepo;
         $this->attendanceRepo = $attendanceRepo;
@@ -46,6 +49,7 @@ class AttendanceRequestService
         $this->notificationService = $notificationService;
         $this->teacherRepo = $teacherRepo;
         $this->classRepo = $classRepo;
+        $this->teacherScopeResolver = $teacherScopeResolver;
     }
 
     public function getAllPending()
@@ -513,13 +517,41 @@ class AttendanceRequestService
             throw new AuthorizationException('Profil guru tidak ditemukan.');
         }
 
+        if ($this->teacherScopeResolver) {
+            $resolved = $this->teacherScopeResolver->resolveForTeacherId($teacherId);
+
+            return [
+                'teacher_id' => $teacherId,
+                'schedule_ids' => collect($resolved['schedule_ids'] ?? []),
+                'class_ids' => collect($resolved['class_ids'] ?? []),
+                'students_by_id' => collect($resolved['students'] ?? collect())->keyBy('Student_ID'),
+                'schedules_by_id' => collect($resolved['schedules'] ?? collect())->keyBy('Schedule_ID'),
+                'students_by_class' => $resolved['students_by_class'] ?? [],
+            ];
+        }
+
         $schedules = collect($this->scheduleRepo->fetchAll());
         $classes = collect($this->classRepo->fetchAll());
         $students = collect($this->studentRepo->fetchAll());
-        $teacherSchedules = $schedules->where('Teacher_ID', $teacherId)->values();
+        $teacherSchedules = $schedules
+            ->where('Teacher_ID', $teacherId)
+            ->filter(fn ($schedule) => strtoupper(trim((string) ($schedule['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+            ->values();
         $scheduleClassIds = $teacherSchedules->pluck('Class_ID')->filter()->unique();
-        $homeroomClassIds = $classes->where('Homeroom_Teacher_ID', $teacherId)->pluck('Class_ID')->filter()->unique();
-        $classIds = $scheduleClassIds->merge($homeroomClassIds)->filter()->unique()->values();
+        $activeClassIds = $classes
+            ->filter(fn ($class) => strtoupper(trim((string) ($class['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+            ->pluck('Class_ID')
+            ->filter()
+            ->unique();
+        $classIds = $scheduleClassIds->intersect($activeClassIds)->filter()->unique()->values();
+        $studentsByClass = [];
+        foreach ($students as $student) {
+            $classId = trim((string) ($student['Class_ID'] ?? ''));
+            $studentId = trim((string) ($student['Student_ID'] ?? ''));
+            if ($studentId !== '' && $classIds->contains($classId)) {
+                $studentsByClass[$classId][] = $studentId;
+            }
+        }
 
         return [
             'teacher_id' => $teacherId,
@@ -527,18 +559,27 @@ class AttendanceRequestService
             'class_ids' => $classIds,
             'students_by_id' => $students->keyBy('Student_ID'),
             'schedules_by_id' => $schedules->keyBy('Schedule_ID'),
+            'students_by_class' => collect($studentsByClass)->map(fn ($ids) => array_values(array_unique($ids)))->all(),
         ];
     }
 
     private function requestAllowedForTeacherFromSnapshot(array $request, array $scope): bool
     {
-        $student = $scope['students_by_id']->get($request['Student_ID'] ?? '');
+        $studentId = trim((string) ($request['Student_ID'] ?? ''));
+        $student = $scope['students_by_id']->get($studentId);
         if (!$student) {
             return false;
         }
 
-        $studentClassId = trim((string) ($student['Class_ID'] ?? ''));
-        if ($studentClassId === '' || !$scope['class_ids']->contains($studentClassId)) {
+        $studentClassIds = collect($scope['students_by_class'] ?? [])
+            ->filter(fn ($studentIds) => in_array($studentId, $studentIds, true))
+            ->keys()
+            ->values();
+        $directClassId = trim((string) ($student['Class_ID'] ?? ''));
+        if ($directClassId !== '' && $scope['class_ids']->contains($directClassId)) {
+            $studentClassIds = $studentClassIds->push($directClassId)->unique()->values();
+        }
+        if ($studentClassIds->isEmpty()) {
             return false;
         }
 
@@ -550,7 +591,7 @@ class AttendanceRequestService
 
         if ($target['Attendance_Type'] === 'CLASS_QR') {
             $requestedClassId = trim((string) ($request['Class_ID'] ?? ''));
-            return $requestedClassId === '' || $requestedClassId === $studentClassId;
+            return $requestedClassId === '' || $studentClassIds->contains($requestedClassId);
         }
 
         $schedule = $scope['schedules_by_id']->get($target['Schedule_ID'] ?? '');
@@ -559,7 +600,7 @@ class AttendanceRequestService
         }
 
         return $scope['schedule_ids']->contains($target['Schedule_ID'] ?? '')
-            && trim((string) ($schedule['Class_ID'] ?? '')) === $studentClassId;
+            && $studentClassIds->contains(trim((string) ($schedule['Class_ID'] ?? '')));
     }
 
     private function isTeacherActor($user): bool

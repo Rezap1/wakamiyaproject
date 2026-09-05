@@ -7,6 +7,7 @@ use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Support\Academic\TeacherScopeResolver;
 use Exception;
 
 class ScoreService
@@ -370,31 +371,7 @@ class ScoreService
      */
     public function getStudentsInTeacherScope($teacherId): array
     {
-        $scheduleRepo = app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class);
-        $enrollmentRepo = app(\App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class);
-        
-        $schedules = $scheduleRepo->fetchAll();
-        $classIds = $schedules->where('Teacher_ID', $teacherId)->pluck('Class_ID')->unique()->toArray();
-        
-        // Also include classes where teacher is homeroom
-        $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
-        $classes = $classRepo->fetchAll();
-        $homeroomClassIds = $classes->where('Homeroom_Teacher_ID', $teacherId)->pluck('Class_ID')->unique()->toArray();
-        $classIds = array_unique(array_merge($classIds, $homeroomClassIds));
-        
-        if (empty($classIds)) {
-            return [];
-        }
-        
-        $enrollments = $enrollmentRepo->fetchAll();
-        $studentIds = $enrollments->whereIn('Class_ID', $classIds)->pluck('Student_ID')->unique()->toArray();
-        
-        // Also include students directly assigned to these classes
-        $allStudents = $this->studentRepository->fetchAll();
-        $directStudentIds = $allStudents->whereIn('Class_ID', $classIds)->pluck('Student_ID')->unique()->toArray();
-        $studentIds = array_unique(array_merge($studentIds, $directStudentIds));
-        
-        return $allStudents->whereIn('Student_ID', $studentIds)->values()->toArray();
+        return $this->getTeacherScoreScope((string) $teacherId)['students']->values()->toArray();
     }
 
     /**
@@ -413,78 +390,16 @@ class ScoreService
      */
     public function getTeacherScoreScope(string $teacherId): array
     {
-        $scopeKey = 'teacher_score_scope_' . hash('sha256', trim($teacherId));
-        if (function_exists('request') && request()->attributes->has($scopeKey)) {
-            return request()->attributes->get($scopeKey);
-        }
+        $resolver = new TeacherScopeResolver(
+            app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class),
+            app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class),
+            app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class),
+            $this->studentRepository,
+            app(\App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class),
+            $this->assessmentRepository
+        );
 
-        $scheduleRepo = app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class);
-        $classRepo = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class);
-        $enrollmentRepo = app(\App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class);
-
-        $schedules = collect($scheduleRepo->fetchAll());
-        $teacherSchedules = $schedules->filter(fn ($row) => trim((string) ($row['Teacher_ID'] ?? '')) === trim($teacherId)
-            && strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE');
-        $scheduleIds = $teacherSchedules->pluck('Schedule_ID')->filter()->map(fn ($id) => trim((string) $id))->unique()->values()->all();
-        $classIds = $teacherSchedules->pluck('Class_ID')->filter()->map(fn ($id) => trim((string) $id))->unique()->all();
-
-        $classes = collect($classRepo->fetchAll());
-        $classIds = array_values(array_unique(array_merge($classIds, $classes
-            ->filter(fn ($row) => trim((string) ($row['Homeroom_Teacher_ID'] ?? '')) === trim($teacherId))
-            ->pluck('Class_ID')->filter()->map(fn ($id) => trim((string) $id))->all())));
-
-        $enrollments = collect($enrollmentRepo->fetchAll());
-        $studentIds = $enrollments->whereIn('Class_ID', $classIds)->pluck('Student_ID')->filter()->map(fn ($id) => trim((string) $id))->all();
-        $students = collect($this->studentRepository->fetchAll());
-        $studentIds = array_values(array_unique(array_merge($studentIds, $students->whereIn('Class_ID', $classIds)->pluck('Student_ID')->filter()->map(fn ($id) => trim((string) $id))->all())));
-
-        $studentsByClass = [];
-        foreach ($enrollments as $enrollment) {
-            $classId = trim((string) ($enrollment['Class_ID'] ?? ''));
-            $studentId = trim((string) ($enrollment['Student_ID'] ?? ''));
-            if ($classId !== '' && $studentId !== '') $studentsByClass[$classId][] = $studentId;
-        }
-        foreach ($students as $student) {
-            $classId = trim((string) ($student['Class_ID'] ?? ''));
-            $studentId = trim((string) ($student['Student_ID'] ?? ''));
-            if ($classId !== '' && $studentId !== '') $studentsByClass[$classId][] = $studentId;
-        }
-        $studentsByClass = collect($studentsByClass)->map(fn ($ids) => array_values(array_unique($ids)))->all();
-        $scheduleStudentIds = [];
-        foreach ($teacherSchedules as $schedule) {
-            $scheduleId = trim((string) ($schedule['Schedule_ID'] ?? ''));
-            $classId = trim((string) ($schedule['Class_ID'] ?? ''));
-            if ($scheduleId !== '') $scheduleStudentIds[$scheduleId] = $studentsByClass[$classId] ?? [];
-        }
-
-        $assessments = collect($this->assessmentRepository->getAll());
-        $assessmentIds = $assessments->filter(function ($row) use ($teacherId, $classIds, $scheduleIds) {
-            $rowTeacher = trim((string) ($row['Teacher_ID'] ?? ''));
-            // When an assessment carries an explicit owner, that owner is
-            // authoritative. Class/schedule overlap must not grant another
-            // teacher access to it.
-            if ($rowTeacher !== '') {
-                return $rowTeacher === trim($teacherId);
-            }
-            $ownedClass = in_array(trim((string) ($row['Class_ID'] ?? '')), $classIds, true);
-            $ownedSchedule = in_array(trim((string) ($row['Schedule_ID'] ?? '')), $scheduleIds, true);
-            return $ownedSchedule || $ownedClass;
-        })->pluck('Assessment_ID')->filter()->map(fn ($id) => trim((string) $id))->unique()->values()->all();
-
-        $scope = [
-            'teacher_id' => trim($teacherId),
-            'schedule_ids' => $scheduleIds,
-            'class_ids' => $classIds,
-            'student_ids' => $studentIds,
-            'assessment_ids' => $assessmentIds,
-            'schedule_student_ids' => $scheduleStudentIds,
-        ];
-
-        if (function_exists('request')) {
-            request()->attributes->set($scopeKey, $scope);
-        }
-
-        return $scope;
+        return $resolver->resolveForTeacherId($teacherId);
     }
 
     public function isAssessmentInTeacherScope($assessmentId, string $teacherId): bool

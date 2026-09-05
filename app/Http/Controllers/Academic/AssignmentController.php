@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Core\AssignmentService;
 use App\Services\Core\ActivityLogService;
+use App\Support\Academic\TeacherScopeResolver;
 use App\Support\Reporting\HumanReadableResolver;
 
 class AssignmentController extends Controller
@@ -23,12 +24,8 @@ class AssignmentController extends Controller
                 $teacherRepo = app(\App\Repositories\GoogleSheets\TeacherRepository::class);
                 $teacherData = collect($teacherRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
                 if ($teacherData) {
-                    $scheduleService = app(\App\Services\Academic\ScheduleService::class);
-                    $myClassIds = collect($scheduleService->getAll())
-                        ->where('Teacher_ID', $teacherData['Teacher_ID'])
-                        ->pluck('Class_ID')
-                        ->unique()
-                        ->toArray();
+                    $myClassIds = app(TeacherScopeResolver::class)
+                        ->resolveForTeacherId($teacherData['Teacher_ID'])['class_ids'];
                     $assignments = $assignments
                         ->where('Teacher_ID', $teacherData['Teacher_ID'])
                         ->whereIn('Class_ID', $myClassIds)
@@ -165,19 +162,10 @@ class AssignmentController extends Controller
             return false;
         }
 
-        $scheduleService = app(\App\Services\Academic\ScheduleService::class);
-        $hasSchedule = collect($scheduleService->getAll())
-            ->where('Teacher_ID', $teacherId)
-            ->where('Class_ID', $classId)
-            ->isNotEmpty();
-
-        $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
-        $isHomeroom = collect($classRepo->fetchAll())
-            ->where('Homeroom_Teacher_ID', $teacherId)
-            ->where('Class_ID', $classId)
-            ->isNotEmpty();
-
-        return $hasSchedule || $isHomeroom;
+        return app(TeacherScopeResolver::class)->classAllowed(
+            app(TeacherScopeResolver::class)->resolveForTeacherId($teacherId),
+            $classId
+        );
     }
 
     public function create(
@@ -199,14 +187,8 @@ class AssignmentController extends Controller
         }
 
         if ($currentTeacherId) {
-            $scheduleService = app(\App\Services\Academic\ScheduleService::class);
-            $scheduleClassIds = collect($scheduleService->getAll())
-                ->where('Teacher_ID', $currentTeacherId)
-                ->pluck('Class_ID');
-            $homeroomClassIds = collect($classes)
-                ->where('Homeroom_Teacher_ID', $currentTeacherId)
-                ->pluck('Class_ID');
-            $allowedClassIds = $scheduleClassIds->merge($homeroomClassIds)->filter()->unique()->values()->all();
+            $allowedClassIds = app(TeacherScopeResolver::class)
+                ->resolveForTeacherId($currentTeacherId)['class_ids'];
             $classes = collect($classes)->whereIn('Class_ID', $allowedClassIds)->values();
         }
 
@@ -263,14 +245,8 @@ class AssignmentController extends Controller
         }
 
         if ($currentTeacherId) {
-            $scheduleService = app(\App\Services\Academic\ScheduleService::class);
-            $scheduleClassIds = collect($scheduleService->getAll())
-                ->where('Teacher_ID', $currentTeacherId)
-                ->pluck('Class_ID');
-            $homeroomClassIds = collect($classes)
-                ->where('Homeroom_Teacher_ID', $currentTeacherId)
-                ->pluck('Class_ID');
-            $allowedClassIds = $scheduleClassIds->merge($homeroomClassIds)->filter()->unique()->values()->all();
+            $allowedClassIds = app(TeacherScopeResolver::class)
+                ->resolveForTeacherId($currentTeacherId)['class_ids'];
             $classes = collect($classes)->whereIn('Class_ID', $allowedClassIds)->values();
         }
 

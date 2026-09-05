@@ -1,6 +1,8 @@
 <?php
 namespace App\Services\Core;
 
+use App\Support\Academic\TeacherScopeResolver;
+use App\Support\Reporting\HumanReadableResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
@@ -194,44 +196,28 @@ class GlobalSearchService
         }
 
         try {
-            $schedules = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll())
-                ->where('Teacher_ID', $teacherId);
-            $scheduleIds = $schedules->pluck('Schedule_ID')->filter()->map(fn ($id) => trim((string) $id))->all();
-            $classIds = $schedules->pluck('Class_ID')->filter()->unique()->values()->all();
-            $students = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
-                ->whereIn('Class_ID', $classIds)
-                ->values();
+            $scope = app(TeacherScopeResolver::class)->resolveForTeacherId((string) $teacherId);
+            $schedules = collect($scope['schedules'] ?? collect());
+            $classIds = $scope['class_ids'] ?? [];
+            $students = collect($scope['students'] ?? collect())->values();
+            $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
+            $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
 
             $this->searchStudents($results, $keyword, route('teacher.workspace.students'), $students);
 
             $schedules->filter(fn ($item) => $this->matches($item, $keyword, ['Schedule_ID', 'Class_ID', 'Subject_ID', 'Room', 'Day', 'Day_Of_Week']))
                 ->take(6)
-                ->each(function ($item) use (&$results) {
+                ->each(function ($item) use (&$results, $classesById, $subjectsById) {
                     $this->add($results, 'Jadwal Saya', [
-                        'title' => $item['Subject_ID'] ?? $item['Schedule_ID'] ?? 'Jadwal',
-                        'desc' => trim(($item['Class_ID'] ?? '') . ' ' . ($item['Day'] ?? $item['Day_Of_Week'] ?? '') . ' ' . ($item['Start_Time'] ?? '')),
+                        'title' => HumanReadableResolver::subjectName($item['Subject_ID'] ?? '', $subjectsById),
+                        'desc' => trim(HumanReadableResolver::className($item['Class_ID'] ?? '', $classesById) . ' ' . ($item['Day'] ?? $item['Day_Of_Week'] ?? '') . ' ' . ($item['Start_Time'] ?? '')),
                         'url' => route('teacher.workspace.schedule'),
                     ]);
                 });
 
-            $studentIds = $students->pluck('Student_ID')->all();
-            $teacherAssessmentIds = $this->teacherAssessmentIds($teacherId);
+            $scoreService = app(\App\Services\Academic\ScoreService::class);
             $scores = collect(app(\App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class)->fetchAll())
-                ->whereIn('Student_ID', $studentIds)
-                ->filter(function ($score) use ($teacherId, $teacherAssessmentIds, $scheduleIds) {
-                    $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? ''));
-                    if ($scoreTeacherId !== '') {
-                        return $scoreTeacherId === $teacherId;
-                    }
-
-                    $scheduleId = trim((string) ($score['Schedule_ID'] ?? ''));
-                    if ($scheduleId !== '') {
-                        return in_array($scheduleId, $scheduleIds, true);
-                    }
-
-                    $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
-                    return $assessmentId !== '' && in_array($assessmentId, $teacherAssessmentIds, true);
-                });
+                ->filter(fn ($score) => $scoreService->isScoreInTeacherScope((array) $score, (string) $teacherId, $scope));
             $scores->filter(fn ($item) => $this->matches($item, $keyword, ['Score_ID', 'Student_ID', 'Assessment_ID', 'Assessment_Category', 'Grade', 'Status']))
                 ->take(6)
                 ->each(function ($item) use (&$results) {
@@ -255,28 +241,6 @@ class GlobalSearchService
                     ]);
                 });
         } catch (\Exception $e) {
-        }
-    }
-
-    private function teacherAssessmentIds(string $teacherId): array
-    {
-        try {
-            $assessmentRepo = app(\App\Interfaces\GoogleSheets\AssessmentRepositoryInterface::class);
-            try {
-                $assessments = $assessmentRepo->getAll();
-            } catch (\Throwable $e) {
-                $assessments = is_callable([$assessmentRepo, 'fetchAll']) ? $assessmentRepo->fetchAll() : collect([]);
-            }
-
-            return collect($assessments)
-                ->where('Teacher_ID', $teacherId)
-                ->pluck('Assessment_ID')
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
-        } catch (\Exception $e) {
-            return [];
         }
     }
 

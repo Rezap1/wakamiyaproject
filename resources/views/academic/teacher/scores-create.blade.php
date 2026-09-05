@@ -18,18 +18,18 @@
                 <!-- Siswa -->
                 <div class="space-y-2">
                     <label for="score-student" class="block text-sm font-bold text-slate-700">Pilih Siswa</label>
-                    <select id="score-student" name="Student_ID" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
-                        <option value="">-- Pilih Siswa --</option>
-                        @foreach($students as $student)
-                            <option value="{{ $student['Student_ID'] }}">{{ $student['Full_Name'] ?? $student['Username'] }} ({{ $student['Class_Name'] ?? $student['Class_ID'] }})</option>
-                        @endforeach
+                    <select id="score-student" name="Student_ID" required x-model="selectedStudent" :disabled="selectedSchedule === ''" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed">
+                        <option value="" x-text="selectedSchedule === '' ? 'Pilih jadwal terlebih dahulu' : '-- Pilih Siswa --'"></option>
+                        <template x-for="student in filteredStudents" :key="student.Student_ID">
+                            <option :value="student.Student_ID" x-text="student.label"></option>
+                        </template>
                     </select>
                 </div>
 
                 <!-- Tanggal -->
                 <div class="space-y-2">
                     <label for="score-schedule" class="block text-sm font-bold text-slate-700">Kelas / Jadwal <span class="text-rose-600" aria-hidden="true">*</span></label>
-                    <select id="score-schedule" name="Schedule_ID" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
+                    <select id="score-schedule" name="Schedule_ID" required x-model="selectedSchedule" @change="selectedStudent = ''" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
                         <option value="">-- Pilih Jadwal Pengajaran --</option>
                         @foreach($schedules as $schedule)
                             <option value="{{ $schedule['Schedule_ID'] }}" @selected(old('Schedule_ID') === $schedule['Schedule_ID'])>{{ $schedule['label'] }}</option>
@@ -105,7 +105,22 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('assessmentForm', () => ({
         category: '',
+        selectedSchedule: @json(old('Schedule_ID', '')),
+        selectedStudent: @json(old('Student_ID', '')),
+        students: @json($students ?? []),
+        studentsBySchedule: @json($studentsBySchedule ?? []),
+        studentsByClass: @json($studentsByClass ?? []),
         configs: @json($assessmentConfigs ?? []),
+        get filteredStudents() {
+            if (this.selectedSchedule === '') return [];
+            const allowed = this.studentsBySchedule[this.selectedSchedule] || [];
+            return this.students
+                .filter(student => allowed.includes(student.Student_ID))
+                .map(student => ({
+                    ...student,
+                    label: `${student.Full_Name || student.Username || 'Siswa'} - ${student.Class_Name || 'Kelas tidak ditemukan'}`
+                }));
+        },
         get activeConfig() {
             return this.configs.find(c => c.Category_ID === this.category);
         },

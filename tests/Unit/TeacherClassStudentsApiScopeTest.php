@@ -3,8 +3,12 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\Core\ClassController;
+use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
-use App\Services\Academic\ScheduleService;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
 use App\Services\Core\ProgramService;
@@ -43,11 +47,33 @@ class TeacherClassStudentsApiScopeTest extends TestCase
         ]));
         $this->app->instance(TeacherRepositoryInterface::class, $teacherRepo);
 
-        $scheduleService = Mockery::mock(ScheduleService::class);
-        $scheduleService->shouldReceive('getAll')->once()->andReturn(collect([
+        $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
+        $scheduleRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
             ['Schedule_ID' => 'SCH-1', 'Teacher_ID' => 'TCH-1', 'Class_ID' => 'CLS-1'],
         ]));
-        $this->app->instance(ScheduleService::class, $scheduleService);
+        $this->app->instance(ScheduleRepositoryInterface::class, $scheduleRepo);
+
+        $classRepo = Mockery::mock(ClassRepositoryInterface::class);
+        $classRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Class_ID' => 'CLS-1', 'Is_Active' => 'TRUE'],
+            ['Class_ID' => 'CLS-2', 'Is_Active' => 'TRUE'],
+        ]));
+        $this->app->instance(ClassRepositoryInterface::class, $classRepo);
+
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Student_ID' => 'STU-1', 'Class_ID' => 'CLS-1', 'Is_Active' => 'TRUE'],
+            ['Student_ID' => 'STU-2', 'Class_ID' => 'CLS-2', 'Is_Active' => 'TRUE'],
+        ]));
+        $this->app->instance(StudentRepositoryInterface::class, $studentRepo);
+
+        $enrollmentRepo = Mockery::mock(ClassEnrollmentRepositoryInterface::class);
+        $enrollmentRepo->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $this->app->instance(ClassEnrollmentRepositoryInterface::class, $enrollmentRepo);
+
+        $assessmentRepo = Mockery::mock(AssessmentRepositoryInterface::class);
+        $assessmentRepo->shouldReceive('getAll')->once()->andReturn(collect());
+        $this->app->instance(AssessmentRepositoryInterface::class, $assessmentRepo);
 
         $studentService = Mockery::mock(StudentService::class);
         $studentService->shouldNotReceive('getAllStudents');

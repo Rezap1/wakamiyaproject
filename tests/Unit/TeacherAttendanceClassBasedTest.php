@@ -75,11 +75,12 @@ class TeacherAttendanceClassBasedTest extends TestCase
 
     public function test_teacher_class_filter_cannot_escape_owned_classes(): void
     {
-        $groups = $this->teacherGroups([
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('Anda tidak memiliki akses ke kelas ini.');
+
+        $this->teacherGroups([
             $this->attendance('STU-A', 'CLASS-A', 'CLASS_QR', 'PRESENT'),
         ], 'CLASS-B');
-
-        $this->assertCount(0, $groups);
     }
 
     public function test_schedule_based_attendance_still_uses_teacher_schedule_scope(): void
@@ -277,16 +278,16 @@ class TeacherAttendanceClassBasedTest extends TestCase
     private function makeController(array $attendanceRows): TeacherWorkspaceController
     {
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
-        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect($attendanceRows));
+        $attendanceRepo->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect($attendanceRows));
         $attendanceService = new AttendanceService($attendanceRepo, Mockery::mock(EnterpriseEventService::class));
 
         return new TeacherWorkspaceController(
             Mockery::mock(TeacherService::class)->shouldReceive('getAllTeachers')->zeroOrMoreTimes()->andReturn(collect([
                 ['Teacher_ID' => 'T1', 'User_ID' => 'USR-T1'],
             ]))->getMock(),
-            Mockery::mock(ClassService::class)->shouldReceive('getAllClasses')->once()->andReturn(collect($this->classes()))->getMock(),
-            Mockery::mock(ScheduleService::class)->shouldReceive('getAll')->once()->andReturn(collect($this->schedules()))->getMock(),
-            Mockery::mock(StudentService::class)->shouldReceive('getAllStudents')->once()->andReturn(collect($this->students()))->getMock(),
+            Mockery::mock(ClassService::class)->shouldReceive('getAllClasses')->zeroOrMoreTimes()->andReturn(collect($this->classes()))->getMock(),
+            Mockery::mock(ScheduleService::class)->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect($this->schedules()))->getMock(),
+            Mockery::mock(StudentService::class)->shouldReceive('getAllStudents')->zeroOrMoreTimes()->andReturn(collect($this->students()))->getMock(),
             $attendanceService,
             Mockery::mock(AttendanceRequestService::class),
             Mockery::mock(SubjectService::class)->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect())->getMock(),

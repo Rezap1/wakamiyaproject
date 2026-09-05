@@ -74,7 +74,10 @@ class TeacherDashboardService
         $allStudents = collect($this->studentService->getAllStudents())->where('Is_Active', '!=', 'FALSE');
 
         // === Filter by Teacher ===
-        $mySchedules = $allSchedules->where('Teacher_ID', $teacherId);
+        $mySchedules = $allSchedules
+            ->where('Teacher_ID', $teacherId)
+            ->filter(fn ($schedule) => strtoupper(trim((string) ($schedule['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+            ->values();
         $myAssessments = $allAssessments->where('Teacher_ID', $teacherId);
 
         // === Today's Classes from MASTER_SCHEDULE ===
@@ -94,11 +97,16 @@ class TeacherDashboardService
             ];
         })->toArray();
 
-        // === My Students (from classes I teach or homeroom) ===
-        $homeroomClassIds = collect($this->classService->getAllClasses())
-            ->where('Homeroom_Teacher_ID', $teacherId)
-            ->pluck('Class_ID');
-        $myClassIds = $mySchedules->pluck('Class_ID')->merge($homeroomClassIds)->unique()->filter();
+        // === My Students (from active teaching schedules only) ===
+        $scheduleClassIds = $mySchedules->pluck('Class_ID')->filter()->unique();
+        $activeClassIds = collect($this->classService->getAllClasses())
+            ->filter(fn ($class) => strtoupper(trim((string) ($class['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+            ->pluck('Class_ID')
+            ->filter()
+            ->unique();
+        $myClassIds = $activeClassIds->isNotEmpty()
+            ? $scheduleClassIds->intersect($activeClassIds)->values()
+            : $scheduleClassIds->values();
         $myStudentCount = $allStudents->filter(function ($s) use ($myClassIds) {
             return $myClassIds->contains($s['Class_ID'] ?? '');
         })->count();
