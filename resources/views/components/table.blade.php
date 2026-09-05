@@ -1,6 +1,6 @@
 @props(['loading' => false, 'empty' => false])
 
-<div class="flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+<div class="flex min-w-0 max-w-full flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
     
     @if (isset($toolbar))
         <div class="p-4 md:p-5 border-b border-slate-100 bg-white">
@@ -8,7 +8,7 @@
         </div>
     @endif
 
-    <div class="overflow-x-auto relative min-h-[200px] custom-scrollbar">
+    <div class="app-table-responsive relative min-h-[200px] custom-scrollbar" role="region" aria-label="Tabel data" tabindex="0">
         @if($loading)
             <div class="absolute inset-0 z-20 flex flex-col justify-center items-center bg-white/90 backdrop-blur-sm">
                 <x-loading />

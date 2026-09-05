@@ -1,10 +1,10 @@
 @props(['empty' => false, 'emptyTitle' => 'Data Kosong', 'emptyDescription' => 'Belum ada data yang tersedia.'])
 
-<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex min-w-0 max-w-full flex-col">
     @if($empty)
         <x-universal.empty-state :title="$emptyTitle" :description="$emptyDescription" />
     @else
-        <div class="overflow-x-auto" role="region" aria-label="Tabel data" tabindex="0">
+        <div class="app-table-responsive" role="region" aria-label="Tabel data" tabindex="0">
             <table class="w-full text-left text-sm text-slate-600 whitespace-nowrap">
                 <thead class="bg-slate-50 text-xs uppercase font-bold text-slate-500 border-b border-slate-100">
                     <tr>

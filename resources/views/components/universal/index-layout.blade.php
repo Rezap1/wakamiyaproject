@@ -4,10 +4,10 @@
     $finalAddText = $addText ?? $attributes->get('add-text') ?? $attributes->get('add_text') ?? 'Tambah Data';
 @endphp
 
-<div class="space-y-6">
+<div class="min-w-0 max-w-full space-y-6">
     <!-- Header Section -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+    <div class="flex min-w-0 flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="min-w-0 max-w-full">
             @if(!empty($breadcrumbs))
                 <x-universal.breadcrumb :links="$breadcrumbs" />
             @endif
@@ -17,7 +17,7 @@
             @endif
         </div>
         
-        <div class="flex items-center gap-3 shrink-0">
+        <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto md:justify-end">
             {{ $headerActions ?? '' }}
             
             @if($finalAddAction)

@@ -66,19 +66,19 @@
                     };
                 @endphp
                 <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
-                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
-                        <div>
+                    <summary class="cursor-pointer list-none p-4 flex flex-col gap-3 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
                             <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
                             <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} tagihan | Total Rp {{ number_format($group['amount'], 0, ',', '.') }}</p>
                         </div>
-                        <div class="flex items-center gap-2 shrink-0">
+                        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
                             <span class="px-2.5 py-1 rounded-lg {{ $groupBadgeClasses }} text-xs font-black">Sisa Rp {{ number_format($group['remaining'], 0, ',', '.') }}</span>
                             <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
                         </div>
                     </summary>
                     <div class="border-t border-slate-100 divide-y divide-slate-100">
                         @foreach($group['items'] as $invoice)
-                            <a href="{{ route('invoices.show', $invoice['Invoice_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                            <a href="{{ route('invoices.show', $invoice['Invoice_ID']) }}" class="flex flex-col gap-2 px-4 py-3 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="min-w-0">
                                     <p class="text-sm font-bold text-slate-800 truncate">{{ $invoice['student_name'] ?? $invoice['Company_Name'] ?? $invoice['Student_ID'] ?? '-' }}</p>
                                     <p class="text-[11px] text-slate-500 font-mono">{{ $invoice['Invoice_ID'] ?? '-' }} | {{ $invoice['Category'] ?? '-' }}</p>
@@ -176,7 +176,7 @@
                     @endif
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-1.5">
+                    <div class="wms-action-group">
                         <a href="{{ route('invoices.pdf', $item['Invoice_ID']) }}" target="_blank" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1" title="Unduh PDF Invoice Resmi">
                             📄 PDF
                         </a>
@@ -226,7 +226,7 @@
 
 <!-- MODAL NOTIFIKASI REMINDER -->
 <div x-show="openNotify" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm" x-cloak>
-    <div class="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+    <div class="mx-4 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl space-y-4 sm:p-6">
         <h3 class="text-lg font-black text-slate-800 border-b pb-2">Kirim Peringatan Penagihan</h3>
         <p class="text-xs text-slate-600">Kirimkan notifikasi pengingat pembayaran tagihan kepada siswa: <strong x-text="studentName"></strong>.</p>
         
@@ -237,9 +237,9 @@
                 <textarea name="message" x-model="message" rows="4" class="w-full text-xs rounded-xl border-slate-200 focus:ring-2 focus:ring-amber-500"></textarea>
             </div>
             
-            <div class="flex justify-end gap-2 pt-2">
-                <button type="button" @click="openNotify = false" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Batal</button>
-                <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md">Kirim Pengingat</button>
+            <div class="grid grid-cols-1 gap-2 pt-2 sm:flex sm:justify-end">
+                <button type="button" @click="openNotify = false" class="min-h-11 px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Batal</button>
+                <button type="submit" class="min-h-11 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md">Kirim Pengingat</button>
             </div>
         </form>
     </div>

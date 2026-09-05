@@ -31,19 +31,19 @@
                     };
                 @endphp
                 <details class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group">
-                    <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
-                        <div>
+                    <summary class="cursor-pointer list-none p-4 flex flex-col gap-3 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
                             <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
                             <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} pembayaran</p>
                         </div>
-                        <div class="flex items-center gap-2 shrink-0">
+                        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
                             <span class="px-2.5 py-1 rounded-lg {{ $groupBadgeClasses }} text-xs font-black">Rp {{ number_format($group['amount'], 0, ',', '.') }}</span>
                             <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
                         </div>
                     </summary>
                     <div class="border-t border-slate-100 divide-y divide-slate-100">
                         @foreach($group['items'] as $payment)
-                            <a href="{{ route('payments.show', $payment['Payment_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                            <a href="{{ route('payments.show', $payment['Payment_ID']) }}" class="flex flex-col gap-2 px-4 py-3 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="min-w-0">
                                     <p class="text-sm font-bold text-slate-800 truncate">{{ $payment['student_name'] ?? \App\Helpers\UserResolverHelper::getName($payment['Student_ID'] ?? $payment['User_ID'] ?? '') }}</p>
                                     <p class="text-[11px] text-slate-500 font-mono">{{ $payment['Payment_ID'] ?? '-' }} | {{ $payment['Invoice_ID'] ?? '-' }}</p>
@@ -104,7 +104,7 @@
                     <x-badge color="{{ $badgeColor }}">{{ $statusText }}</x-badge>
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-1.5">
+                    <div class="wms-action-group">
                         @if($status === 'Verified')
                             <a href="{{ route('payments.receipt', $item['Payment_ID']) }}" target="_blank" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1" title="Unduh Kuitansi PDF Resmi">
                                 📄 PDF Kuitansi

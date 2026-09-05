@@ -9,13 +9,13 @@
     $paid = (float)($invoice['Paid_Amount'] ?? 0);
 @endphp
 
-<div class="space-y-6">
+<div class="min-w-0 max-w-full space-y-6">
     <x-page-header title="Invoice Details" description="Lihat rincian tagihan dan unggah bukti pembayaran." :breadcrumbs="['Dashboard' => route('dashboard.student'), 'Tagihan' => route('student.billing.index'), 'Detail' => '#']" />
     
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="md:col-span-2 space-y-6">
             @if($status === 'OVERDUE')
-                <div class="bg-rose-50 border-2 border-rose-200 p-5 rounded-2xl flex items-center gap-4">
+                <div class="bg-rose-50 border-2 border-rose-200 p-5 rounded-2xl flex items-start gap-4">
                     <span class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-lg">⚠️</span>
                     <div>
                         <h4 class="text-sm font-black text-rose-900 uppercase">TAGIHAN INI TELAH OVERDUE (TERLAMBAT)</h4>
@@ -25,10 +25,10 @@
             @endif
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{{ $invoice['Invoice_ID'] ?? '' }} | {{ $invoice['Category'] ?? '' }}</p>
-                <h2 class="text-4xl font-black text-slate-800 my-2">Rp {{ number_format($amount, 0, ',', '.') }}</h2>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 break-all">{{ $invoice['Invoice_ID'] ?? '' }} | {{ $invoice['Category'] ?? '' }}</p>
+                <h2 class="text-3xl sm:text-4xl font-black text-slate-800 my-2 break-words">Rp {{ number_format($amount, 0, ',', '.') }}</h2>
                 
-                <div class="flex justify-center items-center gap-3 my-3">
+                <div class="flex flex-col justify-center gap-3 my-3 sm:flex-row sm:items-center">
                     @if($status === 'OVERDUE')
                         <span class="px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wide bg-rose-500 text-white shadow-xs">⚠️ OVERDUE</span>
                     @elseif($status === 'Paid')
@@ -41,7 +41,7 @@
                         <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-slate-100 text-slate-700">{{ $status }}</span>
                     @endif
 
-                    <a href="{{ route('student.billing.invoice-pdf', $invoice['Invoice_ID']) }}" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1">
+                    <a href="{{ route('student.billing.invoice-pdf', $invoice['Invoice_ID']) }}" target="_blank" class="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700">
                         📄 <span>Download PDF</span>
                     </a>
                 </div>
@@ -80,7 +80,7 @@
                             </div>
                             <div>
                                 <label class="block mb-1.5 text-[13px] font-bold text-slate-700">File Bukti Transfer <span class="text-rose-500 font-black">*</span></label>
-                                <input type="file" name="Proof_File" class="block w-full text-[13px] rounded-xl bg-white border-slate-200 text-slate-800 focus:ring-2 focus:border-emerald-500 focus:ring-emerald-500/20 px-4 py-2 shadow-sm" accept="image/*,.pdf" required>
+                                <input type="file" name="Proof_File" class="block w-full min-w-0 text-[13px] rounded-xl bg-white border-slate-200 text-slate-800 focus:ring-2 focus:border-emerald-500 focus:ring-emerald-500/20 px-4 py-2 shadow-sm" accept="image/*,.pdf" required>
                             </div>
                         </div>
                         <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors">
@@ -97,14 +97,14 @@
                 <div class="space-y-4">
                     @forelse($relatedPayments as $pay)
                         <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                            <p class="text-xs font-mono font-bold text-slate-500">{{ $pay['Payment_ID'] ?? '' }}</p>
+                            <p class="break-all text-xs font-mono font-bold text-slate-500">{{ $pay['Payment_ID'] ?? '' }}</p>
                             <p class="text-lg font-black text-slate-800">Rp {{ number_format($pay['Amount_Paid'] ?? 0, 0, ',', '.') }}</p>
                             <p class="text-[10px] font-bold text-slate-400 uppercase">{{ !empty($pay['Payment_Date']) ? \Carbon\Carbon::parse($pay['Payment_Date'])->format('d M Y') : '-' }}</p>
-                            <div class="pt-1 flex items-center justify-between">
+                            <div class="pt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <span class="px-2 py-0.5 text-[10px] font-bold rounded {{ ($pay['Status'] ?? '') === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
                                     {{ $pay['Status'] ?? 'Waiting Verification' }}
                                 </span>
-                                <div class="flex items-center gap-2">
+                                <div class="wms-action-group sm:justify-end">
                                     @if(!empty($pay['Proof_File']) || !empty($pay['Proof_Image']))
                                         <a href="{{ route('student.billing.payment-proof', $pay['Payment_ID']) }}" class="text-xs font-bold text-slate-700 hover:underline">
                                             Bukti

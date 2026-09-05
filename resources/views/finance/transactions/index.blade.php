@@ -108,7 +108,7 @@
                     {{ $trx['account']['label'] ?? '-' }}
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-1.5">
+                    <div class="wms-action-group">
                         <x-universal.action-button action="detail" url="{{ route('transactions.show', $trx['transaction_id']) }}" />
                         @if($canMutateTransactions ?? false)
                             <x-universal.action-button action="edit" url="{{ route('transactions.edit', $trx['transaction_id']) }}" />

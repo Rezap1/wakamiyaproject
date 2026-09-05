@@ -1,8 +1,8 @@
 @props(['searchUrl' => '', 'filters' => [], 'exportUrl' => null, 'refreshUrl' => null])
 
-<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6">
-    <form action="{{ $searchUrl }}" method="GET" class="flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between">
-        <div class="flex-1 flex flex-col md:flex-row gap-4 w-full">
+<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 min-w-0 max-w-full">
+    <form action="{{ $searchUrl }}" method="GET" class="flex min-w-0 flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
+        <div class="flex-1 min-w-0 flex flex-col md:flex-row md:flex-wrap gap-4 w-full">
             <!-- Search -->
             <div class="w-full md:max-w-xs relative">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -15,7 +15,7 @@
             {{ $slot }}
 
             <!-- Date Range Filter -->
-            <div class="flex items-center gap-1.5 w-full md:w-auto">
+            <div class="flex min-w-0 items-center gap-1.5 w-full md:w-auto">
                 <input type="date" name="date_from" value="{{ request('date_from') }}" 
                     class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors"
                     onchange="this.form.submit()" title="Dari tanggal">
@@ -46,7 +46,7 @@
         </div>
 
         <!-- Action Tools -->
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="wms-action-group w-full sm:w-auto">
             @if($refreshUrl)
                 <a href="{{ $refreshUrl }}" class="flex items-center justify-center p-2.5 text-slate-500 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-emerald-600 focus:ring-2 focus:ring-emerald-500 transition-colors shadow-sm" title="Segarkan">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>

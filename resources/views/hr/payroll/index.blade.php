@@ -33,10 +33,10 @@
                         <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Generate Batch Payroll Massal</h4>
                         <p class="text-[11px] text-slate-500 mt-0.5">Kalkulasi gaji seluruh pegawai aktif secara otomatis berdasarkan presensi Phase F untuk periode tertentu.</p>
                     </div>
-                    <form action="{{ route('payrolls.batch-generate') }}" method="POST" class="flex items-center gap-2" onsubmit="return confirm('Proses batch payroll seluruh pegawai untuk periode ini?');">
+                    <form action="{{ route('payrolls.batch-generate') }}" method="POST" class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center" onsubmit="return confirm('Proses batch payroll seluruh pegawai untuk periode ini?');">
                         @csrf
                         <input type="month" name="Payroll_Period" class="text-xs rounded-xl border-slate-200 p-2 font-bold text-slate-800" value="{{ date('Y-m') }}" required>
-                        <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-colors">
+                        <button type="submit" class="min-h-11 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-colors">
                             ⚡ Process Batch Payroll
                         </button>
                     </form>
@@ -93,7 +93,7 @@
                     <x-badge color="{{ $badgeColor }}">{{ $status }}</x-badge>
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-1.5">
+                    <div class="wms-action-group">
                         <a href="{{ route('payrolls.pdf', $item['Payroll_ID']) }}" target="_blank" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1" title="Unduh Slip Gaji PDF Resmi">
                             📄 PDF
                         </a>
