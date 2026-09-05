@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Finance;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Finance\PaymentService;
+use App\Services\Finance\TransactionPresentationService;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentRequest;
 use App\Helpers\ReportHelper;
@@ -72,10 +73,12 @@ class PaymentController extends Controller
     }
 
     protected $paymentService;
+    protected $transactionPresentationService;
 
-    public function __construct(PaymentService $paymentService)
+    public function __construct(PaymentService $paymentService, TransactionPresentationService $transactionPresentationService)
     {
         $this->paymentService = $paymentService;
+        $this->transactionPresentationService = $transactionPresentationService;
     }
 
     public function index(Request $request)
@@ -180,7 +183,9 @@ class PaymentController extends Controller
             $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
         }
 
-        return view('finance.payments.show', compact('payment', 'invoice'));
+        $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
+
+        return view('finance.payments.show', compact('payment', 'invoice', 'paymentEvidence'));
     }
 
     public function downloadReceiptPdf($id)
@@ -300,7 +305,9 @@ class PaymentController extends Controller
         if (!empty($payment['Invoice_ID'])) {
             $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
         }
-        return view('finance.payments.show', compact('payment', 'invoice'));
+        $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
+
+        return view('finance.payments.show', compact('payment', 'invoice', 'paymentEvidence'));
     }
 
     public function update(UpdatePaymentRequest $request, $id)

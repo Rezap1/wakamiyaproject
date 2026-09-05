@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Finance\TransactionService;
 use App\Services\Finance\AccountService;
+use App\Services\Finance\TransactionPresentationService;
 use App\Support\Reporting\HumanReadableResolver;
 
 class TransactionController extends Controller
@@ -36,31 +37,22 @@ class TransactionController extends Controller
             });
         }
 
-        $accountsById = collect($this->accountService->getAll())->flatMap(function ($account) {
-            $keys = [];
-            foreach (['Account_ID', 'Account_Code'] as $field) {
-                $key = trim((string) ($account[$field] ?? ''));
-                if ($key !== '') {
-                    $keys[$key] = $account;
-                }
-            }
-
-            return $keys;
-        });
+        $presented = $this->transactionPresentationService->presentCollection($transactions);
         
         return [
             'moduleName' => 'Transaksi (Transactions)',
-            'data' => collect(array_values($transactions->toArray())),
+            'data' => $presented,
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['Akun', 'Tanggal', 'Tipe', 'Kategori', 'Nominal', 'Deskripsi'],
-            'mapRow' => function($row) use ($accountsById) {
+            'headers' => ['Tanggal', 'Tipe', 'Sumber', 'Pihak Terkait', 'Akun', 'Nominal', 'Status/Referensi'],
+            'mapRow' => function($row) {
                 return [
-                    HumanReadableResolver::accountName(trim((string) ($row['Account_ID'] ?? '')) ?: ($row['Account_Code'] ?? ''), $accountsById),
-                    isset($row['Transaction_Date']) ? \Carbon\Carbon::parse($row['Transaction_Date'])->format('d M Y') : '-',
-                    $row['Type'] ?? '-',
-                    $row['Category'] ?? '-',
-                    'Rp ' . number_format($row['Amount'] ?? 0, 0, ',', '.'),
-                    $row['Description'] ?? '-'
+                    $row['date_label'] ?? '-',
+                    $row['type_label'] ?? '-',
+                    $row['source']['label'] ?? '-',
+                    $row['party']['name'] ?? '-',
+                    $row['account']['label'] ?? '-',
+                    $row['amount_label'] ?? '-',
+                    $row['source']['status_label'] ?? ($row['reference_label'] ?? '-'),
                 ];
             },
             'isLandscape' => true,
@@ -68,12 +60,17 @@ class TransactionController extends Controller
         ];
     }
 
-    protected $transactionService, $accountService;
+    protected $transactionService, $accountService, $transactionPresentationService;
 
-    public function __construct(TransactionService $transactionService, AccountService $accountService)
+    public function __construct(
+        TransactionService $transactionService,
+        AccountService $accountService,
+        TransactionPresentationService $transactionPresentationService
+    )
     {
         $this->transactionService = $transactionService;
         $this->accountService = $accountService;
+        $this->transactionPresentationService = $transactionPresentationService;
     }
 
     public function index(Request $request)
@@ -99,9 +96,11 @@ class TransactionController extends Controller
             });
         }
 
-        $transactionGroups = $transactions
+        $presentedTransactions = $this->transactionPresentationService->presentCollection($transactions);
+
+        $transactionGroups = $presentedTransactions
             ->groupBy(function ($transaction) {
-                $date = $transaction['Transaction_Date'] ?? null;
+                $date = $transaction['raw']['Transaction_Date'] ?? null;
                 if (!$date) {
                     return 'NO_DATE';
                 }
@@ -113,25 +112,26 @@ class TransactionController extends Controller
                 }
             })
             ->map(function ($group, $date) {
-                $income = $group->filter(fn ($item) => strcasecmp($item['Type'] ?? '', 'Income') === 0)->sum('Amount');
-                $expense = $group->filter(fn ($item) => strcasecmp($item['Type'] ?? '', 'Expense') === 0)->sum('Amount');
+                $income = $group->filter(fn ($item) => strcasecmp($item['type'] ?? '', 'Income') === 0)->sum('amount');
+                $expense = $group->filter(fn ($item) => strcasecmp($item['type'] ?? '', 'Expense') === 0)->sum('amount');
 
                 return [
                     'id' => $date,
-                    'title' => $date === 'NO_DATE' ? 'Tanpa Tanggal' : \Carbon\Carbon::parse($date)->format('d M Y'),
+                    'title' => $date === 'NO_DATE' ? 'Tanpa Tanggal' : \Carbon\Carbon::parse($date)->locale('id')->translatedFormat('j F Y'),
                     'total' => $group->count(),
                     'income' => (float) $income,
                     'expense' => (float) $expense,
                     'net' => (float) $income - (float) $expense,
-                    'items' => $group->sortByDesc('Transaction_ID')->values(),
+                    'items' => $group->sortByDesc('transaction_id')->values(),
                 ];
             })
             ->sortByDesc('id')
             ->values();
 
-        $transactions = \App\Helpers\CollectionHelper::paginate($transactions, 15)->withQueryString();
+        $transactions = \App\Helpers\CollectionHelper::paginate($presentedTransactions, 15)->withQueryString();
+        $canMutateTransactions = $this->canMutateTransactions();
 
-        return view('finance.transactions.index', compact('transactions', 'transactionGroups'));
+        return view('finance.transactions.index', compact('transactions', 'transactionGroups', 'canMutateTransactions'));
     }
 
     public function create()
@@ -175,11 +175,16 @@ class TransactionController extends Controller
     public function show($id)
     {
         $transaction = $this->transactionService->getById($id);
-        if (!$transaction) {
-            return redirect()->route('transactions.index')->with('error', 'Transaksi tidak ditemukan.');
+        if (!$transaction || strtoupper(trim((string) ($transaction['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            abort(404, 'Transaksi tidak ditemukan.');
         }
-        $account = $this->accountService->getById($transaction['Account_ID']);
-        return view('finance.transactions.show', compact('transaction', 'account'));
+
+        $presentation = $this->transactionPresentationService->presentDetail($transaction);
+        $canAccessPayments = $this->canAccessPayments();
+        $canAccessInvoices = $this->canAccessInvoices();
+        $canMutateTransactions = $this->canMutateTransactions();
+
+        return view('finance.transactions.show', compact('presentation', 'canAccessPayments', 'canAccessInvoices', 'canMutateTransactions'));
     }
 
     public function edit($id)
@@ -221,6 +226,45 @@ class TransactionController extends Controller
             return redirect()->route('transactions.index')->with('success', 'Transaksi berhasil dibatalkan.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
+        }
+    }
+
+    private function canAccessPayments(): bool
+    {
+        return in_array($this->authenticatedRoleName(), ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true);
+    }
+
+    private function canAccessInvoices(): bool
+    {
+        return in_array($this->authenticatedRoleName(), ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true);
+    }
+
+    private function canMutateTransactions(): bool
+    {
+        return in_array($this->authenticatedRoleName(), ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true);
+    }
+
+    private function authenticatedRoleName(): string
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return '';
+        }
+
+        $role = trim((string) ($user->Role ?? $user->Role_Name ?? ''));
+        if ($role !== '') {
+            return strtoupper($role);
+        }
+
+        $roleId = trim((string) ($user->Role_ID ?? ''));
+        if ($roleId === '') {
+            return '';
+        }
+
+        try {
+            return strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)->getRoleById($roleId)['Role_Name'] ?? '')));
+        } catch (\Throwable) {
+            return '';
         }
     }
 }

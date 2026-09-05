@@ -8,12 +8,14 @@
     :breadcrumbs="['Dashboard' => route('dashboard'), 'Keuangan' => '#', 'Transaksi' => route('transactions.index')]"
 >
     <x-slot:headerActions>
-        <a href="{{ route('transactions.create') }}" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-sm font-bold rounded-xl shadow-sm hover:shadow transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-            </svg>
-            Catat Transaksi
-        </a>
+        @if($canMutateTransactions ?? false)
+            <a href="{{ route('transactions.create') }}" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 text-sm font-bold rounded-xl shadow-sm hover:shadow transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+                Catat Transaksi
+            </a>
+        @endif
         <x-universal.multi-export route-prefix="transactions" />
     </x-slot:headerActions>
 
@@ -54,13 +56,14 @@
                     </summary>
                     <div class="border-t border-slate-100 divide-y divide-slate-100">
                         @foreach($group['items'] as $trx)
-                            @php $isIncome = strcasecmp($trx['Type'] ?? '', 'Income') === 0; @endphp
-                            <a href="{{ route('transactions.show', $trx['Transaction_ID']) }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                            @php $isIncome = strcasecmp($trx['type'] ?? '', 'Income') === 0; @endphp
+                            <a href="{{ route('transactions.show', $trx['transaction_id']) }}" class="flex flex-col gap-3 px-4 py-3 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-800 truncate">{{ $trx['Category'] ?? '-' }}</p>
-                                    <p class="text-[11px] text-slate-500 font-mono">{{ $trx['Transaction_ID'] ?? '-' }} | {{ $trx['Account_ID'] ?? '-' }}</p>
+                                    <p class="text-sm font-bold text-slate-800">{{ $trx['source']['label'] ?? '-' }}</p>
+                                    <p class="text-xs font-semibold text-slate-600">{{ $trx['party']['name'] ?? '-' }} | {{ $trx['payment']['method_label'] ?? $trx['source']['type_label'] ?? '-' }} | {{ $trx['source']['status_label'] ?? '-' }}</p>
+                                    <p class="mt-1 break-all text-[11px] text-slate-500 font-mono">Referensi: {{ $trx['transaction_id'] ?? '-' }}</p>
                                 </div>
-                                <span class="text-sm font-black shrink-0 {{ $isIncome ? 'text-emerald-600' : 'text-rose-600' }}">{{ $isIncome ? '+' : '-' }} Rp {{ number_format($trx['Amount'] ?? 0, 0, ',', '.') }}</span>
+                                <span class="text-sm font-black shrink-0 {{ $isIncome ? 'text-emerald-600' : 'text-rose-600' }}">{{ $isIncome ? '+' : '-' }} {{ $trx['amount_label'] ?? 'Rp 0' }}</span>
                             </a>
                         @endforeach
                     </div>
@@ -71,8 +74,8 @@
 
     <x-universal.data-table :empty="count($transactions) === 0" empty-title="Belum Ada Transaksi" empty-description="Belum ada transaksi pengeluaran/pemasukan yang dicatat.">
         <x-slot:header>
-            <th class="px-6 py-4">ID Transaksi</th>
-            <th class="px-6 py-4">Tipe & Kategori</th>
+            <th class="px-6 py-4">Transaksi</th>
+            <th class="px-6 py-4">Pihak / Sumber</th>
             <th class="px-6 py-4">Nominal</th>
             <th class="px-6 py-4">Tanggal Transaksi</th>
             <th class="px-6 py-4">Akun Kas</th>
@@ -81,33 +84,36 @@
 
         @foreach($transactions as $trx)
             @php
-                $isIncome = strcasecmp($trx['Type'] ?? '', 'Income') === 0;
+                $isIncome = strcasecmp($trx['type'] ?? '', 'Income') === 0;
                 $badgeColor = $isIncome ? 'green' : 'red';
-                $typeText = $isIncome ? 'PEMASUKAN' : 'PENGELUARAN';
+                $typeText = strtoupper($trx['type_label'] ?? ($isIncome ? 'PEMASUKAN' : 'PENGELUARAN'));
             @endphp
             <tr class="hover:bg-slate-50 transition-colors">
                 <td class="px-6 py-4">
-                    <div class="font-mono font-bold text-slate-800 text-sm">{{ $trx['Transaction_ID'] ?? '-' }}</div>
-                    <div class="text-[10px] text-slate-500 mt-1 truncate max-w-[150px]">{{ $trx['Description'] ?? '' }}</div>
+                    <div class="font-bold text-slate-800 text-sm">{{ $trx['source']['label'] ?? '-' }}</div>
+                    <div class="text-[10px] text-slate-500 mt-1 break-all font-mono">Referensi: {{ $trx['transaction_id'] ?? '-' }}</div>
                 </td>
                 <td class="px-6 py-4">
                     <x-badge color="{{ $badgeColor }}">{{ $typeText }}</x-badge>
-                    <div class="text-xs font-bold text-slate-600 mt-1">{{ $trx['Category'] ?? '-' }}</div>
+                    <div class="text-xs font-bold text-slate-700 mt-1">{{ $trx['party']['name'] ?? '-' }}</div>
+                    <div class="text-[11px] font-semibold text-slate-500 mt-0.5">{{ $trx['source']['type_label'] ?? '-' }} | {{ $trx['source']['status_label'] ?? '-' }}</div>
                 </td>
                 <td class="px-6 py-4 font-black text-slate-800 text-sm {{ $isIncome ? 'text-emerald-600' : 'text-rose-600' }}">
-                    {{ $isIncome ? '+' : '-' }} Rp {{ number_format($trx['Amount'] ?? 0, 0, ',', '.') }}
+                    {{ $isIncome ? '+' : '-' }} {{ $trx['amount_label'] ?? 'Rp 0' }}
                 </td>
                 <td class="px-6 py-4 text-sm font-bold text-slate-700">
-                    {{ isset($trx['Transaction_Date']) ? \Carbon\Carbon::parse($trx['Transaction_Date'])->format('d M Y') : '-' }}
+                    {{ $trx['date_label'] ?? '-' }}
                 </td>
-                <td class="px-6 py-4 font-mono font-bold text-slate-500 text-xs">
-                    {{ $trx['Account_ID'] ?? '-' }}
+                <td class="px-6 py-4 font-bold text-slate-600 text-xs">
+                    {{ $trx['account']['label'] ?? '-' }}
                 </td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-1.5">
-                        <x-universal.action-button action="detail" url="{{ route('transactions.show', $trx['Transaction_ID']) }}" />
-                        <x-universal.action-button action="edit" url="{{ route('transactions.edit', $trx['Transaction_ID']) }}" />
-                        <x-universal.action-button action="delete" url="{{ route('transactions.destroy', $trx['Transaction_ID']) }}" confirmMessage="Yakin ingin membatalkan/menghapus transaksi ini?" />
+                        <x-universal.action-button action="detail" url="{{ route('transactions.show', $trx['transaction_id']) }}" />
+                        @if($canMutateTransactions ?? false)
+                            <x-universal.action-button action="edit" url="{{ route('transactions.edit', $trx['transaction_id']) }}" />
+                            <x-universal.action-button action="delete" url="{{ route('transactions.destroy', $trx['transaction_id']) }}" confirmMessage="Yakin ingin membatalkan/menghapus transaksi ini?" />
+                        @endif
                     </div>
                 </td>
             </tr>
