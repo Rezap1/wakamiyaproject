@@ -19,6 +19,7 @@ use App\Services\Dashboard\FinanceDashboardService;
 use App\Services\Finance\FinanceReportService;
 use App\Services\Core\ActivityLogService;
 use App\Support\Finance\Money;
+use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Exceptions\FinancialIntegrityException;
 use App\Exceptions\AmbiguousSheetWriteException;
 use App\Exceptions\DuplicatePrimaryKeyException;
@@ -799,6 +800,112 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertCount(1, $transactions->rows);
         $this->assertSame('Payment', $transactions->rows[0]['Reference_Type']);
         $this->assertSame('TRX-PAY-' . strtoupper(substr(hash('sha256', 'PAY-SELF'), 0, 20)), $transactions->rows[0]['Transaction_ID']);
+    }
+
+    public function test_self_service_verification_requires_invoice_when_student_has_open_bill(): void
+    {
+        $payments = new IntegrityPaymentRepository([[
+            'Payment_ID' => 'PAY-NEEDS-INVOICE', 'Invoice_ID' => '', 'Student_ID' => 'STU-1',
+            'Amount_Paid' => 2000000, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01',
+            'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE',
+        ]]);
+        $invoices = new IntegrityInvoiceRepository([[
+            'Invoice_ID' => 'INV-7M5', 'Student_ID' => 'STU-1', 'Invoice_Type' => 'STUDENT',
+            'Amount' => 7500000, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ]]);
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+        $service = new PaymentService($payments, $invoices, new IntegrityStudentRepository(), new IntegrityCompanyRepository(), new IntegrityAccountRepository(), new IntegrityTransactionRepository(), Mockery::mock(EnterpriseEventService::class));
+
+        $this->expectException(FinancialIntegrityException::class);
+        try {
+            $service->verifyPayment('PAY-NEEDS-INVOICE', 'spoofed', 'Verified');
+        } finally {
+            $this->assertSame('Waiting Verification', $payments->getById('PAY-NEEDS-INVOICE')['Status']);
+            $this->assertSame('', $payments->getById('PAY-NEEDS-INVOICE')['Invoice_ID']);
+        }
+    }
+
+    public function test_self_service_verification_links_invoice_and_reconciles_partial_balance(): void
+    {
+        $payments = new IntegrityPaymentRepository([[
+            'Payment_ID' => 'PAY-LINK-2M', 'Invoice_ID' => '', 'Student_ID' => 'STU-1',
+            'Amount_Paid' => 2000000, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01',
+            'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE',
+        ]]);
+        $invoices = new IntegrityInvoiceRepository([[
+            'Invoice_ID' => 'INV-7M5', 'Student_ID' => 'STU-1', 'Invoice_Type' => 'STUDENT',
+            'Amount' => 7500000, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ]]);
+        $transactions = new IntegrityTransactionRepository();
+        $txService = Mockery::mock(TransactionService::class);
+        $txService->shouldReceive('create')->once()->andReturnUsing(function ($data) use ($transactions) {
+            $transactions->rows[] = $data;
+            return $data;
+        });
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+        $service = new PaymentService($payments, $invoices, new IntegrityStudentRepository(), new IntegrityCompanyRepository(), new IntegrityAccountRepository(), $transactions, Mockery::mock(EnterpriseEventService::class), $txService);
+
+        $service->verifyPayment('PAY-LINK-2M', 'spoofed', 'Verified', '', null, 'INV-7M5');
+
+        $this->assertSame('Verified', $payments->getById('PAY-LINK-2M')['Status']);
+        $this->assertSame('INV-7M5', $payments->getById('PAY-LINK-2M')['Invoice_ID']);
+        $this->assertSame('Partial Paid', $invoices->getById('INV-7M5')['Status']);
+        $this->assertSame(2000000.0, AcceptedPaymentCalculator::forInvoice($payments->rows, 'INV-7M5'));
+        $this->assertSame(5500000.0, 7500000.0 - AcceptedPaymentCalculator::forInvoice($payments->rows, 'INV-7M5'));
+    }
+
+    public function test_self_service_invoice_link_rolls_back_when_ledger_fails(): void
+    {
+        $payments = new IntegrityPaymentRepository([[
+            'Payment_ID' => 'PAY-LINK-ROLLBACK', 'Invoice_ID' => '', 'Student_ID' => 'STU-1',
+            'Amount_Paid' => 2000000, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01',
+            'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Waiting Verification', 'Is_Active' => 'TRUE',
+        ]]);
+        $invoices = new IntegrityInvoiceRepository([[
+            'Invoice_ID' => 'INV-ROLLBACK', 'Student_ID' => 'STU-1', 'Invoice_Type' => 'STUDENT',
+            'Amount' => 7500000, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ]]);
+        $txService = Mockery::mock(TransactionService::class);
+        $txService->shouldReceive('create')->once()->andThrow(new \RuntimeException('ledger unavailable'));
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+        $service = new PaymentService($payments, $invoices, new IntegrityStudentRepository(), new IntegrityCompanyRepository(), new IntegrityAccountRepository(), new IntegrityTransactionRepository(), Mockery::mock(EnterpriseEventService::class), $txService);
+
+        try {
+            $service->verifyPayment('PAY-LINK-ROLLBACK', 'spoofed', 'Verified', '', null, 'INV-ROLLBACK');
+            $this->fail('Ledger failure must propagate.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('ledger unavailable', $exception->getMessage());
+        }
+
+        $this->assertSame('Waiting Verification', $payments->getById('PAY-LINK-ROLLBACK')['Status']);
+        $this->assertSame('', $payments->getById('PAY-LINK-ROLLBACK')['Invoice_ID']);
+        $this->assertSame('Waiting Payment', $invoices->getById('INV-ROLLBACK')['Status']);
+    }
+
+    public function test_legacy_verified_self_service_payment_can_be_explicitly_linked(): void
+    {
+        $payments = new IntegrityPaymentRepository([[
+            'Payment_ID' => 'PAY-LEGACY-2M', 'Invoice_ID' => '', 'Student_ID' => 'STU-1',
+            'Amount_Paid' => 2000000, 'Payment_Method' => 'CASH', 'Payment_Date' => '2026-09-01',
+            'Payment_Type' => 'STUDENT_SELF_SERVICE', 'Status' => 'Verified', 'Is_Active' => 'TRUE',
+        ]]);
+        $invoices = new IntegrityInvoiceRepository([[
+            'Invoice_ID' => 'INV-LEGACY-7M5', 'Student_ID' => 'STU-1', 'Invoice_Type' => 'STUDENT',
+            'Amount' => 7500000, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ]]);
+        $transactions = new IntegrityTransactionRepository();
+        $transactions->rows[] = [
+            'Transaction_ID' => 'TRX-LEGACY', 'Reference_Type' => 'Payment', 'Reference_ID' => 'PAY-LEGACY-2M',
+            'Type' => 'Income', 'Amount' => 2000000, 'Account_ID' => '101', 'Is_Active' => 'TRUE',
+        ];
+        $this->app->instance(InvoiceService::class, Mockery::mock(InvoiceService::class));
+        $service = new PaymentService($payments, $invoices, new IntegrityStudentRepository(), new IntegrityCompanyRepository(), new IntegrityAccountRepository(), $transactions, Mockery::mock(EnterpriseEventService::class));
+
+        $service->linkVerifiedSelfServicePaymentToInvoice('PAY-LEGACY-2M', 'INV-LEGACY-7M5');
+
+        $this->assertSame('INV-LEGACY-7M5', $payments->getById('PAY-LEGACY-2M')['Invoice_ID']);
+        $this->assertSame('Partial Paid', $invoices->getById('INV-LEGACY-7M5')['Status']);
+        $this->assertSame(5500000.0, 7500000.0 - AcceptedPaymentCalculator::forInvoice($payments->rows, 'INV-LEGACY-7M5'));
     }
 
     public function test_verification_rolls_back_status_when_ledger_creation_fails(): void

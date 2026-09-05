@@ -16,7 +16,7 @@ use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Support\ActorIdentity;
 use Throwable;
 use App\Support\Finance\Money;
-use App\Support\Finance\PaymentStatus;
+use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Support\Reporting\HumanReadableResolver;
 use App\Exceptions\FinancialIntegrityException;
 
@@ -47,10 +47,7 @@ class InvoiceService
         if (empty($invoiceId)) return 0.0;
 
         $allPayments = $paymentSnapshot ?? $this->freshPaymentSnapshot();
-        return (float) collect($allPayments)
-            ->where('Invoice_ID', $invoiceId)
-            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-            ->sum(fn ($payment) => Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        return (float) ($this->acceptedPaymentTotalsByInvoice($allPayments, [$invoiceId])[$invoiceId] ?? 0.0);
     }
 
     private function freshPaymentSnapshot(): \Illuminate\Support\Collection
@@ -60,30 +57,19 @@ class InvoiceService
             : $this->paymentRepository->getAll());
     }
 
-    private function verifiedPaymentTotalsByInvoice(iterable $payments, array $invoiceIds): array
+    /**
+     * Build the canonical accepted-payment aggregate for each invoice.
+     * A persisted Payment_ID is counted once so retry artefacts cannot inflate
+     * paid amounts while the reconciliation audit reports the duplicate row.
+     */
+    public function acceptedPaymentTotalsByInvoice(iterable $payments, array $invoiceIds): array
     {
-        $invoiceIdSet = array_fill_keys(array_map('strval', $invoiceIds), true);
-        $totals = [];
+        return AcceptedPaymentCalculator::totalsByInvoice($payments, $invoiceIds);
+    }
 
-        foreach ($payments as $payment) {
-            $invoiceId = (string) ($payment['Invoice_ID'] ?? '');
-            if ($invoiceId === '' || !isset($invoiceIdSet[$invoiceId])) {
-                continue;
-            }
-
-            if (!PaymentStatus::verified($payment['Status'] ?? null)) {
-                continue;
-            }
-
-            $totals[$invoiceId] = ($totals[$invoiceId] ?? 0)
-                + Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran');
-        }
-
-        foreach ($totals as $invoiceId => $cents) {
-            $totals[$invoiceId] = $cents / 100;
-        }
-
-        return $totals;
+    public function acceptedInvoiceLessSelfServiceTotal(iterable $payments, string $studentId): float
+    {
+        return AcceptedPaymentCalculator::invoiceLessSelfServiceForStudent($payments, $studentId);
     }
 
     private function verifiedPaymentTotalFromIndex(string $invoiceId, ?array $verifiedPaymentTotalsByInvoice, ?iterable $paymentSnapshot): float
@@ -375,37 +361,22 @@ class InvoiceService
         $invoiceIds = $educationInvoices->pluck('Invoice_ID')->filter()->values()->all();
         $billedCents = $educationInvoices->sum(fn($invoice) => Money::cents($this->rawInvoiceAmount($invoice), 'Invoice Amount'));
         $paidCents = 0;
-        $canUseInvoicePaidAmounts = $paymentSnapshot === null
-            && $invoiceSnapshot !== null
-            && $educationInvoices->every(fn ($invoice) => array_key_exists('Paid_Amount', (array) $invoice));
+        // Paid_Amount on an invoice is derived presentation data and can be
+        // stale. FINANCE_PAYMENT is the sole authority for accepted payment.
+        $paymentRows = $paymentSnapshot !== null
+            ? collect($paymentSnapshot)
+            : $this->freshPaymentSnapshot();
+        $acceptedTotals = $this->acceptedPaymentTotalsByInvoice($paymentRows, $invoiceIds);
+        $paidCents = collect($acceptedTotals)
+            ->sum(fn ($amount) => Money::cents($amount, 'Verified payment total'));
 
-        if ($canUseInvoicePaidAmounts) {
-            $paidCents = $educationInvoices->sum(fn ($invoice) => Money::cents($invoice['Paid_Amount'] ?? 0, 'Verified payment total'));
-        } else {
-            $paymentRows = $paymentSnapshot !== null
-                ? collect($paymentSnapshot)
-                : collect(method_exists($this->paymentRepository, 'getAllFresh')
-                    ? $this->paymentRepository->getAllFresh()
-                    : $this->paymentRepository->getAll());
-            $paidCents = $paymentRows
-                ->whereIn('Invoice_ID', $invoiceIds)
-                ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-                ->sum(fn($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
-
-            // Student self-service payments are deliberately invoice-less. They
-            // remain financially effective only after verification and are
-            // associated to the student through the server-owned Student_ID.
-            // Include them in the same education summary without fabricating an
-            // invoice or changing invoice-linked aggregation.
-            $selfServicePaidCents = $paymentRows
-                ->where('Student_ID', $studentId)
-                ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-                ->filter(fn ($payment) => strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0)
-                ->filter(fn ($payment) => trim((string) ($payment['Invoice_ID'] ?? '')) === '')
-                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran mandiri'));
-
-            $paidCents += $selfServicePaidCents;
-        }
+        // Student self-service payments are deliberately invoice-less. They
+        // remain financially effective only after verification and are
+        // associated to the student through the server-owned Student_ID.
+        $paidCents += Money::cents(
+            $this->acceptedInvoiceLessSelfServiceTotal($paymentRows, $studentId),
+            'Nominal pembayaran mandiri'
+        );
         $billed = (float) ($billedCents / 100);
         $paid = (float) ($paidCents / 100);
 
@@ -497,7 +468,7 @@ class InvoiceService
         }
 
         $paymentSnapshot = $this->freshPaymentSnapshot();
-        $verifiedPaymentTotalsByInvoice = $this->verifiedPaymentTotalsByInvoice(
+        $verifiedPaymentTotalsByInvoice = $this->acceptedPaymentTotalsByInvoice(
             $paymentSnapshot,
             $invoices->pluck('Invoice_ID')->filter()->values()->all()
         );
@@ -947,10 +918,10 @@ class InvoiceService
         $payments = method_exists($this->paymentRepository, 'getAllFresh')
             ? $this->paymentRepository->getAllFresh()
             : $this->paymentRepository->getAll();
-        $verifiedCents = collect($payments)
-            ->where('Invoice_ID', $id)
-            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-            ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        $verifiedCents = Money::cents(
+            AcceptedPaymentCalculator::forInvoice($payments, (string) $id),
+            'Nominal pembayaran'
+        );
         if ($verifiedCents > 0) {
             throw new FinancialIntegrityException("Invoice #{$id} memiliki pembayaran terverifikasi dan tidak dapat dibatalkan.");
         }

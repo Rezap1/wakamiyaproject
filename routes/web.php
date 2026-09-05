@@ -303,6 +303,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/{id}/reverse', [\App\Http\Controllers\Finance\PaymentController::class, 'reverse'])->name('reverse');
         Route::post('/{id}/reconcile-ledger', [\App\Http\Controllers\Finance\PaymentController::class, 'reconcileLedger'])->name('reconcile-ledger');
         Route::post('/{id}/reconcile-reversal', [\App\Http\Controllers\Finance\PaymentController::class, 'reconcileReversal'])->name('reconcile-reversal');
+        Route::post('/{id}/link-invoice', [\App\Http\Controllers\Finance\PaymentController::class, 'linkInvoice'])->name('link-invoice');
         Route::get('/{id}/receipt', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadReceiptPdf'])->name('receipt');
         Route::get('/{id}/proof', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadProof'])->name('proof');
         Route::get('/{id}', [\App\Http\Controllers\Finance\PaymentController::class, 'show'])->name('show');

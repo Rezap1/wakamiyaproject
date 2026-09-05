@@ -182,10 +182,11 @@ class PaymentController extends Controller
         if (!empty($payment['Invoice_ID'])) {
             $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
         }
+        $candidateInvoices = $this->candidateInvoicesFor($payment);
 
         $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
 
-        return view('finance.payments.show', compact('payment', 'invoice', 'paymentEvidence'));
+        return view('finance.payments.show', compact('payment', 'invoice', 'candidateInvoices', 'paymentEvidence'));
     }
 
     public function downloadReceiptPdf($id)
@@ -244,6 +245,7 @@ class PaymentController extends Controller
             $validated = $request->validate([
                 'status' => 'nullable|in:Verified,Rejected,Need Revision',
                 'notes' => 'nullable|string|max:1000',
+                'Invoice_ID' => 'nullable|string|max:100',
             ]);
 
             $user = auth()->user();
@@ -255,7 +257,14 @@ class PaymentController extends Controller
             $status = $validated['status'] ?? 'Verified';
             $notes = $validated['notes'] ?? '';
 
-            $this->paymentService->verifyPayment($id, $verifiedBy, $status, $notes);
+            $this->paymentService->verifyPayment(
+                $id,
+                $verifiedBy,
+                $status,
+                $notes,
+                null,
+                $validated['Invoice_ID'] ?? null
+            );
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diverifikasi.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -295,6 +304,18 @@ class PaymentController extends Controller
         }
     }
 
+    public function linkInvoice(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate(['Invoice_ID' => 'required|string|max:100']);
+            $this->paymentService->linkVerifiedSelfServicePaymentToInvoice($id, $validated['Invoice_ID']);
+
+            return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil dihubungkan dan invoice telah direkonsiliasi.');
+        } catch (\Exception $e) {
+            return back()->with('error', $this->safeExceptionMessage($e))->withInput();
+        }
+    }
+
     public function edit($id)
     {
         $payment = $this->paymentService->getById($id);
@@ -305,9 +326,10 @@ class PaymentController extends Controller
         if (!empty($payment['Invoice_ID'])) {
             $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
         }
+        $candidateInvoices = $this->candidateInvoicesFor($payment);
         $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
 
-        return view('finance.payments.show', compact('payment', 'invoice', 'paymentEvidence'));
+        return view('finance.payments.show', compact('payment', 'invoice', 'candidateInvoices', 'paymentEvidence'));
     }
 
     public function update(UpdatePaymentRequest $request, $id)
@@ -353,6 +375,21 @@ class PaymentController extends Controller
         }
 
         return response()->download($path, $this->downloadFilename('bukti-pembayaran', $id, $path));
+    }
+
+    private function candidateInvoicesFor(array $payment)
+    {
+        if (trim((string) ($payment['Invoice_ID'] ?? '')) !== '') {
+            return collect();
+        }
+
+        $amount = (float) ($payment['Amount_Paid'] ?? 0);
+
+        return app(\App\Services\Finance\InvoiceService::class)->getAll()
+            ->where('Student_ID', $payment['Student_ID'] ?? '')
+            ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
+            ->filter(fn ($invoice) => (float) ($invoice['Remaining_Amount'] ?? 0) >= $amount)
+            ->values();
     }
 
     private function downloadFilename(string $prefix, string $id, string $path): string

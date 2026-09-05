@@ -57,6 +57,52 @@
 
         <x-slot:information>
             <div class="space-y-8">
+                @if(in_array($status, ['Waiting Verification', 'Need Revision'], true))
+                    <form method="POST" action="{{ route('payments.verify', $payment['Payment_ID']) }}" class="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+                        @csrf
+                        @if(trim((string) ($payment['Invoice_ID'] ?? '')) === '')
+                            <div>
+                                <label for="payment-invoice" class="mb-1.5 block text-xs font-bold text-slate-700">Tagihan Tujuan</label>
+                                <select id="payment-invoice" name="Invoice_ID" class="block min-h-11 w-full rounded-lg border-slate-300 text-sm">
+                                    <option value="">Tidak terkait invoice</option>
+                                    @foreach(($candidateInvoices ?? collect()) as $candidate)
+                                        <option value="{{ $candidate['Invoice_ID'] }}" @selected(old('Invoice_ID') === ($candidate['Invoice_ID'] ?? ''))>
+                                            {{ $candidate['Category'] ?? 'Tagihan' }} | Rp {{ number_format((float)($candidate['Remaining_Amount'] ?? 0), 0, ',', '.') }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
+                        <div>
+                            <label for="payment-notes" class="mb-1.5 block text-xs font-bold text-slate-700">Catatan Verifikasi</label>
+                            <textarea id="payment-notes" name="notes" rows="3" maxlength="1000" class="block w-full rounded-lg border-slate-300 text-sm">{{ old('notes') }}</textarea>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="submit" name="status" value="Verified" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">Verifikasi</button>
+                            <button type="submit" name="status" value="Need Revision" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700">Perlu Revisi</button>
+                            <button type="submit" name="status" value="Rejected" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700">Tolak</button>
+                        </div>
+                    </form>
+                @endif
+
+                @if($status === 'Verified' && trim((string) ($payment['Invoice_ID'] ?? '')) === '' && ($candidateInvoices ?? collect())->isNotEmpty())
+                    <form method="POST" action="{{ route('payments.link-invoice', $payment['Payment_ID']) }}" class="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+                        @csrf
+                        <div>
+                            <label for="verified-payment-invoice" class="mb-1.5 block text-xs font-bold text-amber-900">Rekonsiliasi ke Tagihan</label>
+                            <select id="verified-payment-invoice" name="Invoice_ID" required class="block min-h-11 w-full rounded-lg border-amber-300 bg-white text-sm">
+                                <option value="">Pilih tagihan</option>
+                                @foreach($candidateInvoices as $candidate)
+                                    <option value="{{ $candidate['Invoice_ID'] }}" @selected(old('Invoice_ID') === ($candidate['Invoice_ID'] ?? ''))>
+                                        {{ $candidate['Category'] ?? 'Tagihan' }} | Rp {{ number_format((float)($candidate['Remaining_Amount'] ?? 0), 0, ',', '.') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700">Hubungkan dan Rekonsiliasi</button>
+                    </form>
+                @endif
+
                 <!-- OVERPAYMENT ALERT -->
                 @if($isOverpaying)
                     <div class="bg-amber-50 border-2 border-amber-200 p-5 rounded-2xl flex items-center justify-between gap-4">

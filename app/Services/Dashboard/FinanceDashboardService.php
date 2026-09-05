@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Support\Finance\Money;
 use Illuminate\Support\Facades\Log;
-use App\Support\Finance\PaymentStatus;
 
 class FinanceDashboardService
 {
@@ -80,10 +79,10 @@ class FinanceDashboardService
         // OVERDUE is a dynamic invoice status, but remains an outstanding
         // receivable and must be included in both the amount and overdue KPI.
         $unpaidInvoices = $invoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
-        $outstandingCents = $unpaidInvoices->sum(fn ($invoice) => Money::cents($invoice['Amount'] ?? 0, 'Invoice Amount')) -
-            $payments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-                ->whereIn('Invoice_ID', $unpaidInvoices->pluck('Invoice_ID'))
-                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        $outstandingCents = $unpaidInvoices->sum(fn ($invoice) => Money::cents(
+            $invoice['Remaining_Amount'] ?? $invoice['Amount'] ?? 0,
+            'Sisa invoice'
+        ));
         $outstandingAmount = $outstandingCents / (10 ** Money::SCALE);
 
         // === Overdue Invoices ===

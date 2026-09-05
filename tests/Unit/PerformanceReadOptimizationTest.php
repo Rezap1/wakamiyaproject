@@ -62,7 +62,7 @@ class PerformanceReadOptimizationTest extends TestCase
         $this->assertCount(2, $recent);
     }
 
-    public function test_invoice_summary_reuses_provided_snapshots_without_fresh_payment_reads(): void
+    public function test_invoice_summary_reuses_authoritative_payment_snapshot_without_fresh_reads(): void
     {
         $settings = Mockery::mock(SystemSettingService::class);
         $settings->shouldReceive('getDefaultTuitionFee')->once()->andReturn(1000);
@@ -86,10 +86,13 @@ class PerformanceReadOptimizationTest extends TestCase
             'STU-1',
             null,
             collect([
-                ['Invoice_ID' => 'INV-1', 'Student_ID' => 'STU-1', 'Amount' => 600, 'Paid_Amount' => 400, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE', 'Category' => 'Biaya Pendidikan'],
-                ['Invoice_ID' => 'INV-2', 'Student_ID' => 'STU-1', 'Amount' => 300, 'Paid_Amount' => 300, 'Status' => 'Paid', 'Is_Active' => 'TRUE', 'Category' => 'Biaya Pendidikan'],
+                ['Invoice_ID' => 'INV-1', 'Student_ID' => 'STU-1', 'Amount' => 600, 'Paid_Amount' => 0, 'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE', 'Category' => 'Biaya Pendidikan'],
+                ['Invoice_ID' => 'INV-2', 'Student_ID' => 'STU-1', 'Amount' => 300, 'Paid_Amount' => 0, 'Status' => 'Paid', 'Is_Active' => 'TRUE', 'Category' => 'Biaya Pendidikan'],
             ]),
-            null,
+            collect([
+                ['Payment_ID' => 'PAY-1', 'Invoice_ID' => 'INV-1', 'Student_ID' => 'STU-1', 'Amount_Paid' => 400, 'Status' => 'Verified'],
+                ['Payment_ID' => 'PAY-2', 'Invoice_ID' => 'INV-2', 'Student_ID' => 'STU-1', 'Amount_Paid' => 300, 'Status' => 'Verified'],
+            ]),
             ['Student_ID' => 'STU-1']
         );
 

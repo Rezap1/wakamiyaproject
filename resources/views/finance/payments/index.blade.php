@@ -118,7 +118,9 @@
                         @endif
 
                         @if($status == 'Waiting Verification')
-                            <x-universal.action-button action="approve" url="{{ route('payments.verify', $item['Payment_ID']) }}" />
+                            @if(!empty($item['Invoice_ID']))
+                                <x-universal.action-button action="approve" url="{{ route('payments.verify', $item['Payment_ID']) }}" />
+                            @endif
                             <x-universal.action-button action="detail" url="{{ route('payments.show', $item['Payment_ID']) }}" />
                         @else
                             <x-universal.action-button action="detail" url="{{ route('payments.show', $item['Payment_ID']) }}" />

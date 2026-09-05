@@ -11,8 +11,6 @@ use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
 use Carbon\Carbon;
 use Exception;
 use App\Support\Finance\Money;
-use App\Exceptions\FinancialIntegrityException;
-use App\Support\Finance\PaymentStatus;
 use App\Support\Reporting\HumanReadableResolver;
 use Illuminate\Support\Facades\Log;
 
@@ -198,8 +196,7 @@ class FinanceReportService
         }
         
         $totalOutstanding = 0;
-        $payments = collect($this->paymentRepo->fetchAll())
-            ->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null));
+        $payments = collect($this->paymentRepo->fetchAll());
         $students = collect($this->studentRepo->fetchAll())->keyBy('Student_ID');
         $companies = collect($this->companyRepo->fetchAll())->keyBy('Company_ID');
         $invoiceService = app(\App\Services\Finance\InvoiceService::class);
@@ -212,26 +209,9 @@ class FinanceReportService
                 return $inv;
             }
 
-            $paidCents = $payments->where('Invoice_ID', $inv['Invoice_ID'] ?? '')
-                ->sum(fn ($payment) => Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
-            $paid = $paidCents / (10 ** Money::SCALE);
-            $amount = Money::value($inv['Amount'] ?? 0, 'Invoice Amount');
-            $lineItems = $inv['Line_Items'] ?? null;
-            if ($lineItems !== null && $lineItems !== '' && $lineItems !== []) {
-                [, , , , $canonicalAmount] = $invoiceService->calculateLineItemsTotal($lineItems, $amount);
-                if (!Money::equal($amount, $canonicalAmount)) {
-                    throw new FinancialIntegrityException("Invoice {$inv['Invoice_ID']} memiliki Amount yang tidak sama dengan total line item.");
-                }
-                $amount = $canonicalAmount;
-            }
-            $sisa = max(0, Money::cents($amount) - $paidCents) / (10 ** Money::SCALE);
-            
-            $inv['Paid_Amount'] = $paid;
-            $inv['Remaining_Amount'] = $sisa;
-
-            $dynamicStatus = $invoiceService->resolveDynamicStatus($inv);
-            $inv['Status'] = $dynamicStatus;
-            $inv['Display_Status'] = $dynamicStatus;
+            $inv = $invoiceService->formatInvoiceRecord($inv, null, $payments);
+            $sisa = (float) $inv['Remaining_Amount'];
+            $dynamicStatus = $inv['Status'];
 
             if ($inv['Invoice_Type'] === 'STUDENT' && isset($inv['Student_ID'])) {
                 $inv['Student_Name'] = HumanReadableResolver::studentName($inv['Student_ID'] ?? '', $students);

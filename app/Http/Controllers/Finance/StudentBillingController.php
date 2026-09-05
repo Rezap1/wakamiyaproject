@@ -13,7 +13,6 @@ use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\ReportHelper;
-use App\Support\Finance\PaymentStatus;
 
 class StudentBillingController extends Controller
 {
@@ -77,7 +76,8 @@ class StudentBillingController extends Controller
         $totalOutstanding = $myInvoices
             ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
             ->sum('Remaining_Amount');
-        $totalPaid = $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))->sum('Amount_Paid');
+        $totalPaid = $myInvoices->sum('Paid_Amount')
+            + $this->invoiceService->acceptedInvoiceLessSelfServiceTotal($myPayments, $studentId);
 
         $educationSummary = $this->invoiceService->getStudentEducationBillingSummary(
             $studentId,
@@ -93,12 +93,10 @@ class StudentBillingController extends Controller
         $companyProfile = $this->systemSettingService->getCompanyProfile();
         $bank = $companyProfile['bank'];
 
-        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) use ($myPayments) {
-            $invoiceIds = $invs->pluck('Invoice_ID');
+        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
             return [
                 'total_billed' => $invs->sum('Amount'),
-                'total_paid' => $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))
-                    ->whereIn('Invoice_ID', $invoiceIds)->sum('Amount_Paid'),
+                'total_paid' => $invs->sum('Paid_Amount'),
                 'outstanding' => $invs
                     ->whereNotIn('Status', ['Paid', 'Cancelled', 'Draft'])
                     ->sum('Remaining_Amount')

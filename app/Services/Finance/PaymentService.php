@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use Exception;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Support\Reporting\HumanReadableResolver;
 use App\Exceptions\FinancialIntegrityException;
 use App\Exceptions\DuplicatePrimaryKeyException;
@@ -128,11 +129,8 @@ class PaymentService
         $invoiceAmount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
         $currentPaymentAmount = Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran');
         
-        $allPayments = collect(method_exists($this->paymentRepository, 'getAllFresh') ? $this->paymentRepository->getAllFresh() : $this->paymentRepository->getAll())
-            ->where('Invoice_ID', $payment['Invoice_ID'] ?? '')
-            ->filter(fn ($row) => PaymentStatus::verified($row['Status'] ?? null));
-        
-        $totalVerifiedSoFar = (float) $allPayments->sum(fn ($item) => Money::value($item['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        $allPayments = collect(method_exists($this->paymentRepository, 'getAllFresh') ? $this->paymentRepository->getAllFresh() : $this->paymentRepository->getAll());
+        $totalVerifiedSoFar = AcceptedPaymentCalculator::forInvoice($allPayments, (string) ($payment['Invoice_ID'] ?? ''));
         $prevVerified = max(0.0, round($totalVerifiedSoFar - $currentPaymentAmount, Money::SCALE));
         $remainingBalance = max(0.0, round($invoiceAmount - $totalVerifiedSoFar, Money::SCALE));
 
@@ -431,9 +429,7 @@ class PaymentService
         $remainingAmount = $selfService ? null : (method_exists($this->paymentRepository, 'getAllFresh')
             ? max(0.0, round(
                 Money::value($invoice['Amount'] ?? 0, 'Invoice Amount')
-                - collect($allPayments)->where('Invoice_ID', $invoiceId)
-                    ->filter(fn ($item) => PaymentStatus::verified($item['Status'] ?? null))
-                    ->sum(fn ($item) => Money::value($item['Amount_Paid'] ?? 0, 'Nominal pembayaran')),
+                - AcceptedPaymentCalculator::forInvoice($allPayments, $invoiceId),
                 Money::SCALE
             ))
             : $invoiceService->calculateRemainingAmount($invoice));
@@ -527,199 +523,204 @@ class PaymentService
         });
     }
 
-    public function verifyPayment($paymentId, $verifiedBy, $status, $notes = '', $explicitAccountId = null)
+    public function verifyPayment($paymentId, $verifiedBy, $status, $notes = '', $explicitAccountId = null, $targetInvoiceId = null)
     {
         $this->assertFinanceMutationActor();
-        // Read only to discover the invoice lock scope. The authoritative read
-        // is repeated inside the invoice-scoped critical section below.
         $initialPayment = $this->freshPayment($paymentId);
         if (!$initialPayment) {
             throw new Exception("Payment #{$paymentId} tidak ditemukan.");
         }
-        $invoiceId = trim((string) ($initialPayment['Invoice_ID'] ?? ''));
+
+        $originalInvoiceId = trim((string) ($initialPayment['Invoice_ID'] ?? ''));
+        $requestedInvoiceId = trim((string) $targetInvoiceId);
         $selfService = $this->isSelfServicePayment($initialPayment);
-        if ($invoiceId === '' && !$selfService) {
+        if ($originalInvoiceId === '' && !$selfService) {
             throw new FinancialIntegrityException("Pembayaran #{$paymentId} tidak memiliki Invoice_ID yang valid.");
         }
-        $lockKey = $invoiceId !== '' ? "payment_verify_invoice_{$invoiceId}" : "payment_verify_payment_{$paymentId}";
-        
+        if ($originalInvoiceId !== '' && $requestedInvoiceId !== '' && $originalInvoiceId !== $requestedInvoiceId) {
+            throw new FinancialIntegrityException("Payment #{$paymentId} sudah terkait ke invoice lain dan tidak dapat dipindahkan.");
+        }
+        if ($requestedInvoiceId !== '' && !$selfService) {
+            throw new FinancialIntegrityException('Invoice payment biasa tidak dapat direlasikan ulang saat verifikasi.');
+        }
+
+        $lockInvoiceId = $originalInvoiceId !== '' ? $originalInvoiceId : $requestedInvoiceId;
+        $lockKey = $lockInvoiceId !== '' ? "payment_verify_invoice_{$lockInvoiceId}" : "payment_verify_payment_{$paymentId}";
+
         try {
-            return Cache::lock($lockKey, 120)->block(15, function () use ($paymentId, $verifiedBy, $status, $notes, $explicitAccountId, $initialPayment) {
-            if (!in_array($status, ['Verified', 'Rejected', 'Need Revision'], true)) {
-                throw new Exception("Status verifikasi pembayaran tidak valid.");
-            }
-
-            $payment = method_exists($this->paymentRepository, 'getByIdFresh')
-                ? $this->freshPayment($paymentId)
-                : $initialPayment;
-            if (!$payment) {
-                throw new Exception("Payment #{$paymentId} tidak ditemukan.");
-            }
-
-            $currentStatus = PaymentStatus::canonical($payment['Status'] ?? 'Waiting Verification');
-            // Verification is a one-way domain transition. Only payments that
-            // are awaiting review (or were sent back for revision) may enter
-            // the verification workflow; terminal states cannot be reopened.
-            if (in_array($currentStatus, ['Verified', 'Rejected', 'Cancelled', 'Reversed'], true)) {
-                $message = match ($currentStatus) {
-                    'Verified' => "Pembayaran #{$paymentId} sudah terverifikasi dan tidak dapat diverifikasi ulang.",
-                    'Rejected' => "Pembayaran #{$paymentId} sudah ditolak. Silakan minta pembayaran baru dari siswa.",
-                    default => "Pembayaran #{$paymentId} berstatus {$currentStatus} dan tidak dapat diverifikasi.",
-                };
-                throw new FinancialIntegrityException($message);
-            }
-            if (!in_array($currentStatus, ['Waiting Verification', 'Need Revision'], true)) {
-                throw new FinancialIntegrityException("Pembayaran #{$paymentId} tidak dapat diverifikasi dari status {$currentStatus}.");
-            }
-
-            $actorId = \App\Support\ActorIdentity::required();
-
-            if ($status === 'Verified') {
-                $invoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
-                if (empty($invoiceId) && !$this->isSelfServicePayment($payment)) {
-                    throw new Exception("Pembayaran #{$paymentId} tidak memiliki Invoice_ID yang valid.");
+            return Cache::lock($lockKey, 120)->block(15, function () use ($paymentId, $status, $notes, $explicitAccountId, $requestedInvoiceId, $initialPayment) {
+                if (!in_array($status, ['Verified', 'Rejected', 'Need Revision'], true)) {
+                    throw new Exception('Status verifikasi pembayaran tidak valid.');
                 }
 
-                if ($this->isSelfServicePayment($payment)) {
-                    // Self-service submissions have no official invoice yet.
-                    // They remain unposted until this Finance verification step.
-                    $invoice = null;
-                } else {
-
-                $invoiceService = app(InvoiceService::class);
-                $invoice = $this->freshInvoice($invoiceId, $invoiceService);
-                if (!$invoice) {
-                    throw new Exception("Tagihan #{$invoiceId} tidak ditemukan.");
-                }
-                if (($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
-                    && !empty($invoice['Student_ID'])
-                    && ($payment['Student_ID'] ?? '') !== $invoice['Student_ID']) {
-                    throw new FinancialIntegrityException("Payment #{$paymentId} tidak dimiliki oleh student invoice {$invoiceId}.");
+                $payment = method_exists($this->paymentRepository, 'getByIdFresh')
+                    ? $this->freshPayment($paymentId)
+                    : $initialPayment;
+                if (!$payment) {
+                    throw new Exception("Payment #{$paymentId} tidak ditemukan.");
                 }
 
-                $invoiceStatus = trim((string) ($invoice['Status'] ?? 'Draft'));
-                if (in_array(strtolower($invoiceStatus), ['draft', 'cancelled'], true)) {
-                    throw new Exception("Tagihan #{$invoiceId} berstatus {$invoiceStatus} dan tidak dapat menerima verifikasi pembayaran.");
+                $currentStatus = PaymentStatus::canonical($payment['Status'] ?? 'Waiting Verification');
+                if (in_array($currentStatus, ['Verified', 'Rejected', 'Cancelled', 'Reversed'], true)) {
+                    $message = match ($currentStatus) {
+                        'Verified' => "Pembayaran #{$paymentId} sudah terverifikasi dan tidak dapat diverifikasi ulang.",
+                        'Rejected' => "Pembayaran #{$paymentId} sudah ditolak. Silakan minta pembayaran baru dari siswa.",
+                        default => "Pembayaran #{$paymentId} berstatus {$currentStatus} dan tidak dapat diverifikasi.",
+                    };
+                    throw new FinancialIntegrityException($message);
+                }
+                if (!in_array($currentStatus, ['Waiting Verification', 'Need Revision'], true)) {
+                    throw new FinancialIntegrityException("Pembayaran #{$paymentId} tidak dapat diverifikasi dari status {$currentStatus}.");
                 }
 
-                $invoiceAmount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
-                $paymentAmount = Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
-                $allFreshPayments = method_exists($this->paymentRepository, 'getAllFresh')
-                    ? $this->paymentRepository->getAllFresh()
-                    : $this->paymentRepository->getAll();
-                $verifiedBefore = (float) collect($allFreshPayments)
-                    ->where('Invoice_ID', $invoiceId)
-                    ->filter(fn ($item) => PaymentStatus::verified($item['Status'] ?? null))
-                    ->reject(fn ($item) => ($item['Payment_ID'] ?? '') === $paymentId)
-                    ->sum(fn ($item) => Money::value($item['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
-
-                if (Money::cents($verifiedBefore) + Money::cents($paymentAmount) > Money::cents($invoiceAmount)) {
-                    $remaining = max(0.0, round($invoiceAmount - $verifiedBefore, Money::SCALE));
-                    throw new Exception(
-                        "Verifikasi pembayaran #{$paymentId} ditolak karena nominal Rp "
-                        . number_format($paymentAmount, 0, ',', '.')
-                        . " melebihi sisa tagihan Rp "
-                        . number_format($remaining, 0, ',', '.')
-                        . "."
-                    );
+                $actorId = \App\Support\ActorIdentity::required();
+                $persistedInvoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
+                if ($persistedInvoiceId !== '' && $requestedInvoiceId !== '' && $persistedInvoiceId !== $requestedInvoiceId) {
+                    throw new FinancialIntegrityException("Payment #{$paymentId} berubah relasi invoice saat verifikasi.");
                 }
-                }
-            }
+                $effectiveInvoiceId = $persistedInvoiceId !== '' ? $persistedInvoiceId : $requestedInvoiceId;
 
-            $data = [
-                'Status' => $status,
-                'Verified_By' => $actorId,
-                'Verified_At' => now()->toDateTimeString(),
-                'Notes' => $notes,
-                'Updated_By' => $actorId,
-                'Updated_At' => now()->toDateTimeString()
-            ];
-
-            $res = $this->paymentRepository->update($paymentId, $data);
-            if (!$res) {
-                throw new Exception("Gagal menyimpan status pembayaran #{$paymentId}.");
-            }
-            $this->paymentRepository->clearCache();
-
-            if (!empty($payment['Student_ID'])) {
-                Cache::forget("student_billing_{$payment['Student_ID']}");
-            }
-            Cache::forget('finance_dashboard');
-            Cache::forget('dashboard_finance');
-
-            if ($status === 'Verified') {
-                try {
-                    $this->reconcileVerifiedPaymentLedger($paymentId, $explicitAccountId);
-                } catch (\Throwable $ledgerException) {
-                    // Google Sheets does not provide a cross-sheet transaction.
-                    // Never leave a payment visibly Verified when its required
-                    // income ledger could not be confirmed. Roll the payment
-                    // back to its prior review state and verify that rollback
-                    // persisted; otherwise fail loudly for manual recovery.
-                    try {
-                        $rolledBack = $this->paymentRepository->update($paymentId, [
-                            'Status' => $currentStatus,
-                            'Verified_By' => '',
-                            'Verified_At' => '',
-                            'Updated_By' => $actorId,
-                            'Updated_At' => now()->toDateTimeString(),
-                        ]);
-                        if (!$rolledBack) {
-                            throw new FinancialIntegrityException('Rollback status pembayaran gagal disimpan.');
-                        }
-                        $this->paymentRepository->clearCache();
-                        $persistedRollback = $this->freshPayment($paymentId);
-                        if (!$persistedRollback || PaymentStatus::canonical($persistedRollback['Status'] ?? null) !== $currentStatus) {
-                            throw new FinancialIntegrityException('Rollback status pembayaran tidak dapat dikonfirmasi.');
-                        }
-                    } catch (\Throwable $rollbackException) {
-                        Log::critical('finance.payment_verification_ledger_gap_requires_manual_recovery', [
-                            'payment_id' => $paymentId,
-                            'prior_status' => $currentStatus,
-                            'ledger_exception' => get_class($ledgerException),
-                            'rollback_exception' => get_class($rollbackException),
-                        ]);
-                        throw new FinancialIntegrityException(
-                            "Verifikasi pembayaran #{$paymentId} gagal dan rollback tidak dapat dikonfirmasi.",
-                            0,
-                            $rollbackException
-                        );
+                if ($status === 'Verified') {
+                    $isSelfService = $this->isSelfServicePayment($payment);
+                    if ($effectiveInvoiceId === '' && !$isSelfService) {
+                        throw new Exception("Pembayaran #{$paymentId} tidak memiliki Invoice_ID yang valid.");
                     }
 
-                    throw $ledgerException;
+                    if ($effectiveInvoiceId === '') {
+                        if ($this->studentHasOpenInvoice((string) ($payment['Student_ID'] ?? ''))) {
+                            throw new FinancialIntegrityException("Pilih invoice aktif milik siswa sebelum memverifikasi Payment #{$paymentId}.");
+                        }
+                    } else {
+                        $invoice = $this->freshInvoice($effectiveInvoiceId, app(InvoiceService::class));
+                        if (!$invoice) {
+                            throw new Exception("Tagihan #{$effectiveInvoiceId} tidak ditemukan.");
+                        }
+                        if (($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
+                            && !empty($invoice['Student_ID'])
+                            && ($payment['Student_ID'] ?? '') !== $invoice['Student_ID']) {
+                            throw new FinancialIntegrityException("Payment #{$paymentId} tidak dimiliki oleh student invoice {$effectiveInvoiceId}.");
+                        }
+
+                        $invoiceStatus = trim((string) ($invoice['Status'] ?? 'Draft'));
+                        if (in_array(strtolower($invoiceStatus), ['draft', 'cancelled', 'paid'], true)) {
+                            throw new Exception("Tagihan #{$effectiveInvoiceId} berstatus {$invoiceStatus} dan tidak dapat menerima verifikasi pembayaran.");
+                        }
+
+                        $invoiceAmount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
+                        $paymentAmount = Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
+                        $allFreshPayments = method_exists($this->paymentRepository, 'getAllFresh')
+                            ? $this->paymentRepository->getAllFresh()
+                            : $this->paymentRepository->getAll();
+                        $verifiedBefore = AcceptedPaymentCalculator::forInvoice($allFreshPayments, $effectiveInvoiceId, $paymentId);
+
+                        if (Money::cents($verifiedBefore) + Money::cents($paymentAmount) > Money::cents($invoiceAmount)) {
+                            $remaining = max(0.0, round($invoiceAmount - $verifiedBefore, Money::SCALE));
+                            throw new Exception(
+                                "Verifikasi pembayaran #{$paymentId} ditolak karena nominal Rp "
+                                .number_format($paymentAmount, 0, ',', '.')
+                                ." melebihi sisa tagihan Rp "
+                                .number_format($remaining, 0, ',', '.')
+                                .'.'
+                            );
+                        }
+                    }
                 }
 
-                try {
-                    $this->enterpriseEvent->dispatch(
-                        'FINANCE', 'VERIFY', 'PAYMENT', $paymentId, $actorId,
-                        ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
-                        ['Status' => $status, 'Notes' => $notes]
-                    );
-                } catch (\Throwable $e) {
-                    Log::error('Payment verification side effect failed after persistence', [
-                        'payment_id' => $paymentId, 'exception' => get_class($e),
-                    ]);
+                $data = [
+                    'Status' => $status,
+                    'Verified_By' => $actorId,
+                    'Verified_At' => now()->toDateTimeString(),
+                    'Notes' => $notes,
+                    'Updated_By' => $actorId,
+                    'Updated_At' => now()->toDateTimeString(),
+                ];
+                if ($status === 'Verified' && $persistedInvoiceId === '' && $effectiveInvoiceId !== '') {
+                    $data['Invoice_ID'] = $effectiveInvoiceId;
                 }
-            } elseif (in_array($status, ['Rejected', 'Need Revision'])) {
-                try {
-                    $this->enterpriseEvent->dispatch(
-                        'FINANCE', 'UPDATE', 'PAYMENT', $paymentId, $actorId,
-                        ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
-                        ['Status' => $status, 'Notes' => $notes]
-                    );
-                } catch (\Throwable $e) {
-                    Log::error('Payment status side effect failed after persistence', [
-                        'payment_id' => $paymentId, 'exception' => get_class($e),
-                    ]);
-                }
-            }
 
-            return $res;
+                $res = $this->paymentRepository->update($paymentId, $data);
+                if (!$res) {
+                    throw new Exception("Gagal menyimpan status pembayaran #{$paymentId}.");
+                }
+                $this->paymentRepository->clearCache();
+
+                if (!empty($payment['Student_ID'])) {
+                    Cache::forget("student_billing_{$payment['Student_ID']}");
+                }
+                Cache::forget('finance_dashboard');
+                Cache::forget('dashboard_finance');
+
+                if ($status === 'Verified') {
+                    try {
+                        $this->reconcileVerifiedPaymentLedger($paymentId, $explicitAccountId);
+                    } catch (\Throwable $ledgerException) {
+                        try {
+                            $rolledBack = $this->paymentRepository->update($paymentId, [
+                                'Status' => $currentStatus,
+                                'Verified_By' => '',
+                                'Verified_At' => '',
+                                'Invoice_ID' => $persistedInvoiceId,
+                                'Updated_By' => $actorId,
+                                'Updated_At' => now()->toDateTimeString(),
+                            ]);
+                            if (!$rolledBack) {
+                                throw new FinancialIntegrityException('Rollback status pembayaran gagal disimpan.');
+                            }
+                            $this->paymentRepository->clearCache();
+                            $persistedRollback = $this->freshPayment($paymentId);
+                            if (!$persistedRollback
+                                || PaymentStatus::canonical($persistedRollback['Status'] ?? null) !== $currentStatus
+                                || trim((string) ($persistedRollback['Invoice_ID'] ?? '')) !== $persistedInvoiceId) {
+                                throw new FinancialIntegrityException('Rollback pembayaran tidak dapat dikonfirmasi.');
+                            }
+                        } catch (\Throwable $rollbackException) {
+                            Log::critical('finance.payment_verification_ledger_gap_requires_manual_recovery', [
+                                'payment_id' => $paymentId,
+                                'prior_status' => $currentStatus,
+                                'ledger_exception' => get_class($ledgerException),
+                                'rollback_exception' => get_class($rollbackException),
+                            ]);
+                            throw new FinancialIntegrityException(
+                                "Verifikasi pembayaran #{$paymentId} gagal dan rollback tidak dapat dikonfirmasi.",
+                                0,
+                                $rollbackException
+                            );
+                        }
+
+                        throw $ledgerException;
+                    }
+
+                    try {
+                        $this->enterpriseEvent->dispatch(
+                            'FINANCE', 'VERIFY', 'PAYMENT', $paymentId, $actorId,
+                            ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
+                            ['Status' => $status, 'Notes' => $notes, 'Invoice_ID' => $effectiveInvoiceId]
+                        );
+                    } catch (\Throwable $e) {
+                        Log::error('Payment verification side effect failed after persistence', [
+                            'payment_id' => $paymentId, 'exception' => get_class($e),
+                        ]);
+                    }
+                } elseif (in_array($status, ['Rejected', 'Need Revision'], true)) {
+                    try {
+                        $this->enterpriseEvent->dispatch(
+                            'FINANCE', 'UPDATE', 'PAYMENT', $paymentId, $actorId,
+                            ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
+                            ['Status' => $status, 'Notes' => $notes]
+                        );
+                    } catch (\Throwable $e) {
+                        Log::error('Payment status side effect failed after persistence', [
+                            'payment_id' => $paymentId, 'exception' => get_class($e),
+                        ]);
+                    }
+                }
+
+                return $res;
             });
         } catch (\Throwable $e) {
             Log::warning('Payment verification lock or critical section failed safely', [
                 'payment_id' => $paymentId,
-                'invoice_id' => $invoiceId,
+                'invoice_id' => $lockInvoiceId,
                 'status' => $status,
                 'exception' => get_class($e),
             ]);
@@ -727,15 +728,91 @@ class PaymentService
         }
     }
 
+    public function linkVerifiedSelfServicePaymentToInvoice(string $paymentId, string $invoiceId): array
+    {
+        $this->assertFinanceMutationActor();
+        $invoiceId = trim($invoiceId);
+        if ($invoiceId === '') {
+            throw new FinancialIntegrityException('Invoice tujuan wajib dipilih.');
+        }
+
+        return Cache::lock("payment_link_invoice_{$invoiceId}", 120)->block(15, function () use ($paymentId, $invoiceId) {
+            $payment = $this->freshPayment($paymentId);
+            if (!$payment || !PaymentStatus::verified($payment['Status'] ?? null)) {
+                throw new FinancialIntegrityException("Payment #{$paymentId} harus berstatus Verified.");
+            }
+            if (!$this->isSelfServicePayment($payment)) {
+                throw new FinancialIntegrityException("Payment #{$paymentId} bukan pembayaran mandiri.");
+            }
+
+            $currentInvoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
+            if ($currentInvoiceId !== '' && $currentInvoiceId !== $invoiceId) {
+                throw new FinancialIntegrityException("Payment #{$paymentId} sudah terkait ke invoice lain.");
+            }
+            if ($currentInvoiceId === $invoiceId) {
+                return $this->reconcileVerifiedPaymentLedger($paymentId);
+            }
+
+            $invoice = $this->freshInvoice($invoiceId, app(InvoiceService::class));
+            if (!$invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+                throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak ditemukan atau tidak aktif.");
+            }
+            if (($invoice['Student_ID'] ?? '') !== ($payment['Student_ID'] ?? '')) {
+                throw new FinancialIntegrityException("Payment #{$paymentId} bukan milik siswa pada Invoice #{$invoiceId}.");
+            }
+            $invoiceStatus = strtolower(trim((string) ($invoice['Status'] ?? 'draft')));
+            if (in_array($invoiceStatus, ['draft', 'cancelled', 'paid'], true)) {
+                throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak dapat menerima pembayaran pada status {$invoice['Status']}.");
+            }
+
+            $allPayments = method_exists($this->paymentRepository, 'getAllFresh')
+                ? $this->paymentRepository->getAllFresh()
+                : $this->paymentRepository->getAll();
+            $acceptedBefore = AcceptedPaymentCalculator::forInvoice($allPayments, $invoiceId, $paymentId);
+            $paymentAmount = Money::value($payment['Amount_Paid'] ?? null, 'Nominal pembayaran', false);
+            $invoiceAmount = Money::value($invoice['Amount'] ?? null, 'Invoice Amount');
+            if (Money::cents($acceptedBefore) + Money::cents($paymentAmount) > Money::cents($invoiceAmount)) {
+                throw new FinancialIntegrityException("Payment #{$paymentId} melebihi sisa Invoice #{$invoiceId}.");
+            }
+
+            if (!$this->paymentRepository->update($paymentId, [
+                'Invoice_ID' => $invoiceId,
+                'Updated_By' => \App\Support\ActorIdentity::required(),
+                'Updated_At' => now()->toDateTimeString(),
+            ])) {
+                throw new FinancialIntegrityException("Relasi Invoice untuk Payment #{$paymentId} gagal disimpan.");
+            }
+            $this->paymentRepository->clearCache();
+
+            try {
+                $result = $this->reconcileVerifiedPaymentLedger($paymentId);
+            } catch (\Throwable $exception) {
+                $rolledBack = $this->paymentRepository->update($paymentId, [
+                    'Invoice_ID' => '',
+                    'Updated_By' => \App\Support\ActorIdentity::required(),
+                    'Updated_At' => now()->toDateTimeString(),
+                ]);
+                $this->paymentRepository->clearCache();
+                if (!$rolledBack || trim((string) (($this->freshPayment($paymentId)['Invoice_ID'] ?? ''))) !== '') {
+                    throw new FinancialIntegrityException("Rollback relasi Invoice untuk Payment #{$paymentId} gagal.", 0, $exception);
+                }
+                throw $exception;
+            }
+
+            Cache::forget("student_billing_{$payment['Student_ID']}");
+            Cache::forget('finance_dashboard');
+            Cache::forget('dashboard_finance');
+
+            return $result;
+        });
+    }
+
     protected function getVerifiedPaymentTotalForInvoice(string $invoiceId): float
     {
         $all = method_exists($this->paymentRepository, 'getAllFresh')
             ? $this->paymentRepository->getAllFresh()
             : $this->paymentRepository->getAll();
-        return (float) collect($all)
-            ->where('Invoice_ID', $invoiceId)
-            ->filter(fn ($item) => PaymentStatus::verified($item['Status'] ?? null))
-            ->sum(fn ($item) => Money::value($item['Amount_Paid'] ?? 0, 'Nominal pembayaran'));
+        return AcceptedPaymentCalculator::forInvoice($all, $invoiceId);
     }
 
     private function freshPayment(string $paymentId): ?array
@@ -820,8 +897,8 @@ class PaymentService
             if ($invoiceId === '' && !$selfService) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} tidak memiliki Invoice_ID yang valid.");
             }
-            $invoice = $selfService ? null : $this->freshInvoice($invoiceId, app(InvoiceService::class));
-            if (!$selfService && (!$invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE')) {
+            $invoice = $invoiceId !== '' ? $this->freshInvoice($invoiceId, app(InvoiceService::class)) : null;
+            if ($invoiceId !== '' && (!$invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE')) {
                 throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak ditemukan atau tidak aktif.");
             }
             $amount = Money::value($payment['Amount_Paid'] ?? null, 'Nominal pembayaran', false);
@@ -856,7 +933,7 @@ class PaymentService
                     throw new FinancialIntegrityException("Income ledger untuk Payment #{$paymentId} tidak konsisten; rekonsiliasi dihentikan.");
                 }
             } else {
-                $description = $selfService
+                $description = $invoiceId === ''
                     ? "Pembayaran mandiri terverifikasi #{$paymentId}"
                     : "Pembayaran Verifikasi Kuitansi #{$paymentId} untuk Invoice #{$invoiceId}";
                 ($this->transactionService ?? app(TransactionService::class))->create([
@@ -872,7 +949,7 @@ class PaymentService
                 ]);
             }
 
-            if (!$selfService) {
+            if ($invoiceId !== '') {
                 $verified = $this->getVerifiedPaymentTotalForInvoice($invoiceId);
                 $invoiceStatus = Money::cents($verified) >= Money::cents(Money::value($invoice['Amount'] ?? 0, 'Invoice Amount'))
                     ? 'Paid' : 'Partial Paid';
@@ -1138,6 +1215,25 @@ class PaymentService
     {
         return strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0
             || !empty($payment['Self_Service']);
+    }
+
+    private function studentHasOpenInvoice(string $studentId): bool
+    {
+        if ($studentId === '') {
+            return false;
+        }
+
+        $invoices = method_exists($this->invoiceRepository, 'getAllFresh')
+            ? $this->invoiceRepository->getAllFresh()
+            : $this->invoiceRepository->getAll();
+
+        return collect($invoices)->contains(function ($invoice) use ($studentId) {
+            $status = strtolower(trim((string) ($invoice['Status'] ?? 'draft')));
+
+            return ($invoice['Student_ID'] ?? '') === $studentId
+                && strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+                && !in_array($status, ['draft', 'cancelled', 'paid'], true);
+        });
     }
 
     private function reconcileInvoiceStatus(string $invoiceId): void
