@@ -130,6 +130,39 @@ final class IndonesianPresentation
         return self::DAYS[self::key($raw)] ?? $raw;
     }
 
+    public static function paymentMethod(mixed $value): string
+    {
+        return match (self::key((string) $value)) {
+            'cash', 'tunai' => 'Tunai',
+            'transfer', 'bank transfer' => 'Transfer Bank',
+            'qris' => 'QRIS',
+            default => 'Metode pembayaran belum teridentifikasi',
+        };
+    }
+
+    public static function paymentType(mixed $value): string
+    {
+        return match (self::key((string) $value)) {
+            'student self service' => 'Pembayaran Mandiri Siswa',
+            'student' => 'Pembayaran Siswa',
+            'company' => 'Pembayaran Perusahaan',
+            default => 'Pembayaran',
+        };
+    }
+
+    public static function paymentStatus(mixed $value): string
+    {
+        return match (self::key((string) $value)) {
+            'pending', 'waiting verification' => 'Menunggu Verifikasi',
+            'verified' => 'Terverifikasi',
+            'need revision' => 'Perlu Revisi',
+            'rejected' => 'Ditolak',
+            'cancelled' => 'Dibatalkan',
+            'reversed' => 'Dikoreksi',
+            default => 'Status pembayaran perlu diperiksa',
+        };
+    }
+
     public static function role(mixed $value, string $fallback = 'Pengguna'): string
     {
         $raw = trim((string) $value);

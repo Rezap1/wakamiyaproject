@@ -75,67 +75,7 @@ class PaymentService
 
     public function getPaymentReceiptData(string $paymentId, bool $allowPublicVerification = false): array
     {
-        $payment = $this->getById($paymentId);
-        if (!$payment) {
-            throw new Exception("Kuitansi pembayaran #{$paymentId} tidak ditemukan.");
-        }
-
-        // Public access is reserved for the signed verification endpoint.
-        $user = auth()->user();
-        if (!$allowPublicVerification) {
-            if (!$user) {
-                throw new Exception("Akses Ditolak: Identitas pengguna tidak dapat dipastikan.");
-            }
-
-            $role = $this->authenticatedRoleName($user);
-            if ($role === 'STUDENT') {
-                $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
-                if (!$student || ($payment['Student_ID'] ?? '') !== ($student['Student_ID'] ?? '')) {
-                    throw new Exception("Akses Ditolak: Kuitansi #{$paymentId} bukan milik akun Anda.");
-                }
-            } elseif (!in_array($role, ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true)) {
-                throw new Exception("Akses Ditolak: Role pengguna tidak diizinkan mengakses kuitansi.");
-            }
-        }
-
-        $invoiceService = app(InvoiceService::class);
-        $invoice = null;
-        if (!empty($payment['Invoice_ID'])) {
-            $invoice = $invoiceService->getById($payment['Invoice_ID']);
-        }
-
-        // Customer Lookup
-        $customerName = '-';
-        $customerCode = '-';
-        $customerType = !empty($payment['Company_ID']) ? 'COMPANY' : (!empty($payment['Student_ID']) ? 'STUDENT' : ($invoice['Invoice_Type'] ?? 'STUDENT'));
-
-        if ($customerType === 'STUDENT' && !empty($payment['Student_ID'])) {
-            $student = $this->studentRepository->findById($payment['Student_ID'])
-                ?: collect($this->studentRepository->fetchAll())->firstWhere('Student_ID', $payment['Student_ID']);
-            $customerName = $student['Full_Name'] ?? 'Data siswa tidak ditemukan';
-            $customerCode = $student['Student_Number'] ?? $student['NIS'] ?? '-';
-        } elseif ($customerType === 'COMPANY' && !empty($payment['Company_ID'])) {
-            $company = $this->companyRepository->findById($payment['Company_ID']);
-            $customerName = $company['Company_Name'] ?? 'Data perusahaan tidak ditemukan';
-            $customerCode = $company['Company_Code'] ?? '-';
-        } else {
-            $customerName = HumanReadableResolver::value($payment['Sender_Name'] ?? '', 'Pihak pembayar tidak teridentifikasi');
-            $customerCode = HumanReadableResolver::value($payment['Sender_Code'] ?? '', '-');
-        }
-
-        // Receiving Account Lookup
-        $receivingAccount = $this->resolvePaymentAccountDisplay($payment['Payment_Method'] ?? 'TRANSFER');
-
-        // Financial Balances Breakdown
-        $hasInvoice = is_array($invoice) && !empty($payment['Invoice_ID']);
-        $invoiceAmount = $hasInvoice ? Money::value($invoice['Amount'] ?? 0, 'Invoice Amount') : 0.0;
-        $currentPaymentAmount = Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran');
-        
-        $allPayments = collect(method_exists($this->paymentRepository, 'getAllFresh') ? $this->paymentRepository->getAllFresh() : $this->paymentRepository->getAll());
-        $totalVerifiedSoFar = $hasInvoice ? AcceptedPaymentCalculator::forInvoice($allPayments, (string) $payment['Invoice_ID']) : 0.0;
-        $prevVerified = max(0.0, round($totalVerifiedSoFar - $currentPaymentAmount, Money::SCALE));
-        $remainingBalance = max(0.0, round($invoiceAmount - $totalVerifiedSoFar, Money::SCALE));
-
+        $documentData = $this->getPaymentDocumentState($paymentId, $allowPublicVerification);
         // Public Verification URL
         $verificationUrl = \App\Helpers\PublicVerificationUrl::make('payments.verify-receipt-public', $paymentId);
 
@@ -157,28 +97,53 @@ class PaymentService
             'company' => $companyProfile['company'],
             'bank' => $companyProfile['bank'],
             'document' => $companyProfile['document'],
-            'payment' => $payment,
-            'invoice' => $invoice,
-            'customer' => [
-                'type' => $customerType,
-                'name' => $customerName,
-                'code' => $customerCode
-            ],
-            'receivingAccount' => $receivingAccount,
-            'balances' => [
-                'invoiceAmount' => $invoiceAmount,
-                'prevVerified' => $prevVerified,
-                'currentPayment' => $currentPaymentAmount,
-                'remainingBalance' => $remainingBalance
-            ],
             'verificationUrl' => $verificationUrl,
             'qrCodeSvg' => $qrCodeSvg
-        ];
+        ] + $documentData;
     }
 
     public function getReceiptDocumentData(string $paymentId, bool $allowPublicVerification = false): array
     {
         return $this->getPaymentReceiptData($paymentId, $allowPublicVerification);
+    }
+
+    public function getPaymentDocumentState(string $paymentId, bool $allowPublicVerification = false): array
+    {
+        $payments = collect($this->documentRows($this->paymentRepository, 'getAllFresh', 'getAll'));
+        $payment = $payments->firstWhere('Payment_ID', $paymentId);
+        if (!$payment || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            abort(404, 'Pembayaran tidak ditemukan.');
+        }
+        $students = collect($this->documentRows($this->studentRepository, 'fetchAllFresh', 'fetchAll'));
+        $user = auth()->user();
+        if (!$allowPublicVerification) {
+            $role = $user ? $this->authenticatedRoleName($user) : '';
+            if ($role === 'STUDENT') {
+                $student = $students->firstWhere('User_ID', $user->User_ID);
+                abort_unless($student && !empty($student['Student_ID']) && ($payment['Student_ID'] ?? '') === $student['Student_ID'], 403, 'Akses dokumen pembayaran ditolak.');
+            } else {
+                abort_unless(in_array($role, ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true), 403, 'Akses dokumen pembayaran ditolak.');
+            }
+        }
+        $classRepository = app()->bound(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)
+            ? app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)
+            : null;
+
+        $snapshot = [
+            'payments' => $payments,
+            'invoices_by_id' => collect($this->documentRows($this->invoiceRepository, 'getAllFresh', 'getAll'))->keyBy('Invoice_ID'),
+            'students_by_id' => $students->keyBy('Student_ID'),
+            'companies_by_id' => collect($this->documentRows($this->companyRepository, 'fetchAllFresh', 'fetchAll'))->keyBy('Company_ID'),
+            'classes_by_id' => $classRepository ? collect($this->documentRows($classRepository, 'fetchAllFresh', 'fetchAll'))->keyBy('Class_ID') : collect(),
+            'accounts' => $this->documentRows($this->accountRepository, 'fetchAllFresh', 'fetchAll'),
+            'transactions' => $this->documentRows($this->transactionRepository, 'fetchAllFresh', 'fetchAll'),
+        ];
+        return app(FinanceDocumentPresenter::class)->payment($payment, $snapshot);
+    }
+
+    private function documentRows(object $repository, string $fresh, string $fallback): iterable
+    {
+        return $repository->{method_exists($repository, $fresh) ? $fresh : $fallback}();
     }
 
     public function generateReceiptNumber($type = 'STUDENT')
@@ -218,19 +183,6 @@ class PaymentService
             }
             throw new FinancialIntegrityException("Tidak dapat mengalokasikan nomor receipt aman untuk {$prefix}-{$year}.");
         });
-    }
-
-    private function resolvePaymentAccountDisplay(string $paymentMethod): string
-    {
-        $code = $this->resolvePaymentAccount($paymentMethod);
-        $rows = collect($this->accountRepository->fetchAll())->where('Is_Active', '!=', 'FALSE');
-        $account = $rows->first(fn ($row) => ($row['Account_Code'] ?? '') === $code || ($row['Account_ID'] ?? '') === $code);
-        if (!$account) {
-            return 'Akun pembayaran';
-        }
-        $name = trim((string) ($account['Account_Name'] ?? ''));
-        $number = trim((string) ($account['Account_Number'] ?? $account['Account_Code'] ?? ''));
-        return trim($name . ($number !== '' ? ' (' . $number . ')' : '')) ?: 'Akun pembayaran';
     }
 
     public function resolvePaymentAccount(string $paymentMethod = 'TRANSFER', ?string $explicitAccountId = null): string

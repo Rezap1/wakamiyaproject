@@ -12,6 +12,8 @@ use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Support\Finance\Money;
+use App\Support\Finance\AcceptedPaymentCalculator;
+use App\Support\Presentation\IndonesianPresentation;
 use App\Support\Reporting\HumanReadableResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -89,6 +91,11 @@ class TransactionPresentationService
         $users = collect($this->readRows($this->userRepository, 'fetchAll'));
         $employees = collect($this->readRows($this->employeeRepository, 'fetchAll'));
 
+        $totals = AcceptedPaymentCalculator::totalsByInvoice($payments, $invoices->pluck('Invoice_ID')->all());
+        $paymentsByInvoice = $payments->groupBy('Invoice_ID');
+        $documents = app(FinanceDocumentPresenter::class);
+        $invoices = $invoices->map(fn ($invoice) => $documents->invoice($invoice, $paymentsByInvoice->get($invoice['Invoice_ID'] ?? '', collect()), $totals));
+
         return [
             'transactions' => $transactions,
             'transactions_by_id' => $transactions->keyBy('Transaction_ID'),
@@ -134,6 +141,8 @@ class TransactionPresentationService
                     'transaction_id' => $transactionId,
                     'invoice_id' => $invoiceId,
                 ]);
+            } elseif ($payment) {
+                app(FinanceDocumentPresenter::class)->assertInvoiceOwner($payment, $invoice);
             }
         }
 
@@ -210,6 +219,7 @@ class TransactionPresentationService
                 ? HumanReadableResolver::userName($verifiedBy, $snapshot['users_by_id'])
                 : 'Belum diverifikasi',
             'verified_at' => $this->dateTimeLabel($payment['Verified_At'] ?? $payment['Approved_At'] ?? ''),
+            'receipt_url' => Route::has('payments.receipt') ? route('payments.receipt', $payment['Payment_ID']) : null,
             'is_self_service' => $this->isSelfServicePayment($payment),
             'invoice_missing' => trim((string) ($payment['Invoice_ID'] ?? '')) !== '' && !$invoice,
             'invoice_optional' => trim((string) ($payment['Invoice_ID'] ?? '')) === '' && $this->isSelfServicePayment($payment),
@@ -241,7 +251,7 @@ class TransactionPresentationService
                 'label' => $selfService ? 'Pembayaran Mandiri Siswa' : $this->value($payment['Receipt_Number'] ?? '', 'Pembayaran'),
                 'official_reference' => $this->value($payment['Receipt_Number'] ?? $payment['Payment_ID'] ?? '', '-'),
                 'status_label' => $this->statusLabel($payment['Status'] ?? ''),
-                'description' => $selfService ? 'Pembayaran mandiri tanpa invoice' : 'Transaksi dari pembayaran terverifikasi',
+                'description' => empty($payment['Invoice_ID']) ? 'Pembayaran tanpa tagihan' : 'Transaksi pembayaran untuk tagihan',
                 'url' => Route::has('payments.show') ? route('payments.show', $payment['Payment_ID']) : null,
             ];
         }
@@ -249,12 +259,12 @@ class TransactionPresentationService
         if ($invoice) {
             return [
                 'type' => $referenceType,
-                'type_label' => 'Invoice',
+                'type_label' => 'Tagihan',
                 'id' => $referenceId,
-                'label' => $this->value($invoice['Invoice_Number'] ?? $invoice['Invoice_ID'] ?? '', 'Invoice'),
+                'label' => $this->value($invoice['Invoice_Number'] ?? $invoice['Invoice_ID'] ?? '', 'Tagihan'),
                 'official_reference' => $this->value($invoice['Invoice_Number'] ?? $invoice['Invoice_ID'] ?? '', '-'),
                 'status_label' => $this->statusLabel($invoice['Display_Status'] ?? $invoice['Status'] ?? ''),
-                'description' => 'Transaksi dari invoice',
+                'description' => 'Transaksi dari tagihan',
                 'url' => Route::has('invoices.show') ? route('invoices.show', $invoice['Invoice_ID']) : null,
             ];
         }
@@ -262,9 +272,9 @@ class TransactionPresentationService
         if ($payroll) {
             return [
                 'type' => $referenceType,
-                'type_label' => 'Payroll',
+                'type_label' => 'Penggajian',
                 'id' => $referenceId,
-                'label' => $this->value($payroll['Document_Number'] ?? $payroll['Payroll_ID'] ?? '', 'Payroll'),
+                'label' => $this->value($payroll['Document_Number'] ?? $payroll['Payroll_ID'] ?? '', 'Penggajian'),
                 'official_reference' => $this->value($payroll['Document_Number'] ?? $payroll['Payroll_ID'] ?? '', '-'),
                 'status_label' => $this->statusLabel($payroll['Status'] ?? ''),
                 'description' => 'Transaksi payroll',
@@ -286,31 +296,15 @@ class TransactionPresentationService
 
     private function party(?array $payment, ?array $invoice, ?array $payroll, array $transaction, array $snapshot): array
     {
-        $companyId = trim((string) ($payment['Company_ID'] ?? $invoice['Company_ID'] ?? ''));
-        if ($companyId !== '') {
+        $owner = $payment ?? $invoice;
+        if ($owner && (!empty($owner['Student_ID']) || !empty($owner['Company_ID']))) {
+            $party = HumanReadableResolver::financialParty($owner, $snapshot['students_by_id'], $snapshot['companies_by_id']);
             return [
-                'type_label' => 'Perusahaan',
-                'name' => HumanReadableResolver::companyName($companyId, $snapshot['companies_by_id']),
-                'context' => $this->value($companyId, '-'),
+                'type_label' => $party['type_label'],
+                'name' => $party['name'],
+                'context' => $party['integrity_warning'] ?? ($party['code'] !== '-' ? $party['code'] : 'Konteks pembayar tidak tersedia'),
             ];
         }
-
-        $studentId = trim((string) ($payment['Student_ID'] ?? $invoice['Student_ID'] ?? ''));
-        if ($studentId !== '') {
-            $student = $this->row($snapshot['students_by_id']->get($studentId));
-            $context = array_filter([
-                $student['Class_Name'] ?? null,
-                $student['Program_Name'] ?? null,
-                HumanReadableResolver::studentNumber($studentId, $snapshot['students_by_id']),
-            ], fn ($value) => trim((string) $value) !== '' && $value !== '-');
-
-            return [
-                'type_label' => 'Siswa',
-                'name' => HumanReadableResolver::studentName($studentId, $snapshot['students_by_id']),
-                'context' => implode(' | ', $context) ?: 'Konteks siswa tidak tersedia',
-            ];
-        }
-
         $employeeId = trim((string) ($payroll['Employee_ID'] ?? $transaction['Employee_ID'] ?? ''));
         if ($employeeId !== '') {
             return [
@@ -471,8 +465,8 @@ class TransactionPresentationService
         return match (strtolower(trim($referenceType))) {
             'payment' => 'Pembayaran',
             'paymentreversal' => 'Pembalikan Pembayaran',
-            'invoice' => 'Invoice',
-            'payroll' => 'Payroll',
+            'invoice' => 'Tagihan',
+            'payroll' => 'Penggajian',
             'adjustment' => 'Penyesuaian',
             'other', '' => 'Transaksi Manual',
             default => 'Sumber tidak dikenal',
@@ -498,29 +492,12 @@ class TransactionPresentationService
 
     private function statusLabel(mixed $status): string
     {
-        return match (strtolower(trim((string) $status))) {
-            'verified' => 'Terverifikasi',
-            'waiting verification' => 'Menunggu Verifikasi',
-            'need revision' => 'Perlu Revisi',
-            'rejected' => 'Ditolak',
-            'cancelled' => 'Dibatalkan',
-            'reversed' => 'Dikoreksi',
-            'paid' => 'Lunas',
-            'partial paid' => 'Dibayar Sebagian',
-            'waiting payment' => 'Menunggu Pembayaran',
-            'overdue' => 'Jatuh Tempo',
-            'draft' => 'Draft',
-            default => $this->value($status, '-'),
-        };
+        return IndonesianPresentation::status($status);
     }
 
     private function paymentMethodLabel(mixed $method): string
     {
-        return match (strtolower(trim((string) $method))) {
-            'cash', 'tunai' => 'Tunai',
-            'transfer', 'bank transfer', 'bank_transfer' => 'Transfer Bank',
-            default => $this->value($method, 'Metode tidak tersedia'),
-        };
+        return IndonesianPresentation::paymentMethod($method);
     }
 
     private function isSelfServicePayment(array $payment): bool

@@ -87,7 +87,34 @@ class HumanReadableResolver
             return $code . ' - ' . $name;
         }
 
-        return $name !== '' ? $name : ($code !== '' ? $code : 'Akun tidak ditemukan');
+        return $name !== '' ? $name : 'Akun tidak ditemukan';
+    }
+
+    /** Resolve ownership from persisted relations, never from payment type or sender text. */
+    public static function financialParty(array $row, $students, $companies, $classes = []): array
+    {
+        $studentId = trim((string) ($row['Student_ID'] ?? ''));
+        $companyId = trim((string) ($row['Company_ID'] ?? ''));
+        if ($studentId !== '' && $companyId !== '') {
+            throw new \App\Exceptions\FinancialIntegrityException('Relasi pembayar siswa dan perusahaan bertentangan.');
+        }
+        $record = $studentId !== '' ? self::row($students, $studentId) : self::row($companies, $companyId);
+        $name = $studentId !== '' ? self::studentName($studentId, $students) : self::companyName($companyId, $companies);
+        $missing = !$record || in_array($name, ['Data siswa tidak ditemukan', 'Data perusahaan tidak ditemukan'], true);
+        if ($missing) {
+            \Illuminate\Support\Facades\Log::warning('finance.document_identity_unresolved', [
+                'student_id' => $studentId, 'company_id' => $companyId,
+                'payment_id' => $row['Payment_ID'] ?? null, 'invoice_id' => $row['Invoice_ID'] ?? null,
+            ]);
+        }
+        return [
+            'type' => $studentId !== '' ? 'STUDENT' : ($companyId !== '' ? 'COMPANY' : ''),
+            'type_label' => $studentId !== '' ? 'Siswa' : ($companyId !== '' ? 'Perusahaan' : 'Pembayar'),
+            'name' => $missing ? ($studentId !== '' ? 'Data siswa tidak ditemukan' : 'Identitas pembayar perlu diperiksa') : $name,
+            'code' => $studentId !== '' ? self::studentNumber($studentId, $students) : self::value($record['Company_Code'] ?? '', '-'),
+            'class_name' => !empty($record['Class_ID']) ? self::className($record['Class_ID'], $classes) : '-',
+            'integrity_warning' => $missing ? 'Identitas pembayar belum dapat diverifikasi. Hubungi bagian keuangan.' : null,
+        ];
     }
 
     public static function scheduleLabel(?string $id, $schedulesById, $classesById, $subjectsById, $teachersById = null): string

@@ -12,6 +12,8 @@ use App\Helpers\ReportHelper;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\UserResolverHelper;
 use App\Support\Reporting\HumanReadableResolver;
+use App\Support\Presentation\IndonesianPresentation;
+use App\Support\Finance\Money;
 
 class PaymentController extends Controller
 {
@@ -48,27 +50,25 @@ class PaymentController extends Controller
             ->keyBy('Company_ID');
         
         return [
-            'moduleName' => 'Pembayaran (Payments)',
+            'moduleName' => 'Pembayaran',
             'data' => collect(array_values($payments->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['No. Pembayaran', 'No. Kwitansi', 'Tagihan (Invoice)', 'Siswa / Pembayar', 'Tanggal', 'Metode', 'Jumlah (Rp)', 'Status'],
+            'headers' => ['No. Pembayaran', 'No. Kwitansi', 'Nomor Tagihan', 'Siswa / Pembayar', 'Tanggal', 'Metode', 'Jumlah (Rp)', 'Status'],
             'mapRow' => function($row) use ($studentsById, $companiesById) {
-                $payerName = trim((string) ($row['Company_ID'] ?? '')) !== ''
-                    ? HumanReadableResolver::companyName($row['Company_ID'] ?? '', $companiesById)
-                    : HumanReadableResolver::studentName($row['Student_ID'] ?? '', $studentsById);
+                $payerName = HumanReadableResolver::financialParty($row, $studentsById, $companiesById)['name'];
                 return [
                     $row['Payment_ID'] ?? '-',
                     $row['Receipt_Number'] ?? '-',
                     $row['Invoice_ID'] ?? '-',
                     $payerName,
-                    isset($row['Payment_Date']) ? \Carbon\Carbon::parse($row['Payment_Date'])->format('d M Y') : '-',
-                    $row['Payment_Method'] ?? 'Bank Transfer',
-                    'Rp ' . number_format((float)($row['Amount_Paid'] ?? $row['Amount'] ?? 0), 0, ',', '.'),
-                    $row['Status'] ?? 'VERIFIED'
+                    IndonesianPresentation::date($row['Payment_Date'] ?? null),
+                    IndonesianPresentation::paymentMethod($row['Payment_Method'] ?? null),
+                    'Rp ' . number_format(Money::value($row['Amount_Paid'] ?? 0), 0, ',', '.'),
+                    IndonesianPresentation::paymentStatus($row['Status'] ?? null)
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Pembayaran Terverifikasi</td><td>: '.$payments->count().'</td></tr>'
+            'summary' => '<tr><td>Jumlah Data Pembayaran</td><td>: '.$payments->count().'</td></tr>'
         ];
     }
 
@@ -171,33 +171,22 @@ class PaymentController extends Controller
 
     public function show($id)
     {
-        $payment = $this->paymentService->getById($id);
-        if (!$payment) {
-            return redirect()->route('payments.index')->with('error', 'Pembayaran tidak ditemukan.');
-        }
-
-        $payment['student_name'] = UserResolverHelper::getName($payment['Student_ID'] ?? '');
+        $documentData = $this->paymentService->getPaymentDocumentState($id);
+        $payment = $documentData['payment'];
+        $invoice = $documentData['invoice'];
         $payment['Created_By_Name'] = UserResolverHelper::getName($payment['Created_By'] ?? '');
-        $invoice = null;
-        if (!empty($payment['Invoice_ID'])) {
-            $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
-        }
         $candidateInvoices = $this->candidateInvoicesFor($payment);
 
         $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
 
-        return view('finance.payments.show', compact('payment', 'invoice', 'candidateInvoices', 'paymentEvidence'));
+        return view('finance.payments.show', compact('payment', 'invoice', 'candidateInvoices', 'paymentEvidence', 'documentData'));
     }
 
     public function downloadReceiptPdf($id)
     {
         try {
             $docData = $this->paymentService->getReceiptDocumentData($id);
-            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
-            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
-            $docData['payment']['student_name'] = trim((string) ($docData['payment']['Company_ID'] ?? '')) !== ''
-                ? HumanReadableResolver::companyName($docData['payment']['Company_ID'] ?? '', $companiesById)
-                : HumanReadableResolver::studentName($docData['payment']['Student_ID'] ?? '', $studentsById);
+
             
             return ReportHelper::export(
                 'pdf',
@@ -209,6 +198,8 @@ class PaymentController extends Controller
                 null,
                 false
             );
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
         }
@@ -218,11 +209,7 @@ class PaymentController extends Controller
     {
         try {
             $docData = $this->paymentService->getReceiptDocumentData($id, true);
-            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
-            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
-            $docData['payment']['student_name'] = trim((string) ($docData['payment']['Company_ID'] ?? '')) !== ''
-                ? HumanReadableResolver::companyName($docData['payment']['Company_ID'] ?? '', $companiesById)
-                : HumanReadableResolver::studentName($docData['payment']['Student_ID'] ?? '', $studentsById);
+
             return view('finance.payments.verify_receipt_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $this->safeExceptionMessage($e, 'Bukti pembayaran tidak ditemukan atau tidak tersedia.'));
@@ -318,18 +305,7 @@ class PaymentController extends Controller
 
     public function edit($id)
     {
-        $payment = $this->paymentService->getById($id);
-        if (!$payment) {
-            return redirect()->route('payments.index')->with('error', 'Pembayaran tidak ditemukan.');
-        }
-        $invoice = null;
-        if (!empty($payment['Invoice_ID'])) {
-            $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($payment['Invoice_ID']);
-        }
-        $candidateInvoices = $this->candidateInvoicesFor($payment);
-        $paymentEvidence = $this->transactionPresentationService->paymentEvidence($payment);
-
-        return view('finance.payments.show', compact('payment', 'invoice', 'candidateInvoices', 'paymentEvidence'));
+        return $this->show($id);
     }
 
     public function update(UpdatePaymentRequest $request, $id)

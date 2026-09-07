@@ -21,6 +21,9 @@
         :breadcrumbs="['Dasbor' => route('dashboard'), 'Keuangan' => '#', 'Riwayat Transaksi' => route('transactions.index'), 'Detail' => '#']"
     >
         <x-slot:actions>
+            @if(($canAccessPayments ?? false) && !empty($tx['payment']['receipt_url']))
+                <a href="{{ $tx['payment']['receipt_url'] }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white">Unduh Dokumen Pembayaran</a>
+            @endif
             <a href="{{ route('transactions.index') }}" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
                 Kembali ke Riwayat Transaksi
             </a>

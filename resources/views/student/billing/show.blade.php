@@ -111,7 +111,7 @@
                                         </a>
                                     @endif
                                     @if(($pay['Status'] ?? '') === 'Verified')
-                                        <a href="{{ route('payments.receipt', $pay['Payment_ID']) }}" target="_blank" class="text-xs font-bold text-blue-600 hover:underline">
+                                        <a href="{{ route('student.billing.payment-receipt', $pay['Payment_ID']) }}" target="_blank" class="inline-flex min-h-11 items-center text-xs font-bold text-blue-600 hover:underline">
                                             📄 Kuitansi PDF
                                         </a>
                                     @endif

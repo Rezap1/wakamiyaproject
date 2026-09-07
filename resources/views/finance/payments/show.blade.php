@@ -11,11 +11,12 @@
         'Need Revision' => 'purple',
         default => 'slate',
     };
+    $documentData = $documentData ?? [];
     $amountPaid = (float)($payment['Amount_Paid'] ?? 0);
     $invoiceAmount = (float)($invoice['Amount'] ?? 0);
     $remainingAmount = (float)($invoice['Remaining_Amount'] ?? $invoiceAmount);
-    $isOverpaying = ($amountPaid > $remainingAmount && $remainingAmount > 0);
-    $studentName = $payment['student_name'] ?? \App\Helpers\UserResolverHelper::getName($payment['Student_ID'] ?? '');
+    $isOverpaying = $documentData['isOverpaying'] ?? false;
+    $studentName = $payment['student_name'] ?? 'Identitas pembayar perlu diperiksa';
     $receiptLabel = trim((string) ($payment['Receipt_Number'] ?? '')) !== '' ? $payment['Receipt_Number'] : 'Kuitansi Pembayaran';
     $invoiceLabel = trim((string) ($payment['Invoice_ID'] ?? '')) !== '' ? 'Tagihan tersedia' : 'Tanpa invoice';
 @endphp
@@ -29,6 +30,7 @@
         :breadcrumbs="['Dasbor' => route('dashboard.finance'), 'Keuangan' => '#', 'Pembayaran' => route('payments.index'), 'Verifikasi' => '#']"
     >
         <x-slot:actions>
+            <a href="{{ route('payments.receipt', $payment['Payment_ID']) }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white">Unduh Dokumen Pembayaran</a>
             @if($status !== 'Verified')
                 <x-universal.action-button action="delete" url="{{ route('payments.destroy', $payment['Payment_ID']) }}" />
             @endif
@@ -41,7 +43,7 @@
             </div>
             <div>
                 <p class="text-[11px] font-bold text-slate-400 uppercase">Metode Pembayaran</p>
-                <p class="text-sm font-bold text-slate-800 mt-0.5 uppercase">{{ $payment['Payment_Method'] ?? 'TRANSFER' }}</p>
+                <p class="text-sm font-bold text-slate-800 mt-0.5">{{ \App\Support\Presentation\IndonesianPresentation::paymentMethod($payment['Payment_Method'] ?? null) }}</p>
             </div>
             <div>
                 <p class="text-[11px] font-bold text-slate-400 uppercase">Tanggal Bayar</p>
@@ -50,12 +52,18 @@
             <div>
                 <p class="text-[11px] font-bold text-slate-400 uppercase">Status Verifikasi</p>
                 <p class="text-sm font-medium text-slate-800 mt-0.5">
-                    <x-badge color="{{ $statusColor }}">{{ $status }}</x-badge>
+                    <x-badge color="{{ $statusColor }}">{{ \App\Support\Presentation\IndonesianPresentation::paymentStatus($status) }}</x-badge>
                 </p>
             </div>
         </x-slot:sidebarContent>
 
         <x-slot:information>
+            @if(!empty($documentData['integrityWarning']))
+                <p class="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{{ $documentData['integrityWarning'] }}</p>
+            @endif
+            @if(!empty($documentData['invoiceMissing']))
+                <p class="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Tagihan terkait tidak ditemukan. Dokumen pembayaran tetap ditampilkan sebagai arsip audit.</p>
+            @endif
             <div class="space-y-8">
                 @if(in_array($status, ['Waiting Verification', 'Need Revision'], true))
                     <form method="POST" action="{{ route('payments.verify', $payment['Payment_ID']) }}" class="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
@@ -118,11 +126,11 @@
 
                 <div class="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Informasi Kwitansi & Transaksi</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                        <div>
-                            <span class="text-slate-500 font-medium">No. Kwitansi Resmi:</span>
-                            <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Receipt_Number'] ?? '-' }}</span>
-                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div>
+                                <span class="text-slate-500 font-medium">No. Kwitansi Resmi:</span>
+                                <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Receipt_Number'] ?? '-' }}</span>
+                            </div>
                         <div>
                             <span class="text-slate-500 font-medium">Nomor Referensi Internal:</span>
                             <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Payment_ID'] ?? '-' }}</span>
@@ -131,14 +139,14 @@
                             <span class="text-slate-500 font-medium">Nomor Tagihan:</span>
                             <span class="font-mono font-bold text-blue-600 block mt-0.5">{{ trim((string) ($payment['Invoice_ID'] ?? '')) !== '' ? $payment['Invoice_ID'] : 'Tidak terkait invoice' }}</span>
                         </div>
-                        <div>
-                            <span class="text-slate-500 font-medium">Metode Pembayaran:</span>
-                            <span class="font-bold text-slate-800 block mt-0.5">{{ $payment['Payment_Method'] ?? '-' }}</span>
-                        </div>
-                        <div>
-                            <span class="text-slate-500 font-medium">Nomor Referensi:</span>
-                            <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Reference_Number'] ?? '-' }}</span>
-                        </div>
+                            <div>
+                                <span class="text-slate-500 font-medium">Metode Pembayaran:</span>
+                                <span class="font-bold text-slate-800 block mt-0.5">{{ \App\Support\Presentation\IndonesianPresentation::paymentMethod($payment['Payment_Method'] ?? null) }}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 font-medium">Nomor Referensi:</span>
+                                <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Reference_Number'] ?? '-' }}</span>
+                            </div>
                     </div>
                 </div>
 

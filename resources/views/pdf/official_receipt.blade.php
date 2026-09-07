@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>KWITANSI PEMBAYARAN - {{ $payment['Payment_ID'] ?? '' }}</title>
+    <title>{{ $documentTitle }} - {{ $payment['Payment_ID'] ?? '' }}</title>
     <style>
         @page {
             size: A4 portrait;
@@ -171,28 +171,35 @@
     @include('pdf.components.header', ['company' => $company ?? $companyProfile['company'] ?? []])
 
     <div style="text-align: right; margin-top: -15px; margin-bottom: 15px;">
-        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">KWITANSI RESMI</div>
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">{{ $documentTitle }}</div>
         <div style="font-size: 11px; font-weight: 700; color: #2563eb; font-family: monospace;">NO: {{ $payment['Payment_ID'] ?? '-' }}</div>
     </div>
+
+    @if($integrityWarning)
+        <p style="padding: 10px; border: 1px solid #b45309; color: #92400e;">! Perlu pemeriksaan: {{ $integrityWarning }}</p>
+    @endif
 
     <!-- INFORMATION CARDS -->
     <table class="info-grid">
         <tr>
             <td>
                 <div class="card">
-                    <div class="card-title">Informasi Penerima / Pelanggan</div>
+                    <div class="card-title">Identitas Pembayar</div>
                     <div class="field-row">
-                        <span class="field-label">Nama Pihak:</span>
+                        <span class="field-label">Nama {{ $customer['type_label'] }}:</span>
                         <span class="field-value">{{ $customer['name'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
-                        <span class="field-label">Nomor Pihak:</span>
+                        <span class="field-label">Nomor Resmi:</span>
                         <span class="field-value">{{ $customer['code'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Tipe Pihak:</span>
-                        <span class="field-value">{{ $customer['type'] ?? 'STUDENT' }}</span>
+                        <span class="field-value">{{ $customer['type_label'] }}</span>
                     </div>
+                    @if(($customer['class_name'] ?? '-') !== '-')
+                        <div class="field-row"><span class="field-label">Kelas:</span><span class="field-value">{{ $customer['class_name'] }}</span></div>
+                    @endif
                 </div>
             </td>
             <td>
@@ -204,15 +211,15 @@
                     </div>
                     <div class="field-row">
                         <span class="field-label">Metode Bayar:</span>
-                        <span class="field-value">{{ match (strtolower($payment['Payment_Method'] ?? 'transfer')) { 'cash', 'tunai' => 'Tunai', 'transfer', 'bank transfer', 'bank_transfer' => 'Transfer Bank', default => 'Metode pembayaran' } }}</span>
+                        <span class="field-value">{{ $paymentMethodLabel }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Akun Penerima:</span>
-                        <span class="field-value">{{ $receivingAccount ?? '102' }}</span>
+                        <span class="field-value">{{ $receivingAccount }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Status Verifikasi:</span>
-                        <span class="badge-verified">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Verified') }}</span>
+                        <span class="badge-verified">{{ $paymentStatusLabel }}</span>
                     </div>
                 </div>
             </td>
@@ -241,14 +248,18 @@
             </tr>
             <tr>
                 <td>Akumulasi Pembayaran Sebelumnya (Terverifikasi)</td>
-                <td style="text-align: right; color: #475569;">Rp {{ number_format($balances['prevVerified'] ?? 0, 0, ',', '.') }}</td>
+                <td style="text-align: right; color: #475569;">{{ $balances['prevVerified'] === null ? 'Urutan pembayaran belum dapat dipastikan' : 'Rp ' . number_format($balances['prevVerified'], 0, ',', '.') }}</td>
             </tr>
             <tr style="background: #f0fdf4;">
-                <td><strong>JUMLAH PEMBAYARAN KUITANSI INI</strong></td>
+                <td><strong>PEMBAYARAN INI ({{ $paymentStatusLabel }})</strong></td>
                 <td style="text-align: right;" class="amount-highlight">Rp {{ number_format($balances['currentPayment'] ?? 0, 0, ',', '.') }}</td>
             </tr>
             <tr>
-                <td><strong>Sisa Piutang Tagihan Terkini (Remaining Balance)</strong></td>
+                <td>Total Telah Dibayar (Terverifikasi, Terkini)</td>
+                <td style="text-align: right; font-weight: bold;">Rp {{ number_format((float) ($balances['acceptedPaid'] ?? 0), 0, ',', '.') }}</td>
+            </tr>
+            <tr>
+                <td><strong>Sisa Tagihan Terkini</strong></td>
                 <td style="text-align: right; font-weight: bold; color: {{ ($balances['remainingBalance'] ?? 0) > 0 ? '#b91c1c' : '#15803d' }};">
                     Rp {{ number_format($balances['remainingBalance'] ?? 0, 0, ',', '.') }}
                 </td>
@@ -257,10 +268,10 @@
     </table>
     @else
     <div class="card" style="margin-bottom: 20px;">
-        <div class="card-title">Informasi Pembayaran Mandiri</div>
-        <div class="field-row"><span class="field-label">Jenis:</span><span class="field-value">Pembayaran Mandiri Siswa</span></div>
+        <div class="card-title">Pembayaran Tanpa Tagihan</div>
+        <div class="field-row"><span class="field-label">Jenis:</span><span class="field-value">{{ $paymentTypeLabel }}</span></div>
         <div class="field-row"><span class="field-label">Nominal Pembayaran:</span><span class="field-value">Rp {{ number_format($balances['currentPayment'] ?? 0, 0, ',', '.') }}</span></div>
-        <div class="field-row"><span class="field-label">Status:</span><span class="field-value">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Waiting Verification') }}</span></div>
+        <div class="field-row"><span class="field-label">Status:</span><span class="field-value">{{ $paymentStatusLabel }}</span></div>
     </div>
     @endif
 
@@ -269,7 +280,7 @@
         'document' => $document ?? $companyProfile['document'] ?? [],
         'verificationUrl' => $verificationUrl ?? null,
         'qrCodeSvg' => $qrCodeSvg ?? null,
-        'notice' => 'Dokumen ini merupakan Kuitansi Resmi yang diterbitkan secara elektronik oleh ' . ($company['name'] ?? 'Wakamiya Management System (WMS)') . '. Kuitansi ini sah tanpa memerlukan tanda tangan basah dan dilindungi oleh sistem verifikasi QR Code terenkripsi.'
+        'notice' => 'Dokumen menampilkan status pembayaran saat diterbitkan. Pelunasan hanya berasal dari pembayaran terverifikasi yang dialokasikan ke tagihan terkait. Periksa status terkini melalui tautan verifikasi.'
     ])
 
 </body>
