@@ -204,7 +204,7 @@
                     </div>
                     <div class="field-row">
                         <span class="field-label">Metode Bayar:</span>
-                        <span class="field-value" style="text-transform: uppercase;">{{ $payment['Payment_Method'] ?? 'TRANSFER' }}</span>
+                        <span class="field-value">{{ match (strtolower($payment['Payment_Method'] ?? 'transfer')) { 'cash', 'tunai' => 'Tunai', 'transfer', 'bank transfer', 'bank_transfer' => 'Transfer Bank', default => 'Metode pembayaran' } }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Akun Penerima:</span>
@@ -212,13 +212,14 @@
                     </div>
                     <div class="field-row">
                         <span class="field-label">Status Verifikasi:</span>
-                        <span class="badge-verified">TERVERIFIKASI / LUNAS</span>
+                        <span class="badge-verified">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Verified') }}</span>
                     </div>
                 </div>
             </td>
         </tr>
     </table>
 
+    @if(!empty($payment['Invoice_ID']) && !empty($invoice))
     <!-- INVOICE REFERENCE SUMMARY -->
     <div style="margin-bottom: 10px;">
         <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Referensi Tagihan:</span>
@@ -254,6 +255,14 @@
             </tr>
         </tbody>
     </table>
+    @else
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-title">Informasi Pembayaran Mandiri</div>
+        <div class="field-row"><span class="field-label">Jenis:</span><span class="field-value">Pembayaran Mandiri Siswa</span></div>
+        <div class="field-row"><span class="field-label">Nominal Pembayaran:</span><span class="field-value">Rp {{ number_format($balances['currentPayment'] ?? 0, 0, ',', '.') }}</span></div>
+        <div class="field-row"><span class="field-label">Status:</span><span class="field-value">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Waiting Verification') }}</span></div>
+    </div>
+    @endif
 
     <!-- SHARED OFFICIAL PDF FOOTER (H8.5 / H8.7) -->
     @include('pdf.components.footer', [

@@ -107,10 +107,11 @@ class PaymentService
         // Customer Lookup
         $customerName = '-';
         $customerCode = '-';
-        $customerType = $payment['Payment_Type'] ?? ($invoice['Invoice_Type'] ?? 'STUDENT');
+        $customerType = !empty($payment['Company_ID']) ? 'COMPANY' : (!empty($payment['Student_ID']) ? 'STUDENT' : ($invoice['Invoice_Type'] ?? 'STUDENT'));
 
         if ($customerType === 'STUDENT' && !empty($payment['Student_ID'])) {
-            $student = $this->studentRepository->findById($payment['Student_ID']);
+            $student = $this->studentRepository->findById($payment['Student_ID'])
+                ?: collect($this->studentRepository->fetchAll())->firstWhere('Student_ID', $payment['Student_ID']);
             $customerName = $student['Full_Name'] ?? 'Data siswa tidak ditemukan';
             $customerCode = $student['Student_Number'] ?? $student['NIS'] ?? '-';
         } elseif ($customerType === 'COMPANY' && !empty($payment['Company_ID'])) {
@@ -118,19 +119,20 @@ class PaymentService
             $customerName = $company['Company_Name'] ?? 'Data perusahaan tidak ditemukan';
             $customerCode = $company['Company_Code'] ?? '-';
         } else {
-            $customerName = HumanReadableResolver::value($payment['Sender_Name'] ?? '', 'Pelanggan tidak ditemukan');
+            $customerName = HumanReadableResolver::value($payment['Sender_Name'] ?? '', 'Pihak pembayar tidak teridentifikasi');
             $customerCode = HumanReadableResolver::value($payment['Sender_Code'] ?? '', '-');
         }
 
         // Receiving Account Lookup
-        $receivingAccount = $this->resolvePaymentAccount($payment['Payment_Method'] ?? 'TRANSFER');
+        $receivingAccount = $this->resolvePaymentAccountDisplay($payment['Payment_Method'] ?? 'TRANSFER');
 
         // Financial Balances Breakdown
-        $invoiceAmount = Money::value($invoice['Amount'] ?? 0, 'Invoice Amount');
+        $hasInvoice = is_array($invoice) && !empty($payment['Invoice_ID']);
+        $invoiceAmount = $hasInvoice ? Money::value($invoice['Amount'] ?? 0, 'Invoice Amount') : 0.0;
         $currentPaymentAmount = Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran');
         
         $allPayments = collect(method_exists($this->paymentRepository, 'getAllFresh') ? $this->paymentRepository->getAllFresh() : $this->paymentRepository->getAll());
-        $totalVerifiedSoFar = AcceptedPaymentCalculator::forInvoice($allPayments, (string) ($payment['Invoice_ID'] ?? ''));
+        $totalVerifiedSoFar = $hasInvoice ? AcceptedPaymentCalculator::forInvoice($allPayments, (string) $payment['Invoice_ID']) : 0.0;
         $prevVerified = max(0.0, round($totalVerifiedSoFar - $currentPaymentAmount, Money::SCALE));
         $remainingBalance = max(0.0, round($invoiceAmount - $totalVerifiedSoFar, Money::SCALE));
 
@@ -216,6 +218,19 @@ class PaymentService
             }
             throw new FinancialIntegrityException("Tidak dapat mengalokasikan nomor receipt aman untuk {$prefix}-{$year}.");
         });
+    }
+
+    private function resolvePaymentAccountDisplay(string $paymentMethod): string
+    {
+        $code = $this->resolvePaymentAccount($paymentMethod);
+        $rows = collect($this->accountRepository->fetchAll())->where('Is_Active', '!=', 'FALSE');
+        $account = $rows->first(fn ($row) => ($row['Account_Code'] ?? '') === $code || ($row['Account_ID'] ?? '') === $code);
+        if (!$account) {
+            return 'Akun pembayaran';
+        }
+        $name = trim((string) ($account['Account_Name'] ?? ''));
+        $number = trim((string) ($account['Account_Number'] ?? $account['Account_Code'] ?? ''));
+        return trim($name . ($number !== '' ? ' (' . $number . ')' : '')) ?: 'Akun pembayaran';
     }
 
     public function resolvePaymentAccount(string $paymentMethod = 'TRANSFER', ?string $explicitAccountId = null): string
