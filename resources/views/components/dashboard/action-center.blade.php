@@ -1,4 +1,4 @@
-@props(['title', 'description', 'kpi' => [], 'quickActions' => [], 'reminders' => [], 'recentActivities' => []])
+@props(['title', 'description', 'kpi' => [], 'quickActions' => [], 'reminders' => [], 'recentActivities' => [], 'showSalaryCard' => true])
 
 <div class="space-y-8">
     
@@ -9,14 +9,14 @@
             <p class="text-sm font-medium text-slate-500 mt-2">{{ $description }}</p>
         </div>
         <div class="text-sm font-bold text-slate-400 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-            {{ \App\Helpers\DateHelper::format(now(), 'l, j F Y') }} | Pusat Aksi Utama
+            {{ \App\Helpers\DateHelper::format(now(), 'l, j F Y') }} | Pusat aksi utama
         </div>
     </div>
 
     <!-- KPI Cards (Row 1) -->
         @if(count($kpi) > 0)
     @php
-        $showGaji = !in_array('Gaji Bulan Ini', array_column($kpi, 'title')) && !request()->routeIs('dashboard.student');
+        $showGaji = $showSalaryCard && !in_array('Gaji Bulan Ini', array_column($kpi, 'title')) && !request()->routeIs('dashboard.student');
         $totalCards = count($kpi) + ($showGaji ? 1 : 0);
         $gridClass = match($totalCards) {
             1 => 'lg:grid-cols-1',
@@ -58,7 +58,6 @@
             @endif
         @endforeach
         
-        <!-- Dynamic Gaji Saya Card for non-teachers who use action-center -->
         <!-- Dynamic Gaji Saya Card for non-teachers who use action-center -->
         @if($showGaji)
             @php 
@@ -118,12 +117,15 @@
                 @if(count($reminders) > 0)
                     <div class="space-y-3">
                         @foreach($reminders as $reminder)
+                            @php
+                                $displayReminderTitle = \App\Support\Presentation\IndonesianPresentation::financeReminderTitle($reminder['title'] ?? '');
+                            @endphp
                             <div class="flex items-start gap-4 p-4 rounded-xl border border-amber-100 bg-amber-50/50 hover:bg-amber-50 transition-colors">
                                 <div class="bg-amber-100 text-amber-600 p-2 rounded-lg shrink-0 mt-0.5">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                                 </div>
                                 <div>
-                                    <h5 class="text-sm font-bold text-slate-800">{{ $reminder['title'] }}</h5>
+                                    <h5 class="text-sm font-bold text-slate-800">{{ $displayReminderTitle }}</h5>
                                     <p class="text-xs text-slate-600 mt-1">{{ $reminder['description'] }}</p>
                                     @if(isset($reminder['action_url']))
                                         <a href="{{ $reminder['action_url'] }}" class="inline-block mt-2 text-xs font-bold text-blue-600 hover:text-blue-800">Tindak Lanjuti &rarr;</a>
@@ -165,7 +167,7 @@
                                     'PAY' => 'Pembayaran',
                                     'VERIFY' => 'Verifikasi',
                                     'PUBLISH' => 'Menerbitkan',
-                                    'LOGIN' => 'Login',
+                                    'LOGIN' => 'Masuk',
                                 ];
                                 $displayTitle = $actionMap[strtoupper($rawTitle)] ?? ($actionMap[$rawTitle] ?? str_replace('_', ' ', $rawTitle));
                                 
@@ -176,7 +178,9 @@
                                     'FINANCE' => 'Keuangan',
                                     'HR' => 'SDM',
                                     'ACADEMIC' => 'Akademik',
-                                    'MARKETING' => 'Marketing',
+                                    'MARKETING' => 'Pemasaran',
+                                    'FINANCE_TRANSACTION' => 'Transaksi Keuangan',
+                                    'ACCOUNT' => 'Akun',
                                     'STUDENT' => 'Siswa',
                                     'TEACHER' => 'Guru',
                                     'EMPLOYEE' => 'Pegawai',
@@ -207,6 +211,8 @@
                                 } else {
                                     $displayDesc = $rawDesc;
                                 }
+                                $displayTitle = \App\Support\Presentation\IndonesianPresentation::activityAction($rawTitle);
+                                $displayDesc = \App\Support\Presentation\IndonesianPresentation::activityDescription($activity['description'] ?? $rawDesc);
                             @endphp
                             <div class="relative">
                                 <div class="absolute -left-6 bg-white w-5 h-5 rounded-full border-2 border-emerald-500 flex items-center justify-center">

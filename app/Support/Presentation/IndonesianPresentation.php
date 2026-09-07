@@ -120,6 +120,43 @@ final class IndonesianPresentation
         'not graduated' => 'Belum Lulus',
     ];
 
+    private const ACTIVITY_ACTIONS = [
+        'create' => 'Membuat Data',
+        'update' => 'Memperbarui Data',
+        'delete' => 'Menghapus Data',
+        'generate invoice' => 'Membuat Tagihan',
+        'pay' => 'Pembayaran',
+        'verify' => 'Verifikasi',
+        'publish' => 'Menerbitkan',
+        'login' => 'Masuk',
+        'logout' => 'Keluar',
+        'approve' => 'Menyetujui',
+        'reject' => 'Menolak',
+    ];
+
+    private const ACTIVITY_MODULES = [
+        'finance' => 'Keuangan',
+        'finance transaction' => 'Transaksi Keuangan',
+        'invoice' => 'Tagihan',
+        'payment' => 'Pembayaran',
+        'account' => 'Akun',
+        'hr' => 'SDM',
+        'academic' => 'Akademik',
+        'marketing' => 'Pemasaran',
+        'student' => 'Siswa',
+        'teacher' => 'Guru',
+        'employee' => 'Pegawai',
+        'document' => 'Dokumen',
+        'system' => 'Sistem',
+        'user' => 'Pengguna',
+        'activity log' => 'Log Aktivitas',
+    ];
+
+    private const FINANCE_REMINDER_TITLES = [
+        'payment verification needed' => 'Verifikasi Pembayaran Diperlukan',
+        'invoice overdue' => 'Tagihan Jatuh Tempo',
+    ];
+
     public static function day(mixed $value, string $fallback = '-'): string
     {
         $raw = trim((string) $value);
@@ -219,6 +256,80 @@ final class IndonesianPresentation
             ?? self::ROLES[$key]
             ?? self::LABELS[$key]
             ?? null;
+    }
+
+    public static function financeReminderTitle(mixed $value, string $fallback = '-'): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return $fallback;
+        }
+
+        return self::FINANCE_REMINDER_TITLES[self::key($raw)] ?? $raw;
+    }
+
+    public static function activityAction(mixed $value, string $fallback = 'Aktivitas'): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return $fallback;
+        }
+
+        return self::ACTIVITY_ACTIONS[self::key($raw)] ?? str_replace('_', ' ', $raw);
+    }
+
+    public static function activityModule(mixed $value, string $fallback = 'Aktivitas'): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return $fallback;
+        }
+
+        return self::ACTIVITY_MODULES[self::key($raw)] ?? str_replace('_', ' ', $raw);
+    }
+
+    public static function activityDescription(mixed $value): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return '-';
+        }
+
+        $normalized = str_replace('â€”', '—', $raw);
+        $parts = preg_split('/\s*—\s*/u', $normalized, 2);
+        if (!is_array($parts) || count($parts) < 2) {
+            $parts = preg_split('/\s*-\s*/u', $normalized, 2) ?: [$normalized];
+        }
+
+        $module = trim((string) ($parts[0] ?? ''));
+        $detail = trim((string) ($parts[1] ?? ''));
+
+        return self::activityModule($module) . ' — ' . self::activityDetail($detail);
+    }
+
+    private static function activityDetail(string $detail): string
+    {
+        $detail = trim($detail);
+        if ($detail === '') {
+            return '-';
+        }
+
+        $key = self::key($detail);
+        if ($key === 'generated' || $key === 'aktivitas generate invoice') {
+            return 'Tagihan berhasil dibuat otomatis';
+        }
+
+        if (preg_match('/^Aktivitas\s+([A-Za-z_]+)\s+pada\s+(.+)$/u', $detail, $matches) === 1) {
+            $action = self::activityAction($matches[1]);
+            return $action . ' pada ' . trim($matches[2]);
+        }
+
+        if (preg_match('/^([A-Za-z_]+)\s+pada\s+(.+)$/u', $detail, $matches) === 1) {
+            $action = self::activityAction($matches[1]);
+            return $action . ' pada ' . trim($matches[2]);
+        }
+
+        return $detail;
     }
 
     public static function date(mixed $value, string $format = 'j F Y', string $fallback = '-'): string

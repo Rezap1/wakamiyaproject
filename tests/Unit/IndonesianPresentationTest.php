@@ -21,4 +21,13 @@ class IndonesianPresentationTest extends TestCase
     {
         $this->assertSame('Sabtu, 5 September 2026', IndonesianPresentation::date('2026-09-05', 'l, j F Y'));
     }
+
+    public function test_finance_dashboard_labels_and_activity_text_are_localized(): void
+    {
+        $this->assertSame('Verifikasi Pembayaran Diperlukan', IndonesianPresentation::financeReminderTitle('Payment Verification Needed'));
+        $this->assertSame('Tagihan Jatuh Tempo', IndonesianPresentation::financeReminderTitle('Invoice Overdue'));
+        $this->assertSame('Masuk', IndonesianPresentation::activityAction('LOGIN'));
+        $this->assertSame('Pemasaran', IndonesianPresentation::activityModule('MARKETING'));
+        $this->assertSame('Keuangan — Masuk pada USR-FINANCE', IndonesianPresentation::activityDescription('FINANCE â€” Aktivitas LOGIN pada USR-FINANCE'));
+    }
 }

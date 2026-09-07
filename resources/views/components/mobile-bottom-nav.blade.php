@@ -38,7 +38,7 @@
         ];
     } elseif ($role === 'FINANCE') {
         $items = [
-            ['label' => 'Dashboard', 'route' => 'dashboard.finance', 'icon' => 'home', 'active' => request()->routeIs('dashboard.finance')],
+            ['label' => 'Dasbor', 'route' => 'dashboard.finance', 'icon' => 'home', 'active' => request()->routeIs('dashboard.finance')],
             ['label' => 'Transaksi', 'route' => 'transactions.index', 'icon' => 'switch-horizontal', 'active' => request()->routeIs('transactions.*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
             ['label' => 'Invoice', 'route' => 'invoices.index', 'icon' => 'document-duplicate', 'active' => request()->routeIs('invoices.*')],
