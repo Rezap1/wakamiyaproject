@@ -103,6 +103,12 @@ body {
   gap: 1rem;
 }
 
+@media (min-width: 1024px) {
+  .wms-mobile-dashboard {
+    display: none;
+  }
+}
+
 .wms-mobile-greeting {
   display: flex;
   min-width: 0;

@@ -82,6 +82,9 @@ class FinalGlobalMobileUiHardeningTest extends TestCase
         $this->assertStringContainsString('grid-template-columns: repeat(2, minmax(0, 1fr))', $css);
         $this->assertStringContainsString('env(safe-area-inset-bottom', $css);
         $this->assertStringContainsString('.wms-modal-open', $css);
+        $this->assertStringContainsString('@media (min-width: 1024px)', $css);
+        $this->assertStringContainsString('.wms-mobile-dashboard', $css);
+        $this->assertStringContainsString('display: none', $css);
         $this->assertStringNotContainsString('body { overflow-x: auto', $css);
     }
 
