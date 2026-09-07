@@ -105,8 +105,8 @@
                     @php
                         $availability = app(\App\Services\Core\PermanentQrService::class)->getAvailabilityStatus($qr);
                         $state = $availability['state'] ?? 'INACTIVE';
-                        $activeFrom = !empty($qr['ACTIVE_FROM']) ? \Carbon\Carbon::parse($qr['ACTIVE_FROM'])->format('Y-m-d\TH:i') : '';
-                        $activeUntil = !empty($qr['ACTIVE_UNTIL']) ? \Carbon\Carbon::parse($qr['ACTIVE_UNTIL'])->format('Y-m-d\TH:i') : '';
+                        $activeFrom = !empty($qr['ACTIVE_FROM']) ? \App\Helpers\DateHelper::format($qr['ACTIVE_FROM'], 'Y-m-d\TH:i') : '';
+                        $activeUntil = !empty($qr['ACTIVE_UNTIL']) ? \App\Helpers\DateHelper::format($qr['ACTIVE_UNTIL'], 'Y-m-d\TH:i') : '';
                     @endphp
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="px-6 py-4 font-bold text-slate-800">{{ $qr['LABEL'] ?? '-' }}</td>
@@ -124,11 +124,11 @@
                                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ACTIVE
                                 </span>
                             @elseif($state === 'SCHEDULED')
-                                <span class="px-2.5 py-1 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px]">SCHEDULED</span>
+                                <span class="px-2.5 py-1 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px]">TERJADWAL</span>
                             @elseif($state === 'EXPIRED')
                                 <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-bold text-[10px]">EXPIRED</span>
                             @else
-                                <span class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-[10px]">INACTIVE</span>
+                                <span class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-[10px]">TIDAK AKTIF</span>
                             @endif
                             <div class="text-[10px] text-slate-400 mt-1 max-w-[180px]">{{ $availability['message'] ?? '' }}</div>
                         </td>

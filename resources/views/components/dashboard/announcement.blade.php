@@ -35,7 +35,7 @@
                 <p class="text-[12px] font-bold text-slate-800">{{ $announcement['title'] ?? '' }}</p>
             </div>
             <p class="text-[11px] text-slate-500 ml-10">{{ $announcement['content'] ?? '' }}</p>
-            <p class="text-[10px] text-slate-400 font-medium ml-10 mt-1">{{ $announcement['date'] ?? \Carbon\Carbon::now()->format('d M Y') }}</p>
+            <p class="text-[10px] text-slate-400 font-medium ml-10 mt-1">{{ $announcement['date'] ?? \App\Helpers\DateHelper::format(now(), 'd M Y') }}</p>
         </div>
     @empty
         <div class="flex flex-col items-center justify-center py-12 text-slate-400 h-full">

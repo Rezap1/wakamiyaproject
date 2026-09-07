@@ -132,12 +132,12 @@
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                    <p class="text-sm font-medium text-slate-800 mt-1">{{ $company['Created_At'] ? \Carbon\Carbon::parse($company['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                    <p class="text-sm font-medium text-slate-800 mt-1">{{ $company['Created_At'] ? \App\Helpers\DateHelper::format($company['Created_At'], 'd M Y, H:i') : '-' }}</p>
                     <p class="text-xs font-medium text-slate-500 mt-1">Oleh: {{ $company['Created_By'] ?? 'Sistem' }}</p>
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase">Data Diupdate</p>
-                    <p class="text-sm font-medium text-slate-800 mt-1">{{ $company['Updated_At'] ? \Carbon\Carbon::parse($company['Updated_At'])->format('d M Y, H:i') : '-' }}</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase">Data Diperbarui</p>
+                    <p class="text-sm font-medium text-slate-800 mt-1">{{ $company['Updated_At'] ? \App\Helpers\DateHelper::format($company['Updated_At'], 'd M Y, H:i') : '-' }}</p>
                     <p class="text-xs font-medium text-slate-500 mt-1">Oleh: {{ $company['Updated_By'] ?? 'Sistem' }}</p>
                 </div>
             </div>

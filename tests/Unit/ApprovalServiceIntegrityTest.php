@@ -61,7 +61,7 @@ class ApprovalServiceIntegrityTest extends TestCase
             'Submit',
             'Draft',
             'Waiting Approval',
-            'Submitted for approval.',
+            'Diajukan untuk persetujuan.',
             'USR-DIRECTOR'
         );
 

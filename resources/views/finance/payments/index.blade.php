@@ -86,7 +86,7 @@
                 <td class="px-6 py-4 text-center font-black text-slate-800 text-sm">Rp {{ number_format((float)($item['Amount_Paid'] ?? 0), 0, ',', '.') }}</td>
                 <td class="px-6 py-4 text-center">
                     @if(!empty($item['Payment_Date']))
-                        <div class="text-xs font-bold text-slate-700">{{ \Carbon\Carbon::parse($item['Payment_Date'])->format('d M Y') }}</div>
+                        <div class="text-xs font-bold text-slate-700">{{ \App\Helpers\DateHelper::format($item['Payment_Date'], 'd M Y') }}</div>
                     @else
                         <span class="text-xs text-slate-400">-</span>
                     @endif

@@ -72,7 +72,7 @@ class ApprovalService
         }
         $this->repo->clearCache();
 
-        $this->historyService->createHistory($data['Approval_ID'], $wfId, 'Submit', 'Draft', 'Waiting Approval', 'Submitted for approval.', $actorId);
+        $this->historyService->createHistory($data['Approval_ID'], $wfId, 'Submit', 'Draft', 'Waiting Approval', 'Diajukan untuk persetujuan.', $actorId);
         try { app(\App\Services\Core\AuditLogService::class)->log('Workflow', 'Submit_Approval', $referenceType, $referenceId, null, $data['Approval_ID']); } catch(\Exception $e) {}
         
         $this->enterpriseEvent->dispatch(
@@ -91,7 +91,7 @@ class ApprovalService
 
     public function approve($id, $userEmail, $remarks = '') {
         $app = $this->getById($id);
-        if(!$app) throw new \Exception("Approval not found");
+        if(!$app) throw new \Exception('Pengajuan persetujuan tidak ditemukan.');
 
         $oldStatus = trim((string) ($app['Status'] ?? ''));
         if ($oldStatus !== 'Waiting Approval') {
@@ -130,7 +130,7 @@ class ApprovalService
 
     public function reject($id, $userEmail, $remarks = '') {
         $app = $this->getById($id);
-        if(!$app) throw new \Exception("Approval not found");
+        if(!$app) throw new \Exception('Pengajuan persetujuan tidak ditemukan.');
 
         $oldStatus = trim((string) ($app['Status'] ?? ''));
         if ($oldStatus !== 'Waiting Approval') {

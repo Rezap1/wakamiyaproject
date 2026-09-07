@@ -10,7 +10,7 @@
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
                     <h3 class="font-bold text-slate-800">Informasi Permintaan</h3>
-                    <span class="px-2 py-1 bg-amber-50 text-amber-600 text-xs font-bold rounded uppercase tracking-widest">{{ $approval['Status'] ?? 'Menunggu' }}</span>
+                    <span class="px-2 py-1 bg-amber-50 text-amber-600 text-xs font-bold rounded uppercase tracking-widest">{{ \App\Support\Presentation\IndonesianPresentation::status($approval['Status'] ?? null, 'Menunggu') }}</span>
                 </div>
                 
                 <table class="w-full text-sm">
@@ -51,9 +51,9 @@
                         <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
                             <div class="flex items-center justify-between mb-1">
                                 <span class="font-bold text-slate-800 text-sm">{{ $h['Action'] ?? 'Pembaruan' }}</span>
-                                <span class="text-[10px] font-bold text-slate-400">{{ \Carbon\Carbon::parse($h['Created_At'])->format('d M H:i') }}</span>
+                                <span class="text-[10px] font-bold text-slate-400">{{ \App\Helpers\DateHelper::format($h['Created_At'], 'd M H:i') }}</span>
                             </div>
-                            <p class="text-xs text-slate-500 mt-1">Status berubah dari <span class="font-semibold">{{ $h['Old_Status'] ?? '-' }}</span> menjadi <span class="font-semibold">{{ $h['New_Status'] ?? '-' }}</span></p>
+                            <p class="text-xs text-slate-500 mt-1">Status berubah dari <span class="font-semibold">{{ \App\Support\Presentation\IndonesianPresentation::status($h['Old_Status'] ?? null) }}</span> menjadi <span class="font-semibold">{{ \App\Support\Presentation\IndonesianPresentation::status($h['New_Status'] ?? null) }}</span></p>
                             <p class="text-xs text-slate-500 mt-1">Oleh: <span class="font-semibold">{{ $h['Performed_By'] ?? '-' }}</span></p>
                             @if(!empty($h['Remarks']))
                                 <div class="mt-2 p-2 bg-slate-50 rounded text-xs italic text-slate-600 border border-slate-200">"{{ $h['Remarks'] }}"</div>

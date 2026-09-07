@@ -30,11 +30,11 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Mulai</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">{{ \Carbon\Carbon::parse($batch['Start_Date'])->format('d M Y') }}</p>
+                            <p class="text-sm font-bold text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($batch['Start_Date'], 'd M Y') }}</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Selesai</p>
-                            <p class="text-sm font-bold text-slate-800 mt-1">{{ \Carbon\Carbon::parse($batch['End_Date'])->format('d M Y') }}</p>
+                            <p class="text-sm font-bold text-slate-800 mt-1">{{ \App\Helpers\DateHelper::format($batch['End_Date'], 'd M Y') }}</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Status Angkatan</p>
@@ -72,12 +72,12 @@
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($batch['Created_At']) ? \Carbon\Carbon::parse($batch['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($batch['Created_At']) ? \App\Helpers\DateHelper::format($batch['Created_At'], 'd M Y, H:i') : '-' }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($batch['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($batch['Updated_At']) ? \Carbon\Carbon::parse($batch['Updated_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($batch['Updated_At']) ? \App\Helpers\DateHelper::format($batch['Updated_At'], 'd M Y, H:i') : '-' }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ $batch['Updated_By'] ?? 'Sistem' }}</p>
                     </div>
                 </div>

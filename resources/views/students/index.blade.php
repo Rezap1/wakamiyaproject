@@ -72,7 +72,7 @@
                                         <p class="text-sm font-bold text-slate-800 truncate">{{ $student['Full_Name'] ?? '-' }}</p>
                                         <p class="text-[11px] text-slate-500 font-mono">{{ $student['Student_Number'] ?? $student['Student_ID'] ?? '-' }}</p>
                                     </div>
-                                    <span class="text-[11px] font-bold text-slate-500 shrink-0">{{ $student['Enrollment_Status'] ?? '-' }}</span>
+                                    <span class="text-[11px] font-bold text-slate-500 shrink-0">{{ \App\Support\Presentation\IndonesianPresentation::status($student['Enrollment_Status'] ?? null) }}</span>
                                 </a>
                             @endforeach
                         </div>
@@ -125,7 +125,7 @@
             </td>
             <td class="px-6 py-4">
                 <div class="text-xs text-slate-500">
-                    {{ isset($student['Registration_Date']) && $student['Registration_Date'] ? \Carbon\Carbon::parse($student['Registration_Date'])->format('d M Y') : (isset($student['Created_At']) && $student['Created_At'] ? \Carbon\Carbon::parse($student['Created_At'])->format('d M Y') : '-') }}
+                    {{ isset($student['Registration_Date']) && $student['Registration_Date'] ? \App\Helpers\DateHelper::format($student['Registration_Date'], 'd M Y') : (isset($student['Created_At']) && $student['Created_At'] ? \App\Helpers\DateHelper::format($student['Created_At'], 'd M Y') : '-') }}
                 </div>
             </td>
             <td class="px-6 py-4">

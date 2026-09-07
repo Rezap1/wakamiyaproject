@@ -57,7 +57,7 @@
             <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
                 <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">1. Saldo Awal (Opening)</p>
                 <p class="text-lg font-black text-slate-800">Rp {{ number_format($opening_balance, 0, ',', '.') }}</p>
-                <p class="text-[10px] text-slate-400">Sebelum {{ \Carbon\Carbon::parse($start_date)->format('d M Y') }}</p>
+                <p class="text-[10px] text-slate-400">Sebelum {{ \App\Helpers\DateHelper::format($start_date, 'd M Y') }}</p>
             </div>
 
             <!-- 2. Total Income -->
@@ -87,7 +87,7 @@
             <div class="bg-slate-900 p-4 rounded-2xl shadow-md text-white space-y-1">
                 <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">5. Saldo Akhir (Closing)</p>
                 <p class="text-lg font-black text-emerald-400">Rp {{ number_format($closing_balance, 0, ',', '.') }}</p>
-                <p class="text-[10px] text-slate-400">Per {{ \Carbon\Carbon::parse($end_date)->format('d M Y') }}</p>
+                <p class="text-[10px] text-slate-400">Per {{ \App\Helpers\DateHelper::format($end_date, 'd M Y') }}</p>
             </div>
         </div>
 
@@ -108,7 +108,7 @@
                 @endphp
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-4 text-sm font-bold text-slate-800">
-                        {{ !empty($trx['Transaction_Date']) ? \Carbon\Carbon::parse($trx['Transaction_Date'])->format('d M Y') : '-' }}
+                        {{ !empty($trx['Transaction_Date']) ? \App\Helpers\DateHelper::format($trx['Transaction_Date'], 'd M Y') : '-' }}
                     </td>
                     <td class="px-6 py-4 font-mono font-bold text-slate-700 text-sm">
                         {{ $trx['Account_ID'] ?? '-' }}

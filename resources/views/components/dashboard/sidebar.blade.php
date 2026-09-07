@@ -3,16 +3,16 @@
 @php
     $logoUrl = $companyProfile['company']['logo_url'] ?? asset('img/logo.png.jpeg');
     $companyName = $companyProfile['company']['name'] ?? 'WAKAMIYA';
-    $tagline = $companyProfile['company']['tagline'] ?? 'MANAGEMENT SYSTEM';
+    $tagline = $companyProfile['company']['tagline'] ?? 'SISTEM MANAJEMEN';
     
     // Centralized MASTER Menu Mapping (De-duplicated)
     $masterMenus = [
         ['group' => 'DASHBOARD', 'items' => [
-            ['label' => 'Dashboard Utama', 'route' => 'dashboard.administrator', 'active_route' => 'dashboard.administrator', 'icon' => 'dashboard'],
-            ['label' => 'HR Dashboard', 'route' => 'dashboard.hr', 'active_route' => 'dashboard.hr', 'icon' => 'dashboard'],
-            ['label' => 'Academic Dashboard', 'route' => 'dashboard.academic', 'active_route' => 'dashboard.academic', 'icon' => 'dashboard'],
-            ['label' => 'Finance Dashboard', 'route' => 'dashboard.finance', 'active_route' => 'dashboard.finance', 'icon' => 'dashboard'],
-            ['label' => 'Marketing Dashboard', 'route' => 'dashboard.marketing', 'active_route' => 'dashboard.marketing', 'icon' => 'dashboard'],
+            ['label' => 'Dasbor Utama', 'route' => 'dashboard.administrator', 'active_route' => 'dashboard.administrator', 'icon' => 'dashboard'],
+            ['label' => 'Dasbor SDM', 'route' => 'dashboard.hr', 'active_route' => 'dashboard.hr', 'icon' => 'dashboard'],
+            ['label' => 'Dasbor Akademik', 'route' => 'dashboard.academic', 'active_route' => 'dashboard.academic', 'icon' => 'dashboard'],
+            ['label' => 'Dasbor Keuangan', 'route' => 'dashboard.finance', 'active_route' => 'dashboard.finance', 'icon' => 'dashboard'],
+            ['label' => 'Dasbor Pemasaran', 'route' => 'dashboard.marketing', 'active_route' => 'dashboard.marketing', 'icon' => 'dashboard'],
         ]],
         ['group' => 'OPERASIONAL', 'items' => [
             ['label' => 'Kotak Persetujuan', 'route' => 'approvals.index', 'active_route' => 'approvals.*', 'icon' => 'inbox'],
@@ -29,15 +29,15 @@
             ['label' => 'Mata Pelajaran', 'route' => 'subjects.index', 'active_route' => 'subjects.*', 'icon' => 'library'],
             ['label' => 'Jadwal Kelas', 'route' => 'schedules.index', 'active_route' => 'schedules.*', 'icon' => 'calendar'],
             ['label' => 'Presensi Akademik', 'route' => 'attendances.index', 'active_route' => 'attendances.*', 'icon' => 'clock'],
-            ['label' => 'Review Pengajuan', 'route' => 'academic.attendance.requests.index', 'active_route' => 'academic.attendance.requests.*', 'icon' => 'clipboard-check'],
+            ['label' => 'Tinjau Pengajuan', 'route' => 'academic.attendance.requests.index', 'active_route' => 'academic.attendance.requests.*', 'icon' => 'clipboard-check'],
         ]],
         ['group' => 'FINANCE', 'items' => [
             ['label' => 'Master Akun', 'route' => 'accounts.index', 'active_route' => 'accounts.*', 'icon' => 'collection'],
             ['label' => 'Transaksi', 'route' => 'transactions.index', 'active_route' => 'transactions.*', 'icon' => 'switch-horizontal'],
-            ['label' => 'Tagihan (Invoice)', 'route' => 'invoices.index', 'active_route' => 'invoices.*', 'icon' => 'document-duplicate'],
+            ['label' => 'Tagihan', 'route' => 'invoices.index', 'active_route' => 'invoices.*', 'icon' => 'document-duplicate'],
             ['label' => 'Pembayaran', 'route' => 'payments.index', 'active_route' => 'payments.*', 'icon' => 'credit-card'],
-            ['label' => 'Payroll & Gaji', 'route' => 'payrolls.index', 'active_route' => 'payrolls.*', 'icon' => 'cash'],
-            ['label' => 'Laporan Finance', 'route' => 'reports.finance.index', 'active_route' => 'reports.finance.*', 'icon' => 'chart-bar'],
+            ['label' => 'Penggajian & Gaji', 'route' => 'payrolls.index', 'active_route' => 'payrolls.*', 'icon' => 'cash'],
+            ['label' => 'Laporan Keuangan', 'route' => 'reports.finance.index', 'active_route' => 'reports.finance.*', 'icon' => 'chart-bar'],
         ]],
         ['group' => 'MARKETING', 'items' => [
             ['label' => 'Perusahaan', 'route' => 'companies.index', 'active_route' => 'companies.*', 'icon' => 'office-building'],
@@ -45,9 +45,9 @@
         ]],
         ['group' => 'SYSTEM', 'items' => [
             ['label' => 'Pengaturan Sistem', 'route' => 'settings.index', 'active_route' => 'settings.*', 'icon' => 'cog'],
-            ['label' => 'Pengaturan HR', 'route' => 'hr.settings.index', 'active_route' => 'hr.settings.*', 'icon' => 'cog'],
+            ['label' => 'Pengaturan SDM', 'route' => 'hr.settings.index', 'active_route' => 'hr.settings.*', 'icon' => 'cog'],
             ['label' => 'Pengaturan Akademik', 'route' => 'academic.settings.index', 'active_route' => 'academic.settings.*', 'icon' => 'cog'],
-            ['label' => 'Pengaturan Finance', 'route' => 'finance.settings.index', 'active_route' => 'finance.settings.*', 'icon' => 'cog'],
+            ['label' => 'Pengaturan Keuangan', 'route' => 'finance.settings.index', 'active_route' => 'finance.settings.*', 'icon' => 'cog'],
             ['label' => 'Pengguna', 'route' => 'users.index', 'active_route' => 'users.*', 'icon' => 'users'],
             ['label' => 'Jabatan', 'route' => 'positions.index', 'active_route' => 'positions.*', 'icon' => 'badge-check'],
             ['label' => 'Departemen', 'route' => 'departments.index', 'active_route' => 'departments.*', 'icon' => 'office-building'],
@@ -55,9 +55,9 @@
             ['label' => 'Jejak Audit', 'route' => 'audit.index', 'active_route' => 'audit.*', 'icon' => 'clipboard-list'],
         ]],
         ['group' => 'TOOLS', 'items' => [
-            ['label' => 'Smart Generator Pro', 'route' => 'finance.smart_generator.index', 'active_route' => 'finance.smart_generator.*', 'icon' => 'sparkles'],
+            ['label' => 'Pembuat Dokumen', 'route' => 'finance.smart_generator.index', 'active_route' => 'finance.smart_generator.*', 'icon' => 'sparkles'],
             ['label' => 'QR Presensi', 'route' => 'attendance.qr.index', 'active_route' => 'attendance.qr.*', 'icon' => 'qrcode'],
-            ['label' => 'Scan QR Pegawai', 'route' => 'hr.attendance.qr.scanner', 'active_route' => 'hr.attendance.qr.*', 'icon' => 'camera'],
+            ['label' => 'Pindai QR Pegawai', 'route' => 'hr.attendance.qr.scanner', 'active_route' => 'hr.attendance.qr.*', 'icon' => 'camera'],
         ]],
     ];
 
@@ -117,7 +117,7 @@
             @foreach($masterMenus as $group)
                 <div class="mb-2">
                     <button @click="toggleGroup('{{ $group['group'] }}'); if(!expanded) expanded = true;" class="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider group transition-colors">
-                        <span x-show="expanded" x-transition>{{ $group['group'] }}</span>
+                        <span x-show="expanded" x-transition>{{ ['DASHBOARD' => 'DASBOR', 'FINANCE' => 'KEUANGAN', 'MARKETING' => 'PEMASARAN', 'SYSTEM' => 'SISTEM', 'TOOLS' => 'ALAT'][$group['group']] ?? $group['group'] }}</span>
                         <div x-show="!expanded" class="w-full text-center" title="{{ $group['group'] }}">
                             <div class="h-0.5 w-4 bg-slate-600 rounded mx-auto group-hover:bg-slate-400"></div>
                         </div>
@@ -151,29 +151,29 @@
             <!-- NON-MASTER ROLES (Original Structure with Alpine visibility wrappers) -->
             <div class="space-y-1">
                 @if($userRole === 'ADMINISTRATOR')
-                    <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.*') }}" icon="clock">Monitoring Pegawai</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Pembuat Dokumen</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.qr.index') }}" active="{{ request()->routeIs('attendance.qr.*') }}" icon="qrcode">QR Presensi</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('settings.index') }}" active="{{ request()->routeIs('settings.*') }}" icon="cog">Pengaturan Sistem</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('users.index') }}" active="{{ request()->routeIs('users.*') }}" icon="users">Pengguna</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('modules.index') }}" active="{{ request()->routeIs('modules.*') }}" icon="puzzle-piece">Modul</x-sidebar.nav-link>
                 @elseif($userRole === 'HR')
-                    <x-sidebar.nav-link href="{{ route('dashboard.hr') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.hr') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('employees.index') }}" active="{{ request()->routeIs('employees.*') }}" icon="identification">Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.*') }}" icon="clock">Monitoring Kehadiran</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.qr.index') }}" active="{{ request()->routeIs('attendance.qr.*') }}" icon="qrcode">QR Presensi</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('payrolls.index') }}" active="{{ request()->routeIs('payrolls.*') }}" icon="cash">Payroll & Gaji</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('payrolls.index') }}" active="{{ request()->routeIs('payrolls.*') }}" icon="cash">Penggajian & Gaji</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('departments.index') }}" active="{{ request()->routeIs('departments.*') }}" icon="office-building">Departemen</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('positions.index') }}" active="{{ request()->routeIs('positions.*') }}" icon="badge-check">Jabatan</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.settings.index') }}" active="{{ request()->routeIs('hr.settings.*') }}" icon="cog">Pengaturan HR</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.settings.index') }}" active="{{ request()->routeIs('hr.settings.*') }}" icon="cog">Pengaturan SDM</x-sidebar.nav-link>
                 @elseif($userRole === 'ACADEMIC')
-                    <x-sidebar.nav-link href="{{ route('dashboard.academic') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.academic') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <div class="px-3 pt-4 pb-1"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Data Akademik</span></div>
                     <x-sidebar.nav-link href="{{ route('students.index') }}" active="{{ request()->routeIs('students.*') }}" icon="academic-cap">Siswa</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teachers.index') }}" active="{{ request()->routeIs('teachers.*') }}" icon="user-group">Pengajar</x-sidebar.nav-link>
@@ -185,35 +185,35 @@
                     <x-sidebar.nav-link href="{{ route('schedules.index') }}" active="{{ request()->routeIs('schedules.*') }}" icon="calendar">Jadwal Kelas</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.index') }}" active="{{ request()->routeIs('attendances.*') }}" icon="clock">Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.qr.index') }}" active="{{ request()->routeIs('attendance.qr.*') }}" icon="qrcode">QR Presensi</x-sidebar.nav-link>
-                    <div class="px-3 pt-4 pb-1"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Review</span></div>
-                    <x-sidebar.nav-link href="{{ route('academic.attendance.requests.index') }}" active="{{ request()->routeIs('academic.attendance.requests.*') }}" icon="clipboard-check">Review Pengajuan</x-sidebar.nav-link>
+                    <div class="px-3 pt-4 pb-1"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tinjauan</span></div>
+                    <x-sidebar.nav-link href="{{ route('academic.attendance.requests.index') }}" active="{{ request()->routeIs('academic.attendance.requests.*') }}" icon="clipboard-check">Tinjau Pengajuan</x-sidebar.nav-link>
                     <div class="px-3 pt-4 pb-1"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Lainnya</span></div>
                     <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('academic.settings.index') }}" active="{{ request()->routeIs('academic.settings.*') }}" icon="cog">Pengaturan Akademik</x-sidebar.nav-link>
                 @elseif($userRole === 'MARKETING')
-                    <x-sidebar.nav-link href="{{ route('dashboard.marketing') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.marketing') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('companies.index') }}" active="{{ request()->routeIs('companies.*') }}" icon="office-building">Perusahaan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
                 @elseif($userRole === 'FINANCE')
-                    <x-sidebar.nav-link href="{{ route('dashboard.finance') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.finance') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('accounts.index') }}" active="{{ request()->routeIs('accounts.*') }}" icon="collection">Master Akun</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('transactions.index') }}" active="{{ request()->routeIs('transactions.*') }}" icon="switch-horizontal">Transaksi</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('invoices.index') }}" active="{{ request()->routeIs('invoices.*') }}" icon="document-duplicate">Tagihan (Invoice)</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Smart Generator Pro</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('invoices.index') }}" active="{{ request()->routeIs('invoices.*') }}" icon="document-duplicate">Tagihan</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Pembuat Dokumen</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('payments.index') }}" active="{{ request()->routeIs('payments.*') }}" icon="credit-card">Pembayaran</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Finance</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('finance.settings.index') }}" active="{{ request()->routeIs('finance.settings.*') }}" icon="cog">Pengaturan Finance</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Keuangan</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('finance.settings.index') }}" active="{{ request()->routeIs('finance.settings.*') }}" icon="cog">Pengaturan Keuangan</x-sidebar.nav-link>
                 @elseif($userRole === 'DIRECTOR')
-                    <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('transactions.index') }}" active="{{ request()->routeIs('transactions.*') }}" icon="switch-horizontal">Transaksi</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Finance</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Keuangan</x-sidebar.nav-link>
                 @elseif($userRole === 'TEACHER')
-                    <x-sidebar.nav-link href="{{ route('dashboard.teacher') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.teacher') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Pengajaran</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.schedule') }}" active="{{ request()->routeIs('teacher.workspace.schedule') }}" icon="calendar">Jadwal Mengajar</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.classes') }}" active="{{ request()->routeIs('teacher.workspace.classes') || request()->routeIs('teacher.workspace.classes.*') }}" icon="view-boards">Kelas Saya</x-sidebar.nav-link>
@@ -227,7 +227,7 @@
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.calendar') }}" active="{{ request()->routeIs('teacher.workspace.calendar') }}" icon="calendar">Kalender Akademik</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.reports') }}" active="{{ request()->routeIs('teacher.workspace.reports') }}" icon="chart-bar">Laporan Pengajaran</x-sidebar.nav-link>
                 @elseif($userRole === 'STUDENT')
-                    <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">Presensi QR</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
@@ -240,8 +240,8 @@
                     <x-sidebar.nav-link href="{{ route('student.attendance.requests.index') }}" active="{{ request()->routeIs('student.attendance.requests.*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
                 @elseif($userRole === 'EMPLOYEE')
-                    <x-sidebar.nav-link href="{{ route('dashboard') }}" active="{{ request()->routeIs('dashboard') }}" icon="dashboard">Dashboard</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Scan QR Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('dashboard') }}" active="{{ request()->routeIs('dashboard') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('dashboard.personal-payroll') }}" active="{{ request()->routeIs('dashboard.personal-payroll*') }}" icon="cash">Slip Gaji Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('profile.index') }}" active="{{ request()->routeIs('profile.*') }}" icon="users">Profil</x-sidebar.nav-link>
@@ -260,13 +260,13 @@
                @click="if(window.innerWidth < 1024) window.dispatchEvent(new CustomEvent('close-sidebar-mobile'))">
                 <x-user-avatar class="w-9 h-9 shrink-0" text-size="text-xs" />
                 <div x-show="expanded" class="min-w-0 flex-1">
-                    <p class="text-xs font-extrabold text-white truncate">{{ auth()->user()->Username ?? auth()->user()->Name ?? 'User' }}</p>
-                    <p class="text-[10px] font-bold uppercase tracking-wider truncate" style="color: var(--color-primary, #38BDF8);">{{ auth()->user()->Role ?? $userRole }}</p>
+                    <p class="text-xs font-extrabold text-white truncate">{{ auth()->user()->Username ?? auth()->user()->Name ?? 'Pengguna' }}</p>
+                    <p class="text-[10px] font-bold uppercase tracking-wider truncate" style="color: var(--color-primary, #38BDF8);">{{ \App\Support\Presentation\IndonesianPresentation::role(auth()->user()->Role ?? $userRole) }}</p>
                 </div>
             </a>
             <form action="{{ route('logout') }}" method="POST" class="shrink-0">
                 @csrf
-                <button type="submit" class="p-2 text-rose-400 hover:text-white hover:bg-rose-600/30 rounded-xl transition-all flex items-center justify-center min-h-[36px] min-w-[36px]" title="Keluar / Logout">
+                <button type="submit" class="p-2 text-rose-400 hover:text-white hover:bg-rose-600/30 rounded-xl transition-all flex items-center justify-center min-h-[36px] min-w-[36px]" title="Keluar">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>

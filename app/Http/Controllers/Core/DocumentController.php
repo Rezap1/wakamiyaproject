@@ -66,7 +66,7 @@ class DocumentController extends Controller
             $data = $request->except('_token');
             $data['Generated_By'] = $this->authenticatedActor();
             $this->docService->GenerateDocument($data);
-            return redirect()->route('documents.index')->with('success', 'Document generated successfully.');
+            return redirect()->route('documents.index')->with('success', 'Dokumen berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }

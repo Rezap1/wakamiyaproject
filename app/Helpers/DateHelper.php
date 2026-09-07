@@ -2,6 +2,7 @@
 
 namespace App\Helpers;
 
+use App\Support\Presentation\IndonesianPresentation;
 use Carbon\Carbon;
 
 class DateHelper
@@ -32,7 +33,6 @@ class DateHelper
      */
     public static function format($date, string $format = 'd M Y, H:i', string $fallback = '-'): string
     {
-        $parsed = static::parse($date);
-        return $parsed ? $parsed->format($format) : $fallback;
+        return IndonesianPresentation::date($date, $format, $fallback);
     }
 }

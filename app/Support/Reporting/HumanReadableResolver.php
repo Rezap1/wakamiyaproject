@@ -2,6 +2,7 @@
 
 namespace App\Support\Reporting;
 
+use App\Support\Presentation\IndonesianPresentation;
 use Illuminate\Support\Collection;
 
 class HumanReadableResolver
@@ -148,7 +149,7 @@ class HumanReadableResolver
 
     private static function scheduleTime(array $schedule): string
     {
-        $day = trim((string) ($schedule['Day_Of_Week'] ?? $schedule['Day'] ?? ''));
+        $day = IndonesianPresentation::day($schedule['Day_Of_Week'] ?? $schedule['Day'] ?? '', '');
         $start = trim((string) ($schedule['Start_Time'] ?? ''));
         $end = trim((string) ($schedule['End_Time'] ?? ''));
         $time = trim($start . ($start !== '' || $end !== '' ? ' - ' : '') . $end);

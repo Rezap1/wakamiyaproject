@@ -1,4 +1,4 @@
-@props(['userRole', 'header' => 'Dashboard'])
+@props(['userRole', 'header' => 'Dasbor'])
 <header style="background-color: var(--color-topbar-bg, #FFFFFF);" class="hidden lg:flex h-20 border-b border-slate-200 shadow-sm items-center justify-between px-6 lg:px-8 sticky top-0 z-40 transition-colors duration-200">
 
     <!-- Left Section: Header -->
@@ -138,15 +138,15 @@
             <div class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                 <div>
-                    <p class="text-[13px] font-bold text-slate-800 leading-tight">{{ \Carbon\Carbon::now()->translatedFormat('d M Y') }}</p>
-                    <p class="text-[11px] text-slate-500 font-medium leading-tight">{{ \Carbon\Carbon::now()->translatedFormat('l') }}</p>
+                    <p class="text-[13px] font-bold text-slate-800 leading-tight">{{ \App\Helpers\DateHelper::format(now(), 'd M Y') }}</p>
+                    <p class="text-[11px] text-slate-500 font-medium leading-tight">{{ \App\Helpers\DateHelper::format(now(), 'l') }}</p>
                 </div>
             </div>
             <!-- Time -->
             <div class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 <div>
-                    <p id="live-clock" class="text-[13px] font-bold text-slate-800 leading-tight">{{ \Carbon\Carbon::now()->format('H:i') }}</p>
+                    <p id="live-clock" class="text-[13px] font-bold text-slate-800 leading-tight">{{ \App\Helpers\DateHelper::format(now(), 'H:i') }}</p>
                     <p class="text-[11px] text-slate-500 font-medium leading-tight">WIB</p>
                 </div>
             </div>

@@ -24,7 +24,7 @@
                             <p class="text-xs font-semibold text-blue-600">{{ $req['Request_Type_Label'] ?? $req['Request_Type'] ?? 'Tidak tersedia' }} - {{ $req['Class_Name'] ?? 'Kelas tidak ditemukan' }}</p>
                         </div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ strtoupper($req['Status'] ?? '') === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : (strtoupper($req['Status'] ?? '') === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700') }}">
-                            {{ $req['Status_Label'] ?? $req['Status'] ?? 'Menunggu Review' }}
+                            {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null, 'Menunggu Tinjauan') }}
                         </span>
                     </div>
                     <div class="text-xs text-slate-500">
@@ -75,7 +75,7 @@
                         <td class="px-6 py-4 text-slate-500 italic max-w-xs truncate">{{ $req['Reason'] ?? '-' }}</td>
                         <td class="px-6 py-4">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase {{ strtoupper($req['Status'] ?? '') === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : (strtoupper($req['Status'] ?? '') === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700') }}">
-                                {{ $req['Status_Label'] ?? $req['Status'] ?? 'Menunggu Review' }}
+                                {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null, 'Menunggu Tinjauan') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 text-right">

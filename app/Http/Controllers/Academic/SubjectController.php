@@ -100,7 +100,7 @@ class SubjectController extends Controller
         try {
             $data = $request->validated();
             $this->subjectService->create($data);
-            return redirect()->route('subjects.index')->with('success', 'Subject created successfully.');
+            return redirect()->route('subjects.index')->with('success', 'Mata pelajaran berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -114,7 +114,7 @@ class SubjectController extends Controller
     public function edit($id)
     {
         $subject = $this->subjectService->getById($id);
-        if (!$subject) return redirect()->route('subjects.index')->withErrors(['error' => 'Not found']);
+        if (!$subject) return redirect()->route('subjects.index')->withErrors(['error' => 'Mata pelajaran tidak ditemukan.']);
         $subject = AcademicSheetMapper::normalizeSubjectRow((array) $subject);
         
         $programs = $this->programService->getAllPrograms()
@@ -131,7 +131,7 @@ class SubjectController extends Controller
         try {
             $data = $request->validated();
             $this->subjectService->update($id, $data);
-            return redirect()->route('subjects.index')->with('success', 'Subject updated successfully.');
+            return redirect()->route('subjects.index')->with('success', 'Mata pelajaran berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -141,7 +141,7 @@ class SubjectController extends Controller
     {
         try {
             $this->subjectService->delete($id);
-            return redirect()->route('subjects.index')->with('success', 'Subject deleted successfully.');
+            return redirect()->route('subjects.index')->with('success', 'Mata pelajaran berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

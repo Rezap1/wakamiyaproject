@@ -192,7 +192,7 @@
                             name="Is_Active" 
                             label="Status Sistem WMS" 
                             :required="true"
-                            :options="['TRUE' => 'Aktif', 'FALSE' => 'Nonaktif (Soft Delete)']"
+                            :options="['TRUE' => 'Aktif', 'FALSE' => 'Tidak Aktif']"
                             value="{{ $student['Is_Active'] ?? 'TRUE' }}"
                         />
                     </div>

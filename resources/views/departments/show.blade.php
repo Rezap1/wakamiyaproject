@@ -71,12 +71,12 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <span class="text-xs font-medium text-slate-400 block uppercase">Dibuat Pada</span>
-                    <span class="text-sm font-bold text-slate-700 mt-1 block">{{ !empty($department['Created_At']) ? \Carbon\Carbon::parse($department['Created_At'])->format('d M Y, H:i') : '-' }}</span>
+                    <span class="text-sm font-bold text-slate-700 mt-1 block">{{ !empty($department['Created_At']) ? \App\Helpers\DateHelper::format($department['Created_At'], 'd M Y, H:i') : '-' }}</span>
                     <span class="text-xs text-slate-500">Oleh: {{ !empty($department['Created_By_Name']) && $department['Created_By_Name'] !== '-' ? $department['Created_By_Name'] : ($department['Created_By'] ?? '-') }}</span>
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <span class="text-xs font-medium text-slate-400 block uppercase">Diperbarui Pada</span>
-                    <span class="text-sm font-bold text-slate-700 mt-1 block">{{ !empty($department['Updated_At']) ? \Carbon\Carbon::parse($department['Updated_At'])->format('d M Y, H:i') : '-' }}</span>
+                    <span class="text-sm font-bold text-slate-700 mt-1 block">{{ !empty($department['Updated_At']) ? \App\Helpers\DateHelper::format($department['Updated_At'], 'd M Y, H:i') : '-' }}</span>
                     <span class="text-xs text-slate-500">Oleh: {{ $department['Updated_By'] ?? '-' }}</span>
                 </div>
             </div>

@@ -35,8 +35,8 @@
             <div>
                 <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Status</label>
                 <select name="Status" class="w-full rounded-xl border-slate-200 text-sm focus:border-emerald-500 focus:ring-emerald-500">
-                    <option value="Active" @selected(old('Status', 'Active') === 'Active')>Active</option>
-                    <option value="Inactive" @selected(old('Status') === 'Inactive')>Inactive</option>
+                    <option value="Active" @selected(old('Status', 'Active') === 'Active')>Aktif</option>
+                    <option value="Inactive" @selected(old('Status') === 'Inactive')>Tidak Aktif</option>
                 </select>
             </div>
         </div>

@@ -38,7 +38,7 @@
                         {{ $request['Status'] === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : '' }}
                         {{ $request['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : '' }}
                         {{ $request['Status'] === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-200' : '' }}">
-                        {{ $request['Status_Label'] ?? $request['Status'] }}
+                        {{ $request['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($request['Status'] ?? null) }}
                     </span>
                 </div>
                 <h3 class="text-xl font-black text-slate-800">{{ $request['Student_Name'] }}</h3>
@@ -58,7 +58,7 @@
                 </div>
                 @if(!empty($request['Existing_Attendance']))
                     <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase">Attendance Saat Ini</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Kehadiran Saat Ini</span>
                         <p class="text-sm font-semibold text-slate-700">{{ $request['Existing_Attendance_Status_Label'] ?? 'Tersedia' }}</p>
                     </div>
                 @endif
@@ -131,7 +131,7 @@
             @else
                 <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
                     <h4 class="text-sm font-black text-slate-800 mb-2">Status Keputusan</h4>
-                    <p class="text-sm font-semibold text-slate-600">{{ $request['Status_Label'] ?? $request['Status'] ?? 'Menunggu Review' }}</p>
+                    <p class="text-sm font-semibold text-slate-600">{{ $request['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($request['Status'] ?? null, 'Menunggu Tinjauan') }}</p>
                 </div>
             @endif
         </div>

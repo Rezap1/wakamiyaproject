@@ -9,7 +9,7 @@
             <p class="text-sm font-medium text-slate-500 mt-2">{{ $description }}</p>
         </div>
         <div class="text-sm font-bold text-slate-400 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-            {{ \Carbon\Carbon::now()->translatedFormat('l, d F Y') }} | Pusat Aksi Enterprise
+            {{ \App\Helpers\DateHelper::format(now(), 'l, j F Y') }} | Pusat Aksi Utama
         </div>
     </div>
 

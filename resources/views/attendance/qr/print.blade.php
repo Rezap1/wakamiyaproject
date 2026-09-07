@@ -162,7 +162,7 @@
     @if(!$isPdf)
     <div class="actions no-print">
         <button onclick="window.print()" class="btn">🖨️ Cetak QR (A4)</button>
-        <a href="{{ route('attendance.qr.pdf', $qr['QR_ID']) }}" class="btn btn-secondary">⬇️ Download PDF</a>
+        <a href="{{ route('attendance.qr.pdf', $qr['QR_ID']) }}" class="btn btn-secondary">⬇️ Unduh PDF</a>
         <a href="{{ route('attendance.qr.index') }}" class="btn btn-secondary">Kembali</a>
     </div>
     @endif
@@ -203,9 +203,9 @@
         </div>
 
         @if(strtoupper($qr['STATUS'] ?? '') === 'ACTIVE')
-            <div class="status-badge">🟢 STATUS: ACTIVE</div>
+            <div class="status-badge">🟢 STATUS: AKTIF</div>
         @else
-            <div class="status-badge status-inactive">🔴 STATUS: INACTIVE</div>
+            <div class="status-badge status-inactive">🔴 STATUS: TIDAK AKTIF</div>
         @endif
 
         <div class="instructions">Scan QR Code ini menggunakan akun WMS Anda.</div>

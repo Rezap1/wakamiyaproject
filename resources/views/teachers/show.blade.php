@@ -34,7 +34,7 @@
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Mulai Mengajar</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($teacher['Hire_Date']) ? \Carbon\Carbon::parse($teacher['Hire_Date'])->format('d F Y') : '-' }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($teacher['Hire_Date']) ? \App\Helpers\DateHelper::format($teacher['Hire_Date'], 'd F Y') : '-' }}</p>
                         </div>
                         <div class="sm:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Status Mengajar</p>

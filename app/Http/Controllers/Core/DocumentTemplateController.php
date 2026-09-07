@@ -30,7 +30,7 @@ class DocumentTemplateController extends Controller
         try {
             $data = $request->validated();
             $this->tplService->create($data);
-            return redirect()->route('templates.index')->with('success', 'Template created successfully.');
+            return redirect()->route('templates.index')->with('success', 'Templat berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -51,7 +51,7 @@ class DocumentTemplateController extends Controller
         try {
             $data = $request->validated();
             $this->tplService->update($id, $data);
-            return redirect()->route('templates.index')->with('success', 'Template updated successfully.');
+            return redirect()->route('templates.index')->with('success', 'Templat berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }

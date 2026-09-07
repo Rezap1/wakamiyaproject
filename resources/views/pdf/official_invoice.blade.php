@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>INVOICE TAGIHAN RESMI - {{ $invoice['Invoice_ID'] ?? '' }}</title>
+    <title>TAGIHAN RESMI - {{ $invoice['Invoice_ID'] ?? '' }}</title>
     <style>
         @page {
             size: A4 portrait;
@@ -173,7 +173,7 @@
     @include('pdf.components.header', ['company' => $company ?? $companyProfile['company'] ?? []])
 
     <div style="text-align: right; margin-top: -15px; margin-bottom: 15px;">
-        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">INVOICE TAGIHAN</div>
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">TAGIHAN RESMI</div>
         <div style="font-size: 11px; font-weight: 700; color: #2563eb; font-family: monospace;">NO: {{ $invoice['Invoice_ID'] ?? '-' }}</div>
     </div>
 
@@ -207,13 +207,13 @@
                     <div class="field-row">
                         <span class="field-label">Tgl Jatuh Tempo:</span>
                         <span class="field-value" style="color: #b91c1c;">
-                            {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d F Y') : '-' }}
+                            {{ !empty($invoice['Due_Date']) ? \App\Helpers\DateHelper::format($invoice['Due_Date'], 'd F Y') : '-' }}
                         </span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Status Tagihan:</span>
                         <span class="badge-status" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1;">
-                            {{ $invoice['Display_Status'] ?? ($invoice['Status'] ?? 'Draft') }}
+                            {{ \App\Support\Presentation\IndonesianPresentation::status($invoice['Display_Status'] ?? ($invoice['Status'] ?? 'Draft')) }}
                         </span>
                     </div>
                 </div>
@@ -287,7 +287,7 @@
                         <td style="text-align: right; font-weight: 900; font-size: 13px; color: #0f172a;">Rp {{ number_format((float)($invoice['Grand_Total'] ?? $invoice['Amount'] ?? 0), 0, ',', '.') }}</td>
                     </tr>
                     <tr>
-                        <td style="color: #15803d; font-weight: bold;">Sudah Dibayar (Verified):</td>
+                        <td style="color: #15803d; font-weight: bold;">Sudah Dibayar (Terverifikasi):</td>
                         <td style="text-align: right; font-weight: bold; color: #15803d;">Rp {{ number_format((float)($invoice['Paid_Amount'] ?? 0), 0, ',', '.') }}</td>
                     </tr>
                     <tr>

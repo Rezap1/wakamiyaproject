@@ -15,7 +15,7 @@
                 <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
                     <div>
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {{ $schedule['Day'] ?? $schedule['Day_Of_Week'] ?? 'N/A' }}
+                            {{ \App\Support\Presentation\IndonesianPresentation::day($schedule['Day'] ?? $schedule['Day_Of_Week'] ?? null, 'Tidak tersedia') }}
                         </span>
                         <h3 class="mt-2 text-lg font-bold text-slate-900">{{ $schedule['Class_Name'] ?? 'Kelas tidak ditemukan' }}</h3>
                     </div>

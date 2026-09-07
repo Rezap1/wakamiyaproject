@@ -36,7 +36,7 @@
             @endif
 
             @if($status === 'Draft' || $status === 'Calculated')
-                <form action="{{ route('payrolls.submit', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Ajukan payroll ini untuk persetujuan?');" class="inline">
+                <form action="{{ route('payrolls.submit', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Ajukan data penggajian ini untuk persetujuan?');" class="inline">
                     @csrf
                     <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shadow-md transition-colors">
                         🚀 Ajukan Persetujuan
@@ -45,13 +45,13 @@
             @endif
 
             @if($status === 'Waiting Approval')
-                <form action="{{ route('payrolls.approve', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Setujui (Approve) penggajian ini?');" class="inline">
+                <form action="{{ route('payrolls.approve', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Setujui data penggajian ini?');" class="inline">
                     @csrf
                     <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-colors">
                         ✅ Setujui Payroll
                     </button>
                 </form>
-                <form action="{{ route('payrolls.reject', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Tolak (Reject) penggajian ini?');" class="inline">
+                <form action="{{ route('payrolls.reject', $payroll['Payroll_ID']) }}" method="POST" onsubmit="return confirm('Tolak data penggajian ini?');" class="inline">
                     @csrf
                     <button type="submit" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-md transition-colors">
                         ❌ Tolak Payroll
@@ -182,7 +182,7 @@
                 <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">Metadata System & Audit Trail</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <p class="text-xs font-bold text-slate-400 uppercase">ID Payroll (Primary Key)</p>
+                        <p class="text-xs font-bold text-slate-400 uppercase">ID Penggajian (Kunci Utama)</p>
                         <p class="text-sm font-mono font-bold text-slate-800 mt-1">{{ $payroll['Payroll_ID'] }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">

@@ -49,7 +49,7 @@
                     {{ !empty($department['Manager_Name']) && $department['Manager_Name'] !== '-' ? $department['Manager_Name'] : ($department['Manager_Employee_ID'] ?: '-') }}
                 </td>
                 <td class="px-6 py-4">
-                    <div class="text-sm font-medium">{{ !empty($department['Created_At']) ? \Carbon\Carbon::parse($department['Created_At'])->format('d M Y, H:i') : '-' }}</div>
+                    <div class="text-sm font-medium">{{ !empty($department['Created_At']) ? \App\Helpers\DateHelper::format($department['Created_At'], 'd M Y, H:i') : '-' }}</div>
                     <div class="text-xs text-slate-500">{{ !empty($department['Created_By_Name']) && $department['Created_By_Name'] !== '-' ? $department['Created_By_Name'] : ($department['Created_By'] ?? '-') }}</div>
                 </td>
                 <td class="px-6 py-4">

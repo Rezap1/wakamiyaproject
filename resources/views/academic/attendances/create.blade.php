@@ -156,7 +156,7 @@
                     headers: { 'Accept': 'application/json' },
                 })
                     .then(response => {
-                        if (!response.ok) throw new Error('Not found');
+                        if (!response.ok) throw new Error('Data tidak ditemukan.');
                         return response.json();
                     })
                     .then(data => {

@@ -45,7 +45,7 @@
                 $expClass = $isExpired ? 'text-rose-600 font-bold' : 'text-slate-800 font-bold';
             @endphp
             <p class="text-sm {{ $expClass }} mt-0.5">
-                Exp: {{ !empty($document['Expiry_Date']) ? \Carbon\Carbon::parse($document['Expiry_Date'])->format('d M Y') : 'Tidak ada' }}
+                Exp: {{ !empty($document['Expiry_Date']) ? \App\Helpers\DateHelper::format($document['Expiry_Date'], 'd M Y') : 'Tidak ada' }}
             </p>
         </div>
         <div>
@@ -73,7 +73,7 @@
                     </div>
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Terbit</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Issue_Date']) ? \Carbon\Carbon::parse($document['Issue_Date'])->format('d M Y') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Issue_Date']) ? \App\Helpers\DateHelper::format($document['Issue_Date'], 'd M Y') : '-' }}</p>
                     </div>
 
                 </div>
@@ -86,7 +86,7 @@
                     @if($document['Document_Status'] === 'VERIFIED')
                     <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                         <p class="text-xs font-bold text-emerald-700 uppercase mb-2">Informasi Verifikasi</p>
-                        <p class="text-sm font-medium text-emerald-800">Diverifikasi oleh <strong>{{ $document['Verified_By'] ?? 'Tidak Diketahui' }}</strong> pada {{ !empty($document['Verification_Date']) ? \Carbon\Carbon::parse($document['Verification_Date'])->format('d M Y') : '-' }}</p>
+                        <p class="text-sm font-medium text-emerald-800">Diverifikasi oleh <strong>{{ $document['Verified_By'] ?? 'Tidak Diketahui' }}</strong> pada {{ !empty($document['Verification_Date']) ? \App\Helpers\DateHelper::format($document['Verification_Date'], 'd M Y') : '-' }}</p>
                     </div>
                     @endif
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -112,12 +112,12 @@
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                    <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Created_At']) ? \Carbon\Carbon::parse($document['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                    <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Created_At']) ? \App\Helpers\DateHelper::format($document['Created_At'], 'd M Y, H:i') : '-' }}</p>
                     <p class="text-xs font-medium text-slate-500 mt-1">Oleh: {{ $document['Created_By'] ?? 'Sistem' }}</p>
                 </div>
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase">Data Diupdate</p>
-                    <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Updated_At']) ? \Carbon\Carbon::parse($document['Updated_At'])->format('d M Y, H:i') : '-' }}</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase">Data Diperbarui</p>
+                    <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($document['Updated_At']) ? \App\Helpers\DateHelper::format($document['Updated_At'], 'd M Y, H:i') : '-' }}</p>
                     <p class="text-xs font-medium text-slate-500 mt-1">Oleh: {{ $document['Updated_By'] ?? 'Sistem' }}</p>
                 </div>
             </div>

@@ -49,7 +49,7 @@
                             {{ $req['Status'] === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : '' }}
                             {{ $req['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : '' }}
                             {{ $req['Status'] === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-200' : '' }}">
-                            {{ $req['Status_Label'] ?? $req['Status'] }}
+                            {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null) }}
                         </span>
                     </div>
                     <h4 class="font-bold text-slate-800">{{ $req['Student_Name'] }}</h4>
@@ -101,7 +101,7 @@
                                         {{ $req['Status'] === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : '' }}
                                         {{ $req['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : '' }}
                                         {{ $req['Status'] === 'REJECTED' ? 'bg-rose-50 text-rose-600 border-rose-200' : '' }}">
-                                        {{ $req['Status_Label'] ?? $req['Status'] }}
+                                        {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null) }}
                                     </span>
                                 </td>
                                 <td class="p-4 text-right">

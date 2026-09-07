@@ -19,7 +19,7 @@
                     <span class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-lg">⚠️</span>
                     <div>
                         <h4 class="text-sm font-black text-rose-900 uppercase">TAGIHAN INI TELAH OVERDUE (TERLAMBAT)</h4>
-                        <p class="text-xs text-rose-700 mt-0.5">Jatuh tempo pada {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d M Y') : '-' }}. Mohon segera lakukan pembayaran sebesar <strong>Rp {{ number_format($remaining, 0, ',', '.') }}</strong>.</p>
+                        <p class="text-xs text-rose-700 mt-0.5">Jatuh tempo pada {{ !empty($invoice['Due_Date']) ? \App\Helpers\DateHelper::format($invoice['Due_Date'], 'd M Y') : '-' }}. Mohon segera lakukan pembayaran sebesar <strong>Rp {{ number_format($remaining, 0, ',', '.') }}</strong>.</p>
                     </div>
                 </div>
             @endif
@@ -36,13 +36,13 @@
                     @elseif($status === 'Partial Paid')
                         <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-purple-100 text-purple-800">🟪 PARTIAL PAID</span>
                     @elseif($status === 'Waiting Payment')
-                        <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-amber-100 text-amber-800">⏳ WAITING PAYMENT</span>
+                        <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-amber-100 text-amber-800">⏳ MENUNGGU PEMBAYARAN</span>
                     @else
                         <span class="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide bg-slate-100 text-slate-700">{{ $status }}</span>
                     @endif
 
                     <a href="{{ route('student.billing.invoice-pdf', $invoice['Invoice_ID']) }}" target="_blank" class="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700">
-                        📄 <span>Download PDF</span>
+                        📄 <span>Unduh PDF</span>
                     </a>
                 </div>
 
@@ -99,10 +99,10 @@
                         <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                             <p class="break-all text-xs font-mono font-bold text-slate-500">{{ $pay['Payment_ID'] ?? '' }}</p>
                             <p class="text-lg font-black text-slate-800">Rp {{ number_format($pay['Amount_Paid'] ?? 0, 0, ',', '.') }}</p>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase">{{ !empty($pay['Payment_Date']) ? \Carbon\Carbon::parse($pay['Payment_Date'])->format('d M Y') : '-' }}</p>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">{{ !empty($pay['Payment_Date']) ? \App\Helpers\DateHelper::format($pay['Payment_Date'], 'd M Y') : '-' }}</p>
                             <div class="pt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <span class="px-2 py-0.5 text-[10px] font-bold rounded {{ ($pay['Status'] ?? '') === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
-                                    {{ $pay['Status'] ?? 'Waiting Verification' }}
+                                    {{ \App\Support\Presentation\IndonesianPresentation::status($pay['Status'] ?? 'Waiting Verification') }}
                                 </span>
                                 <div class="wms-action-group sm:justify-end">
                                     @if(!empty($pay['Proof_File']) || !empty($pay['Proof_Image']))

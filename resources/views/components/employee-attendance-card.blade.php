@@ -19,7 +19,7 @@
     }
 
     $hasCheckedIn = !empty($todayRecord);
-    $checkInTime = $hasCheckedIn ? \Carbon\Carbon::parse($todayRecord['Check_In_Time'] ?? $todayRecord['Created_At'])->format('H:i') : null;
+    $checkInTime = $hasCheckedIn ? \App\Helpers\DateHelper::format($todayRecord['Check_In_Time'] ?? $todayRecord['Created_At'], 'H:i') : null;
 @endphp
 
 <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 shadow-xl border border-white/10 relative overflow-hidden mb-6" x-data="employeeLocationWidget()">

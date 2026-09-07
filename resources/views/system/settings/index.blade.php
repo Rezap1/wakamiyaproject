@@ -32,10 +32,10 @@
                 </button>
             </form>
             @if($activeTab === 'Branding')
-                <form action="{{ route('settings.reset_branding') }}" method="POST" onsubmit="return confirm('Reset warna ke Wakamiya Brand Palette resmi?')">
+                <form action="{{ route('settings.reset_branding') }}" method="POST" onsubmit="return confirm('Atur ulang warna ke palet merek resmi Wakamiya?')">
                     @csrf
                     <button type="submit" class="px-4 py-2.5 bg-sky-900/50 hover:bg-sky-800/80 text-sky-300 font-bold text-xs rounded-xl border border-sky-700/50 transition-all flex items-center gap-1.5 min-h-[44px]">
-                        🔄 <span>Reset Brand</span>
+                        🔄 <span>Atur Ulang Merek</span>
                     </button>
                 </form>
             @endif
@@ -219,7 +219,7 @@
                                             {{ $providerUpper === 'GOOGLE' ? 'Google Workspace' : ($providerUpper === 'MICROSOFT' ? 'Microsoft 365 / Outlook' : 'Email Perusahaan (SMTP Custom)') }}
                                         </h3>
                                         <p class="text-xs text-emerald-300/90 font-mono font-semibold">{{ $emailConfig['connected_account'] }}</p>
-                                        <p class="text-[11px] text-emerald-400/70 font-medium">Terhubung sejak: {{ $emailConfig['connected_at'] ?? '17 Aug 2026' }} • Status: Operational</p>
+                                        <p class="text-[11px] text-emerald-400/70 font-medium">Terhubung sejak: {{ $emailConfig['connected_at'] ?? '17 Agustus 2026' }} • Status: Beroperasi</p>
                                     </div>
                                 </div>
 
@@ -241,7 +241,7 @@
                                         </form>
                                     @endif
 
-                                    <form action="{{ route('settings.email.disconnect') }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin memutuskan koneksi email ini? Seluruh pengiriman otomatis akan beralih ke mode default.')">
+                                    <form action="{{ route('settings.email.disconnect') }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin memutuskan koneksi email ini? Seluruh pengiriman otomatis akan beralih ke mode bawaan.')">
                                         @csrf
                                         <button type="submit" class="px-4 py-2.5 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white font-bold text-xs rounded-xl border border-rose-500/30 transition-all flex items-center gap-2 min-h-[44px]">
                                             🔌 <span>Putuskan Koneksi</span>
@@ -530,7 +530,7 @@
                         <!-- Enhanced Live Preview Panel -->
                         <div class="mb-8 p-4 md:p-5 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-4">
                             <div class="border-b border-slate-800 pb-3">
-                                <h3 class="text-xs font-bold text-sky-400 uppercase tracking-widest">🎨 Live Preview — Tampilan Wakamiya</h3>
+                                <h3 class="text-xs font-bold text-sky-400 uppercase tracking-widest">🎨 Pratinjau Langsung — Tampilan Wakamiya</h3>
                                 <p class="text-xs text-slate-400">Ubah warna di bawah → pratinjau langsung berubah secara real-time.</p>
                             </div>
                             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 text-xs">
@@ -543,7 +543,7 @@
                                             <span class="font-bold text-[11px]" :style="{ color: previewSidebarText }">Wakamiya</span>
                                         </div>
                                         <div class="px-3 py-1.5" :style="{ backgroundColor: previewSidebarBg }">
-                                            <span class="text-[10px] block py-1" :style="{ color: previewSidebarText }">📊 Dashboard</span>
+                                            <span class="text-[10px] block py-1" :style="{ color: previewSidebarText }">📊 Dasbor</span>
                                             <span class="text-[10px] block py-1 px-2 rounded" :style="{ backgroundColor: previewActiveBg, color: previewActiveText }">⚙️ Pengaturan</span>
                                             <span class="text-[10px] block py-1" :style="{ color: previewSidebarText }">👥 Pengguna</span>
                                         </div>
@@ -572,8 +572,8 @@
                                 <div class="p-4 rounded-xl border border-slate-800 bg-slate-950 space-y-2">
                                     <p class="font-bold text-slate-400 uppercase text-[10px]">4. Card</p>
                                     <div class="p-3 rounded-xl border border-slate-200 shadow-sm" :style="{ backgroundColor: previewCardBg }">
-                                        <p class="text-[11px] font-bold text-slate-700">Dashboard Card</p>
-                                        <p class="text-[10px] text-slate-400">Preview content</p>
+                                        <p class="text-[11px] font-bold text-slate-700">Kartu Dasbor</p>
+                                        <p class="text-[10px] text-slate-400">Pratinjau konten</p>
                                         <div class="mt-2 h-1 rounded-full" :style="{ backgroundColor: previewPrimary }"></div>
                                     </div>
                                 </div>
@@ -581,8 +581,8 @@
                                 <div class="p-4 rounded-xl border border-slate-800 bg-slate-950 space-y-2">
                                     <p class="font-bold text-slate-400 uppercase text-[10px]">5. Badge</p>
                                     <div class="flex flex-wrap gap-2">
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-950" :style="{ backgroundColor: previewPrimary }">Active</span>
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold border" :style="{ borderColor: previewPrimary, color: previewPrimary }">Pending</span>
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-950" :style="{ backgroundColor: previewPrimary }">Aktif</span>
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold border" :style="{ borderColor: previewPrimary, color: previewPrimary }">Menunggu</span>
                                     </div>
                                 </div>
                                 <!-- 6. Mobile Bottom Nav Preview -->

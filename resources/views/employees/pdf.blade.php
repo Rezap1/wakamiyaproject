@@ -21,7 +21,7 @@
                     <td>{{ $emp['Full_Name'] ?? '-' }}</td>
                     <td>{{ $emp['Department_Name'] ?? '-' }}</td>
                     <td>{{ $emp['Position_Name'] ?? '-' }}</td>
-                    <td>{{ $emp['Employment_Status'] ?? '-' }}</td>
+                    <td>{{ \App\Support\Presentation\IndonesianPresentation::status($emp['Employment_Status'] ?? null) }}</td>
                     <td>
                         {{ (isset($emp['Is_Active']) && $emp['Is_Active'] === 'TRUE') ? 'Aktif' : 'Non-Aktif' }}
                     </td>

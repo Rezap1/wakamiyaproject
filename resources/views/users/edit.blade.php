@@ -8,7 +8,7 @@
         $roleOptions = [];
         foreach($roles as $role) {
             if(isset($role['Role_ID'])) {
-                $roleOptions[$role['Role_ID']] = $role['Role_Name'] ?? $role['Role_ID'];
+                $roleOptions[$role['Role_ID']] = \App\Support\Presentation\IndonesianPresentation::role($role['Role_Name'] ?? $role['Role_ID']);
             }
         }
     @endphp

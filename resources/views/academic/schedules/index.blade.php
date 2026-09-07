@@ -104,7 +104,7 @@
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center gap-2 mb-1">
-                    <x-badge color="blue">{{ $dayMap[$schedule['Day_Of_Week'] ?? ''] ?? $schedule['Day_Of_Week'] ?? '-' }}</x-badge>
+                    <x-badge color="blue">{{ \App\Support\Presentation\IndonesianPresentation::day($schedule['Day_Of_Week'] ?? null) }}</x-badge>
                 </div>
                 <div class="text-[13px] font-mono font-medium text-slate-500">
                     {{ $schedule['Start_Time'] ?? '--:--' }} - {{ $schedule['End_Time'] ?? '--:--' }}

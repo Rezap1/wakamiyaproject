@@ -95,7 +95,7 @@ trait Exportable
 
         // 4. Empty State Handling
         if ($data->isEmpty()) {
-            return back()->with('warning', 'There is no data matching the selected criteria.');
+            return back()->with('warning', 'Tidak ada data yang sesuai dengan kriteria yang dipilih.');
         }
 
         // 5. Orientation Override

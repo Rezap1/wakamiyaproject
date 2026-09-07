@@ -78,7 +78,7 @@ class UserController extends Controller
     {
         $user = $this->userService->getUserById($id);
         if (!$user) {
-            return redirect()->route('users.index')->withErrors(['error' => 'User not found.']);
+            return redirect()->route('users.index')->withErrors(['error' => 'Pengguna tidak ditemukan.']);
         }
         $roles = $this->roleService->getAllRoles();
         return view('users.edit', compact('user', 'roles'));
@@ -89,7 +89,7 @@ class UserController extends Controller
         try {
             $user = $this->userService->getUserById($id);
             if (!$user) {
-                return redirect()->route('users.index')->withErrors(['error' => 'User not found.']);
+                return redirect()->route('users.index')->withErrors(['error' => 'Pengguna tidak ditemukan.']);
             }
 
             $data = $request->validated();
@@ -129,7 +129,7 @@ class UserController extends Controller
             // Cascade hard delete all owned user data before removing the account.
             $this->userService->deleteUser($id);
 
-            return redirect()->route('users.index')->with('success', 'Pengguna berhasil dihapus (Hard Delete).');
+            return redirect()->route('users.index')->with('success', 'Pengguna beserta data terkait berhasil dihapus permanen.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $this->safeExceptionMessage($e)]);
         }

@@ -32,7 +32,7 @@
             <td style="width: 5%;">{{ $index + 1 }}</td>
             <td style="width: 55%;">{{ $score['Assessment_Name'] ?? $score['Assessment_Title'] ?? 'Penilaian tidak ditemukan' }}</td>
             <td class="text-center" style="width: 20%;">{{ $score['Score_Value'] ?? '-' }}</td>
-            <td class="text-center font-bold" style="width: 20%;">{{ $score['Status'] ?? 'LULUS' }}</td>
+            <td class="text-center font-bold" style="width: 20%;">{{ \App\Support\Presentation\IndonesianPresentation::status($score['Status'] ?? 'LULUS') }}</td>
         </tr>
         @endforeach
         

@@ -16,7 +16,7 @@
         <x-slot:actions><x-universal.action-button action="edit" url="{{ route('scores.edit', $score['Score_ID']) }}" /><x-universal.action-button action="delete" url="{{ route('scores.destroy', $score['Score_ID']) }}" /></x-slot:actions>
         <x-slot:information>
             <div class="space-y-8">
-                <div class="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white"><span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kategori Assessment</span><h2 class="mt-1 text-xl font-bold">{{ $categoryLabel }}</h2><p class="mt-1 text-xs text-slate-400">Tanggal: {{ !empty($score['Created_At']) ? \Carbon\Carbon::parse($score['Created_At'])->format('d M Y') : '-' }}</p><p class="mt-4 text-4xl font-black">{{ $rawScore }} <span class="text-sm font-normal text-slate-400">/ 100</span></p></div>
+                <div class="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white"><span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kategori Assessment</span><h2 class="mt-1 text-xl font-bold">{{ $categoryLabel }}</h2><p class="mt-1 text-xs text-slate-400">Tanggal: {{ !empty($score['Created_At']) ? \App\Helpers\DateHelper::format($score['Created_At'], 'd M Y') : '-' }}</p><p class="mt-4 text-4xl font-black">{{ $rawScore }} <span class="text-sm font-normal text-slate-400">/ 100</span></p></div>
                 <div>
                     <h3 class="mb-4 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Rincian Metrik Evaluasi</h3>
                     @php $rendered = 0; @endphp

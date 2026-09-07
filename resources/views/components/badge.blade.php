@@ -1,6 +1,9 @@
 @props(['color' => null, 'type' => 'soft', 'status' => null, 'dot' => false])
 
 @php
+    $rawLabel = $status !== null ? trim((string) $status) : trim(strip_tags((string) $slot));
+    $localizedLabel = \App\Support\Presentation\IndonesianPresentation::knownLabel($rawLabel);
+
     // Map known statuses to colors
     if ($status && !$color) {
         $statusMap = [
@@ -61,7 +64,11 @@
     @if($dot)
         <span class="w-1.5 h-1.5 rounded-full mr-1.5 {{ $type === 'solid' ? 'bg-white' : $dotClasses }}"></span>
     @endif
-    {{ $status ?? $slot }}
+    @if($localizedLabel !== null)
+        {{ $localizedLabel }}
+    @else
+        {{ $status ?? $slot }}
+    @endif
 </span>
 
 

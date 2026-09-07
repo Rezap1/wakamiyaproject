@@ -46,7 +46,7 @@
         @if(in_array('teacher', $filters))
         <div>
             <x-select name="teacher" label="Teacher">
-                <option value="">All Teachers</option>
+                <option value="">Semua Guru</option>
             </x-select>
         </div>
         @endif
@@ -54,7 +54,7 @@
         @if(in_array('student', $filters))
         <div>
             <x-select name="student" label="Student">
-                <option value="">All Students</option>
+                <option value="">Semua Siswa</option>
             </x-select>
         </div>
         @endif
@@ -91,7 +91,7 @@
 
         <div class="xl:col-span-4 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
             <a href="{{ url()->current() }}" class="text-[13px] font-bold text-slate-500 hover:text-slate-800 transition-colors">Reset</a>
-            <x-button type="submit" variant="primary" size="sm">Apply Filter</x-button>
+            <x-button type="submit" variant="primary" size="sm">Terapkan Filter</x-button>
         </div>
     </form>
 </x-card>

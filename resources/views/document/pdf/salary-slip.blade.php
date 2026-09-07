@@ -1,7 +1,7 @@
 <div class="my-6">
     <div class="text-center mb-8 border-b-2 border-slate-800 pb-4">
         <h2 class="text-xl font-black text-slate-900 tracking-wider uppercase">SALARY SLIP</h2>
-        <p class="text-sm font-bold text-slate-600 mt-1">Period: {{ \Carbon\Carbon::parse($document['Generated_At'] ?? now())->format('F Y') }}</p>
+        <p class="text-sm font-bold text-slate-600 mt-1">Periode: {{ \App\Helpers\DateHelper::format($document['Generated_At'] ?? now(), 'F Y') }}</p>
     </div>
 
     <!-- Employee Information -->
@@ -79,7 +79,7 @@
     </div>
     
     <div class="mt-8 text-xs text-slate-500 italic text-justify leading-relaxed">
-        This is a computer-generated document. No physical signature is required unless stated otherwise. 
+        Dokumen ini dibuat secara elektronik. Tanda tangan fisik tidak diperlukan kecuali dinyatakan lain.
         For any discrepancies, please contact the HR Department within 3 working days from the generated date.
     </div>
 </div>

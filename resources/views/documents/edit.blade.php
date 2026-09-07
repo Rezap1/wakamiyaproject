@@ -63,8 +63,8 @@
             <div>
                 <h3 class="text-base font-bold text-slate-800 border-b border-slate-100 pb-2 mb-4">3. Validitas & Status</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <x-universal.input type="date" name="Issue_Date" label="Tanggal Terbit (Issue Date)" value="{{ !empty($document['Issue_Date']) ? \Carbon\Carbon::parse($document['Issue_Date'])->format('Y-m-d') : '' }}" />
-                    <x-universal.input type="date" name="Expiry_Date" label="Tanggal Berakhir (Expiry Date)" value="{{ !empty($document['Expiry_Date']) ? \Carbon\Carbon::parse($document['Expiry_Date'])->format('Y-m-d') : '' }}" />
+                    <x-universal.input type="date" name="Issue_Date" label="Tanggal Terbit (Issue Date)" value="{{ !empty($document['Issue_Date']) ? \App\Helpers\DateHelper::format($document['Issue_Date'], 'Y-m-d') : '' }}" />
+                    <x-universal.input type="date" name="Expiry_Date" label="Tanggal Berakhir (Expiry Date)" value="{{ !empty($document['Expiry_Date']) ? \App\Helpers\DateHelper::format($document['Expiry_Date'], 'Y-m-d') : '' }}" />
                     
                     <x-universal.select 
                         name="Document_Status" 

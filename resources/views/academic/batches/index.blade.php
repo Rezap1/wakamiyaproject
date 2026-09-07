@@ -58,8 +58,8 @@
                 </div>
             </td>
             <td class="px-6 py-4">
-                <div class="font-bold text-slate-800">{{ \Carbon\Carbon::parse($batch['Start_Date'])->format('d M Y') }}</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">s/d {{ \Carbon\Carbon::parse($batch['End_Date'])->format('d M Y') }}</div>
+                <div class="font-bold text-slate-800">{{ \App\Helpers\DateHelper::format($batch['Start_Date'], 'd M Y') }}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">s/d {{ \App\Helpers\DateHelper::format($batch['End_Date'], 'd M Y') }}</div>
             </td>
             <td class="px-6 py-4">
                 <div class="flex flex-col gap-1.5 items-start">

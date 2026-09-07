@@ -20,8 +20,8 @@
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-black text-lg shrink-0">💰</div>
             <div>
-                <h3 class="font-bold text-sm text-white">Finance Module Settings</h3>
-                <p class="text-xs text-emerald-300/70">Pengaturan invoice, pembayaran, rekening bank, dan parameter keuangan lainnya.</p>
+                <h3 class="font-bold text-sm text-white">Pengaturan Modul Keuangan</h3>
+                <p class="text-xs text-emerald-300/70">Pengaturan tagihan, pembayaran, rekening bank, dan parameter keuangan lainnya.</p>
             </div>
         </div>
     </div>
@@ -95,7 +95,7 @@
             <div class="text-center py-12">
                 <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-400 flex items-center justify-center text-2xl mx-auto mb-3">💰</div>
                 <h3 class="text-slate-600 font-bold text-sm">Tidak Ada Pengaturan</h3>
-                <p class="text-xs text-slate-400 mt-1">Konfigurasi default finance berjalan otomatis.</p>
+                <p class="text-xs text-slate-400 mt-1">Konfigurasi bawaan keuangan berjalan otomatis.</p>
             </div>
             @else
             <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end sticky bottom-0 bg-white pb-2">

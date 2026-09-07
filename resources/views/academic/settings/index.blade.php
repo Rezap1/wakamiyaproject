@@ -20,7 +20,7 @@
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-lg shrink-0">🎓</div>
             <div>
-                <h3 class="font-bold text-sm text-white">Academic Module Settings</h3>
+                <h3 class="font-bold text-sm text-white">Pengaturan Modul Akademik</h3>
                 <p class="text-xs text-blue-300/70">Pengaturan tahun akademik, semester, kriteria penilaian, dan parameter pembelajaran.</p>
             </div>
         </div>

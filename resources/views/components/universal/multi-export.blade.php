@@ -19,14 +19,14 @@
     @if(isset($exportRoutes['preview']))
         <button type="button" @click="openModal('preview')" class="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-blue-600 focus:ring-2 focus:ring-slate-100 transition-all shadow-sm">
             <svg class="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-            Preview PDF
+            Pratinjau PDF
         </button>
     @endif
 
     @if(isset($exportRoutes['pdf']))
         <button type="button" @click="openModal('pdf')" class="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-red-600 focus:ring-2 focus:ring-slate-100 transition-all shadow-sm">
             <svg class="w-4 h-4 mr-1.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
-            Download PDF
+            Unduh PDF
         </button>
     @endif
 
@@ -77,8 +77,8 @@
                                 <div>
                                     <label class="block text-[13px] font-bold text-slate-700 mb-1">Export Type</label>
                                     <select x-model="exportType" class="block w-full text-[13px] rounded-xl bg-slate-50 border-slate-200 text-slate-800 focus:ring-2 focus:border-blue-500 focus:ring-blue-500/20 px-4 py-2.5 shadow-sm">
-                                        @if(isset($exportRoutes['preview']))<option value="preview">Preview PDF</option>@endif
-                                        @if(isset($exportRoutes['pdf']))<option value="pdf">Download PDF</option>@endif
+                                        @if(isset($exportRoutes['preview']))<option value="preview">Pratinjau PDF</option>@endif
+                                        @if(isset($exportRoutes['pdf']))<option value="pdf">Unduh PDF</option>@endif
                                         @if(isset($exportRoutes['excel']))<option value="excel">Excel</option>@endif
                                         @if(isset($exportRoutes['csv']))<option value="csv">CSV</option>@endif
                                         @if(isset($exportRoutes['print']))<option value="print">Print</option>@endif
@@ -158,13 +158,13 @@
 
             submitExport() {
                 if (this.exportFilter === 'range' && (!this.startDate || !this.endDate)) {
-                    alert('Please select both Start Date and End Date.');
+                    alert('Pilih tanggal mulai dan tanggal selesai.');
                     return;
                 }
 
                 let baseUrl = routeMap[this.exportType];
                 if (!baseUrl) {
-                    alert('Export route is not available for this format.');
+                    alert('Rute ekspor tidak tersedia untuk format ini.');
                     return;
                 }
 

@@ -73,7 +73,7 @@
                             <option value="REJECTED" {{ old('Document_Status') == 'REJECTED' ? 'selected' : '' }}>Rejected (Ditolak)</option>
                             <option value="EXPIRED" {{ old('Document_Status') == 'EXPIRED' ? 'selected' : '' }}>Expired (Kedaluwarsa)</option>
                         </select>
-                        <p class="text-xs text-slate-500 mt-1">Set ke 'Verified' untuk otomatis mencatat nama Anda sebagai Verifikator.</p>
+                        <p class="text-xs text-slate-500 mt-1">Pilih "Terverifikasi" untuk otomatis mencatat nama Anda sebagai verifikator.</p>
                         @error('Document_Status') <p class="mt-1.5 text-xs font-medium text-rose-500">{{ $message }}</p> @enderror
                     </div>
                 </div>

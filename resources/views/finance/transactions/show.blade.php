@@ -149,7 +149,7 @@
 
                 @if(!empty($tx['invoice']))
                     <section class="rounded-xl border border-slate-200 bg-white p-5">
-                        <h3 class="text-xs font-black uppercase tracking-wide text-slate-400">Invoice</h3>
+                        <h3 class="text-xs font-black uppercase tracking-wide text-slate-400">Tagihan</h3>
                         <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                             <div><p class="text-xs font-bold text-slate-500">Nomor Invoice</p><p class="break-all font-mono text-xs font-bold text-slate-700">{{ $tx['invoice']['number'] }}</p></div>
                             <div><p class="text-xs font-bold text-slate-500">Nominal Invoice</p><p class="font-black text-slate-900">{{ $tx['invoice']['amount_label'] }}</p></div>

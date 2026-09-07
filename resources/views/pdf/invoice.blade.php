@@ -12,7 +12,7 @@
             ID Ref: {{ $invoice['Invoice_ID'] ?? '-' }}<br>
             Tipe: {{ $invoice['Invoice_Type'] ?? '-' }}<br>
             Tanggal Jatuh Tempo: {{ $invoice['Due_Date'] ?? '-' }}<br>
-            Status: {{ $invoice['Status'] ?? '-' }}
+            Status: {{ \App\Support\Presentation\IndonesianPresentation::status($invoice['Status'] ?? null) }}
         </td>
     </tr>
 </table>

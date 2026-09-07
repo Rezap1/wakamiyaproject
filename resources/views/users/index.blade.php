@@ -22,7 +22,7 @@
                 <select name="role" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
                     <option value="">Semua Role</option>
                     @foreach($roles as $role)
-                        <option value="{{ $role['Role_ID'] }}" {{ request('role') == $role['Role_ID'] ? 'selected' : '' }}>{{ $role['Role_Name'] }}</option>
+                        <option value="{{ $role['Role_ID'] }}" {{ request('role') == $role['Role_ID'] ? 'selected' : '' }}>{{ \App\Support\Presentation\IndonesianPresentation::role($role['Role_Name'] ?? null) }}</option>
                     @endforeach
                 </select>
             </div>
@@ -65,7 +65,7 @@
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-4"><x-badge color="slate">{{ $roleName }}</x-badge></td>
+                <td class="px-6 py-4"><x-badge color="slate">{{ \App\Support\Presentation\IndonesianPresentation::role($roleName) }}</x-badge></td>
                 <td class="px-6 py-4"><x-badge color="{{ $badgeColor }}">{{ $status }}</x-badge></td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-2">

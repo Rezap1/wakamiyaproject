@@ -47,8 +47,8 @@
                     default => ucfirst($item['Status'] ?? 'Hadir'),
                 };
                 
-                $dateFormatted = !empty($item['Attendance_Date']) ? \Carbon\Carbon::parse($item['Attendance_Date'])->format('d M Y') : '-';
-                $timeFormatted = !empty($item['Created_At']) ? \Carbon\Carbon::parse($item['Created_At'])->format('H:i') : '-';
+                $dateFormatted = !empty($item['Attendance_Date']) ? \App\Helpers\DateHelper::format($item['Attendance_Date'], 'd M Y') : '-';
+                $timeFormatted = !empty($item['Created_At']) ? \App\Helpers\DateHelper::format($item['Created_At'], 'H:i') : '-';
             @endphp
             
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">

@@ -19,7 +19,7 @@
                     <td>{{ $teacher['Full_Name'] ?? '-' }}</td>
                     <td>{{ $teacher['NUPTK'] ?? '-' }}</td>
                     <td>{{ $teacher['Specialization'] ?? '-' }}</td>
-                    <td>{{ $teacher['Teaching_Status'] ?? '-' }}</td>
+                    <td>{{ \App\Support\Presentation\IndonesianPresentation::status($teacher['Teaching_Status'] ?? null) }}</td>
                     <td>
                         {{ (isset($teacher['Is_Active']) && $teacher['Is_Active'] === 'TRUE') ? 'Aktif' : 'Non-Aktif' }}
                     </td>

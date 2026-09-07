@@ -119,7 +119,7 @@ class DocumentService
     public function DuplicateDocument($id, $user)
     {
         $doc = $this->getById($id);
-        if(!$doc) throw new \Exception("Document not found");
+        if(!$doc) throw new \Exception('Dokumen tidak ditemukan.');
 
         unset($doc['Document_ID']);
         $doc['Generated_By'] = $user;

@@ -11,7 +11,7 @@
             </div>
             <div class="min-w-0 text-sm leading-relaxed">
                 <h2 id="payment-info-title" class="font-extrabold">Pembayaran menunggu verifikasi</h2>
-                <p class="mt-1">Submission ini bukan invoice resmi. Status awal selalu <strong>Waiting Verification</strong> dan belum memengaruhi saldo atau laporan Finance sampai diverifikasi oleh Finance/Master.</p>
+                <p class="mt-1">Pengiriman ini bukan tagihan resmi. Status awal selalu <strong>Menunggu Verifikasi</strong> dan belum memengaruhi saldo atau laporan keuangan sampai diverifikasi oleh tim Keuangan atau Administrator Utama.</p>
             </div>
         </div>
     </section>
@@ -73,7 +73,7 @@
                         <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sky-600 shadow-sm" aria-hidden="true">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L8 8m4-4l4 4M5 20h14a2 2 0 002-2v-3a2 2 0 00-2-2h-1m-10 0H7a2 2 0 00-2 2v3a2 2 0 002 2z" /></svg>
                         </span>
-                        <span class="mt-2 text-sm font-extrabold text-slate-800">Upload bukti pembayaran</span>
+                        <span class="mt-2 text-sm font-extrabold text-slate-800">Unggah bukti pembayaran</span>
                         <span class="mt-1 text-xs text-slate-500">Ketuk untuk memilih file</span>
                         <span id="proof-help" class="mt-1 text-[11px] font-medium text-slate-400">JPG • PNG • PDF • maksimum 5 MB</span>
                     </label>

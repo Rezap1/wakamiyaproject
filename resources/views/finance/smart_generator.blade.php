@@ -26,7 +26,7 @@
                 📁 <span>Profil Kop Surat</span>
             </button>
             <button @click="activeTab = 'invoice'" :class="{'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)]': activeTab === 'invoice', 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50': activeTab !== 'invoice'}" class="px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-200 flex items-center gap-2">
-                📄 <span>Invoice</span>
+                📄 <span>Tagihan</span>
             </button>
             <button @click="activeTab = 'kwitansi'" :class="{'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)]': activeTab === 'kwitansi', 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50': activeTab !== 'kwitansi'}" class="px-4 py-2 text-xs font-extrabold rounded-xl transition-all duration-200 flex items-center gap-2">
                 📜 <span>Kwitansi</span>
@@ -66,20 +66,20 @@
                         🛠️ <span>Data Contoh</span>
                     </button>
                     <button type="button" @click="resetForm()" class="px-3 py-1.5 bg-rose-950/50 text-rose-300 hover:bg-rose-600 hover:text-white border border-rose-700/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
-                        🔄 <span>Reset</span>
+                        🔄 <span>Atur Ulang</span>
                     </button>
                 </div>
             </div>
 
             <!-- MODE SWITCHER (TAGIHAN SISWA vs INVOICE MANUAL) -->
             <div x-show="activeTab === 'invoice' || activeTab === 'kwitansi'" class="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 space-y-2 shadow-inner">
-                <label class="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Sumber Dokumen Invoice:</label>
+                <label class="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Sumber Dokumen Tagihan:</label>
                 <div class="grid grid-cols-2 gap-3">
                     <button type="button" @click="setSourceMode('student_invoice')" :class="{'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black shadow-lg ring-2 ring-emerald-400': sourceMode === 'student_invoice', 'bg-slate-800/80 text-slate-400 font-bold hover:bg-slate-700/80 hover:text-white': sourceMode !== 'student_invoice'}" class="py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5">
                         <span class="text-base">🧑‍🎓</span> <span>TAGIHAN SISWA</span>
                     </button>
                     <button type="button" @click="setSourceMode('manual_invoice')" :class="{'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black shadow-lg ring-2 ring-emerald-400': sourceMode === 'manual_invoice', 'bg-slate-800/80 text-slate-400 font-bold hover:bg-slate-700/80 hover:text-white': sourceMode !== 'manual_invoice'}" class="py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5">
-                        <span class="text-base">✏️</span> <span>INVOICE MANUAL</span>
+                        <span class="text-base">✏️</span> <span>TAGIHAN MANUAL</span>
                     </button>
                 </div>
             </div>
@@ -88,7 +88,7 @@
             <div x-show="(activeTab === 'invoice' || activeTab === 'kwitansi') && sourceMode === 'student_invoice'" class="bg-slate-950/70 border border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3.5 shadow-inner">
                 <div class="flex items-center justify-between">
                     <h3 class="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                        <span>🔎</span> <span>Cari Tagihan Siswa dari Finance Engine</span>
+                        <span>🔎</span> <span>Cari Tagihan Siswa dari Sistem Keuangan</span>
                     </h3>
                     <template x-if="selectedSourceId">
                         <span class="px-3 py-1 bg-emerald-950 text-emerald-300 border border-emerald-500/80 rounded-xl text-[10px] font-black tracking-wide shadow-xs">
@@ -107,7 +107,7 @@
                 <!-- Searching Loading -->
                 <div x-show="isSearching" class="text-center py-4 text-xs text-slate-400 flex items-center justify-center gap-2">
                     <span class="w-3 h-3 bg-emerald-400 rounded-full animate-ping"></span>
-                    <span>Mencari invoice siswa di Finance Engine...</span>
+                    <span>Mencari tagihan siswa di sistem keuangan...</span>
                 </div>
 
                 <!-- Search Results List -->
@@ -141,8 +141,8 @@
                     <div class="flex items-center gap-3 text-emerald-200">
                         <span class="text-base">🔒</span>
                         <div>
-                            <p class="font-black text-white">Tagihan Finance: <span class="font-mono text-emerald-300" x-text="selectedSourceId"></span></p>
-                            <p class="text-[10px] text-emerald-400 font-medium">Data terhubung langsung dari Finance Engine (Read-Only).</p>
+                            <p class="font-black text-white">Tagihan Keuangan: <span class="font-mono text-emerald-300" x-text="selectedSourceId"></span></p>
+                            <p class="text-[10px] text-emerald-400 font-medium">Data terhubung langsung dari sistem keuangan (hanya baca).</p>
                         </div>
                     </div>
                 </div>
@@ -237,7 +237,7 @@
                 <!-- DOCUMENT CONFIG -->
                 <div class="bg-slate-950/60 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4">
                     <h3 class="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                        <span>⚙️</span> <span>Konfigurasi Dokumen Invoice</span>
+                        <span>⚙️</span> <span>Konfigurasi Dokumen Tagihan</span>
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -249,7 +249,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-extrabold text-slate-300 uppercase tracking-wider mb-1.5">No. Invoice</label>
+                            <label class="block text-[11px] font-extrabold text-slate-300 uppercase tracking-wider mb-1.5">Nomor Tagihan</label>
                             <input type="text" x-model="invoice.doc_number" :readonly="sourceMode === 'student_invoice'" :class="{'bg-slate-950 text-slate-500 cursor-not-allowed': sourceMode === 'student_invoice'}" class="w-full text-xs bg-slate-900 border border-slate-700/80 rounded-xl text-white p-3 font-mono font-bold">
                         </div>
                         <div>
@@ -396,7 +396,7 @@
                             <label class="block text-[11px] font-extrabold text-slate-300 uppercase tracking-wider mb-1.5">Status Dokumen</label>
                             <select x-model="kwitansi.status" class="w-full text-xs bg-slate-900 border border-slate-700/80 rounded-xl text-white p-3 font-bold">
                                 <option value="PAID / LUNAS">PAID / LUNAS</option>
-                                <option value="PENDING">PENDING</option>
+                                <option value="PENDING">MENUNGGU</option>
                             </select>
                         </div>
                         <div>
@@ -498,7 +498,7 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-[11px] font-bold text-slate-400 mb-1.5">Coret TTD di bawah atau Upload Stempel PNG:</label>
+                        <label class="block text-[11px] font-bold text-slate-400 mb-1.5">Bubuhkan tanda tangan di bawah atau unggah stempel PNG:</label>
                         <div class="bg-white rounded-2xl overflow-hidden p-1 border-2 border-dashed border-slate-700 shadow-inner">
                             <canvas id="signatureCanvas" width="400" height="120" class="w-full h-24 bg-white rounded-xl cursor-crosshair"></canvas>
                         </div>
@@ -587,7 +587,7 @@
                                     <!-- TITLE BAR -->
                                     <div class="flex items-start justify-between">
                                         <div>
-                                            <h1 class="text-xl font-black text-slate-950 tracking-wider">INVOICE TAGIHAN</h1>
+                                            <h1 class="text-xl font-black text-slate-950 tracking-wider">TAGIHAN RESMI</h1>
                                             <p class="text-xs font-black text-slate-700 mt-0.5">No: <span x-text="invoice.doc_number" class="font-mono text-slate-950"></span></p>
                                         </div>
                                         <div>

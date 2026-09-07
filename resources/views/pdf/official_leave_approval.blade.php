@@ -173,7 +173,7 @@
                     <div class="field-row">
                         <span class="field-label">Status Cuti:</span>
                         <span class="field-value" style="color: #15803d; text-transform: uppercase;">
-                            {{ $leave['Status'] ?? 'APPROVED' }}
+                            {{ \App\Support\Presentation\IndonesianPresentation::status($leave['Status'] ?? 'APPROVED') }}
                         </span>
                     </div>
                 </div>

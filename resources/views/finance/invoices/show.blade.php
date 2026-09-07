@@ -71,7 +71,7 @@
                             <span class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-lg">⚠️</span>
                             <div>
                                 <h4 class="text-sm font-bold text-rose-900">Tagihan Ini Telah Jatuh Tempo (OVERDUE)</h4>
-                                <p class="text-xs text-rose-700 mt-0.5">Jatuh tempo pada {{ !empty($invoice['Due_Date']) ? \Carbon\Carbon::parse($invoice['Due_Date'])->format('d M Y') : '-' }}. Mohon segera hubungi siswa/pembayar.</p>
+                                <p class="text-xs text-rose-700 mt-0.5">Jatuh tempo pada {{ !empty($invoice['Due_Date']) ? \App\Helpers\DateHelper::format($invoice['Due_Date'], 'd M Y') : '-' }}. Mohon segera hubungi siswa/pembayar.</p>
                             </div>
                         </div>
                     </div>
@@ -140,7 +140,7 @@
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Pembuatan</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($invoice['Created_At']) ? \Carbon\Carbon::parse($invoice['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($invoice['Created_At']) ? \App\Helpers\DateHelper::format($invoice['Created_At'], 'd M Y, H:i') : '-' }}</p>
                     </div>
                 </div>
             </div>

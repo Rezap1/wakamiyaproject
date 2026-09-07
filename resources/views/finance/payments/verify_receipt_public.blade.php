@@ -42,7 +42,7 @@
             </div>
             <div class="flex justify-between gap-4">
                 <span class="text-slate-500 font-medium">Tanggal</span>
-                <span class="font-bold text-slate-800 text-right">{{ !empty($payment['Payment_Date']) ? \Carbon\Carbon::parse($payment['Payment_Date'])->format('d M Y') : '-' }}</span>
+                <span class="font-bold text-slate-800 text-right">{{ !empty($payment['Payment_Date']) ? \App\Helpers\DateHelper::format($payment['Payment_Date'], 'd M Y') : '-' }}</span>
             </div>
             <div class="flex justify-between gap-4">
                 <span class="text-slate-500 font-medium">Status</span>

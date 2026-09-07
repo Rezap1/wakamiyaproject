@@ -99,7 +99,7 @@ class HrDashboardService
         $payrollPending = $payrollsThisMonth->whereIn('Status', ['Draft', 'Waiting Approval'])->take(5)->values()->toArray();
         foreach ($payrollPending as $pay) {
             $reminders[] = [
-                'title'       => 'Payroll Waiting Approval',
+                'title'       => 'Penggajian Menunggu Persetujuan',
                 'description' => 'Payroll ' . ($pay['Payroll_Number'] ?? 'Unknown') . ' menunggu diproses.',
                 'action_url'  => route('payrolls.index'),
             ];

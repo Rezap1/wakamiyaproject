@@ -4,6 +4,12 @@
 
 @section('content')
 
+<section class="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+    <h2 class="text-xs font-bold uppercase tracking-widest text-blue-800">Biaya Pendidikan</h2>
+    <p class="mt-1 text-2xl font-black text-slate-900">Rp {{ number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.') }}</p>
+    <p class="mt-2 text-sm text-slate-600">Informasi biaya resmi. Tagihan muncul setelah diterbitkan oleh bagian keuangan.</p>
+</section>
+
 @php
     $formattedKpi = [
         ['title' => "Kelas Hari Ini", 'value' => $kpi['today_class'] ?? 0, 'icon' => 'calendar', 'color' => 'indigo', 'link' => route('student.schedule')],

@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use App\Support\LoginRateLimiter;
 use App\Providers\GoogleSheetsUserProvider;
 use App\Services\Core\UserService;
+use Carbon\Carbon;
 
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Repositories\GoogleSheets\UserRepository;
@@ -162,6 +163,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        app()->setLocale('id');
+        Carbon::setLocale('id');
+
         RateLimiter::for('login', function (Request $request) {
             return LoginRateLimiter::limits($request);
         });

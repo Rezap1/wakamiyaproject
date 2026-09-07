@@ -56,7 +56,7 @@
                 <tr><th>Departemen</th><td>{{ $employee['Department_Name'] ?? '-' }}</td></tr>
                 <tr><th>Jabatan</th><td>{{ $employee['Position_Name'] ?? '-' }}</td></tr>
                 <tr><th>Tanggal Bergabung</th><td>{{ $employee['Join_Date'] ?? '-' }}</td></tr>
-                <tr><th>Status Kerja</th><td>{{ $employee['Employment_Status'] ?? '-' }}</td></tr>
+                <tr><th>Status Kerja</th><td>{{ \App\Support\Presentation\IndonesianPresentation::status($employee['Employment_Status'] ?? null) }}</td></tr>
                 <tr><th>Status Akun</th><td>
                     @if(($employee['Is_Active'] ?? 'TRUE') === 'TRUE')
                         <span class="badge badge-active">AKTIF</span>

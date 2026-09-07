@@ -10,7 +10,7 @@
     
     <div class="flex items-center justify-between mb-4">
         <button class="p-1 hover:bg-slate-50 text-slate-400 rounded transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg></button>
-        <span class="text-[13px] font-extrabold text-slate-700 tracking-wide">{{ \Carbon\Carbon::now()->translatedFormat('F Y') }}</span>
+        <span class="text-[13px] font-extrabold text-slate-700 tracking-wide">{{ \App\Helpers\DateHelper::format(now(), 'F Y') }}</span>
         <button class="p-1 hover:bg-slate-50 text-slate-400 rounded transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg></button>
     </div>
 
@@ -46,7 +46,7 @@
     </div>
     
     <div class="mt-6 border-t border-slate-100 pt-6 space-y-4 flex-1">
-        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Upcoming Schedules</p>
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Jadwal Mendatang</p>
         <div class="flex items-start gap-3 group cursor-pointer">
             <div class="w-2.5 h-2.5 mt-1 rounded-full bg-emerald-500 ring-4 ring-blue-50 group-hover:scale-110 transition-transform"></div>
             <div>

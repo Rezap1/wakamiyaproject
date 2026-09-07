@@ -200,7 +200,7 @@
                     <div class="card-title">Informasi Pembayaran</div>
                     <div class="field-row">
                         <span class="field-label">Tgl Pembayaran:</span>
-                        <span class="field-value">{{ !empty($payment['Payment_Date']) ? \Carbon\Carbon::parse($payment['Payment_Date'])->format('d F Y') : '-' }}</span>
+                        <span class="field-value">{{ !empty($payment['Payment_Date']) ? \App\Helpers\DateHelper::format($payment['Payment_Date'], 'd F Y') : '-' }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Metode Bayar:</span>
@@ -212,7 +212,7 @@
                     </div>
                     <div class="field-row">
                         <span class="field-label">Status Verifikasi:</span>
-                        <span class="badge-verified">VERIFIED / LUNAS</span>
+                        <span class="badge-verified">TERVERIFIKASI / LUNAS</span>
                     </div>
                 </div>
             </td>
@@ -221,7 +221,7 @@
 
     <!-- INVOICE REFERENCE SUMMARY -->
     <div style="margin-bottom: 10px;">
-        <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Referensi Tagihan (Invoice):</span>
+        <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Referensi Tagihan:</span>
         <span style="font-size: 11px; font-weight: 700; color: #0f172a; margin-left: 5px;">#{{ $payment['Invoice_ID'] ?? '-' }} &bull; {{ $invoice['Category'] ?? 'Pendidikan' }}</span>
     </div>
 
@@ -235,11 +235,11 @@
         </thead>
         <tbody>
             <tr>
-                <td>Total Tagihan Tagihan (Invoice Amount)</td>
+                <td>Total Tagihan</td>
                 <td style="text-align: right; font-weight: bold;">Rp {{ number_format($balances['invoiceAmount'] ?? 0, 0, ',', '.') }}</td>
             </tr>
             <tr>
-                <td>Akumulasi Pembayaran Sebelumnya (Verified)</td>
+                <td>Akumulasi Pembayaran Sebelumnya (Terverifikasi)</td>
                 <td style="text-align: right; color: #475569;">Rp {{ number_format($balances['prevVerified'] ?? 0, 0, ',', '.') }}</td>
             </tr>
             <tr style="background: #f0fdf4;">

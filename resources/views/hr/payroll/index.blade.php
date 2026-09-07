@@ -30,10 +30,10 @@
             @if(in_array($currentRoleName, ['ADMINISTRATOR', 'HR', 'MASTER'], true))
                 <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Generate Batch Payroll Massal</h4>
+                        <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Buat Penggajian Massal</h4>
                         <p class="text-[11px] text-slate-500 mt-0.5">Kalkulasi gaji seluruh pegawai aktif secara otomatis berdasarkan presensi Phase F untuk periode tertentu.</p>
                     </div>
-                    <form action="{{ route('payrolls.batch-generate') }}" method="POST" class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center" onsubmit="return confirm('Proses batch payroll seluruh pegawai untuk periode ini?');">
+                    <form action="{{ route('payrolls.batch-generate') }}" method="POST" class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center" onsubmit="return confirm('Proses penggajian seluruh pegawai untuk periode ini?');">
                         @csrf
                         <input type="month" name="Payroll_Period" class="text-xs rounded-xl border-slate-200 p-2 font-bold text-slate-800" value="{{ date('Y-m') }}" required>
                         <button type="submit" class="min-h-11 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-colors">
@@ -47,7 +47,7 @@
 
     <x-universal.data-table :empty="count($payrolls) === 0" empty-title="Data Penggajian Kosong" empty-description="Belum ada data penggajian.">
         <x-slot:header>
-            <th class="px-6 py-4">Nomor & ID Payroll</th>
+            <th class="px-6 py-4">Nomor & ID Penggajian</th>
             <th class="px-6 py-4">Pegawai</th>
             <th class="px-6 py-4 text-center">Periode</th>
             <th class="px-6 py-4 text-right">Gaji Pokok</th>
@@ -101,7 +101,7 @@
                         <x-universal.action-button action="detail" url="{{ route('payrolls.show', $item['Payroll_ID']) }}" />
 
                         @if(!in_array(strtolower($status), ['paid', 'closed']))
-                            <form action="{{ route('payrolls.destroy', $item['Payroll_ID']) }}" method="POST" class="inline" onsubmit="return confirm('Hapus payroll ini?');">
+                            <form action="{{ route('payrolls.destroy', $item['Payroll_ID']) }}" method="POST" class="inline" onsubmit="return confirm('Hapus data penggajian ini?');">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus">

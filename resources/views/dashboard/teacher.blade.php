@@ -36,11 +36,11 @@
     <!-- 1. HEADER HERO -->
     <div class="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl shadow-lg p-4 sm:p-5 md:p-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div class="min-w-0">
-            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Dashboard Pengajar</p>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Dasbor Pengajar</p>
             <h1 class="mt-1 text-xl md:text-3xl font-extrabold tracking-tight leading-tight break-words">
                 {{ $greeting }}, {{ $teacherName }}
             </h1>
-            <p class="text-sm text-slate-300 mt-1 font-medium">Teacher / Pengajar</p>
+            <p class="text-sm text-slate-300 mt-1 font-medium">Guru / Pengajar</p>
         </div>
         <div class="w-full sm:w-auto text-left sm:text-right rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
             <p class="text-xs text-slate-300 font-semibold">{{ $dateFormatted }}</p>

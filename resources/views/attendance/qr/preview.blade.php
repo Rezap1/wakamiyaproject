@@ -12,7 +12,7 @@
                 🖨️ Cetak A4
             </a>
             <a href="{{ route('attendance.qr.pdf', $qr['QR_ID']) }}" class="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 font-bold rounded-xl text-sm transition-colors shadow-sm">
-                ⬇️ Download PDF
+                ⬇️ Unduh PDF
             </a>
         </div>
     </div>

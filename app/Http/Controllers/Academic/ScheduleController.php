@@ -147,7 +147,7 @@ class ScheduleController extends Controller
                 $this->scheduleService->create($scheduleData);
             }
             
-            return redirect()->route('schedules.index')->with('success', 'Schedule(s) created successfully.');
+            return redirect()->route('schedules.index')->with('success', 'Jadwal berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -171,7 +171,7 @@ class ScheduleController extends Controller
         \App\Repositories\GoogleSheets\AcademicYearRepository $ayRepo
     ) {
         $schedule = $this->scheduleService->getById($id);
-        if (!$schedule) return redirect()->route('schedules.index')->withErrors(['error' => 'Not found']);
+        if (!$schedule) return redirect()->route('schedules.index')->withErrors(['error' => 'Jadwal tidak ditemukan.']);
         $schedule = AcademicSheetMapper::normalizeScheduleRow((array) $schedule);
         
         $classes = $classRepo->fetchAll();
@@ -196,7 +196,7 @@ class ScheduleController extends Controller
         try {
             $data = $request->validated();
             $this->scheduleService->update($id, $data);
-            return redirect()->route('schedules.index')->with('success', 'Schedule updated successfully.');
+            return redirect()->route('schedules.index')->with('success', 'Jadwal berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -206,7 +206,7 @@ class ScheduleController extends Controller
     {
         try {
             $this->scheduleService->delete($id);
-            return redirect()->route('schedules.index')->with('success', 'Schedule deleted successfully.');
+            return redirect()->route('schedules.index')->with('success', 'Jadwal berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

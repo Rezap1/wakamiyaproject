@@ -27,7 +27,7 @@
             <span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                 Dokumen Valid
             </span>
-            <h2 class="text-2xl font-black text-slate-800 mt-3">Invoice Terverifikasi</h2>
+            <h2 class="text-2xl font-black text-slate-800 mt-3">Tagihan Terverifikasi</h2>
             <p class="text-xs text-slate-500 mt-1">Nominal dan metadata internal tidak ditampilkan pada halaman publik.</p>
         </div>
 

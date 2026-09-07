@@ -153,39 +153,8 @@ class StudentService
             $mappedData
         );
 
-        // --- AUTOMATIC INVOICE GENERATION ---
-        try {
-            $settingService = app(\App\Services\Core\SystemSettingService::class);
-            $invoiceService = app(\App\Services\Finance\InvoiceService::class);
-
-            // Get default tuition fee from settings (Finance category)
-            $defaultTuitionFee = $settingService->getDefaultTuitionFee();
-
-            if ($defaultTuitionFee > 0) {
-                $invoiceData = [
-                    'Invoice_Type' => 'STUDENT',
-                    'Student_ID' => $newId,
-                    'Category' => 'Biaya Pendidikan',
-                    'Amount' => $defaultTuitionFee,
-                    'Due_Date' => \Carbon\Carbon::parse($data['Registration_Date'] ?? now())->addDays(30)->format('Y-m-d'),
-                    'Description' => 'Tagihan biaya pendidikan awal siswa (Otomatis dari Sistem)',
-                    'items' => [
-                        [
-                            'description' => 'Biaya Pendidikan Pokok',
-                            'qty' => 1,
-                            'unit_price' => $defaultTuitionFee
-                        ]
-                    ]
-                ];
-
-                $invoice = $invoiceService->create($invoiceData);
-                // Publish the invoice to set it to 'Waiting Payment'
-                $invoiceService->publish($invoice['Invoice_ID']);
-            }
-
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Failed to generate default tuition invoice for student {$newId}: " . $e->getMessage());
-        }
+        // Registration and billing are separate business events. Finance must
+        // explicitly create and publish an invoice through its own workflow.
 
         return $mappedData;
     }

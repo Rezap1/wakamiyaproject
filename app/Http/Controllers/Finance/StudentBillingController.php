@@ -73,23 +73,10 @@ class StudentBillingController extends Controller
 
         // Use the dynamic remaining amount so partial and overdue invoices are
         // represented accurately without double-counting verified payments.
-        $totalOutstanding = $myInvoices
-            ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
-            ->sum('Remaining_Amount');
-        $totalPaid = $myInvoices->sum('Paid_Amount')
-            + $this->invoiceService->acceptedInvoiceLessSelfServiceTotal($myPayments, $studentId);
-
-        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary(
-            $studentId,
-            null,
-            $myInvoices,
-            $myPayments,
-            $student
-        );
-        $biayaBelajar = $educationSummary['tuition_fee'];
-        $totalDibayarPendidikan = $educationSummary['education_paid'];
-        $sisaTagihan = $educationSummary['remaining_to_pay'];
-        $progress = $educationSummary['progress'];
+        $totalOutstanding = (float) $myInvoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])->sum('Remaining_Amount');
+        $financialInvoices = $myInvoices->filter(fn ($invoice) => in_array(strtolower(trim((string) ($invoice['Status'] ?? ''))), ['waiting payment', 'partial paid', 'paid', 'overdue'], true));
+        $totalPaid = (float) $financialInvoices->sum('Paid_Amount');
+        $totalBilled = (float) $financialInvoices->sum('Amount');
         $companyProfile = $this->systemSettingService->getCompanyProfile();
         $bank = $companyProfile['bank'];
 
@@ -103,7 +90,7 @@ class StudentBillingController extends Controller
             ];
         });
 
-        $data = compact('myInvoices', 'myPayments', 'selfServicePayments', 'totalOutstanding', 'totalPaid', 'biayaBelajar', 'sisaTagihan', 'progress', 'categoryBreakdown', 'bank', 'totalDibayarPendidikan');
+        $data = compact('myInvoices', 'myPayments', 'selfServicePayments', 'totalOutstanding', 'totalPaid', 'totalBilled', 'categoryBreakdown', 'bank');
 
         return view('student.billing.index', $data);
     }
@@ -260,7 +247,7 @@ class StudentBillingController extends Controller
 
             $this->paymentService->submitPayment($paymentData);
             
-            return redirect()->route('student.billing.show', $id)->with('success', 'Payment submitted and waiting for verification.');
+            return redirect()->route('student.billing.show', $id)->with('success', 'Pembayaran berhasil dikirim dan sedang menunggu verifikasi.');
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {

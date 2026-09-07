@@ -388,7 +388,7 @@
             
             <div class="flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4 text-sm font-bold text-slate-800">
-                    {{ \Carbon\Carbon::now()->translatedFormat('F Y') }}
+                    {{ \App\Helpers\DateHelper::format(now(), 'F Y') }}
                 </div>
                 <div class="flex bg-slate-50 rounded-lg p-1 border border-slate-200 text-xs font-bold">
                     <button class="px-3 py-1 rounded-md bg-blue-600 text-white shadow-sm">Bulan</button>
@@ -398,7 +398,7 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 @forelse($calendar ?? [] as $event)
                 <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center text-center">
-                    <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">{{ \Carbon\Carbon::parse($event['date'])->format('d M Y') }}</span>
+                    <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">{{ \App\Helpers\DateHelper::format($event['date'], 'd M Y') }}</span>
                     <span class="text-xs font-bold text-slate-800">{{ $event['title'] }}</span>
                     <span class="text-[10px] text-slate-500 mt-1">{{ $event['type'] }}</span>
                 </div>

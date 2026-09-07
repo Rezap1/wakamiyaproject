@@ -58,11 +58,11 @@
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Status Pendidikan</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ $student['Enrollment_Status'] }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Support\Presentation\IndonesianPresentation::status($student['Enrollment_Status'] ?? null) }}</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Status Kelulusan</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ $student['Graduation_Status'] ?? 'Belum Lulus' }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Support\Presentation\IndonesianPresentation::status($student['Graduation_Status'] ?? 'Belum Lulus') }}</p>
                         </div>
                     </div>
                 </div>
@@ -82,7 +82,7 @@
                             <p class="text-xs font-bold text-slate-400 uppercase">Tempat, Tanggal Lahir</p>
                             <p class="text-sm font-medium text-slate-800 mt-1">
                                 {{ $student['Birth_Place'] ?: '-' }}, 
-                                {{ !empty($student['Birth_Date']) ? \Carbon\Carbon::parse($student['Birth_Date'])->translatedFormat('d F Y') : '-' }}
+                                {{ !empty($student['Birth_Date']) ? \App\Helpers\DateHelper::format($student['Birth_Date'], 'd F Y') : '-' }}
                             </p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">

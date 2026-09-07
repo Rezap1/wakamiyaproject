@@ -101,18 +101,13 @@ class StudentDashboardService
         $latestInvoice = $outstandingBills->sortByDesc('Created_At')->first();
 
         // === Payment Progress ===
-        $educationSummary = $this->invoiceService->getStudentEducationBillingSummary(
-            $studentId,
-            null,
-            $allInvoices,
-            $allPayments,
-            $student
-        );
-        $totalPaid = $educationSummary['education_paid'];
-        $totalBilled = $educationSummary['tuition_fee'];
-        $sisaTagihan = $educationSummary['remaining_to_pay'];
-        $statusPembayaran = $sisaTagihan <= 0 ? 'LUNAS' : 'BELUM LUNAS';
-        $paymentProgress = $educationSummary['progress'];
+        $educationFee = $this->invoiceService->getStudentTuitionFee($studentId, $student);
+        $invoiceRows = $myInvoices->filter(fn ($invoice) => in_array(strtolower(trim((string) ($invoice['Status'] ?? ''))), ['waiting payment', 'partial paid', 'paid', 'overdue'], true));
+        $totalBilled = (float) $invoiceRows->sum('Amount');
+        $totalPaid = (float) $invoiceRows->sum('Paid_Amount');
+        $sisaTagihan = (float) $invoiceRows->sum('Remaining_Amount');
+        $statusPembayaran = $invoiceRows->isEmpty() ? 'Belum ada tagihan' : ($sisaTagihan <= 0 ? 'LUNAS' : ($totalPaid > 0 ? 'DIBAYAR SEBAGIAN' : 'BELUM DIBAYAR'));
+        $paymentProgress = $totalBilled > 0 ? min(100, round(($totalPaid / $totalBilled) * 100)) : 0;
 
         $lastPayment = $myPayments->filter(fn ($payment) => \App\Support\Finance\PaymentStatus::verified($payment['Status'] ?? null))->sortByDesc('Payment_Date')->first();
         $nextDueDate = $outstandingBills->whereNotNull('Due_Date')->sortBy('Due_Date')->first();
@@ -160,6 +155,7 @@ class StudentDashboardService
         // === KPI ===
         $kpi = [
             'today_class'           => $todayClassCount,
+            'biaya_pendidikan'      => $educationFee,
             'total_tagihan'         => $totalBilled,
             'tagihan_dibayar'       => $totalPaid,
             'sisa_tagihan'          => $sisaTagihan,

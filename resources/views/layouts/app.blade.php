@@ -78,7 +78,7 @@
 
                     <div class="min-w-0 flex-1">
                         <p class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{{ $userRole ?? 'WMS' }}</p>
-                        <h1 class="line-clamp-2 text-sm font-extrabold leading-tight text-slate-900 sm:text-base" title="{{ strip_tags($__env->yieldContent('header', 'Dashboard')) }}">{!! strip_tags($__env->yieldContent('header', 'Dashboard')) !!}</h1>
+                        <h1 class="line-clamp-2 text-sm font-extrabold leading-tight text-slate-900 sm:text-base" title="{{ strip_tags($__env->yieldContent('header', 'Dasbor')) }}">{!! strip_tags($__env->yieldContent('header', 'Dasbor')) !!}</h1>
                     </div>
 
                     @if(Route::has('notifications.index'))

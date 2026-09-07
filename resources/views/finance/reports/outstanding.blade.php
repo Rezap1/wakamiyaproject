@@ -48,7 +48,7 @@
                 @endphp
                 <tr class="hover:bg-slate-50 transition-colors {{ $status === 'OVERDUE' ? 'bg-rose-50/50' : '' }}">
                     <td class="px-6 py-4 text-sm font-bold {{ $status === 'OVERDUE' ? 'text-rose-600' : 'text-slate-800' }}">
-                        {{ !empty($inv['Due_Date']) ? \Carbon\Carbon::parse($inv['Due_Date'])->format('d M Y') : '-' }}
+                        {{ !empty($inv['Due_Date']) ? \App\Helpers\DateHelper::format($inv['Due_Date'], 'd M Y') : '-' }}
                         @if($status === 'OVERDUE')
                             <div class="text-[10px] font-black text-rose-500 uppercase mt-0.5">⚠️ Terlambat</div>
                         @endif
@@ -71,7 +71,7 @@
                         @elseif($status === 'Partial Paid')
                             <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-purple-100 text-purple-800 uppercase">🟪 PARTIAL PAID</span>
                         @else
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-800 uppercase">⏳ WAITING PAYMENT</span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-800 uppercase">⏳ MENUNGGU PEMBAYARAN</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 text-right font-bold text-slate-700 text-sm">

@@ -8,7 +8,7 @@
     <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
         <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-5 sm:p-6 shadow-md flex items-center justify-between gap-4">
             <div class="min-w-0">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Active Unpaid Bills</p>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Tagihan Aktif Belum Lunas</p>
                 <h3 class="text-2xl sm:text-3xl font-black text-white mt-1 break-words">
                     Rp {{ number_format(collect($myInvoices)->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])->sum('Remaining_Amount'), 0, ',', '.') }}
                 </h3>
@@ -18,7 +18,7 @@
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 flex items-center justify-between gap-4">
             <div class="min-w-0">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Official Payment Account</p>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Rekening Pembayaran Resmi</p>
                 <p class="text-xs text-slate-500 font-medium">{{ $bank['name'] ?? 'BANK BCA' }}</p>
                 <p class="text-lg font-black text-slate-800 tracking-wider mt-0.5 break-all" id="accountNumber">{{ $bank['account_number'] ?? '888-999-777' }}</p>
                 <p class="text-[11px] font-bold text-slate-400 break-words">a.n. {{ $bank['account_holder'] ?? 'PT WAKAMIYA INDONESIA' }}</p>
@@ -35,9 +35,9 @@
             var accountNumber = document.getElementById("accountNumber").innerText;
             navigator.clipboard.writeText(accountNumber).then(function() {
                 var copyText = document.getElementById("copyText");
-                copyText.innerText = "Copied!";
+                copyText.innerText = "Tersalin!";
                 setTimeout(function() {
-                    copyText.innerText = "Copy";
+                    copyText.innerText = "Salin";
                 }, 2000);
             });
         }
@@ -92,7 +92,7 @@
                         </div>
                         <div class="rounded-xl bg-slate-50 p-3">
                             <dt class="text-[10px] font-bold uppercase text-slate-400">Jatuh Tempo</dt>
-                            <dd class="mt-1 font-bold {{ $status === 'OVERDUE' ? 'text-rose-700' : 'text-slate-800' }}">{{ !empty($item['Due_Date']) ? \Carbon\Carbon::parse($item['Due_Date'])->format('d M Y') : '-' }}</dd>
+                            <dd class="mt-1 font-bold {{ $status === 'OVERDUE' ? 'text-rose-700' : 'text-slate-800' }}">{{ !empty($item['Due_Date']) ? \App\Helpers\DateHelper::format($item['Due_Date'], 'd M Y') : '-' }}</dd>
                         </div>
                     </dl>
 
@@ -101,12 +101,12 @@
                             Detail / Bayar
                         </a>
                         <a href="{{ route('student.billing.invoice-pdf', $item['Invoice_ID']) }}" target="_blank" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
-                            Download PDF
+                            Unduh PDF
                         </a>
                     </div>
                 </article>
             @empty
-                <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">Tidak ada data tagihan.</div>
+                <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">Belum ada tagihan aktif.</div>
             @endforelse
         </div>
         <div class="app-table-responsive hidden md:block" data-desktop-billing-table>
@@ -133,7 +133,7 @@
                             <td class="px-6 py-4 font-bold text-slate-800">{{ $item['Category'] ?? '' }}</td>
                             <td class="px-6 py-4 text-center">
                                 <span class="text-xs font-bold {{ $status === 'OVERDUE' ? 'text-rose-600' : 'text-slate-700' }}">
-                                    {{ !empty($item['Due_Date']) ? \Carbon\Carbon::parse($item['Due_Date'])->format('d M Y') : '-' }}
+                                    {{ !empty($item['Due_Date']) ? \App\Helpers\DateHelper::format($item['Due_Date'], 'd M Y') : '-' }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 text-center font-black text-slate-800">Rp {{ number_format($item['Amount'] ?? 0, 0, ',', '.') }}</td>
@@ -148,11 +148,11 @@
                                 @elseif($status === 'Partial Paid')
                                     <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-purple-100 text-purple-800 uppercase">🟪 PARTIAL PAID</span>
                                 @elseif($status === 'Waiting Payment')
-                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-100 text-amber-800 uppercase">⏳ WAITING PAYMENT</span>
+                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-100 text-amber-800 uppercase">⏳ MENUNGGU PEMBAYARAN</span>
                                 @elseif($status === 'Cancelled')
-                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-200 text-slate-700 uppercase">❌ CANCELLED</span>
+                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-200 text-slate-700 uppercase">❌ DIBATALKAN</span>
                                 @else
-                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 text-slate-600 uppercase">📝 DRAFT</span>
+                                    <span class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 text-slate-600 uppercase">📝 DRAF</span>
                                 @endif
                             </td>
                             <td class="px-6 py-4 text-right">
@@ -179,7 +179,7 @@
                             <p class="break-all font-mono text-xs font-bold text-slate-500">{{ $payment['Payment_ID'] ?? '' }}</p>
                             <p class="font-black text-slate-800">Rp {{ number_format($payment['Amount_Paid'] ?? 0, 0, ',', '.') }}</p>
                         </div>
-                        <span class="inline-flex w-fit px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">{{ $payment['Status'] ?? 'Waiting Verification' }}</span>
+                        <span class="inline-flex w-fit px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Waiting Verification') }}</span>
                     </div>
                 @endforeach
             </div>

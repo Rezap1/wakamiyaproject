@@ -4,6 +4,7 @@ namespace App\Services\Dashboard;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use App\Support\Presentation\IndonesianPresentation;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
@@ -34,9 +35,7 @@ class DashboardContextService
             $greeting_icon = '🌙';
         }
 
-        // Format dates dynamically using Carbon with Indonesian locale
-        Carbon::setLocale('id');
-        $dateFormatted = $now->translatedFormat('l, d F Y');
+        $dateFormatted = IndonesianPresentation::date($now, 'l, j F Y');
 
         $user = Auth::user();
         if (!$user) {
@@ -46,8 +45,8 @@ class DashboardContextService
                 'greeting'      => $greeting,
                 'greeting_icon' => $greeting_icon,
                 'timezone'      => 'Asia/Jakarta',
-                'user_name'     => 'Guest',
-                'username'      => 'anonymous',
+                'user_name'     => 'Tamu',
+                'username'      => 'anonim',
                 'role'          => 'GUEST',
                 'user_id'       => null,
                 'timestamp'     => $now->timestamp,
@@ -78,7 +77,7 @@ class DashboardContextService
             }
 
             $context = [
-                'user_name'     => $user->Full_Name ?? 'Unknown User',
+                'user_name'     => $user->Full_Name ?? 'Pengguna tidak dikenal',
                 'username'      => $user->Username ?? 'unknown',
                 'role'          => strtoupper($roleName),
                 'user_id'       => $user->User_ID ?? null,

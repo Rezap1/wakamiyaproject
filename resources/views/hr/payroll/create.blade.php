@@ -97,7 +97,7 @@
                         <p class="font-bold flex items-center gap-1.5 text-blue-950">
                             <span>💡</span> Informasi Perhitungan Otomatis:
                         </p>
-                        <p>• Jika diisi <strong>0</strong>, sistem akan menghitung total gaji secara otomatis sesuai standar **Pengaturan HR** berdasarkan divisi/jabatan karyawan (misal: Finance Rp 3,8 Jt, Guru Rp 4 Jt, Staff Rp 3,5 Jt).</p>
+                        <p>• Jika diisi <strong>0</strong>, sistem akan menghitung total gaji secara otomatis sesuai Pengaturan SDM berdasarkan divisi/jabatan karyawan (misal: Keuangan Rp 3,8 juta, Guru Rp 4 juta, Staf Rp 3,5 juta).</p>
                         <p>• Jika Anda memasukkan nominal tertentu (misal: 5.000.000), nominal tersebut akan digunakan sebagai gaji bersih karyawan.</p>
                     </div>
                 </div>
@@ -106,7 +106,7 @@
                     <a href="{{ route('payrolls.index') }}" class="px-6 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-slate-800 transition-colors">Batal</a>
                     <button type="submit" :disabled="!employee.Employee_ID && isSelected" class="px-6 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-xl shadow-sm hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                         <span>⚡</span>
-                        <span>Hitung & Buat Payroll</span>
+                        <span>Hitung & Buat Penggajian</span>
                     </button>
                 </div>
             </div>

@@ -139,7 +139,7 @@
                 <td class="px-6 py-4 text-center">
                     @if(!empty($item['Due_Date']))
                         <span class="text-xs font-bold {{ $status === 'OVERDUE' ? 'text-rose-600' : 'text-slate-700' }}">
-                            {{ \Carbon\Carbon::parse($item['Due_Date'])->format('d M Y') }}
+                            {{ \App\Helpers\DateHelper::format($item['Due_Date'], 'd M Y') }}
                         </span>
                         @if($status === 'OVERDUE')
                             <div class="text-[10px] font-extrabold text-rose-500 uppercase mt-0.5">Lewat Jatuh Tempo</div>
@@ -194,7 +194,7 @@
                         @endif
 
                         @if(in_array($status, ['Waiting Payment', 'Partial Paid', 'OVERDUE']))
-                            <button @click="openModal('{{ $item['Invoice_ID'] }}', '{{ addslashes($item['student_name'] ?? '') }}', '{{ addslashes($item['Category'] ?? '') }}', '{{ number_format($remaining, 0, ',', '.') }}', '{{ !empty($item['Due_Date']) ? \Carbon\Carbon::parse($item['Due_Date'])->format('d M Y') : '-' }}')" 
+                            <button @click="openModal('{{ $item['Invoice_ID'] }}', '{{ addslashes($item['student_name'] ?? '') }}', '{{ addslashes($item['Category'] ?? '') }}', '{{ number_format($remaining, 0, ',', '.') }}', '{{ !empty($item['Due_Date']) ? \App\Helpers\DateHelper::format($item['Due_Date'], 'd M Y') : '-' }}')"
                                     class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold text-xs shadow-xs transition-colors" title="Kirim Notifikasi">
                                 Notifikasi
                             </button>

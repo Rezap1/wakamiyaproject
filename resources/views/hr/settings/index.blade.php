@@ -52,7 +52,7 @@
                     <div class="flex items-start gap-3">
                         <span class="text-2xl shrink-0">🛡️</span>
                         <div>
-                            <h4 class="font-bold text-amber-800 text-sm">H8.22 Geo-Fenced Dual QR Attendance</h4>
+                            <h4 class="font-bold text-amber-800 text-sm">H8.22 Presensi QR Ganda Berbasis Batas Lokasi</h4>
                             <p class="text-xs text-amber-700 mt-1">Konfigurasi geofence secara langsung mengontrol keamanan absensi. Perubahan akan langsung berlaku setelah disimpan. Pastikan nilai yang dimasukkan valid.</p>
                             <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div class="bg-white rounded-xl p-2.5 border border-amber-200">

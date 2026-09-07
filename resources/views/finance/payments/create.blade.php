@@ -16,9 +16,9 @@
             <input type="hidden" name="Idempotency_Key" value="{{ old('Idempotency_Key', (string) \Illuminate\Support\Str::uuid()) }}">
 
             <div class="md:col-span-2">
-                <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Invoice</label>
+                <label class="block mb-1.5 text-[13px] font-bold text-slate-700">Tagihan</label>
                 <select name="Invoice_ID" class="block w-full rounded-xl border-slate-200 text-sm" required>
-                    <option value="">Pilih invoice</option>
+                    <option value="">Pilih tagihan</option>
                     @foreach($invoices as $item)
                         @php $invoiceId = $item['Invoice_ID'] ?? ''; @endphp
                         <option value="{{ $invoiceId }}" @selected(old('Invoice_ID', $invoice['Invoice_ID'] ?? '') === $invoiceId)>

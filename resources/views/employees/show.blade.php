@@ -111,7 +111,7 @@
                             <p class="text-xs font-bold text-slate-400 uppercase">Tempat, Tanggal Lahir</p>
                             <p class="text-sm font-medium text-slate-800 mt-1">
                                 {{ $employee['Birth_Place'] ?: '-' }}, 
-                                {{ !empty($employee['Birth_Date']) ? \Carbon\Carbon::parse($employee['Birth_Date'])->format('d F Y') : '-' }}
+                                {{ !empty($employee['Birth_Date']) ? \App\Helpers\DateHelper::format($employee['Birth_Date'], 'd F Y') : '-' }}
                             </p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
@@ -165,11 +165,11 @@
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Status Kepegawaian</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ $employee['Employment_Status'] }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ \App\Support\Presentation\IndonesianPresentation::status($employee['Employment_Status'] ?? null) }}</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Tanggal Bergabung</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($employee['Join_Date']) ? \Carbon\Carbon::parse($employee['Join_Date'])->format('d M Y') : '-' }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($employee['Join_Date']) ? \App\Helpers\DateHelper::format($employee['Join_Date'], 'd M Y') : '-' }}</p>
                         </div>
                     </div>
                 </div>

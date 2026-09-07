@@ -56,7 +56,7 @@ class PdfService
     public function GenerateDocumentFile($docId, $userEmail, $role)
     {
         $doc = $this->docRepo->getById($docId);
-        if(!$doc) throw new \Exception("Document not found");
+        if(!$doc) throw new \Exception('Dokumen tidak ditemukan.');
 
         $currentVersion = intval(str_replace('V', '', $doc['Version'] ?? '0'));
         $newVersion = 'V' . ($currentVersion + 1);

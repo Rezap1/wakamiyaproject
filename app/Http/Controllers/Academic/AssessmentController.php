@@ -126,7 +126,7 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->create($request->validated());
-            return redirect()->route('assessments.index')->with('success', 'Assessment created successfully.');
+            return redirect()->route('assessments.index')->with('success', 'Penilaian berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -178,7 +178,7 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->update($id, $request->validated());
-            return redirect()->route('assessments.index')->with('success', 'Assessment updated successfully.');
+            return redirect()->route('assessments.index')->with('success', 'Penilaian berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -188,7 +188,7 @@ class AssessmentController extends Controller
     {
         try {
             $this->assessmentService->delete($id);
-            return redirect()->route('assessments.index')->with('success', 'Assessment deleted successfully.');
+            return redirect()->route('assessments.index')->with('success', 'Penilaian berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

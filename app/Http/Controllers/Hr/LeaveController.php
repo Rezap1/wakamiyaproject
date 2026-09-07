@@ -111,7 +111,7 @@ class LeaveController extends Controller
                 abort(403, 'Identitas approver tidak valid.');
             }
             $this->leaveService->approveLeave($id, $approver);
-            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti disetujui (Approved).');
+            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti disetujui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -127,7 +127,7 @@ class LeaveController extends Controller
             }
             $reason = $request->input('reason');
             $this->leaveService->rejectLeave($id, $approver, $reason);
-            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti ditolak (Rejected).');
+            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti ditolak.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -138,7 +138,7 @@ class LeaveController extends Controller
         try {
             $user = $this->authenticatedActor();
             $this->leaveService->cancelLeave($id, $user);
-            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti dibatalkan (Cancelled).');
+            return redirect()->route('hr.leaves.show', $id)->with('success', 'Pengajuan cuti dibatalkan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

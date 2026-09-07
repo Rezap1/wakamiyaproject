@@ -31,7 +31,7 @@ class PdfController extends Controller
             $role = session('role') ?? 'GUEST';
             
             $this->pdfService->GenerateDocumentFile($id, $userEmail, $role);
-            return back()->with('success', 'PDF Document successfully generated and signed.');
+            return back()->with('success', 'Dokumen PDF berhasil dibuat dan ditandatangani.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

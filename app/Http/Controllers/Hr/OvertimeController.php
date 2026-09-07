@@ -112,7 +112,7 @@ class OvertimeController extends Controller
                 abort(403, 'Identitas approver tidak valid.');
             }
             $this->overtimeService->approveOvertime($id, $approver);
-            return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur disetujui (Approved).');
+            return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur disetujui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -128,7 +128,7 @@ class OvertimeController extends Controller
             }
             $reason = $request->input('reason');
             $this->overtimeService->rejectOvertime($id, $approver, $reason);
-            return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur ditolak (Rejected).');
+            return redirect()->route('hr.overtimes.show', $id)->with('success', 'Pengajuan lembur ditolak.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

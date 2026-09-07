@@ -9,20 +9,8 @@
         ?? $user->Username
         ?? 'Pengguna WMS';
     $greeting = $dashboardContext['greeting'] ?? 'Selamat datang';
-    $roleLabels = [
-        'MASTER' => 'Master',
-        'ADMINISTRATOR' => 'Administrator',
-        'ACADEMIC' => 'Tim Akademik',
-        'FINANCE' => 'Tim Keuangan',
-        'HR' => 'Tim HR',
-        'MARKETING' => 'Tim Marketing',
-        'DIRECTOR' => 'Direktur',
-        'TEACHER' => 'Pengajar',
-        'STUDENT' => 'Siswa',
-        'EMPLOYEE' => 'Pegawai',
-    ];
-    $roleLabel = $roleLabels[$role] ?? 'Pengguna WMS';
-    $dateLabel = $dashboardContext['date'] ?? now('Asia/Jakarta')->translatedFormat('l, d F Y');
+    $roleLabel = \App\Support\Presentation\IndonesianPresentation::role($role, 'Pengguna WMS');
+    $dateLabel = $dashboardContext['date'] ?? \App\Support\Presentation\IndonesianPresentation::date(now('Asia/Jakarta'), 'l, j F Y');
     $formatMoney = static fn ($value) => 'Rp '.number_format((float) $value, 0, ',', '.');
 
     $actionsByRole = [

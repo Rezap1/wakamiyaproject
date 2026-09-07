@@ -84,12 +84,12 @@
                     <dl class="space-y-4">
                         <div>
                             <dt class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase">Dibuat Pada</dt>
-                            <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ !empty($module['Created_At']) ? \Carbon\Carbon::parse($module['Created_At'])->format('d F Y, H:i:s') : '-' }}</dd>
+                            <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ !empty($module['Created_At']) ? \App\Helpers\DateHelper::format($module['Created_At'], 'd F Y, H:i:s') : '-' }}</dd>
                             <dd class="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Oleh: {{ $module['Created_By'] ?? '-' }}</dd>
                         </div>
                         <div>
                             <dt class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase">Terakhir Diperbarui</dt>
-                            <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ !empty($module['Updated_At']) ? \Carbon\Carbon::parse($module['Updated_At'])->format('d F Y, H:i:s') : '-' }}</dd>
+                            <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ !empty($module['Updated_At']) ? \App\Helpers\DateHelper::format($module['Updated_At'], 'd F Y, H:i:s') : '-' }}</dd>
                             <dd class="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Oleh: {{ $module['Updated_By'] ?? '-' }}</dd>
                         </div>
                     </dl>

@@ -78,12 +78,12 @@
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Data Dibuat</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($class['Created_At']) ? \Carbon\Carbon::parse($class['Created_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($class['Created_At']) ? \App\Helpers\DateHelper::format($class['Created_At'], 'd M Y, H:i') : '-' }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ \App\Helpers\UserResolverHelper::getName($class['Created_By'] ?? '') }}</p>
                     </div>
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <p class="text-xs font-bold text-slate-400 uppercase">Terakhir Diperbarui</p>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($class['Updated_At']) ? \Carbon\Carbon::parse($class['Updated_At'])->format('d M Y, H:i') : '-' }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ !empty($class['Updated_At']) ? \App\Helpers\DateHelper::format($class['Updated_At'], 'd M Y, H:i') : '-' }}</p>
                         <p class="text-xs text-slate-500 mt-1">Oleh: {{ $class['Updated_By'] ?? 'Sistem' }}</p>
                     </div>
                 </div>

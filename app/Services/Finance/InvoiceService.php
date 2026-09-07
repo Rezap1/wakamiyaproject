@@ -313,7 +313,7 @@ class InvoiceService
                 $program = $programSnapshot !== null
                     ? collect($programSnapshot)->firstWhere('Program_ID', $student['Program_ID'])
                     : app(\App\Interfaces\GoogleSheets\ProgramRepositoryInterface::class)->findById($student['Program_ID']);
-                if ($program && !empty($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
+                if ($program && isset($program['Tuition_Fee']) && is_numeric($program['Tuition_Fee'])) {
                     $tuitionFee = (float) $program['Tuition_Fee'];
                 }
             }
@@ -322,7 +322,7 @@ class InvoiceService
                 $batch = $batchSnapshot !== null
                     ? collect($batchSnapshot)->firstWhere('Batch_ID', $student['Batch_ID'])
                     : app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->findById($student['Batch_ID']);
-                if ($batch && !empty($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
+                if ($batch && isset($batch['Tuition_Fee']) && is_numeric($batch['Tuition_Fee'])) {
                     $tuitionFee = (float) $batch['Tuition_Fee'];
                 }
             }
@@ -373,10 +373,12 @@ class InvoiceService
         // Student self-service payments are deliberately invoice-less. They
         // remain financially effective only after verification and are
         // associated to the student through the server-owned Student_ID.
-        $paidCents += Money::cents(
-            $this->acceptedInvoiceLessSelfServiceTotal($paymentRows, $studentId),
-            'Nominal pembayaran mandiri'
-        );
+        // Standalone receipts are cash history, never invoice settlement.
+        $standalonePaid = $this->acceptedInvoiceLessSelfServiceTotal($paymentRows, $studentId);
+        $remainingCents = $educationInvoices->sum(fn ($invoice) => max(0,
+            Money::cents($this->rawInvoiceAmount($invoice))
+            - Money::cents($acceptedTotals[$invoice['Invoice_ID']] ?? 0)
+        ));
         $billed = (float) ($billedCents / 100);
         $paid = (float) ($paidCents / 100);
 
@@ -384,9 +386,10 @@ class InvoiceService
             'tuition_fee' => $tuitionFee,
             'education_billed' => $billed,
             'education_paid' => $paid,
+            'standalone_paid' => $standalonePaid,
             'remaining_to_bill' => max(0.0, $tuitionFee - $billed),
-            'remaining_to_pay' => max(0.0, $tuitionFee - $paid),
-            'progress' => $tuitionFee > 0 ? min(100, round(($paid / $tuitionFee) * 100)) : 0,
+            'remaining_to_pay' => (float) ($remainingCents / 100),
+            'progress' => $billed > 0 ? min(100, round(($paid / $billed) * 100)) : 0,
         ];
     }
 

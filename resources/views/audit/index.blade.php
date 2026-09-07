@@ -36,8 +36,8 @@
                     @forelse($logs as $log)
                     <tr class="hover:bg-slate-50 transition-colors group">
                         <td class="p-4 whitespace-nowrap">
-                            <span class="font-semibold text-slate-700">{{ \Carbon\Carbon::parse($log['Created_At'])->format('d M Y') }}</span><br>
-                            <span class="text-xs text-slate-400">{{ \Carbon\Carbon::parse($log['Created_At'])->format('H:i:s') }}</span>
+                            <span class="font-semibold text-slate-700">{{ \App\Helpers\DateHelper::format($log['Created_At'], 'd M Y') }}</span><br>
+                            <span class="text-xs text-slate-400">{{ \App\Helpers\DateHelper::format($log['Created_At'], 'H:i:s') }}</span>
                         </td>
                         <td class="p-4">
                             <span class="font-bold text-slate-800">{{ $log['User_ID'] ?? 'Sistem' }}</span><br>

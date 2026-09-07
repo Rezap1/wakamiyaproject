@@ -202,7 +202,7 @@
                 <div class="card">
                     <div class="card-title">Detail Penggajian</div>
                     <div class="field-row">
-                        <span class="field-label">Periode Payroll:</span>
+                        <span class="field-label">Periode Penggajian:</span>
                         <span class="field-value">{{ $payroll['Payroll_Period'] ?? date('Y-m') }}</span>
                     </div>
                     <div class="field-row">
@@ -212,7 +212,7 @@
                     <div class="field-row">
                         <span class="field-label">Status Pembayaran:</span>
                         <span class="field-value" style="color: #15803d; text-transform: uppercase;">
-                            {{ $payroll['Status'] ?? 'Draft' }}
+                            {{ \App\Support\Presentation\IndonesianPresentation::status($payroll['Status'] ?? 'Draft') }}
                         </span>
                     </div>
                 </div>
@@ -350,7 +350,7 @@
                         {{ $payroll['Approved_By'] ?? 'HR & Finance Director' }}
                     </div>
                     <div style="font-size: 9px; color: #64748b;">
-                        Tanggal: {{ !empty($payroll['Paid_Date']) ? \Carbon\Carbon::parse($payroll['Paid_Date'])->format('d M Y') : date('d M Y') }}
+                        Tanggal: {{ !empty($payroll['Paid_Date']) ? \App\Helpers\DateHelper::format($payroll['Paid_Date'], 'd M Y') : date('d M Y') }}
                     </div>
                 </div>
             </td>

@@ -76,7 +76,7 @@
                         <div class="font-bold text-slate-800 text-sm mt-0.5">{{ $s['Title'] ?? '-' }}</div>
                     </td>
                     <td class="px-6 py-4 text-center">
-                        <div class="font-bold text-slate-800 text-xs">{{ !empty($s['Date']) ? \Carbon\Carbon::parse($s['Date'])->format('d M Y') : '-' }}</div>
+                        <div class="font-bold text-slate-800 text-xs">{{ !empty($s['Date']) ? \App\Helpers\DateHelper::format($s['Date'], 'd M Y') : '-' }}</div>
                         <div class="text-[11px] text-slate-500 font-mono">{{ $s['Start_Time'] ?? '08:00' }} - {{ $s['End_Time'] ?? '17:00' }} WIB</div>
                         @if($isScheduled)
                             <div class="text-[10px] text-sky-600 font-black mt-1">QR aktif saat jam mulai.</div>

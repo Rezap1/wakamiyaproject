@@ -24,7 +24,7 @@
             <div class="flex items-center gap-3">
                 <h1 class="text-2xl font-black text-slate-800 tracking-tight">{!! strip_tags($title) !!}</h1>
                 @if($status)
-                    <x-badge color="{{ $badgeColor }}">{{ $status }}</x-badge>
+                    <x-badge color="{{ $badgeColor }}">{{ \App\Support\Presentation\IndonesianPresentation::status($status) }}</x-badge>
                 @endif
             </div>
             @if($description)

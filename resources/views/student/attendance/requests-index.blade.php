@@ -65,7 +65,7 @@
                             <div class="text-lg font-black text-slate-800 mt-0.5">{{ $req['Attendance_Date'] }}</div>
                         </div>
                         <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border {{ $badgeClass }}">
-                            {{ $req['Status_Label'] ?? $req['Status'] }}
+                            {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null) }}
                         </span>
                     </div>
                     
@@ -129,7 +129,7 @@
                                         if ($req['Status'] === 'REJECTED') $badgeClass = 'bg-rose-50 text-rose-600 border-rose-200';
                                     @endphp
                                     <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold border {{ $badgeClass }}">
-                                        {{ $req['Status_Label'] ?? $req['Status'] }}
+                                        {{ $req['Status_Label'] ?? \App\Support\Presentation\IndonesianPresentation::status($req['Status'] ?? null) }}
                                     </span>
                                 </td>
                                 <td class="p-4 text-right">

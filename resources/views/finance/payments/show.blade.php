@@ -45,7 +45,7 @@
             </div>
             <div>
                 <p class="text-[11px] font-bold text-slate-400 uppercase">Tanggal Bayar</p>
-                <p class="text-sm font-medium text-slate-800 mt-0.5">{{ !empty($payment['Payment_Date']) ? \Carbon\Carbon::parse($payment['Payment_Date'])->format('d M Y') : '-' }}</p>
+                <p class="text-sm font-medium text-slate-800 mt-0.5">{{ !empty($payment['Payment_Date']) ? \App\Helpers\DateHelper::format($payment['Payment_Date'], 'd M Y') : '-' }}</p>
             </div>
             <div>
                 <p class="text-[11px] font-bold text-slate-400 uppercase">Status Verifikasi</p>
@@ -64,7 +64,7 @@
                             <div>
                                 <label for="payment-invoice" class="mb-1.5 block text-xs font-bold text-slate-700">Tagihan Tujuan</label>
                                 <select id="payment-invoice" name="Invoice_ID" class="block min-h-11 w-full rounded-lg border-slate-300 text-sm">
-                                    <option value="">Tidak terkait invoice</option>
+                                    <option value="">Tidak terkait tagihan</option>
                                     @foreach(($candidateInvoices ?? collect()) as $candidate)
                                         <option value="{{ $candidate['Invoice_ID'] }}" @selected(old('Invoice_ID') === ($candidate['Invoice_ID'] ?? ''))>
                                             {{ $candidate['Category'] ?? 'Tagihan' }} | Rp {{ number_format((float)($candidate['Remaining_Amount'] ?? 0), 0, ',', '.') }}
@@ -109,7 +109,7 @@
                         <div class="flex items-center gap-3">
                             <span class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-lg">⚠️</span>
                             <div>
-                                <h4 class="text-sm font-bold text-amber-900">Peringatan Overpayment!</h4>
+                                <h4 class="text-sm font-bold text-amber-900">Peringatan Kelebihan Pembayaran!</h4>
                                 <p class="text-xs text-amber-700 mt-0.5">Nominal bayar (Rp {{ number_format($amountPaid, 0, ',', '.') }}) melebihi sisa tagihan (Rp {{ number_format($remainingAmount, 0, ',', '.') }}).</p>
                             </div>
                         </div>
@@ -128,7 +128,7 @@
                             <span class="font-mono font-bold text-slate-800 block mt-0.5">{{ $payment['Payment_ID'] ?? '-' }}</span>
                         </div>
                         <div>
-                            <span class="text-slate-500 font-medium">No. Tagihan (Invoice):</span>
+                            <span class="text-slate-500 font-medium">Nomor Tagihan:</span>
                             <span class="font-mono font-bold text-blue-600 block mt-0.5">{{ trim((string) ($payment['Invoice_ID'] ?? '')) !== '' ? $payment['Invoice_ID'] : 'Tidak terkait invoice' }}</span>
                         </div>
                         <div>

@@ -55,7 +55,7 @@
                 <td class="px-6 py-4"><span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold">{{ $position['Department_Name'] }}</span></td>
                 <td class="px-6 py-4 font-medium text-slate-700">{{ $position['Position_Level'] }}</td>
                 <td class="px-6 py-4">
-                    <div class="text-sm font-medium">{{ !empty($position['Created_At']) ? \Carbon\Carbon::parse($position['Created_At'])->format('d M Y, H:i') : '-' }}</div>
+                    <div class="text-sm font-medium">{{ !empty($position['Created_At']) ? \App\Helpers\DateHelper::format($position['Created_At'], 'd M Y, H:i') : '-' }}</div>
                     <div class="text-xs text-slate-500">{{ $position['Created_By'] ?? '-' }}</div>
                 </td>
                 <td class="px-6 py-4">

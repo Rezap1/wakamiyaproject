@@ -32,7 +32,7 @@
                                 </div>
                                 <div>
                                     <h4 class="font-bold text-slate-800">{{ $payroll['Payroll_Period'] ?? 'Bulan Ini' }}</h4>
-                                    <p class="text-xs text-slate-500 mt-1">Dibayar: {{ isset($payroll['Paid_Date']) ? \Carbon\Carbon::parse($payroll['Paid_Date'])->translatedFormat('d F Y') : '-' }}</p>
+                                    <p class="text-xs text-slate-500 mt-1">Dibayar: {{ isset($payroll['Paid_Date']) ? \App\Helpers\DateHelper::format($payroll['Paid_Date'], 'd F Y') : '-' }}</p>
                                     @if(!empty($payroll['Notes']))
                                         <p class="text-xs text-blue-600 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-100">
                                             <span class="font-bold">Catatan:</span> {{ $payroll['Notes'] }}

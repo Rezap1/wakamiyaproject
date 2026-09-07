@@ -245,7 +245,7 @@
     <table class="doc-title-bar">
         <tr>
             <td>
-                <div class="doc-title">INVOICE TAGIHAN</div>
+                <div class="doc-title">TAGIHAN RESMI</div>
                 <div class="doc-no">No: {{ $data['doc_number'] ?? 'INV-WMS-0001' }}</div>
             </td>
             <td style="text-align: right; vertical-align: top;">

@@ -30,8 +30,8 @@
         <div>
             <x-select id="targetFilter">
                 <option value="ALL">Semua Target</option>
-                <option value="STUDENT">Student</option>
-                <option value="TEACHER">Teacher</option>
+                <option value="STUDENT">Siswa</option>
+                <option value="TEACHER">Guru</option>
                 <option value="ALL_USERS">Semua Pengguna</option>
             </x-select>
         </div>

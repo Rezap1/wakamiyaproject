@@ -68,7 +68,7 @@ class ProfileContactSyncTest extends TestCase
                 && $row['Full_Name'] === 'Siswa Contoh';
         }))->andReturn(true);
         $event->shouldReceive('dispatch')->zeroOrMoreTimes();
-        $settings->shouldReceive('getDefaultTuitionFee')->once()->andReturn(0);
+        $settings->shouldNotReceive('getDefaultTuitionFee');
 
         $service = new StudentService($studentRepo, $programRepo, $batchRepo, $classRepo, $event);
         $result = $service->createStudent([

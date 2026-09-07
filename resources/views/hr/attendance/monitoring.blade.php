@@ -108,9 +108,9 @@
                     $badgeColor = \App\Helpers\AttendanceStatusHelper::badgeColor($item['Status'] ?? '');
                     $displayStatus = \App\Helpers\AttendanceStatusHelper::label($item['Status'] ?? '');
 
-                    $checkIn = !empty($item['Check_In_Time']) ? \Carbon\Carbon::parse($item['Check_In_Time'])->format('H:i') : '-';
-                    $checkOut = !empty($item['Check_Out_Time']) ? \Carbon\Carbon::parse($item['Check_Out_Time'])->format('H:i') : 'Belum Check-Out';
-                    $dateFormatted = !empty($item['Attendance_Date']) ? \Carbon\Carbon::parse($item['Attendance_Date'])->format('d M Y') : '-';
+                    $checkIn = !empty($item['Check_In_Time']) ? \App\Helpers\DateHelper::format($item['Check_In_Time'], 'H:i') : '-';
+                    $checkOut = !empty($item['Check_Out_Time']) ? \App\Helpers\DateHelper::format($item['Check_Out_Time'], 'H:i') : 'Belum Check-Out';
+                    $dateFormatted = !empty($item['Attendance_Date']) ? \App\Helpers\DateHelper::format($item['Attendance_Date'], 'd M Y') : '-';
                 @endphp
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-4 font-bold text-slate-700">{{ $dateFormatted }}</td>
@@ -164,9 +164,9 @@
                 $badgeColor = \App\Helpers\AttendanceStatusHelper::badgeColor($item['Status'] ?? '');
                 $displayStatus = \App\Helpers\AttendanceStatusHelper::label($item['Status'] ?? '');
                 
-                $dateFormatted = !empty($item['Attendance_Date']) ? \Carbon\Carbon::parse($item['Attendance_Date'])->format('d M Y') : '-';
-                $checkIn = !empty($item['Check_In_Time']) ? \Carbon\Carbon::parse($item['Check_In_Time'])->format('H:i') : '-';
-                $checkOut = !empty($item['Check_Out_Time']) ? \Carbon\Carbon::parse($item['Check_Out_Time'])->format('H:i') : 'Belum Check-Out';
+                $dateFormatted = !empty($item['Attendance_Date']) ? \App\Helpers\DateHelper::format($item['Attendance_Date'], 'd M Y') : '-';
+                $checkIn = !empty($item['Check_In_Time']) ? \App\Helpers\DateHelper::format($item['Check_In_Time'], 'H:i') : '-';
+                $checkOut = !empty($item['Check_Out_Time']) ? \App\Helpers\DateHelper::format($item['Check_Out_Time'], 'H:i') : 'Belum Check-Out';
             @endphp
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                 <div class="flex justify-between items-start mb-3">

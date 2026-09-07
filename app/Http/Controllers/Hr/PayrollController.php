@@ -121,9 +121,9 @@ class PayrollController extends Controller
             $id = $payroll['Payroll_ID'] ?? ($payroll['id'] ?? null);
             if ($id) {
                 return redirect()->route('payrolls.show', ['id' => $id])
-                    ->with('success', 'Payroll berhasil dibuat secara deterministik sebagai Draft.');
+                    ->with('success', 'Data penggajian berhasil dibuat sebagai draf.');
             }
-            return redirect()->route('payrolls.index')->with('success', 'Payroll berhasil dibuat.');
+            return redirect()->route('payrolls.index')->with('success', 'Data penggajian berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -135,7 +135,7 @@ class PayrollController extends Controller
             $period = $request->input('Payroll_Period');
             $generated = $this->payrollService->generateBatchPayroll($period);
             return redirect()->route('payrolls.index')
-                ->with('success', "Batch Payroll periode {$period} berhasil diproses untuk " . count($generated) . " pegawai.");
+                ->with('success', "Penggajian massal periode {$period} berhasil diproses untuk " . count($generated) . " pegawai.");
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -159,7 +159,7 @@ class PayrollController extends Controller
         try {
             $user = $this->authenticatedActor();
             $this->payrollService->updateStatus($id, 'Waiting Approval', $user);
-            return redirect()->route('payrolls.show', $id)->with('success', 'Payroll berhasil diajukan untuk persetujuan (Waiting Approval).');
+            return redirect()->route('payrolls.show', $id)->with('success', 'Data penggajian berhasil diajukan dan menunggu persetujuan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -170,7 +170,7 @@ class PayrollController extends Controller
         try {
             $user = $this->authenticatedActor();
             $this->payrollService->updateStatus($id, 'Approved', $user);
-            return redirect()->route('payrolls.show', $id)->with('success', 'Payroll berhasil disetujui (Approved).');
+            return redirect()->route('payrolls.show', $id)->with('success', 'Data penggajian berhasil disetujui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -181,7 +181,7 @@ class PayrollController extends Controller
         try {
             $user = $this->authenticatedActor();
             $this->payrollService->updateStatus($id, 'Rejected', $user);
-            return redirect()->route('payrolls.show', $id)->with('success', 'Payroll ditolak (Rejected).');
+            return redirect()->route('payrolls.show', $id)->with('success', 'Data penggajian ditolak.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -206,7 +206,7 @@ class PayrollController extends Controller
 
             $notes = $request->input('Notes');
             $this->payrollService->updateStatus($id, 'Paid', $user, $paymentProofPath, $notes);
-            return redirect()->route('payrolls.show', $id)->with('success', 'Payroll lunas (Paid) dan jurnal kas pengeluaran tercatat.');
+            return redirect()->route('payrolls.show', $id)->with('success', 'Gaji telah dibayar dan jurnal kas pengeluaran tercatat.');
         } catch (\Exception $e) {
             if ($paymentProofPath) {
                 try {
@@ -262,7 +262,7 @@ class PayrollController extends Controller
     {
         try {
             $this->payrollService->delete($id);
-            return redirect()->route('payrolls.index')->with('success', 'Payroll berhasil dihapus.');
+            return redirect()->route('payrolls.index')->with('success', 'Data penggajian berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }
@@ -287,7 +287,7 @@ class PayrollController extends Controller
             ]);
             $user = $this->authenticatedActor();
             $this->payrollService->updateStatus($id, $validated['Status'], $user);
-            return redirect()->route('payrolls.show', $id)->with('success', 'Status Payroll berhasil diperbarui.');
+            return redirect()->route('payrolls.show', $id)->with('success', 'Status penggajian berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

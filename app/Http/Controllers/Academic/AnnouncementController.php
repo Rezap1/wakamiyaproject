@@ -59,7 +59,7 @@ class AnnouncementController extends Controller
         try {
             $data = $request->validated();
             $this->announcementService->create($data);
-            return redirect()->route('announcements.index')->with('success', 'Announcement created successfully.');
+            return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -68,14 +68,14 @@ class AnnouncementController extends Controller
     public function show($id)
     {
         $announcement = $this->announcementService->getById($id);
-        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Not found']);
+        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
         return view('academic.announcements.edit', compact('announcement'));
     }
 
     public function edit($id)
     {
         $announcement = $this->announcementService->getById($id);
-        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Not found']);
+        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
         return view('academic.announcements.edit', compact('announcement'));
     }
 
@@ -84,7 +84,7 @@ class AnnouncementController extends Controller
         try {
             $data = $request->validated();
             $this->announcementService->update($id, $data);
-            return redirect()->route('announcements.index')->with('success', 'Announcement updated successfully.');
+            return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
         }
@@ -94,7 +94,7 @@ class AnnouncementController extends Controller
     {
         try {
             $this->announcementService->delete($id);
-            return redirect()->route('announcements.index')->with('success', 'Announcement deleted successfully.');
+            return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
         }

@@ -141,13 +141,13 @@
                     <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
                             <x-select name="Day_Of_Week" label="Hari" required>
-                                <option value="Monday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Monday' ? 'selected' : '' }}>Senin (Monday)</option>
-                                <option value="Tuesday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Tuesday' ? 'selected' : '' }}>Selasa (Tuesday)</option>
-                                <option value="Wednesday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Wednesday' ? 'selected' : '' }}>Rabu (Wednesday)</option>
-                                <option value="Thursday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Thursday' ? 'selected' : '' }}>Kamis (Thursday)</option>
-                                <option value="Friday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Friday' ? 'selected' : '' }}>Jumat (Friday)</option>
-                                <option value="Saturday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Saturday' ? 'selected' : '' }}>Sabtu (Saturday)</option>
-                                <option value="Sunday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Sunday' ? 'selected' : '' }}>Minggu (Sunday)</option>
+                                <option value="Monday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Monday' ? 'selected' : '' }}>Senin</option>
+                                <option value="Tuesday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Tuesday' ? 'selected' : '' }}>Selasa</option>
+                                <option value="Wednesday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Wednesday' ? 'selected' : '' }}>Rabu</option>
+                                <option value="Thursday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Thursday' ? 'selected' : '' }}>Kamis</option>
+                                <option value="Friday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Friday' ? 'selected' : '' }}>Jumat</option>
+                                <option value="Saturday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Saturday' ? 'selected' : '' }}>Sabtu</option>
+                                <option value="Sunday" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Sunday' ? 'selected' : '' }}>Minggu</option>
                                 <!-- Fallback for existing indonesian data -->
                                 <option value="Senin" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Senin' ? 'selected' : '' }} class="hidden">Senin</option>
                                 <option value="Selasa" {{ old('Day_Of_Week', $schedule['Day_Of_Week'] ?? '') == 'Selasa' ? 'selected' : '' }} class="hidden">Selasa</option>

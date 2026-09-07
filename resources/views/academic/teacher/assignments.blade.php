@@ -33,7 +33,7 @@
                             <p class="text-xs font-semibold text-blue-600">Kelas: {{ $assignment['Class_Name'] ?? 'Kelas tidak ditemukan' }}</p>
                         </div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
-                            {{ !empty($assignment['Status']) ? $assignment['Status'] : 'Published' }}
+                            {{ \App\Support\Presentation\IndonesianPresentation::status($assignment['Status'] ?? 'Published') }}
                         </span>
                     </div>
                     <div class="text-xs text-slate-500">
@@ -76,7 +76,7 @@
                         <td class="px-6 py-4 text-slate-600">{{ $assignment['Deadline'] ?? '-' }}</td>
                         <td class="px-6 py-4">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
-                                {{ !empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED' }}
+                                {{ \App\Support\Presentation\IndonesianPresentation::status($assignment['Status'] ?? 'PUBLISHED') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 text-right">

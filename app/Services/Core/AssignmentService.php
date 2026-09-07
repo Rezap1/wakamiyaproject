@@ -35,7 +35,7 @@ class AssignmentService
     {
         if (isset($data['Publish_Date']) && isset($data['Deadline'])) {
             if (strtotime($data['Publish_Date']) >= strtotime($data['Deadline'])) {
-                throw new \Exception('Deadline must be greater than Publish Date.');
+                throw new \Exception('Batas waktu harus setelah tanggal publikasi.');
             }
         }
     }

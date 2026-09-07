@@ -100,10 +100,10 @@ class PerformanceReadOptimizationTest extends TestCase
         $this->assertSame(900.0, $summary['education_billed']);
         $this->assertSame(700.0, $summary['education_paid']);
         $this->assertSame(100.0, $summary['remaining_to_bill']);
-        $this->assertSame(300.0, $summary['remaining_to_pay']);
+        $this->assertSame(200.0, $summary['remaining_to_pay']);
     }
 
-    public function test_verified_invoice_and_self_service_payments_share_one_student_summary(): void
+    public function test_verified_invoice_and_standalone_self_service_payments_do_not_share_one_invoice_summary(): void
     {
         $settings = Mockery::mock(SystemSettingService::class);
         $settings->shouldReceive('getDefaultTuitionFee')->once()->andReturn(1000);
@@ -133,8 +133,9 @@ class PerformanceReadOptimizationTest extends TestCase
             ['Student_ID' => 'STU-1']
         );
 
-        $this->assertSame(500.0, $summary['education_paid']);
-        $this->assertSame(500.0, $summary['remaining_to_pay']);
+        $this->assertSame(200.0, $summary['education_paid']);
+        $this->assertSame(800.0, $summary['remaining_to_pay']);
+        $this->assertSame(300.0, $summary['standalone_paid']);
     }
 
     public function test_unknown_self_service_status_fails_closed(): void

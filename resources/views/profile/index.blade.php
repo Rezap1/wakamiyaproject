@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('header', 'Profil Saya')
 
@@ -76,11 +76,11 @@
                         </div>
                         <div>
                             <dt class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Tanggal Dibuat</dt>
-                            <dd class="text-sm font-medium text-slate-900">{{ isset($user->Created_At) ? \Carbon\Carbon::parse($user->Created_At)->format('d F Y') : 'Tidak diketahui' }}</dd>
+                            <dd class="text-sm font-medium text-slate-900">{{ isset($user->Created_At) ? \App\Helpers\DateHelper::format($user->Created_At, 'd F Y') : 'Tidak diketahui' }}</dd>
                         </div>
                         <div>
                             <dt class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Terakhir Diperbarui</dt>
-                            <dd class="text-sm font-medium text-slate-900">{{ isset($user->Updated_At) ? \Carbon\Carbon::parse($user->Updated_At)->format('d F Y, H:i') : 'Tidak diketahui' }}</dd>
+                            <dd class="text-sm font-medium text-slate-900">{{ isset($user->Updated_At) ? \App\Helpers\DateHelper::format($user->Updated_At, 'd F Y, H:i') : 'Tidak diketahui' }}</dd>
                         </div>
                     </dl>
                 </div>

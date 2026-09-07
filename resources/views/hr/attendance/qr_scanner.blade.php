@@ -406,7 +406,7 @@
                                 fixVideoIOS();
                                 this.viewState = 'SCANNING';
                             } else {
-                                throw new Error('No camera found');
+                                throw new Error('Kamera tidak ditemukan.');
                             }
                         } catch (err2) {
                             try {

@@ -106,7 +106,7 @@
                             $expColor = $isExpired ? 'text-rose-600 font-bold' : 'text-slate-500 font-medium';
                         @endphp
                         <div class="text-[10px] mt-1 {{ $expColor }}">
-                            Exp: {{ \Carbon\Carbon::parse($doc['Expiry_Date'])->format('d M Y') }}
+                            Exp: {{ \App\Helpers\DateHelper::format($doc['Expiry_Date'], 'd M Y') }}
                         </div>
                     @endif
                 </div>

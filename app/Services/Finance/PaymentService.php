@@ -980,7 +980,7 @@ class PaymentService
         $this->assertFinanceMutationActor();
         $payment = $this->freshPayment($paymentId);
         if (!$payment) {
-            throw new Exception("Payment not found");
+            throw new Exception('Pembayaran tidak ditemukan.');
         }
 
         $state = PaymentStatus::canonical($payment['Status'] ?? null);
