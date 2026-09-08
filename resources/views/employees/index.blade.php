@@ -107,7 +107,7 @@
             </td>
             <td class="px-6 py-4">
                 <div class="font-medium text-slate-800">{{ $employee['Email'] ?: '-' }}</div>
-                <div class="text-xs font-medium text-slate-500 mt-0.5">{{ $employee['Phone_Number'] ?: '-' }}</div>
+                <div class="text-xs font-medium text-slate-500 mt-0.5">{{ $employee['Phone_Number'] ?: 'Belum diisi' }}</div>
             </td>
             <td class="px-6 py-4">
                 <div class="font-bold text-slate-800">{{ $employee['Position_Name'] }}</div>

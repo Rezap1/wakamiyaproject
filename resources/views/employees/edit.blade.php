@@ -54,13 +54,18 @@
                 <div class="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-center gap-4">
                     <div class="relative w-24 h-24 rounded-full overflow-hidden border-2 border-white shadow-md bg-slate-200 flex items-center justify-center shrink-0">
                         @php
-                            $photoUrl = !empty($employee['Profile_Photo']) ? $employee['Profile_Photo'] : 'https://ui-avatars.com/api/?name=' . urlencode($employee['Full_Name'] ?? 'Emp') . '&background=0D8ABC&color=fff&size=128';
+                            $rawPhoto = $employee['Profile_Photo'] ?? '';
+                            $photoUrl = !empty($rawPhoto)
+                                ? (str_starts_with($rawPhoto, 'http') ? $rawPhoto : asset($rawPhoto))
+                                : 'https://ui-avatars.com/api/?name=' . urlencode($employee['Full_Name'] ?? 'Emp') . '&background=0D8ABC&color=fff&size=128';
                         @endphp
                         <img id="photo_preview" src="{{ $photoUrl }}" alt="Foto {{ $employee['Full_Name'] ?? '' }}" class="w-full h-full object-cover">
                     </div>
                     <div class="flex-1 w-full">
                         <label for="Profile_Photo" class="block text-xs font-bold text-slate-700 mb-1">Ganti Foto Profil Karyawan (Opsional)</label>
-                        <input type="file" name="Profile_Photo" id="Profile_Photo" accept="image/jpeg,image/png,image/jpg,image/webp" onchange="previewImage(this)" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer">
+                        <label for="Profile_Photo" class="inline-flex items-center rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer">Pilih File</label>
+                        <input type="file" name="Profile_Photo" id="Profile_Photo" accept="image/jpeg,image/png,image/jpg,image/webp" onchange="previewImage(this)" class="sr-only" aria-describedby="profile_photo_filename">
+                        <span id="profile_photo_filename" class="ml-2 text-xs text-slate-500">Belum ada file dipilih</span>
                         <p class="text-[11px] text-slate-500 mt-1">Format: JPG, PNG, WEBP. Maksimum: 5MB.</p>
                         @error('Profile_Photo') <p class="mt-1 text-xs font-bold text-rose-500">{{ $message }}</p> @enderror
                     </div>
@@ -85,7 +90,7 @@
                             label="Pilih Akun Pengguna" 
                             :required="true"
                             :options="$userOptions"
-                            value="{{ $employee['User_ID'] ?? '' }}"
+                            value="{{ old('User_ID', $employee['User_ID'] ?? '') }}"
                         />
                         <div id="selectedUserContact" class="rounded-2xl border border-sky-100 bg-sky-50/70 p-4 text-sm">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -99,39 +104,45 @@
                                 </div>
                                 <div>
                                     <p class="text-[10px] font-black uppercase text-slate-400">Nomor HP</p>
-                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">-</p>
+                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">Belum diisi</p>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <x-universal.input
+                        name="Phone_Number"
+                        label="Nomor Telepon / WhatsApp"
+                        placeholder="Belum diisi"
+                        value="{{ old('Phone_Number', $employee['Phone_Number'] ?? '') }}"
+                    />
                     <x-universal.input 
                         name="National_ID" 
                         label="Nomor KTP (NIK Nasional)" 
-                        value="{{ $employee['National_ID'] ?? '' }}"
+                        value="{{ old('National_ID', $employee['National_ID'] ?? '') }}"
                     />
                     <x-universal.input 
                         name="Birth_Place" 
                         label="Tempat Lahir" 
-                        value="{{ $employee['Birth_Place'] ?? '' }}"
+                        value="{{ old('Birth_Place', $employee['Birth_Place'] ?? '') }}"
                     />
                     <x-universal.input 
                         name="Birth_Date" 
                         label="Tanggal Lahir" 
                         type="date"
-                        value="{{ $employee['Birth_Date'] ?? '' }}"
+                        value="{{ old('Birth_Date', $employee['Birth_Date'] ?? '') }}"
                     />
                     <x-universal.select 
                         name="Gender" 
                         label="Jenis Kelamin" 
                         :required="true"
                         :options="['Laki-laki' => 'Laki-laki', 'Perempuan' => 'Perempuan']"
-                        value="{{ $employee['Gender'] ?? '' }}"
+                        value="{{ old('Gender', $employee['Gender'] ?? '') }}"
                     />
                     <div class="md:col-span-2">
                         <x-universal.textarea 
                             name="Address" 
                             label="Alamat Domisili" 
-                            value="{{ $employee['Address'] ?? '' }}"
+                            value="{{ old('Address', $employee['Address'] ?? '') }}"
                         />
                     </div>
                 </div>
@@ -146,7 +157,7 @@
                         label="Departemen" 
                         :required="true"
                         :options="$deptOptions"
-                        value="{{ $employee['Department_ID'] ?? '' }}"
+                        value="{{ old('Department_ID', $employee['Department_ID'] ?? '') }}"
                     />
                     
                     <div>
@@ -169,14 +180,14 @@
                         label="Tanggal Bergabung" 
                         type="date"
                         :required="true"
-                        value="{{ $employee['Join_Date'] ?? '' }}"
+                        value="{{ old('Join_Date', $employee['Join_Date'] ?? '') }}"
                     />
                     <x-universal.select 
                         name="Employment_Status" 
                         label="Status Kepegawaian" 
                         :required="true"
                         :options="['Tetap (PKWTT)' => 'Tetap (PKWTT)', 'Kontrak (PKWT)' => 'Kontrak (PKWT)', 'Probation' => 'Probation (Percobaan)', 'Magang' => 'Magang (Internship)']"
-                        value="{{ $employee['Employment_Status'] ?? '' }}"
+                        value="{{ old('Employment_Status', $employee['Employment_Status'] ?? '') }}"
                     />
                 </div>
             </div>
@@ -188,23 +199,23 @@
                     <x-universal.input 
                         name="Tax_Number" 
                         label="NPWP" 
-                        value="{{ $employee['Tax_Number'] ?? '' }}"
+                        value="{{ old('Tax_Number', $employee['Tax_Number'] ?? '') }}"
                     />
                     <x-universal.select 
                         name="Bank_Name" 
                         label="Nama Bank" 
                         :options="['BCA' => 'BCA', 'Mandiri' => 'Mandiri', 'BNI' => 'BNI', 'BRI' => 'BRI', 'BSI' => 'BSI', 'Lainnya' => 'Lainnya']"
-                        value="{{ $employee['Bank_Name'] ?? '' }}"
+                        value="{{ old('Bank_Name', $employee['Bank_Name'] ?? '') }}"
                     />
                     <x-universal.input 
                         name="Bank_Account_Number" 
                         label="Nomor Rekening" 
-                        value="{{ $employee['Bank_Account_Number'] ?? '' }}"
+                        value="{{ old('Bank_Account_Number', $employee['Bank_Account_Number'] ?? '') }}"
                     />
                     <x-universal.input 
                         name="Account_Holder_Name" 
                         label="Nama Pemilik Rekening" 
-                        value="{{ $employee['Account_Holder_Name'] ?? '' }}"
+                        value="{{ old('Account_Holder_Name', $employee['Account_Holder_Name'] ?? '') }}"
                     />
                 </div>
             </div>
@@ -218,13 +229,13 @@
                         label="Status Karyawan" 
                         :required="true"
                         :options="['TRUE' => 'Aktif', 'FALSE' => 'Nonaktif']"
-                        value="{{ $employee['Is_Active'] ?? 'TRUE' }}"
+                        value="{{ old('Is_Active', $employee['Is_Active'] ?? 'TRUE') }}"
                     />
                     <div class="md:col-span-2">
                         <x-universal.textarea 
                             name="Notes" 
                             label="Catatan Tambahan" 
-                            value="{{ $employee['Notes'] ?? '' }}"
+                            value="{{ old('Notes', $employee['Notes'] ?? '') }}"
                         />
                     </div>
                 </div>
@@ -296,12 +307,18 @@
 
             contactName.textContent = user.name || '-';
             contactEmail.textContent = user.email || '-';
-            contactPhone.textContent = user.phone || '-';
+            contactPhone.textContent = user.phone || 'Belum diisi';
             contactCard.classList.remove('hidden');
         }
     });
 
     function previewImage(input) {
+        const filename = document.getElementById('profile_photo_filename');
+        if (filename) {
+            filename.textContent = input.files && input.files[0]
+                ? input.files[0].name
+                : 'Belum ada file dipilih';
+        }
         if (input.files && input.files[0]) {
             const reader = new FileReader();
             reader.onload = function(e) {

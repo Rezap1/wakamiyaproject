@@ -32,6 +32,10 @@ class StoreEmployeeRequest extends FormRequest
                     }
                 }
             ],
+            // Contact is owned by MASTER_USER and synchronized to the
+            // employee row by EmployeeService. It is optional on create so a
+            // blank value never overwrites an existing account value.
+            'Phone_Number' => 'sometimes|nullable|string|max:30',
             'Gender' => 'nullable|string|max:20',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',

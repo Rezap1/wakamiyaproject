@@ -108,8 +108,8 @@ class HrDashboardService
         // Contract Expired
         foreach ($contractExpired->take(3) as $emp) {
             $reminders[] = [
-                'title'       => 'Contract Expired',
-                'description' => ($emp['Full_Name'] ?? 'Employee') . ' — kontrak berakhir ' . ($emp['Contract_End_Date'] ?? $emp['End_Date'] ?? '—'),
+                'title'       => 'Kontrak Berakhir',
+                'description' => ($emp['Full_Name'] ?? 'Karyawan') . ' — kontrak berakhir ' . ($emp['Contract_End_Date'] ?? $emp['End_Date'] ?? '—'),
                 'action_url'  => route('employees.index'),
             ];
         }
@@ -143,7 +143,13 @@ class HrDashboardService
     {
         // Department Distribution (riil)
         $deptMap = $departments->keyBy('Department_ID');
-        $deptGroups = $employees->where('Status', 'Active')->groupBy('Department_ID');
+        // MASTER_EMPLOYEE uses Is_Active/Employment_Status (there is no
+        // generic Status column). Keep charts aligned with the index KPI.
+        $deptGroups = $employees->filter(function ($employee) {
+            $flag = strtoupper(trim((string) ($employee['Is_Active'] ?? 'TRUE')));
+            $status = strtoupper(trim((string) ($employee['Employment_Status'] ?? 'ACTIVE')));
+            return $flag !== 'FALSE' && !in_array($status, ['INACTIVE', 'RESIGNED', 'TERMINATED'], true);
+        })->groupBy('Department_ID');
         $deptLabels = [];
         $deptData = [];
         foreach ($deptGroups as $deptId => $emps) {
@@ -157,7 +163,7 @@ class HrDashboardService
         $statusLabels = [];
         $statusData = [];
         foreach ($statusGroups as $status => $emps) {
-            $statusLabels[] = $status ?: 'Unknown';
+            $statusLabels[] = \App\Support\Presentation\IndonesianPresentation::status($status, 'Belum diisi');
             $statusData[] = $emps->count();
         }
 

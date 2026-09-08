@@ -23,6 +23,7 @@ class UpdateEmployeeRequest extends FormRequest
     {
         return [
             'User_ID' => 'required|string',
+            'Phone_Number' => 'sometimes|nullable|string|max:30',
             'Gender' => 'nullable|string|max:20',
             'Birth_Place' => 'nullable|string|max:100',
             'Birth_Date' => 'nullable|date',

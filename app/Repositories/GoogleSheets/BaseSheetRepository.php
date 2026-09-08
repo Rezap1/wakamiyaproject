@@ -269,12 +269,15 @@ abstract class BaseSheetRepository
 
                     $rowValues = [];
                     foreach ($headers as $header) {
-                        $rowValues[] = $data[$header] ?? '';
+                        $rowValues[] = $this->normalizeSheetCell($data[$header] ?? '');
                     }
+                    // Google's ValueRange serializes numeric-keyed PHP arrays
+                    // as JSON objects when keys are sparse. Always reindex the
+                    // row so the API receives values: [[cell, cell, ...]].
+                    $rowValues = array_values($rowValues);
 
-                    $body = new \Google_Service_Sheets_ValueRange([
-                        'values' => [$rowValues]
-                    ]);
+                    $body = new \Google\Service\Sheets\ValueRange();
+                    $body->setValues([array_values($rowValues)]);
 
                     $params = [
                         'valueInputOption' => self::WRITE_INPUT_OPTION
@@ -502,14 +505,14 @@ abstract class BaseSheetRepository
                     foreach ($headers as $header) {
                         // Keep existing value if not provided in $data
                         $existingValue = $values[$rowIndexToUpdate - 1][array_search($header, $headers)] ?? '';
-                        $rowValues[] = array_key_exists($header, $data) ? $data[$header] : $existingValue;
+                        $rowValues[] = $this->normalizeSheetCell(array_key_exists($header, $data) ? $data[$header] : $existingValue);
                     }
+                    $rowValues = array_values($rowValues);
 
                     $range = $this->sheetName . '!A' . $rowIndexToUpdate;
                     
-                    $body = new \Google_Service_Sheets_ValueRange([
-                        'values' => [$rowValues]
-                    ]);
+                    $body = new \Google\Service\Sheets\ValueRange();
+                    $body->setValues([array_values($rowValues)]);
 
                     $params = [
                         'valueInputOption' => self::WRITE_INPUT_OPTION
@@ -778,6 +781,30 @@ abstract class BaseSheetRepository
         if (!empty($this->expectedHeaders) && array_values($headers) !== array_values($this->expectedHeaders)) {
             throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak sesuai schema yang diharapkan.");
         }
+    }
+
+    /**
+     * Google Sheets ValueRange accepts scalar cell values only. Normalizing at
+     * the repository boundary prevents malformed nested/associative payloads
+     * (the production "Unknown name \"0\" at data.values[0]" failure) and
+     * keeps booleans/dates deterministic without changing sheet headers.
+     */
+    private function normalizeSheetCell($value)
+    {
+        if ($value === null) {
+            return '';
+        }
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+        if (is_bool($value) || is_int($value) || is_float($value) || is_string($value)) {
+            return $value;
+        }
+        if ($value instanceof \Stringable) {
+            return (string) $value;
+        }
+
+        throw new \InvalidArgumentException('Nilai sel Google Sheets harus berupa skalar.');
     }
 
     /**

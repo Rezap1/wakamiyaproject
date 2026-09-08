@@ -37,7 +37,7 @@ class EmployeeController extends Controller
 
         $search = $request->input('search');
         if (!empty($search)) {
-            $employees = \App\Helpers\CollectionHelper::search($employees, $search, ['Employee_ID', 'First_Name', 'Last_Name', 'Email', 'Phone', 'Department_Name', 'Position_Name']);
+            $employees = \App\Helpers\CollectionHelper::search($employees, $search, ['Employee_ID', 'Employee_Number', 'Full_Name', 'Email', 'Phone_Number', 'Department_Name', 'Position_Name']);
         }
         if ($request->filled('department')) {
             $employees = $employees->where('Department_ID', $request->input('department'));
@@ -112,7 +112,7 @@ class EmployeeController extends Controller
             // Search
             $search = $request->input('search');
             if (!empty($search)) {
-                $employees = \App\Helpers\CollectionHelper::search($employees, $search, ['Employee_ID', 'First_Name', 'Last_Name', 'Email', 'Phone', 'Department_Name', 'Position_Name']);
+                $employees = \App\Helpers\CollectionHelper::search($employees, $search, ['Employee_ID', 'Employee_Number', 'Full_Name', 'Email', 'Phone_Number', 'Department_Name', 'Position_Name']);
             }
 
             // Filter
@@ -206,6 +206,7 @@ class EmployeeController extends Controller
 
     public function store(StoreEmployeeRequest $request)
     {
+        $data = [];
         try {
             $data = $request->validated();
             if ($request->hasFile('Profile_Photo')) {
@@ -215,7 +216,11 @@ class EmployeeController extends Controller
 
             return redirect()->route('employees.index')->with('success', 'Karyawan berhasil didaftarkan.');
         } catch (\Exception $e) {
-            Log::error('Error creating employee: ' . $e->getMessage());
+            Log::error('Employee create failed', [
+                'stage' => 'controller',
+                'exception' => get_class($e),
+                'employee_id' => $data['Employee_ID'] ?? null,
+            ]);
             return back()->with('error', 'Terjadi kesalahan saat menyimpan data ke Google Sheets.')->withInput();
         }
     }
@@ -303,7 +308,11 @@ class EmployeeController extends Controller
 
             return redirect()->route('employees.index')->with('success', 'Data karyawan berhasil diperbarui.');
         } catch (\Exception $e) {
-            Log::error('Error updating employee: ' . $e->getMessage());
+            Log::error('Employee update failed', [
+                'stage' => 'controller',
+                'exception' => get_class($e),
+                'employee_id' => $id,
+            ]);
             return back()->with('error', 'Terjadi kesalahan saat memperbarui data di Google Sheets.')->withInput();
         }
     }

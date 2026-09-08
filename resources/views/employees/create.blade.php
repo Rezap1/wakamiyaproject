@@ -48,7 +48,9 @@
                     </div>
                     <div class="flex-1 w-full">
                         <label for="Profile_Photo" class="block text-xs font-bold text-slate-700 mb-1">Foto Profil Karyawan (Opsional)</label>
-                        <input type="file" name="Profile_Photo" id="Profile_Photo" accept="image/jpeg,image/png,image/jpg,image/webp" onchange="previewImage(this)" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer">
+                        <label for="Profile_Photo" class="inline-flex items-center rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer">Pilih File</label>
+                        <input type="file" name="Profile_Photo" id="Profile_Photo" accept="image/jpeg,image/png,image/jpg,image/webp" onchange="previewImage(this)" class="sr-only" aria-describedby="profile_photo_filename">
+                        <span id="profile_photo_filename" class="ml-2 text-xs text-slate-500">Belum ada file dipilih</span>
                         <p class="text-[11px] text-slate-500 mt-1">Format: JPG, PNG, WEBP. Maksimum: 5MB.</p>
                         @error('Profile_Photo') <p class="mt-1 text-xs font-bold text-rose-500">{{ $message }}</p> @enderror
                     </div>
@@ -61,7 +63,7 @@
                             label="Pilih Akun Pengguna" 
                             :required="true"
                             :options="$userOptions"
-                            value=""
+                            value="{{ old('User_ID') }}"
                         />
                         <div id="selectedUserContact" class="hidden rounded-2xl border border-sky-100 bg-sky-50/70 p-4 text-sm">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -75,39 +77,49 @@
                                 </div>
                                 <div>
                                     <p class="text-[10px] font-black uppercase text-slate-400">Nomor HP</p>
-                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">-</p>
+                                    <p id="selectedUserPhone" class="mt-1 font-bold text-slate-800">Belum diisi</p>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <x-universal.input
+                        name="Phone_Number"
+                        label="Nomor Telepon / WhatsApp"
+                        placeholder="Belum diisi"
+                        value="{{ old('Phone_Number') }}"
+                    />
                     <x-universal.input 
                         name="National_ID" 
                         label="Nomor KTP (NIK Nasional)" 
                         placeholder="16 Digit NIK"
+                        value="{{ old('National_ID') }}"
                     />
                     <div></div> <!-- Spacing -->
                     <x-universal.input 
                         name="Birth_Place" 
                         label="Tempat Lahir" 
                         placeholder="Kota Kelahiran"
+                        value="{{ old('Birth_Place') }}"
                     />
                     <x-universal.input 
                         name="Birth_Date" 
                         label="Tanggal Lahir" 
                         type="date"
+                        value="{{ old('Birth_Date') }}"
                     />
                     <x-universal.select 
                         name="Gender" 
                         label="Jenis Kelamin" 
                         :required="true"
                         :options="['Laki-laki' => 'Laki-laki', 'Perempuan' => 'Perempuan']"
-                        value=""
+                        value="{{ old('Gender') }}"
                     />
                     <div class="md:col-span-2">
                         <x-universal.textarea 
                             name="Address" 
                             label="Alamat Domisili" 
                             placeholder="Alamat lengkap..."
+                            value="{{ old('Address') }}"
                         />
                     </div>
                 </div>
@@ -122,7 +134,7 @@
                         label="Departemen" 
                         :required="true"
                         :options="$deptOptions"
-                        value=""
+                        value="{{ old('Department_ID') }}"
                     />
                     
                     <div>
@@ -145,14 +157,14 @@
                         label="Tanggal Bergabung" 
                         type="date"
                         :required="true"
-                        value="{{ date('Y-m-d') }}"
+                        value="{{ old('Join_Date', date('Y-m-d')) }}"
                     />
                     <x-universal.select 
                         name="Employment_Status" 
                         label="Status Kepegawaian" 
                         :required="true"
                         :options="['Tetap (PKWTT)' => 'Tetap (PKWTT)', 'Kontrak (PKWT)' => 'Kontrak (PKWT)', 'Probation' => 'Probation (Percobaan)', 'Magang' => 'Magang (Internship)']"
-                        value=""
+                        value="{{ old('Employment_Status') }}"
                     />
                 </div>
             </div>
@@ -165,22 +177,25 @@
                         name="Tax_Number" 
                         label="NPWP" 
                         placeholder="Nomor NPWP"
+                        value="{{ old('Tax_Number') }}"
                     />
                     <x-universal.select 
                         name="Bank_Name" 
                         label="Nama Bank" 
                         :options="['BCA' => 'BCA', 'Mandiri' => 'Mandiri', 'BNI' => 'BNI', 'BRI' => 'BRI', 'BSI' => 'BSI', 'Lainnya' => 'Lainnya']"
-                        value=""
+                        value="{{ old('Bank_Name') }}"
                     />
                     <x-universal.input 
                         name="Bank_Account_Number" 
                         label="Nomor Rekening" 
                         placeholder="Nomor Rekening"
+                        value="{{ old('Bank_Account_Number') }}"
                     />
                     <x-universal.input 
                         name="Account_Holder_Name" 
                         label="Nama Pemilik Rekening" 
                         placeholder="Sesuai Buku Tabungan"
+                        value="{{ old('Account_Holder_Name') }}"
                     />
                 </div>
             </div>
@@ -194,6 +209,7 @@
                             name="Notes" 
                             label="Catatan Tambahan" 
                             placeholder="Informasi medis, kontak darurat, atau catatan khusus..."
+                            value="{{ old('Notes') }}"
                         />
                     </div>
                 </div>
@@ -269,12 +285,18 @@
 
             contactName.textContent = user.name || '-';
             contactEmail.textContent = user.email || '-';
-            contactPhone.textContent = user.phone || '-';
+            contactPhone.textContent = user.phone || 'Belum diisi';
             contactCard.classList.remove('hidden');
         }
     });
 
     function previewImage(input) {
+        const filename = document.getElementById('profile_photo_filename');
+        if (filename) {
+            filename.textContent = input.files && input.files[0]
+                ? input.files[0].name
+                : 'Belum ada file dipilih';
+        }
         if (input.files && input.files[0]) {
             const reader = new FileReader();
             reader.onload = function(e) {

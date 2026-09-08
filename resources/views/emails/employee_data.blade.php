@@ -45,7 +45,7 @@
             <div class="section-title">B. Informasi Kontak</div>
             <table class="info-table">
                 <tr><th>Email</th><td>{{ $employee['Email'] ?? '-' }}</td></tr>
-                <tr><th>Nomor Telepon</th><td>{{ $employee['Phone_Number'] ?? '-' }}</td></tr>
+                <tr><th>Nomor Telepon</th><td>{{ trim((string) ($employee['Phone_Number'] ?? '')) !== '' ? $employee['Phone_Number'] : 'Belum diisi' }}</td></tr>
             </table>
 
             <!-- C. Employment Information -->

@@ -143,7 +143,7 @@
                         </div>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <p class="text-xs font-bold text-slate-400 uppercase">Nomor Telepon / WhatsApp</p>
-                            <p class="text-sm font-medium text-slate-800 mt-1">{{ $employee['Phone_Number'] ?: '-' }}</p>
+                            <p class="text-sm font-medium text-slate-800 mt-1">{{ $employee['Phone_Number'] ?: 'Belum diisi' }}</p>
                         </div>
                     </div>
                 </div>

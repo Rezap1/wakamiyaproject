@@ -17,6 +17,7 @@ class ProfileController extends Controller
     public function index()
     {
         $user = auth()->user();
+        $user->Phone = trim((string) ($user->Phone ?? $user->Phone_Number ?? ''));
         $roleName = 'Unknown';
         $recentActivities = [];
         
@@ -27,7 +28,24 @@ class ProfileController extends Controller
                 $roleName = $roleData['Role_Name'] ?? 'Unknown';
             }
             
-            // Fetch Employee Data for Phone Number
+            // MASTER_USER owns contact data. Refresh the principal from the
+            // sheet first, then use employee/student rows only as legacy
+            // fallbacks for accounts whose contact cell is still empty.
+            try {
+                $authoritativeUser = app(UserService::class)->getUserById((string) ($user->User_ID ?? ''));
+                if (is_array($authoritativeUser)) {
+                    foreach (['Full_Name', 'Email', 'Phone_Number', 'Employee_ID', 'Student_ID'] as $field) {
+                        if (array_key_exists($field, $authoritativeUser) && trim((string) ($authoritativeUser[$field] ?? '')) !== '') {
+                            $user->{$field} = $authoritativeUser[$field];
+                        }
+                    }
+                    $user->Phone = $authoritativeUser['Phone_Number'] ?? '';
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to refresh authoritative profile user', ['exception' => get_class($e)]);
+            }
+
+            // Fetch legacy Employee/Student fallbacks for phone display.
             $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
             $employees = $employeeRepo->fetchAll();
             $employee = collect($employees)->firstWhere('User_ID', $user->User_ID);
@@ -36,9 +54,9 @@ class ProfileController extends Controller
                 $employee = collect($employees)->firstWhere('Employee_ID', $user->Employee_ID);
             }
             
-            if ($employee && !empty($employee['Phone_Number'])) {
+            if (empty($user->Phone) && $employee && !empty($employee['Phone_Number'])) {
                 $user->Phone = $employee['Phone_Number'];
-            } else {
+            } elseif (empty($user->Phone)) {
                 // If not found in Employee, try fetching from Student Data
                 $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
                 $students = $studentRepo->fetchAll();
@@ -51,7 +69,7 @@ class ProfileController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            Log::error("Failed to fetch role/employee/student in ProfileController: " . $e->getMessage());
+            Log::error('Profile contact lookup failed', ['exception' => get_class($e)]);
         }
         
         try {
@@ -70,7 +88,7 @@ class ProfileController extends Controller
                     ->toArray();
             }
         } catch (\Exception $e) {
-            Log::error("Failed to fetch activity logs for user {$user->User_ID}: " . $e->getMessage());
+            Log::error('Profile activity lookup failed', ['exception' => get_class($e)]);
         }
 
         return view('profile.index', compact('user', 'roleName', 'recentActivities'));
