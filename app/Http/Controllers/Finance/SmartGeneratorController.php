@@ -11,8 +11,10 @@ use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Helpers\UserResolverHelper;
 use App\Helpers\TerbilangHelper;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 class SmartGeneratorController extends Controller
 {
@@ -133,24 +135,43 @@ class SmartGeneratorController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $docType = $request->input('doc_type', 'invoice');
-        $data = $this->prepareDocumentData($request);
+        try {
+            $docType = $request->input('doc_type', 'invoice');
+            $data = $this->prepareDocumentData($request);
 
-        $viewName = ($docType === 'kwitansi') 
-            ? 'pdf.smart_generator_kwitansi' 
-            : 'pdf.smart_generator_invoice';
+            $viewName = ($docType === 'kwitansi')
+                ? 'pdf.smart_generator_kwitansi'
+                : 'pdf.smart_generator_invoice';
 
-        $filename = ($docType === 'kwitansi' ? 'Kwitansi_' : 'Invoice_') . ($data['doc_number'] ?? time()) . '.pdf';
+            $filename = ($docType === 'kwitansi' ? 'Kwitansi_' : 'Invoice_') . ($data['doc_number'] ?? time()) . '.pdf';
 
-        $pdf = Pdf::loadView($viewName, ['data' => $data]);
-        $pdf->setPaper('A4', 'portrait');
-        $pdf->getDomPDF()->getOptions()->set([
-            'defaultFont' => 'Helvetica',
-            'isHtml5ParserEnabled' => true,
-            'isRemoteEnabled' => true
-        ]);
+            $pdf = Pdf::loadView($viewName, ['data' => $data]);
+            $pdf->setPaper('A4', 'portrait');
+            $pdf->getDomPDF()->getOptions()->set([
+                'defaultFont' => 'Helvetica',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true
+            ]);
 
-        return $pdf->download($filename);
+            return $pdf->download($filename);
+        } catch (Throwable $e) {
+            Log::error('Smart Generator PDF export failed', [
+                'stage' => 'prepare_render_download',
+                'exception' => get_class($e),
+                'doc_type' => $request->input('doc_type', 'invoice'),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dokumen gagal diekspor. Periksa data lalu coba lagi.',
+                ], 422);
+            }
+
+            return back()
+                ->with('error', 'Dokumen gagal diekspor. Periksa data lalu coba lagi.')
+                ->withInput();
+        }
     }
 
     public function saveHistory(Request $request)

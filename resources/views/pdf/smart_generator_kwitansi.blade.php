@@ -118,7 +118,10 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 25px;
+            page-break-inside: auto;
+            break-inside: auto;
         }
+        .fields-table tr { page-break-inside: avoid; break-inside: avoid; }
         .fields-table td {
             padding: 10px 0;
             vertical-align: top;
@@ -134,6 +137,8 @@
             font-size: 11px;
             color: #0f172a;
             font-weight: 600;
+            overflow-wrap: anywhere;
+            word-break: normal;
         }
         .terbilang-card {
             background-color: #f8fafc;

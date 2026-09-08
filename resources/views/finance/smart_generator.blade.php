@@ -2,10 +2,10 @@
 @section('header', 'Smart Generator Invoice & Kwitansi Pro V3')
 
 @section('content')
-<div x-data="smartGenerator()" x-init="init()" class="space-y-6">
+<div id="smart-generator-app" x-data="smartGenerator()" x-init="init()" class="smart-generator-app space-y-6" :aria-busy="renderState === 'printing' || renderState === 'generating' ? 'true' : 'false'">
 
     <!-- TOP NAVBAR HEADER -->
-    <div class="bg-slate-900/95 backdrop-blur-xl text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-2xl flex flex-wrap items-center justify-between gap-4">
+    <div class="smart-generator-ui bg-slate-900/95 backdrop-blur-xl text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-2xl flex flex-wrap items-center justify-between gap-4">
         <!-- BRAND BADGE -->
         <div class="flex items-center gap-3.5">
             <div class="w-11 h-11 bg-gradient-to-br from-emerald-500 via-teal-500 to-emerald-700 rounded-2xl flex items-center justify-center text-white font-black shadow-[0_4px_20px_rgba(16,185,129,0.35)] shrink-0 border border-white/20">
@@ -53,7 +53,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         <!-- LEFT FORM CONTROL PANE (6 COLS) -->
-        <div class="lg:col-span-6 bg-slate-900/95 backdrop-blur-xl text-slate-200 rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-2xl space-y-6">
+        <div class="smart-generator-ui lg:col-span-6 bg-slate-900/95 backdrop-blur-xl text-slate-200 rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-2xl space-y-6">
             
             <!-- HEADER PANE CONTROLS -->
             <div class="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -162,9 +162,9 @@
                         <div>
                             <label class="block text-[11px] font-extrabold text-slate-300 uppercase tracking-wider mb-1.5">Tata Letak Kop Surat (Layout)</label>
                             <select x-model="company.layout_kop" class="w-full text-xs bg-slate-900 border border-slate-700/80 rounded-xl text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 p-3 font-medium">
-                                <option value="left">Modern Left-Aligned (Samping)</option>
-                                <option value="center">Centered (Tengah)</option>
-                                <option value="classic">Classic Formal Header</option>
+                                <option value="left">Modern Rata Kiri (Samping)</option>
+                                <option value="center">Tengah</option>
+                                <option value="classic">Kop Formal Klasik</option>
                             </select>
                         </div>
                     </div>
@@ -519,11 +519,11 @@
 
             <!-- ACTION BUTTONS BOTTOM -->
             <div x-show="activeTab !== 'history'" class="pt-5 border-t border-slate-800/80 flex flex-wrap items-center gap-3">
-                <button type="button" @click="exportPdf()" class="flex-1 px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.35)] transition-all flex items-center justify-center gap-2">
+                <button type="button" @click="exportPdf()" :disabled="renderState === 'generating' || renderState === 'printing'" class="flex-1 px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-wait text-white font-black text-xs rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.35)] transition-all flex items-center justify-center gap-2">
                     📥 <span>Ekspor / Unduh PDF Presisi High</span>
                 </button>
-                <button type="button" @click="printDocument()" class="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-extrabold text-xs rounded-xl transition-all flex items-center gap-2 shadow-sm">
-                    🖨️ <span>Cetak Document</span>
+                <button type="button" @click="printDocument()" :disabled="renderState === 'generating' || renderState === 'printing'" class="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-wait text-slate-200 border border-slate-700 font-extrabold text-xs rounded-xl transition-all flex items-center gap-2 shadow-sm">
+                    🖨️ <span>Cetak Dokumen</span>
                 </button>
                 <button type="button" @click="saveToHistory()" class="px-4 py-3.5 bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2">
                     💾 <span>Simpan Ke Riwayat</span>
@@ -533,29 +533,31 @@
         </div>
 
         <!-- RIGHT LIVE CANVAS PRATINJAU (A4) PANE (6 COLS) -->
-        <div class="lg:col-span-6 sticky top-6">
+        <div class="smart-generator-preview-pane lg:col-span-6 sticky top-6">
             <div class="bg-slate-900/95 backdrop-blur-xl text-slate-200 rounded-2xl p-5 border border-slate-800 shadow-2xl space-y-4">
                 <!-- LIVE PREVIEW HEADER -->
-                <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div class="smart-generator-ui smart-generator-preview-toolbar flex items-center justify-between pb-3 border-b border-slate-800">
                     <div class="flex items-center gap-2.5">
                         <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></span>
                         <h3 class="text-xs font-black text-white uppercase tracking-wider">Live Canvas Pratinjau (A4)</h3>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button type="button" @click="exportPdf()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black rounded-xl shadow-xs transition-all">
+                        <button type="button" @click="exportPdf()" :disabled="renderState === 'generating' || renderState === 'printing'" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-wait text-white text-[11px] font-black rounded-xl shadow-xs transition-all">
                             Ekspor PDF
                         </button>
-                        <button type="button" @click="printDocument()" class="px-3 py-1.5 bg-slate-800 text-slate-300 text-[11px] font-bold rounded-xl border border-slate-700 hover:bg-slate-700 transition-all">
-                            Print
+                        <button type="button" @click="printDocument()" :disabled="renderState === 'generating' || renderState === 'printing'" class="px-3 py-1.5 bg-slate-800 text-slate-300 disabled:opacity-50 disabled:cursor-wait text-[11px] font-bold rounded-xl border border-slate-700 hover:bg-slate-700 transition-all">
+                            Cetak
                         </button>
                     </div>
                 </div>
 
+                <div x-show="printError" x-cloak role="alert" aria-live="assertive" class="smart-generator-ui rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700" x-text="printError"></div>
+
                 <!-- SCROLLABLE A4 SHEET CANVAS CONTAINER -->
-                <div class="overflow-y-auto max-h-[820px] p-4 sm:p-6 bg-slate-950 rounded-2xl border border-slate-800 flex justify-center shadow-inner">
+                <div class="smart-generator-preview-viewport overflow-y-auto max-h-[820px] p-4 sm:p-6 bg-slate-950 rounded-2xl border border-slate-800 flex justify-center shadow-inner">
                     
                     <!-- A4 REALISTIC DOCUMENT PAPER SHEET (HIGH CONTRAST & CLEAR FONTS) -->
-                    <div id="a4CanvasSheet" class="bg-white text-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-8 sm:p-10 w-full max-w-[210mm] min-h-[297mm] text-[11px] leading-relaxed relative flex flex-col justify-between font-sans transition-all duration-300 border border-slate-200 rounded-xs">
+                    <div id="a4CanvasSheet" data-printable-document="true" class="bg-white text-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-8 sm:p-10 w-full max-w-[210mm] min-h-[297mm] text-[11px] leading-relaxed relative flex flex-col justify-between font-sans transition-all duration-300 border border-slate-200 rounded-xs">
                         
                         <div>
                             <!-- KOP LETTERHEAD -->
@@ -583,7 +585,7 @@
 
                             <!-- INVOICE DOCUMENT CANVAS PREVIEW -->
                             <template x-if="activeTab === 'invoice' || activeTab === 'kop'">
-                                <div class="space-y-6">
+                                <div class="space-y-6" data-document-body="invoice">
                                     <!-- TITLE BAR -->
                                     <div class="flex items-start justify-between">
                                         <div>
@@ -670,7 +672,7 @@
 
                             <!-- KWITANSI DOCUMENT CANVAS PREVIEW -->
                             <template x-if="activeTab === 'kwitansi'">
-                                <div class="space-y-6">
+                                <div class="space-y-6" data-document-body="kwitansi">
                                     <!-- TITLE BAR -->
                                     <div class="flex items-center justify-between border-b-2 border-slate-300 pb-3">
                                         <div>
@@ -777,6 +779,8 @@ function smartGenerator() {
         sourceMode: 'student_invoice', // 'student_invoice' vs 'manual_invoice'
         openEmailModal: false,
         history: [],
+        renderState: 'ready',
+        printError: '',
 
         // Student search state
         studentSearchQuery: '',
@@ -1041,59 +1045,126 @@ function smartGenerator() {
             this.company.signature = '';
         },
 
-        exportPdf() {
-            const payload = this.getPayload();
-            const form = document.getElementById('pdfExportForm');
+        async waitForPrintableDocument() {
+            await new Promise(resolve => this.$nextTick(resolve));
+            const printable = document.querySelector('[data-printable-document]');
+            const body = printable?.querySelector('[data-document-body]');
+            if (!printable || !body || body.textContent.trim() === '') {
+                throw new Error('Dokumen belum siap untuk dicetak.');
+            }
 
-            form.replaceChildren();
-            const appendHidden = (name, value) => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = name;
-                input.value = value ?? '';
-                form.appendChild(input);
-            };
+            if (document.fonts?.ready) {
+                await document.fonts.ready.catch(() => {});
+            }
 
-            appendHidden('_token', '{{ csrf_token() }}');
-            appendHidden('source_type', payload.source_type);
-            appendHidden('source_id', payload.source_id || '');
-            appendHidden('student_id', payload.student_id || '');
-            appendHidden('doc_type', payload.doc_type);
-            appendHidden('doc_number', payload.doc_number);
-            appendHidden('issue_date', payload.issue_date);
-            appendHidden('due_date', payload.due_date);
-            appendHidden('status', payload.status);
-            appendHidden('client_name', payload.client_name);
-            appendHidden('client_email', payload.client_email);
-            appendHidden('client_address', payload.client_address);
-            appendHidden('company_name', payload.company_name);
-            appendHidden('company_tagline', payload.company_tagline);
-            appendHidden('company_address', payload.company_address);
-            appendHidden('company_phone', payload.company_phone);
-            appendHidden('company_email', payload.company_email);
-            appendHidden('company_web', payload.company_web);
-            appendHidden('company_npwp', payload.company_npwp);
-            appendHidden('bank_name', payload.bank_name);
-            appendHidden('bank_account', payload.bank_account);
-            appendHidden('bank_holder', payload.bank_holder);
-            appendHidden('items', JSON.stringify(payload.items));
-            appendHidden('discount', payload.discount);
-            appendHidden('ppn_percent', payload.ppn_percent);
-            appendHidden('shipping', payload.shipping);
-            appendHidden('notes', payload.notes);
-            appendHidden('kwitansi_amount', payload.kwitansi_amount);
-            appendHidden('payment_for', payload.payment_for);
-            appendHidden('issue_city', payload.issue_city);
-            appendHidden('signer_name', payload.signer_name);
-            appendHidden('company_logo', payload.company_logo || '');
-            appendHidden('signature', payload.signature || '');
-            appendHidden('stamp', payload.stamp || '');
-            appendHidden('theme', payload.theme || 'emerald');
-            form.submit();
+            const images = Array.from(printable.querySelectorAll('img'));
+            await Promise.all(images.map(image => {
+                if (image.complete) {
+                    return image.decode ? image.decode().catch(() => {}) : Promise.resolve();
+                }
+                return new Promise(resolve => {
+                    const done = () => resolve();
+                    image.addEventListener('load', done, { once: true });
+                    image.addEventListener('error', done, { once: true });
+                    // A broken optional asset must not deadlock printing.
+                    window.setTimeout(done, 3000);
+                });
+            }));
+
+            // Two frames allow Alpine's x-if/x-text DOM patch and layout pass to
+            // settle before print media is evaluated.
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return printable;
         },
 
-        printDocument() {
-            window.print();
+        async exportPdf() {
+            if (this.renderState === 'generating' || this.renderState === 'printing') return;
+            this.renderState = 'generating';
+            this.printError = '';
+            try {
+                await this.waitForPrintableDocument();
+                const payload = this.getPayload();
+                const form = document.getElementById('pdfExportForm');
+                if (!form) throw new Error('Form ekspor dokumen tidak tersedia.');
+
+                form.replaceChildren();
+                const appendHidden = (name, value) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value ?? '';
+                    form.appendChild(input);
+                };
+
+                appendHidden('_token', '{{ csrf_token() }}');
+                appendHidden('source_type', payload.source_type);
+                appendHidden('source_id', payload.source_id || '');
+                appendHidden('student_id', payload.student_id || '');
+                appendHidden('doc_type', payload.doc_type);
+                appendHidden('doc_number', payload.doc_number);
+                appendHidden('issue_date', payload.issue_date);
+                appendHidden('due_date', payload.due_date);
+                appendHidden('status', payload.status);
+                appendHidden('client_name', payload.client_name);
+                appendHidden('client_email', payload.client_email);
+                appendHidden('client_address', payload.client_address);
+                appendHidden('company_name', payload.company_name);
+                appendHidden('company_tagline', payload.company_tagline);
+                appendHidden('company_address', payload.company_address);
+                appendHidden('company_phone', payload.company_phone);
+                appendHidden('company_email', payload.company_email);
+                appendHidden('company_web', payload.company_web);
+                appendHidden('company_npwp', payload.company_npwp);
+                appendHidden('bank_name', payload.bank_name);
+                appendHidden('bank_account', payload.bank_account);
+                appendHidden('bank_holder', payload.bank_holder);
+                appendHidden('items', JSON.stringify(payload.items));
+                appendHidden('discount', payload.discount);
+                appendHidden('ppn_percent', payload.ppn_percent);
+                appendHidden('shipping', payload.shipping);
+                appendHidden('notes', payload.notes);
+                appendHidden('kwitansi_amount', payload.kwitansi_amount);
+                appendHidden('payment_for', payload.payment_for);
+                appendHidden('issue_city', payload.issue_city);
+                appendHidden('signer_name', payload.signer_name);
+                appendHidden('company_logo', payload.company_logo || '');
+                appendHidden('signature', payload.signature || '');
+                appendHidden('stamp', payload.stamp || '');
+                appendHidden('theme', payload.theme || 'emerald');
+                form.submit();
+            } catch (error) {
+                this.renderState = 'failed';
+                this.printError = 'Dokumen belum siap untuk diekspor.';
+                console.warn('Smart Generator export preparation failed', error?.message || 'unknown');
+            }
+        },
+
+        async printDocument() {
+            if (this.renderState === 'printing' || this.renderState === 'generating') return;
+            this.renderState = 'printing';
+            this.printError = '';
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                document.body.classList.remove('smart-generator-printing');
+                this.renderState = 'ready';
+            };
+
+            try {
+                await this.waitForPrintableDocument();
+                document.body.classList.add('smart-generator-printing');
+                window.addEventListener('afterprint', finish, { once: true });
+                window.print();
+                // Chromium/Edge normally dispatch afterprint. The fallback
+                // prevents a stale print mode in embedded/mobile browsers.
+                window.setTimeout(finish, 1500);
+            } catch (error) {
+                finish();
+                this.renderState = 'failed';
+                this.printError = 'Dokumen belum siap untuk dicetak.';
+                console.warn('Smart Generator print preparation failed', error?.message || 'unknown');
+            }
         },
 
         getThemeColors() {
@@ -1285,21 +1356,136 @@ function smartGenerator() {
 
 <style>
 @media print {
-    body * {
-        visibility: hidden;
+    @page {
+        size: A4 portrait;
+        margin: 0;
     }
-    #a4CanvasSheet, #a4CanvasSheet * {
-        visibility: visible;
+
+    html,
+    body {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
     }
-    #a4CanvasSheet {
-        position: absolute;
-        left: 0;
-        top: 0;
+
+    body.smart-generator-printing {
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Keep the application shell out of the print tree. Do not use a global
+       body * visibility rule: inherited visibility plus scroll parents was
+       the source of the blank/clipped print output. */
+    body.smart-generator-printing #sidebar,
+    body.smart-generator-printing #mobile-sidebar-overlay,
+    body.smart-generator-printing .wms-mobile-header,
+    body.smart-generator-printing .mobile-bottom-nav,
+    body.smart-generator-printing #floating-qr-button,
+    body.smart-generator-printing > .fixed,
+    body.smart-generator-printing #toast-container,
+    body.smart-generator-printing #confirm-dialog,
+    body.smart-generator-printing .smart-generator-ui,
+    body.smart-generator-printing #pdfExportForm,
+    body.smart-generator-printing .main-content > *:not(#main-content) {
+        display: none !important;
+    }
+
+    body.smart-generator-printing .wms-shell,
+    body.smart-generator-printing .main-content,
+    body.smart-generator-printing #main-content,
+    body.smart-generator-printing #smart-generator-app {
+        display: block !important;
         width: 100% !important;
+        max-width: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background: #fff !important;
+    }
+
+    body.smart-generator-printing .smart-generator-preview-pane {
+        display: block !important;
+        position: static !important;
+        width: 210mm !important;
+        max-width: 210mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body.smart-generator-printing .smart-generator-preview-pane > div,
+    body.smart-generator-printing .smart-generator-preview-viewport {
+        display: block !important;
+        width: 210mm !important;
+        max-width: 210mm !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background: #fff !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    #a4CanvasSheet {
+        display: flex !important;
+        visibility: visible !important;
+        position: relative !important;
+        box-sizing: border-box !important;
+        width: 210mm !important;
+        min-width: 210mm !important;
+        max-width: 210mm !important;
+        min-height: 297mm !important;
+        height: auto !important;
         margin: 0 !important;
         padding: 10mm !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
         box-shadow: none !important;
-        border: none !important;
+        color: #0f172a !important;
+        background: #fff !important;
+    }
+
+    #a4CanvasSheet * {
+        visibility: visible !important;
+    }
+
+    #a4CanvasSheet table {
+        width: 100% !important;
+        max-width: 100% !important;
+        page-break-inside: auto;
+        break-inside: auto;
+    }
+
+    #a4CanvasSheet thead {
+        display: table-header-group;
+    }
+
+    #a4CanvasSheet tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    #a4CanvasSheet td,
+    #a4CanvasSheet th,
+    #a4CanvasSheet p,
+    #a4CanvasSheet span {
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
+
+    #a4CanvasSheet img,
+    #a4CanvasSheet svg,
+    #a4CanvasSheet canvas {
+        max-width: 100%;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
     }
 }
 </style>

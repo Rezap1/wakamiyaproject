@@ -142,7 +142,11 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 22px;
+            page-break-inside: auto;
+            break-inside: auto;
         }
+        .items-table thead { display: table-header-group; }
+        .items-table tr { page-break-inside: avoid; break-inside: avoid; }
         .items-table th {
             color: #334155;
             font-size: 9.5px;
@@ -159,6 +163,8 @@
             font-size: 11px;
             color: #0f172a;
             font-weight: 600;
+            overflow-wrap: anywhere;
+            word-break: normal;
         }
         .text-right {
             text-align: right;
