@@ -424,7 +424,7 @@ class TeacherWorkspaceController extends Controller
                 return [
                     $score['Created_At'] ?? $score['Assessment_Date'] ?? '-',
                     HumanReadableResolver::studentName($score['Student_ID'] ?? '', $studentsById),
-                    strtoupper($score['Assessment_Category'] ?? 'GENERAL'),
+                    $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
                     $title,
                     $score['Score'] ?? $score['Score_Value'] ?? '-',
                     $score['Grade'] ?? '-',
@@ -640,12 +640,14 @@ class TeacherWorkspaceController extends Controller
             'Date' => 'required|date',
             'Assessment_ID' => 'nullable|string',
             'Score_ID' => ['nullable', 'string', 'regex:/^SCR-[0-9a-f-]{36}$/i'],
+            'Score' => 'nullable|numeric|min:0|max:100',
+            'Score_Value' => 'nullable|numeric|min:0|max:100',
             'Notes' => 'nullable|string|max:2000'
         ]);
 
         $category = strtoupper(trim((string) $validated['Assessment_Category']));
         $categoryConfig = $this->assessmentConfigService->getCategoryConfig($category);
-        if (!$categoryConfig || empty($this->assessmentConfigService->getAspects($category))) {
+        if (!$categoryConfig || (!$this->assessmentConfigService->isNumericCategory($category) && empty($this->assessmentConfigService->getAspects($category)))) {
             return redirect()->back()->with('error', 'Kategori penilaian belum tersedia di MASTER_ASSESSMENT_CONFIG.')->withInput();
         }
 
@@ -664,6 +666,7 @@ class TeacherWorkspaceController extends Controller
 
         // Validate aspects against SSOT
         $data = $request->except(['_token', '_method']);
+        unset($data['Class_ID'], $data['Subject_ID']);
         // Ownership identity is always resolved from the authenticated actor;
         // a client-supplied Teacher_ID is never evidence of authorization.
         $data['Teacher_ID'] = $teacherId;
@@ -674,7 +677,7 @@ class TeacherWorkspaceController extends Controller
         $aspectKeys = collect($data)->except([
             'Student_ID', 'Teacher_ID', 'Assessment_Category', 'Date',
             'Assessment_Date', 'Assessment_ID', 'Score_ID', 'Notes',
-            'Schedule_ID', 'Class_ID',
+            'Schedule_ID', 'Class_ID', 'Subject_ID',
         ])->keys()->toArray();
         $evaluationDetails = [];
         foreach ($aspectKeys as $key) {
@@ -683,7 +686,19 @@ class TeacherWorkspaceController extends Controller
             }
         }
 
-        if (!empty($evaluationDetails)) {
+        $schedule = $this->scheduleService->getById($scheduleId);
+        if (!$schedule) {
+            return redirect()->back()->with('error', 'Jadwal pengajaran tidak ditemukan.')->withInput();
+        }
+        $data['Class_ID'] = trim((string) ($schedule['Class_ID'] ?? ''));
+        $data['Subject_ID'] = trim((string) ($schedule['Subject_ID'] ?? ''));
+
+        if ($this->assessmentConfigService->isNumericCategory($category)) {
+            $scoreInput = $data['Score'] ?? $data['Score_Value'] ?? null;
+            if (trim((string) $scoreInput) === '') {
+                return redirect()->back()->with('error', 'Nilai Ujian Bab harus berupa angka.')->withInput();
+            }
+        } elseif (!empty($evaluationDetails)) {
             $isValid = $this->assessmentConfigService->validateAspectPayload($category, $evaluationDetails);
             if (!$isValid) {
                 return redirect()->back()->with('error', 'Aspek penilaian tidak valid atau tidak terdaftar untuk kategori ini.')->withInput();
@@ -734,10 +749,12 @@ class TeacherWorkspaceController extends Controller
             'Assessment_Category' => 'required|string',
             'Date' => 'required|date',
             'Notes' => 'nullable|string|max:2000',
+            'Score' => 'nullable|numeric|min:0|max:100',
+            'Score_Value' => 'nullable|numeric|min:0|max:100',
         ]);
         $category = strtoupper(trim((string) $validated['Assessment_Category']));
         if (!$this->assessmentConfigService->getCategoryConfig($category)
-            || empty($this->assessmentConfigService->getAspects($category))) {
+            || (!$this->assessmentConfigService->isNumericCategory($category) && empty($this->assessmentConfigService->getAspects($category)))) {
             return redirect()->back()->with('error', 'Kategori penilaian belum tersedia di MASTER_ASSESSMENT_CONFIG.')->withInput();
         }
 
@@ -745,6 +762,7 @@ class TeacherWorkspaceController extends Controller
         // never let a client move an existing score to another schedule or
         // assignment after the authorization check.
         $data = $request->except(['_token', '_method', 'Student_ID', 'Score_ID', 'Teacher_ID', 'Assessment_ID', 'Schedule_ID', 'Class_ID', 'Assignment_ID']);
+        unset($data['Subject_ID']);
         $data['Student_ID'] = $existing['Student_ID'];
         $data['Teacher_ID'] = $teacherId;
         $data['Assessment_Category'] = $category;
@@ -754,7 +772,20 @@ class TeacherWorkspaceController extends Controller
             ->filter(fn ($value) => $value !== '' && $value !== null)
             ->toArray();
 
-        if (!$this->assessmentConfigService->validateAspectPayload($category, $evaluationDetails)) {
+        $existingScheduleId = trim((string) ($existing['Schedule_ID'] ?? ''));
+        $schedule = $existingScheduleId !== '' ? $this->scheduleService->getById($existingScheduleId) : null;
+        if (!$schedule) {
+            return redirect()->back()->with('error', 'Jadwal pengajaran tidak ditemukan.')->withInput();
+        }
+        $data['Class_ID'] = trim((string) ($schedule['Class_ID'] ?? ''));
+        $data['Subject_ID'] = trim((string) ($schedule['Subject_ID'] ?? ''));
+
+        if ($this->assessmentConfigService->isNumericCategory($category)) {
+            $scoreInput = $data['Score'] ?? $data['Score_Value'] ?? null;
+            if (trim((string) $scoreInput) === '') {
+                return redirect()->back()->with('error', 'Nilai Ujian Bab harus berupa angka.')->withInput();
+            }
+        } elseif (!$this->assessmentConfigService->validateAspectPayload($category, $evaluationDetails)) {
             return redirect()->back()->with('error', 'Aspek penilaian tidak valid atau belum lengkap.')->withInput();
         }
 

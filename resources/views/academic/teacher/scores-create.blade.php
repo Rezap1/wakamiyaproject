@@ -2,10 +2,10 @@
 @section('header', 'Tambah Penilaian')
 
 @section('content')
-<div class="space-y-6" x-data="assessmentForm()">
+<div class="space-y-6" x-data="assessmentForm(@js(old('Assessment_Category', '')))">
     <x-page-header 
         title="Tambah Penilaian" 
-        description="Masukkan penilaian aspektual untuk siswa di kelas Anda."
+        description="Masukkan penilaian siswa di kelas Anda."
         :breadcrumbs="['Dashboard' => route('dashboard.teacher'), 'Penilaian' => route('teacher.workspace.scores'), 'Tambah' => '#']"
     />
 
@@ -51,10 +51,16 @@
                     <select id="score-category" name="Assessment_Category" x-model="category" required class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50">
                         <option value="">-- Pilih Kategori --</option>
                         @foreach($assessmentConfigs as $config)
-                            <option value="{{ $config['Category_ID'] }}">{{ strtoupper($config['Category_Name']) }}</option>
+                            <option value="{{ $config['Category_ID'] }}">{{ $config['Category_Name'] ?? $config['Category_ID'] }}</option>
                         @endforeach
                     </select>
                 </div>
+            </div>
+
+            <div x-show="isNumeric" class="space-y-2 pt-4 border-t border-slate-100" style="display: none;">
+                <label for="score-value" class="block text-sm font-bold text-slate-700"><span x-text="numericLabel">Nilai Ujian Bab</span> <span class="text-rose-600" aria-hidden="true">*</span></label>
+                <input id="score-value" type="number" name="Score" min="0" max="100" step="any" inputmode="decimal" value="{{ old('Score', old('Score_Value')) }}" x-bind:required="isNumeric" class="w-full min-h-12 rounded-xl border-slate-300 bg-slate-50 px-3 text-base focus:border-blue-500 focus:ring-blue-500">
+                <p class="text-xs text-slate-500">Masukkan angka 0 sampai 100.</p>
             </div>
 
             <!-- Aspek Penilaian Dinamis -->
@@ -79,21 +85,21 @@
             </div>
 
             <!-- Aspek Kosong / Belum Ada Konfigurasi -->
-            <div x-show="category !== '' && !hasAspects" class="space-y-6 pt-4 border-t border-slate-100" style="display: none;">
+            <div x-show="category !== '' && !hasAspects && !isNumeric" class="space-y-6 pt-4 border-t border-slate-100" style="display: none;">
                 <x-empty-state icon="cog" title="Konfigurasi Penilaian Belum Tersedia" message="Kategori ini belum memiliki aspek penilaian yang dapat digunakan. Hubungi Administrator untuk menyiapkan konfigurasi penilaian kategori ini." />
             </div>
 
             <!-- Catatan -->
             <div x-show="category !== ''" class="space-y-2 pt-4 border-t border-slate-100" style="display: none;">
                 <label class="block text-sm font-bold text-slate-700">Catatan (Opsional)</label>
-                <textarea name="Notes" rows="3" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50" placeholder="Tambahkan catatan khusus terkait penilaian ini..."></textarea>
+                <textarea name="Notes" rows="3" class="w-full rounded-xl border-slate-300 focus:border-blue-500 focus:ring-blue-500 bg-slate-50" placeholder="Tambahkan catatan khusus terkait penilaian ini...">{{ old('Notes') }}</textarea>
             </div>
 
             <div class="pt-6 border-t border-slate-100 flex justify-end gap-3">
                 <a href="{{ route('teacher.workspace.scores') }}" class="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors">
                     Batal
                 </a>
-                <button type="submit" x-bind:disabled="category === '' || !hasAspects" class="px-6 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                <button type="submit" x-bind:disabled="category === '' || (!hasAspects && !isNumeric)" class="px-6 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                     Simpan Penilaian
                 </button>
             </div>
@@ -103,8 +109,8 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    Alpine.data('assessmentForm', () => ({
-        category: '',
+    Alpine.data('assessmentForm', (initialCategory = '') => ({
+        category: initialCategory,
         selectedSchedule: @json(old('Schedule_ID', '')),
         selectedStudent: @json(old('Student_ID', '')),
         students: @json($students ?? []),
@@ -122,7 +128,14 @@ document.addEventListener('alpine:init', () => {
                 }));
         },
         get activeConfig() {
-            return this.configs.find(c => c.Category_ID === this.category);
+            return this.configs.find(c => String(c.Category_ID).toUpperCase() === String(this.category).toUpperCase());
+        },
+        get isNumeric() {
+            const type = String(this.activeConfig?.Score_Type || this.activeConfig?.ScoreType || this.activeConfig?.Input_Type || '').toUpperCase();
+            return type === 'NUMERIC' || type === 'NUMBER' || type === 'SCORE' || String(this.category).toUpperCase() === 'UJIAN_BAB';
+        },
+        get numericLabel() {
+            return String(this.category).toUpperCase() === 'UJIAN_BAB' ? 'Nilai Ujian Bab' : 'Nilai (0-100)';
         },
         get activeAspects() {
             if (!this.activeConfig || !this.activeConfig.Aspects_JSON) return [];

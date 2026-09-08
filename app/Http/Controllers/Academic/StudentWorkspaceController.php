@@ -195,7 +195,7 @@ class StudentWorkspaceController extends Controller
         $myScores = collect($this->scoreService->getAll())->where('Student_ID', $studentId);
 
         $numericScores = $myScores->filter(function($s) {
-            return empty($s['Evaluation_Details']) && is_numeric($s['Score'] ?? $s['Score_Value'] ?? null);
+            return is_numeric($s['Score'] ?? $s['Score_Value'] ?? null);
         });
 
         if ($numericScores->count() > 0) {
@@ -255,7 +255,8 @@ class StudentWorkspaceController extends Controller
 
         foreach ($scores as $s) {
             $date = $this->formatCsvDate($s['Created_At'] ?? null);
-            $category = strtoupper($s['Assessment_Category'] ?? 'Tidak dikategorikan');
+            $category = strtoupper(trim((string) ($s['Assessment_Category'] ?? '')));
+            $categoryLabel = $this->assessmentConfigService->categoryLabel($category);
             $assessmentId = trim((string) ($s['Assessment_ID'] ?? ''));
             $assignmentId = trim((string) ($s['Assignment_ID'] ?? ''));
             $assessment = $assessmentId !== ''
@@ -263,7 +264,15 @@ class StudentWorkspaceController extends Controller
                 : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian tidak ditemukan');
 
             $detailsRaw = $s['Evaluation_Details'] ?? null;
-            if (!empty($detailsRaw)) {
+            if ($this->assessmentConfigService->isNumericCategory($s['Assessment_Category'] ?? '')) {
+                $hasil = $s['Score'] ?? $s['Score_Value'] ?? '-';
+                if (!empty($detailsRaw)) {
+                    $details = json_decode($detailsRaw, true);
+                    if (is_array($details) && !empty($details['notes'])) {
+                        $hasil .= '; Catatan: ' . $details['notes'];
+                    }
+                }
+            } elseif (!empty($detailsRaw)) {
                 $details = json_decode($detailsRaw, true);
                 $config = $this->assessmentConfigService->getCategoryConfig($s['Assessment_Category'] ?? '');
                 $aspects = !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
@@ -272,7 +281,7 @@ class StudentWorkspaceController extends Controller
                 $summaryArr = [];
                 if (is_array($details)) {
                     foreach ($details as $key => $val) {
-                        if (strtolower($key) === 'notes') continue;
+                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) continue;
                         $label = $aspectMap[$key] ?? ucwords(str_replace('_', ' ', $key));
                         $summaryArr[] = "$label: $val";
                     }
@@ -282,7 +291,7 @@ class StudentWorkspaceController extends Controller
                 $hasil = $s['Score'] ?? $s['Score_Value'] ?? '-';
             }
 
-            $rows[] = [$date, $category, $assessment, $hasil];
+            $rows[] = [$date, $categoryLabel, $assessment, $hasil];
         }
 
         return $rows;

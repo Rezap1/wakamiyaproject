@@ -72,6 +72,7 @@
                 $val = is_numeric($val) ? (float) $val : 0;
                 $result = \App\Helpers\GradeHelper::calculate($val);
                 $category = strtoupper($item['Assessment_Category'] ?? 'GENERAL');
+                $categoryLabel = $item['Assessment_Category_Label'] ?? $category;
                 $details = $item['Parsed_Details'] ?? [];
             @endphp
             <tr class="hover:bg-slate-50 transition-colors">
@@ -80,7 +81,7 @@
                 </td>
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800 uppercase">{{ $category }}</span>
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800">{{ $categoryLabel }}</span>
                         <span class="font-bold text-slate-700 text-xs">{{ $item['Assessment_Title'] ?? 'Penilaian tidak ditemukan' }}</span>
                     </div>
                     <div class="text-[11px] text-slate-500 mt-1 truncate max-w-xs">

@@ -16,12 +16,15 @@ class ScoreController extends Controller
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
         $scores = $this->scoreService->getAll();
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         if ($request->filled('search')) {
             $search = strtolower($request->search);
-            $scores = $scores->filter(function($item) use ($search) {
+            $scores = $scores->filter(function($item) use ($search, $assessmentConfigService) {
+                $categoryLabel = strtolower($assessmentConfigService->categoryLabel($item['Assessment_Category'] ?? ''));
                 return str_contains(strtolower($item['Score_ID'] ?? ''), $search) ||
                        str_contains(strtolower($item['Student_ID'] ?? ''), $search) ||
-                       str_contains(strtolower($item['Assessment_Category'] ?? ''), $search);
+                       str_contains(strtolower($item['Assessment_Category'] ?? ''), $search) ||
+                       str_contains($categoryLabel, $search);
             })->values();
         }
         
@@ -35,8 +38,9 @@ class ScoreController extends Controller
             'data' => collect(array_values($scores->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Siswa', 'Kategori', 'Penilaian', 'Nilai', 'Grade', 'Status', 'Metrik Evaluasi'],
-            'mapRow' => function($row) use ($students, $assessments, $assignments) {
+            'mapRow' => function($row) use ($students, $assessments, $assignments, $assessmentConfigService) {
                 $category = strtoupper($row['Assessment_Category'] ?? 'GENERAL');
+                $categoryLabel = $assessmentConfigService->categoryLabel($category);
                 $details = $this->scoreService->parseEvaluationDetails($row);
                 $metricSummary = '-';
                 
@@ -63,7 +67,7 @@ class ScoreController extends Controller
 
                 return [
                     HumanReadableResolver::studentName($row['Student_ID'] ?? '', $students),
-                    $category,
+                    $categoryLabel,
                     $assessmentTitle,
                     $row['Score'] ?? $row['Score_Value'] ?? '-',
                     $row['Grade'] ?? '-',
@@ -105,8 +109,9 @@ class ScoreController extends Controller
 
         $assessmentRepo = app(\App\Repositories\GoogleSheets\AssessmentRepository::class);
         $assessments = $assessmentRepo->fetchAll()->keyBy('Assessment_ID');
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         
-        $scores = $scores->map(function($item) use ($students, $assessments) {
+        $scores = $scores->map(function($item) use ($students, $assessments, $assessmentConfigService) {
             $studentId = $item['Student_ID'] ?? null;
             $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : 'Data siswa tidak ditemukan';
             
@@ -117,6 +122,7 @@ class ScoreController extends Controller
             $item['Student_Display'] = $studentName;
             $item['Assessment_Title'] = $asmTitle;
             $item['Assessment_Category'] = strtoupper($item['Assessment_Category'] ?? 'GENERAL');
+            $item['Assessment_Category_Label'] = $assessmentConfigService->categoryLabel($item['Assessment_Category'] ?? '');
             
             return $item;
         });
@@ -128,17 +134,17 @@ class ScoreController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->input('search');
-            $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Assessment_Title', 'Assessment_Category', 'Score_Value']);
+            $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Assessment_Title', 'Assessment_Category', 'Assessment_Category_Label', 'Score_Value']);
         }
 
         $scoreGroups = $scores
             ->groupBy(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? 'GENERAL'))))
-            ->map(function ($group, $category) {
+            ->map(function ($group, $category) use ($assessmentConfigService) {
                 $numericScores = $group->map(fn ($score) => $score['Score'] ?? $score['Score_Value'] ?? null)->filter(fn ($value) => is_numeric($value));
 
                 return [
                     'id' => $category,
-                    'title' => $category,
+                    'title' => $assessmentConfigService->categoryLabel($category),
                     'total' => $group->count(),
                     'average' => $numericScores->count() > 0 ? round($numericScores->avg(), 1) : null,
                     'items' => $group->sortBy('Student_Name')->values(),
@@ -149,7 +155,6 @@ class ScoreController extends Controller
 
         $scores = \App\Helpers\CollectionHelper::paginate($scores, 10)->withQueryString();
         
-        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         $assessmentConfigs = collect($assessmentConfigService->getActiveCategories())->keyBy('Category_ID')->toArray();
         
         return view('academic.scores.index', compact('scores', 'scoreGroups', 'assessmentConfigs'));
@@ -291,6 +296,7 @@ class ScoreController extends Controller
         $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
         $assessmentsById = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
         $assignmentsById = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         $file = fopen('php://temp', 'r+');
         $sanitize = fn($value) => \App\Helpers\ReportHelper::sanitizeCsvCell($value ?? '');
 
@@ -306,6 +312,7 @@ class ScoreController extends Controller
         
         foreach ($scores as $s) {
             $category = strtoupper($s['Assessment_Category'] ?? 'GENERAL');
+            $categoryLabel = $assessmentConfigService->categoryLabel($category);
             $details = $this->scoreService->parseEvaluationDetails($s);
             $summary = '-';
             
@@ -332,7 +339,7 @@ class ScoreController extends Controller
 
             fputcsv($file, array_map($sanitize, [
                 HumanReadableResolver::studentName($s['Student_ID'] ?? '', $studentsById),
-                $category,
+                $categoryLabel,
                 $assessmentTitle,
                 $s['Score'] ?? $s['Score_Value'] ?? '',
                 $s['Grade'] ?? '',

@@ -1,6 +1,9 @@
 @extends('layouts.app')
 @section('header', 'Academic Progress')
 @section('content')
+@php
+    $assessmentConfigMap = collect($assessmentConfigs ?? []);
+@endphp
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
     <div class="bg-white p-4 rounded-xl shadow border-l-4 border-blue-500">
         <h4 class="text-sm text-gray-500 font-bold">Rata-Rata Nilai</h4>
@@ -29,10 +32,27 @@
         <div class="p-4 max-h-[600px] overflow-y-auto space-y-4">
             @forelse($myScores as $score)
             @php
-                $catRaw = strtoupper($score['Assessment_Category'] ?? '');
-                $config = $assessmentConfigs[$catRaw] ?? null;
-                $catLabel = $config ? $config['Category_Name'] : ($catRaw ?: 'Tidak dikategorikan');
-                $detailsRaw = $score['Evaluation_Details'] ?? null;
+                $catRaw = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
+                $config = $assessmentConfigMap[$catRaw] ?? null;
+                $catLabel = $config ? ($config['Category_Name'] ?? $catRaw) : ($catRaw ?: 'Tidak dikategorikan');
+                $type = strtoupper(trim((string) ($config['Score_Type'] ?? $config['ScoreType'] ?? $config['Input_Type'] ?? '')));
+                $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $catRaw === 'UJIAN_BAB';
+                $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
+                $details = is_array($details) ? $details : [];
+                $scoreVal = $score['Score'] ?? $score['Score_Value'] ?? 0;
+                $notes = trim((string) ($details['notes'] ?? ''));
+                $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
+                $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
+                $hasAspectDetails = false;
+                foreach ($details as $key => $val) {
+                    if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                        continue;
+                    }
+                    if (isset($aspectMap[$key])) {
+                        $hasAspectDetails = true;
+                        break;
+                    }
+                }
             @endphp
             <div class="border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow bg-white" x-data="{ open: false }">
                 <div class="flex justify-between items-start mb-2">
@@ -42,7 +62,26 @@
                     </div>
                 </div>
 
-                @if(!empty($detailsRaw))
+                @if($isNumeric)
+                    <div class="mt-3 bg-slate-50 p-3 rounded-lg flex justify-between items-center">
+                        <span class="text-sm text-slate-600 font-semibold">Hasil:</span>
+                        <span class="font-black text-lg text-slate-800">{{ $scoreVal }}</span>
+                    </div>
+                    @if($notes !== '')
+                        <div class="mt-3">
+                            <button @click="open = !open" class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-semibold transition-colors flex items-center gap-1 w-full justify-center">
+                                <span x-show="!open">Lihat Catatan</span>
+                                <span x-show="open" style="display: none;">Tutup Catatan</span>
+                            </button>
+                            <div x-show="open" style="display: none;" class="mt-4 space-y-4">
+                                <div class="mt-4 pt-4 border-t border-slate-100">
+                                    <h6 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Catatan Guru</h6>
+                                    <p class="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">{{ $notes }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                @elseif($hasAspectDetails)
                     <div class="mt-3">
                         <button @click="open = !open" class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-semibold transition-colors flex items-center gap-1 w-full justify-center">
                             <span x-show="!open">Lihat Detail Penilaian Aspektual</span>
@@ -52,15 +91,12 @@
                         <div x-show="open" style="display: none;" class="mt-4 space-y-4">
                             <h5 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Hasil Penilaian</h5>
                             @php
-                                $details = json_decode($detailsRaw, true) ?? [];
-                                $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
-                                $aspectMap = collect($aspects)->pluck('label', 'id')->toArray();
                                 $labels = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
                                 $validAspectsCount = 0;
                             @endphp
                             @foreach($details as $key => $val)
                                 @php
-                                    if(in_array(strtolower($key), ['category', 'notes', 'comment', 'title', 'score', 'feedback', 'metadata'])) continue;
+                                    if(in_array(strtolower((string) $key), ['category', 'notes', 'comment', 'title', 'score', 'feedback', 'metadata', 'subject_id'])) continue;
                                     if(!is_numeric($val) || $val < 1 || $val > 5) continue;
 
                                     $validAspectsCount++;
@@ -94,7 +130,6 @@
                         </div>
                     </div>
                 @else
-                    @php $scoreVal = $score['Score'] ?? $score['Score_Value'] ?? 0; @endphp
                     <div class="mt-3 bg-slate-50 p-3 rounded-lg flex justify-between items-center">
                         <span class="text-sm text-slate-600 font-semibold">Hasil:</span>
                         <span class="font-black text-lg text-slate-800">{{ $scoreVal }}</span>
@@ -158,6 +193,3 @@
     </div>
 </div>
 @endsection
-
-
-

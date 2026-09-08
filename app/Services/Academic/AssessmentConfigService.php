@@ -16,9 +16,57 @@ class AssessmentConfigService
 
     public function getAllConfigs()
     {
-        return Cache::remember('assessment_configs', 3600, function () {
-            return $this->repository->getAll();
+        $configs = Cache::remember('assessment_configs', 3600, function () {
+            return collect($this->repository->getAll())->values()->all();
         });
+
+        return $this->withBuiltInUjianBabConfig($configs);
+    }
+
+    private function withBuiltInUjianBabConfig($configs): array
+    {
+        $configs = collect($configs);
+        // Ujian Bab is a code-level category so deployments do not need a
+        // production sheet/schema mutation just to expose the workflow.
+        // A sheet row, when present, remains authoritative and is not
+        // overwritten. Apply this after cache reads so pre-existing cached
+        // config payloads are augmented too.
+        if (!$configs->contains(fn ($config) => strtoupper(trim((string) ($config['Category_ID'] ?? ''))) === 'UJIAN_BAB')) {
+            $configs->push($this->builtInUjianBabConfig());
+        }
+
+        return $configs->values()->all();
+    }
+
+    public function builtInUjianBabConfig(): array
+    {
+        return [
+            'Category_ID' => 'UJIAN_BAB',
+            'Category_Name' => 'Ujian Bab',
+            'Is_Active' => 'TRUE',
+            'Score_Type' => 'NUMERIC',
+            'Min_Score' => 0,
+            'Max_Score' => 100,
+            'Aspects_JSON' => '',
+        ];
+    }
+
+    public function isNumericCategory($categoryId): bool
+    {
+        $config = $this->getCategoryConfig($categoryId);
+        if (!$config) {
+            return false;
+        }
+
+        $type = strtoupper(trim((string) ($config['Score_Type'] ?? $config['ScoreType'] ?? $config['Input_Type'] ?? '')));
+        return in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true)
+            || strtoupper(trim((string) $categoryId)) === 'UJIAN_BAB';
+    }
+
+    public function categoryLabel($categoryId): string
+    {
+        $config = $this->getCategoryConfig($categoryId);
+        return trim((string) ($config['Category_Name'] ?? '')) ?: (trim((string) $categoryId) ?: 'Tidak dikategorikan');
     }
 
     public function getActiveCategories()

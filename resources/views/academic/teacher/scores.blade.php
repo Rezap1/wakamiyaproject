@@ -6,8 +6,8 @@
     $assessmentConfigMap = collect($assessmentConfigs ?? []);
 @endphp
 <div class="space-y-6">
-    <x-page-header 
-        title="Penilaian" 
+    <x-page-header
+        title="Penilaian"
         description="Manajemen nilai siswa pada kelas yang Anda ajar."
         :breadcrumbs="['Dashboard' => route('dashboard.teacher'), 'Penilaian' => '#']"
     />
@@ -29,47 +29,77 @@
         <div class="md:hidden divide-y divide-slate-100">
             @forelse($scores as $score)
                 @php
+                    $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
+                    $config = $assessmentConfigMap->get($category);
+                    $categoryLabel = $config['Category_Name'] ?? ($category ?: 'Legacy Score');
+                    $type = strtoupper(trim((string) ($config['Score_Type'] ?? $config['ScoreType'] ?? $config['Input_Type'] ?? '')));
+                    $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $category === 'UJIAN_BAB';
                     $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
                     $details = is_array($details) ? $details : [];
-                    $config = $assessmentConfigMap->get(strtoupper(trim((string) ($score['Assessment_Category'] ?? ''))));
+                    $scoreValue = $score['Score'] ?? $score['Score_Value'] ?? '-';
+                    $notes = trim((string) ($details['notes'] ?? ''));
                     $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
                     $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
+                    $hasAspectDetails = false;
+                    foreach ($details as $key => $value) {
+                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                            continue;
+                        }
+                        if (isset($aspectMap[$key])) {
+                            $hasAspectDetails = true;
+                            break;
+                        }
+                    }
                 @endphp
                 <div class="p-4 bg-white space-y-3" x-data="{ open: false }">
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="text-sm font-extrabold text-slate-900">{{ $score['Student_Name'] ?? 'Unknown Student' }}</p>
-                            <p class="text-xs font-semibold text-blue-600 mt-0.5">{{ $score['Assessment_Category'] ?? 'Legacy Score' }} &bull; {{ date('d M Y', strtotime($score['Created_At'] ?? now())) }}</p>
+                            <p class="text-xs font-semibold text-blue-600 mt-0.5">{{ $categoryLabel }} &bull; {{ date('d M Y', strtotime($score['Created_At'] ?? now())) }}</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            @if(empty($score['Evaluation_Details']))
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-lg font-bold bg-slate-100 text-slate-700">{{ $score['Score'] ?? '0' }}</span>
-                            @else
+                            @if($isNumeric)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-lg font-bold bg-slate-100 text-slate-700">{{ $scoreValue }}</span>
+                                @if($notes !== '')
+                                    <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">Catatan</button>
+                                @endif
+                            @elseif($hasAspectDetails)
                                 <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">Lihat Detail</button>
                             @endif
                             <a href="{{ route('teacher.workspace.scores.edit', $score['Score_ID']) }}" class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-200">Edit</a>
                         </div>
                     </div>
-                    @if(!empty($score['Evaluation_Details']))
-                    <div x-show="open" class="pt-3 border-t border-slate-100 text-sm space-y-2">
-                        @php
-                            $labels = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
-                        @endphp
-                        @foreach($details as $key => $value)
-                            @if(!in_array(strtolower((string) $key), ['category', 'notes'], true) && isset($aspectMap[$key]))
-                                <div class="flex justify-between">
-                                    <span class="text-slate-500">{{ $aspectMap[$key] }}</span>
-                                    <span class="font-semibold text-slate-800">{{ $value }} - {{ $labels[$value] ?? '' }}</span>
-                                </div>
-                            @endif
-                        @endforeach
-                        @if(!empty($details['notes']))
+                    @if($isNumeric && $notes !== '')
+                        <div x-show="open" class="pt-3 border-t border-slate-100 text-sm space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Nilai</span>
+                                <span class="font-semibold text-slate-800">{{ $scoreValue }}</span>
+                            </div>
                             <div class="mt-2 pt-2 border-t border-slate-50">
                                 <p class="text-xs text-slate-400">Catatan:</p>
-                                <p class="text-slate-700 italic">{{ $details['notes'] }}</p>
+                                <p class="text-slate-700 italic">{{ $notes }}</p>
                             </div>
-                        @endif
-                    </div>
+                        </div>
+                    @elseif($hasAspectDetails)
+                        <div x-show="open" class="pt-3 border-t border-slate-100 text-sm space-y-2">
+                            @php
+                                $labels = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
+                            @endphp
+                            @foreach($details as $key => $value)
+                                @if(!in_array(strtolower((string) $key), ['category', 'notes'], true) && isset($aspectMap[$key]))
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">{{ $aspectMap[$key] }}</span>
+                                        <span class="font-semibold text-slate-800">{{ $value }} - {{ $labels[$value] ?? '' }}</span>
+                                    </div>
+                                @endif
+                            @endforeach
+                            @if(!empty($details['notes']))
+                                <div class="mt-2 pt-2 border-t border-slate-50">
+                                    <p class="text-xs text-slate-400">Catatan:</p>
+                                    <p class="text-slate-700 italic">{{ $details['notes'] }}</p>
+                                </div>
+                            @endif
+                        </div>
                     @endif
                 </div>
             @empty
@@ -91,61 +121,99 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($scores as $score)
-                    @php
-                        $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
-                        $details = is_array($details) ? $details : [];
-                        $config = $assessmentConfigMap->get(strtoupper(trim((string) ($score['Assessment_Category'] ?? ''))));
-                        $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
-                        $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
-                    @endphp
-                    <tr class="hover:bg-slate-50 transition-colors" x-data="{ open: false }">
-                        <td class="px-6 py-4 font-medium text-slate-600">
-                            {{ $score['Assessment_Category'] ?? 'Legacy Score' }}
-                            <div class="text-xs text-slate-400 mt-1">{{ date('d M Y', strtotime($score['Created_At'] ?? now())) }}</div>
-                        </td>
-                        <td class="px-6 py-4 font-bold text-slate-900">{{ $score['Student_Name'] ?? 'Unknown Student' }}</td>
-                        <td class="px-6 py-4">
-                            @if(empty($score['Evaluation_Details']))
-                                <span class="font-semibold text-slate-900 text-lg">{{ $score['Score'] ?? '0' }}</span>
-                            @else
-                                <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
-                                    <span x-show="!open">Lihat Detail</span>
-                                    <span x-show="open">Tutup Detail</span>
-                                </button>
-                                
-                                <div x-show="open" class="mt-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm text-sm min-w-[250px] absolute z-10" @click.away="open = false">
-                                    @php
-                                        $labels = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
-                                    @endphp
-                                    <div class="space-y-2">
-                                    @foreach($details as $key => $value)
-                                        @if(!in_array(strtolower((string) $key), ['category', 'notes'], true) && isset($aspectMap[$key]))
-                                            <div class="flex justify-between gap-4">
-                                                <span class="text-slate-500">{{ $aspectMap[$key] }}</span>
-                                                <span class="font-semibold text-slate-800">{{ $value }} - {{ $labels[$value] ?? '' }}</span>
+                        @php
+                            $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
+                            $config = $assessmentConfigMap->get($category);
+                            $categoryLabel = $config['Category_Name'] ?? ($category ?: 'Legacy Score');
+                            $type = strtoupper(trim((string) ($config['Score_Type'] ?? $config['ScoreType'] ?? $config['Input_Type'] ?? '')));
+                            $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $category === 'UJIAN_BAB';
+                            $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
+                            $details = is_array($details) ? $details : [];
+                            $scoreValue = $score['Score'] ?? $score['Score_Value'] ?? '-';
+                            $notes = trim((string) ($details['notes'] ?? ''));
+                            $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
+                            $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
+                            $hasAspectDetails = false;
+                            foreach ($details as $key => $value) {
+                                if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                                    continue;
+                                }
+                                if (isset($aspectMap[$key])) {
+                                    $hasAspectDetails = true;
+                                    break;
+                                }
+                            }
+                        @endphp
+                        <tr class="hover:bg-slate-50 transition-colors" x-data="{ open: false }">
+                            <td class="px-6 py-4 font-medium text-slate-600">
+                                {{ $categoryLabel }}
+                                <div class="text-xs text-slate-400 mt-1">{{ date('d M Y', strtotime($score['Created_At'] ?? now())) }}</div>
+                            </td>
+                            <td class="px-6 py-4 font-bold text-slate-900">{{ $score['Student_Name'] ?? 'Unknown Student' }}</td>
+                            <td class="px-6 py-4">
+                                @if($isNumeric)
+                                    <span class="font-semibold text-slate-900 text-lg">{{ $scoreValue }}</span>
+                                    @if($notes !== '')
+                                        <div class="mt-2">
+                                            <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                                                <span x-show="!open">Catatan</span>
+                                                <span x-show="open">Tutup Catatan</span>
+                                            </button>
+                                            <div x-show="open" class="mt-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm text-sm min-w-[250px] absolute z-10" @click.away="open = false">
+                                                <div class="space-y-2">
+                                                    <div class="flex justify-between gap-4">
+                                                        <span class="text-slate-500">Nilai</span>
+                                                        <span class="font-semibold text-slate-800">{{ $scoreValue }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3 pt-3 border-t border-slate-100">
+                                                    <p class="text-xs font-semibold text-slate-400 mb-1">Catatan:</p>
+                                                    <p class="text-slate-700 italic whitespace-normal">{{ $notes }}</p>
+                                                </div>
                                             </div>
-                                        @endif
-                                    @endforeach
-                                    </div>
-                                    @if(!empty($details['notes']))
-                                        <div class="mt-3 pt-3 border-t border-slate-100">
-                                            <p class="text-xs font-semibold text-slate-400 mb-1">Catatan:</p>
-                                            <p class="text-slate-700 italic whitespace-normal">{{ $details['notes'] }}</p>
                                         </div>
                                     @endif
-                                </div>
-                            @endif
-                        </td>
-                        <td class="px-6 py-4 text-right">
-                            <a href="{{ route('teacher.workspace.scores.edit', $score['Score_ID']) }}" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200">Edit</a>
-                        </td>
-                    </tr>
+                                @elseif($hasAspectDetails)
+                                    <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                                        <span x-show="!open">Lihat Detail</span>
+                                        <span x-show="open">Tutup Detail</span>
+                                    </button>
+
+                                    <div x-show="open" class="mt-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm text-sm min-w-[250px] absolute z-10" @click.away="open = false">
+                                        @php
+                                            $labels = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
+                                        @endphp
+                                        <div class="space-y-2">
+                                        @foreach($details as $key => $value)
+                                            @if(!in_array(strtolower((string) $key), ['category', 'notes'], true) && isset($aspectMap[$key]))
+                                                <div class="flex justify-between gap-4">
+                                                    <span class="text-slate-500">{{ $aspectMap[$key] }}</span>
+                                                    <span class="font-semibold text-slate-800">{{ $value }} - {{ $labels[$value] ?? '' }}</span>
+                                                </div>
+                                            @endif
+                                        @endforeach
+                                        </div>
+                                        @if(!empty($details['notes']))
+                                            <div class="mt-3 pt-3 border-t border-slate-100">
+                                                <p class="text-xs font-semibold text-slate-400 mb-1">Catatan:</p>
+                                                <p class="text-slate-700 italic whitespace-normal">{{ $details['notes'] }}</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span class="font-semibold text-slate-900 text-lg">{{ $scoreValue }}</span>
+                                @endif
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <a href="{{ route('teacher.workspace.scores.edit', $score['Score_ID']) }}" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200">Edit</a>
+                            </td>
+                        </tr>
                     @empty
-                    <tr>
-                        <td colspan="4" class="px-6 py-12">
-                            <x-empty-state icon="chart-bar" title="Belum ada data penilaian." message="" />
-                        </td>
-                    </tr>
+                        <tr>
+                            <td colspan="4" class="px-6 py-12">
+                                <x-empty-state icon="chart-bar" title="Belum ada data penilaian." message="" />
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>

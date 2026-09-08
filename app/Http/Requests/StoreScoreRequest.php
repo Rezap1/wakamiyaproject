@@ -22,6 +22,7 @@ class StoreScoreRequest extends FormRequest
             'Assessment_Category' => 'nullable|string',
             'Assessment_Date' => 'nullable|date',
             'Score' => 'nullable|numeric|min:0|max:100',
+            'Score_Value' => 'nullable|numeric|min:0|max:100',
             'Notes' => 'nullable|string',
             'Remarks' => 'nullable|string',
         ];
@@ -39,11 +40,38 @@ class StoreScoreRequest extends FormRequest
         return $rules;
     }
 
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $category = strtoupper(trim((string) $this->input('Assessment_Category', '')));
+            if ($category === '') {
+                return;
+            }
+
+            $configService = app(\App\Services\Academic\AssessmentConfigService::class);
+            if (!$configService->isNumericCategory($category)) {
+                return;
+            }
+
+            $score = $this->input('Score');
+            $scoreValue = $this->input('Score_Value');
+            if (($score === null || trim((string) $score) === '')
+                && ($scoreValue === null || trim((string) $scoreValue) === '')) {
+                $message = $category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.';
+                $validator->errors()->add('Score_Value', $message);
+            }
+        });
+    }
+
     public function messages(): array
     {
         return [
-            'Score_Value.min' => 'Nilai harus minimal 1.',
+            'Score_Value.numeric' => 'Nilai harus berupa angka.',
+            'Score.numeric' => 'Nilai harus berupa angka.',
+            'Score_Value.min' => 'Nilai minimal 0.',
             'Score_Value.max' => 'Nilai harus maksimal 100.',
+            'Score.min' => 'Nilai minimal 0.',
+            'Score.max' => 'Nilai maksimal 100.',
             'Subject_ID.required' => 'Mata Pelajaran wajib dipilih untuk Ujian Bab.',
         ];
     }

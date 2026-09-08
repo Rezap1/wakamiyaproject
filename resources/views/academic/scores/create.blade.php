@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('header', 'Input Nilai & Penilaian Siswa')
 @section('content')
-<div class="max-w-4xl mx-auto space-y-6" x-data="scoreEntryForm(@js($assessmentConfigs ?? []))">
+<div class="max-w-4xl mx-auto space-y-6" x-data="scoreEntryForm(@js($assessmentConfigs ?? []), @js(old('Assessment_Category', '')))">
     <x-page-header title="Input Nilai" description="Kategori dan aspek penilaian berasal dari MASTER_ASSESSMENT_CONFIG." :breadcrumbs="['Dasbor' => route('dashboard'), 'Nilai' => route('scores.index'), 'Tambah' => '#']" />
     <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <form x-ref="form" action="{{ route('scores.store') }}" method="POST" class="space-y-6 p-4 sm:p-6 md:p-8">
@@ -12,7 +12,7 @@
                     <select name="Student_ID" required class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3">
                         <option value="">-- Pilih Siswa --</option>
                         @foreach($students as $student)
-                            <option value="{{ $student['Student_ID'] }}">{{ $student['Full_Name'] ?? $student['Student_ID'] }} ({{ $student['Student_ID'] }})</option>
+                            <option value="{{ $student['Student_ID'] }}" @selected(old('Student_ID') === ($student['Student_ID'] ?? ''))>{{ $student['Full_Name'] ?? $student['Student_ID'] }} ({{ $student['Student_ID'] }})</option>
                         @endforeach
                     </select>
                 </div>
@@ -43,12 +43,12 @@
                 </template>
             </div>
             <div x-show="activeConfig && activeAspects.length === 0" class="border-t border-slate-100 pt-5">
-                <label class="mb-1.5 block text-sm font-bold text-slate-700">Nilai (0–100) <span class="text-rose-600">*</span></label>
-                <input type="number" name="Score_Value" min="0" max="100" step="0.01" :required="!!activeConfig && activeAspects.length === 0" class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-lg font-bold">
+                <label class="mb-1.5 block text-sm font-bold text-slate-700"><span x-text="numericLabel">Nilai Ujian Bab</span> <span class="text-rose-600">*</span></label>
+                <input type="number" name="Score_Value" min="0" max="100" step="0.01" value="{{ old('Score_Value', old('Score')) }}" :required="!!activeConfig && activeAspects.length === 0" class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-lg font-bold">
             </div>
             <div class="border-t border-slate-100 pt-5">
                 <label class="mb-1.5 block text-sm font-bold text-slate-700">Catatan (Opsional)</label>
-                <textarea name="Notes" rows="3" maxlength="2000" class="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"></textarea>
+                <textarea name="Notes" rows="3" maxlength="2000" class="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">{{ old('Notes') }}</textarea>
             </div>
             <div class="flex justify-end border-t border-slate-100 pt-5">
                 <button type="submit" :disabled="!activeConfig || submitting" class="min-h-12 rounded-xl bg-blue-600 px-6 py-2.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"><span x-text="submitting ? 'Menyimpan...' : 'Simpan Nilai'"></span></button>
@@ -58,9 +58,12 @@
 </div>
 <script>
 document.addEventListener('alpine:init', () => {
-    Alpine.data('scoreEntryForm', configs => ({
-        configs, category: '', submitting: false,
+    Alpine.data('scoreEntryForm', (configs, initialCategory = '') => ({
+        configs,
+        category: initialCategory,
+        submitting: false,
         levelLabels: {1:'Sangat Kurang',2:'Kurang',3:'Cukup',4:'Baik',5:'Sangat Baik'},
+        get numericLabel() { return String(this.category).toUpperCase() === 'UJIAN_BAB' ? 'Nilai Ujian Bab' : 'Nilai (0-100)'; },
         get activeConfig() { return this.configs.find(c => String(c.Category_ID).toUpperCase() === String(this.category).toUpperCase()); },
         get activeAspects() {
             if (!this.activeConfig || !this.activeConfig.Aspects_JSON) return [];

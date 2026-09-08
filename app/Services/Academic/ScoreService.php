@@ -76,11 +76,14 @@ class ScoreService
     {
         $category = strtoupper(trim($data['Assessment_Category'] ?? 'GENERAL'));
 
+        $categoryConfig = null;
+        $isNumericCategory = false;
         if ($this->assessmentConfigService) {
-            $config = $this->assessmentConfigService->getCategoryConfig($category);
-            if (!$config) {
+            $categoryConfig = $this->assessmentConfigService->getCategoryConfig($category);
+            if (!$categoryConfig) {
                 throw new Exception('Kategori penilaian tidak terdaftar pada MASTER_ASSESSMENT_CONFIG.');
             }
+            $isNumericCategory = $this->assessmentConfigService->isNumericCategory($category);
         }
         
         $details = ['category' => strtolower($category)];
@@ -125,18 +128,26 @@ class ScoreService
             $scoreVal = (float) $data['Score'];
         }
 
-        if ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes']))) {
-             if ($scoreVal === null) {
-                  $scoreVal = 0.0; // Fallback
-             }
-             if ($scoreVal < 1 || $scoreVal > 100) {
-                 throw new Exception("Nilai Ujian Bab harus berada di antara 1 dan 100.");
-             }
-             $details['subject_id'] = $data['Subject_ID'] ?? '';
-        }
-
-        if ($scoreVal !== null && ($scoreVal < 0 || $scoreVal > 100)) {
-            throw new Exception("Nilai akhir harus berada di antara 0 dan 100.");
+        if ($isNumericCategory || ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes']))) ) {
+            $rawScore = $data['Score_Value'] ?? $data['Score'] ?? null;
+            if ($rawScore === null || $rawScore === '') {
+                throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
+            }
+            if (!is_int($rawScore) && !is_float($rawScore) && !is_string($rawScore)) {
+                throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
+            }
+            $rawScore = trim((string) $rawScore);
+            if ($rawScore === '' || !is_numeric($rawScore) || !is_finite((float) $rawScore)) {
+                throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
+            }
+            $scoreVal = (float) $rawScore;
+            if ($scoreVal < 0) {
+                throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab minimal 0.' : 'Nilai minimal 0.');
+            }
+            if ($scoreVal > 100) {
+                throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab maksimal 100.' : 'Nilai maksimal 100.');
+            }
+            $details['subject_id'] = $data['Subject_ID'] ?? '';
         }
 
         return [

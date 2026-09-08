@@ -29,10 +29,15 @@
                     <label for="edit-category" class="mb-1.5 block text-sm font-bold text-slate-700">Kategori Penilaian <span class="text-rose-600" aria-hidden="true">*</span></label>
                     <select id="edit-category" name="Assessment_Category" x-model="category" required class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-base font-semibold outline-none focus:border-sky-500 focus:bg-white focus:ring-4 focus:ring-sky-100">
                         @foreach($assessmentConfigs as $config)
-                            <option value="{{ $config['Category_ID'] }}">{{ strtoupper($config['Category_Name']) }}</option>
+                            <option value="{{ $config['Category_ID'] }}">{{ $config['Category_Name'] ?? $config['Category_ID'] }}</option>
                         @endforeach
                     </select>
                 </div>
+            </div>
+
+            <div x-show="isNumeric" class="border-t border-slate-100 pt-5" style="display: none;">
+                <label class="mb-1.5 block text-sm font-bold text-slate-700"><span x-text="numericLabel">Nilai Ujian Bab</span> <span class="text-rose-600" aria-hidden="true">*</span></label>
+                <input name="Score" type="number" min="0" max="100" step="0.01" value="{{ old('Score', old('Score_Value', $score['Score'] ?? ($score['Score_Value'] ?? ''))) }}" x-bind:required="isNumeric" class="w-full rounded-xl border-slate-200 bg-slate-50 text-lg font-bold">
             </div>
 
             <div class="space-y-4 border-t border-slate-100 pt-5">
@@ -48,7 +53,7 @@
                         </select>
                     </div>
                 </template>
-                <p x-show="activeAspects.length === 0" class="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">Konfigurasi aspek tidak tersedia. Penyimpanan dinonaktifkan.</p>
+                <p x-show="!isNumeric && activeAspects.length === 0" class="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">Konfigurasi aspek tidak tersedia. Penyimpanan dinonaktifkan.</p>
             </div>
 
             <div class="border-t border-slate-100 pt-5">
@@ -58,7 +63,7 @@
 
             <div class="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
                 <a href="{{ route('teacher.workspace.scores') }}" class="inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100">Batal</a>
-                <button type="submit" x-bind:disabled="activeAspects.length === 0" class="inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-600 px-6 py-2.5 font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Simpan Perubahan</button>
+                <button type="submit" x-bind:disabled="!activeConfig || (!isNumeric && activeAspects.length === 0)" class="inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-600 px-6 py-2.5 font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Simpan Perubahan</button>
             </div>
         </form>
     </div>
@@ -71,16 +76,32 @@ document.addEventListener('alpine:init', () => {
         details,
         configs: @json($assessmentConfigs ?? []),
         levelLabels: {1: 'Sangat Kurang', 2: 'Kurang', 3: 'Cukup', 4: 'Baik', 5: 'Sangat Baik'},
-        get activeConfig() { return this.configs.find(config => String(config.Category_ID).toUpperCase() === String(this.category).toUpperCase()); },
+        get activeConfig() {
+            return this.configs.find(config => String(config.Category_ID).toUpperCase() === String(this.category).toUpperCase());
+        },
+        get isNumeric() {
+            const type = String(this.activeConfig?.Score_Type || this.activeConfig?.ScoreType || this.activeConfig?.Input_Type || '').toUpperCase();
+            return type === 'NUMERIC' || type === 'NUMBER' || type === 'SCORE' || String(this.category).toUpperCase() === 'UJIAN_BAB';
+        },
+        get numericLabel() {
+            return String(this.category).toUpperCase() === 'UJIAN_BAB' ? 'Nilai Ujian Bab' : 'Nilai (0-100)';
+        },
         get activeAspects() {
             if (!this.activeConfig || !this.activeConfig.Aspects_JSON) return [];
-            try { return JSON.parse(this.activeConfig.Aspects_JSON); } catch (error) { return []; }
+            try {
+                const parsed = JSON.parse(this.activeConfig.Aspects_JSON);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
         },
         init() {
             this.$nextTick(() => {
                 this.activeAspects.forEach(aspect => {
                     const field = document.getElementById('aspect-' + aspect.id);
-                    if (field && this.details[aspect.id] !== undefined) field.value = this.details[aspect.id];
+                    if (field && this.details[aspect.id] !== undefined) {
+                        field.value = this.details[aspect.id];
+                    }
                 });
             });
         }

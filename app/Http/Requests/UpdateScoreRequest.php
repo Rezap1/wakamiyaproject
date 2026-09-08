@@ -35,4 +35,39 @@ class UpdateScoreRequest extends FormRequest
 
         return $rules;
     }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $category = strtoupper(trim((string) $this->input('Assessment_Category', '')));
+            if ($category === '') {
+                return;
+            }
+
+            $configService = app(\App\Services\Academic\AssessmentConfigService::class);
+            if (!$configService->isNumericCategory($category)) {
+                return;
+            }
+
+            $score = $this->input('Score');
+            $scoreValue = $this->input('Score_Value');
+            if (($score === null || trim((string) $score) === '')
+                && ($scoreValue === null || trim((string) $scoreValue) === '')) {
+                $message = $category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.';
+                $validator->errors()->add('Score_Value', $message);
+            }
+        });
+    }
+
+    public function messages(): array
+    {
+        return [
+            'Score_Value.numeric' => 'Nilai harus berupa angka.',
+            'Score.numeric' => 'Nilai harus berupa angka.',
+            'Score_Value.min' => 'Nilai minimal 0.',
+            'Score_Value.max' => 'Nilai maksimal 100.',
+            'Score.min' => 'Nilai minimal 0.',
+            'Score.max' => 'Nilai maksimal 100.',
+        ];
+    }
 }
