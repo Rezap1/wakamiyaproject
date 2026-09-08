@@ -16,6 +16,15 @@ class ProtectMassAssignment
         'payments.verify',
         'invoices.update',
         'approvals.update',
+        // Assignment publication status is an intentional teacher/admin input.
+        // Keep the global protected-field guard for other endpoints, but allow
+        // the assignment create/edit routes to reach their FormRequest rules.
+        'assignments.store',
+        'assignments.update',
+        // Other validated forms that intentionally expose a Status selector.
+        'announcements.update',
+        'assessments.update',
+        'attendances.update',
         'workflow.*',
     ];
 

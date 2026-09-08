@@ -48,7 +48,7 @@ class AssignmentService
             $data['Assignment_ID'] = $this->generateId();
         }
         $data['Created_At'] = now()->toDateTimeString();
-        $data['Status'] = AssignmentStatus::normalize($data['Status'] ?? null) ?? AssignmentStatus::PUBLISHED;
+        $data['Status'] = $this->requireStatus($data['Status'] ?? null);
         
         $result = $this->repository->create($data);
         $this->repository->clearCache();
@@ -72,7 +72,7 @@ class AssignmentService
     {
         $this->validateAssignment($data);
         $data['Updated_At'] = now()->toDateTimeString();
-        $data['Status'] = AssignmentStatus::normalize($data['Status'] ?? null) ?? AssignmentStatus::PUBLISHED;
+        $data['Status'] = $this->requireStatus($data['Status'] ?? null);
         
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
@@ -111,6 +111,16 @@ class AssignmentService
                 throw new \RuntimeException("Assignment {$id} gagal diverifikasi pada kolom {$field}.");
             }
         }
+    }
+
+    private function requireStatus(mixed $value): string
+    {
+        $status = AssignmentStatus::normalize($value);
+        if ($status === null) {
+            throw new \InvalidArgumentException('Status tugas wajib diisi dan harus valid.');
+        }
+
+        return $status;
     }
     
     public function delete($id)

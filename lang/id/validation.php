@@ -119,5 +119,8 @@ return [
         'username' => 'Nama Pengguna',
         'Role_ID' => 'ID Role',
         'Module_ID' => 'ID Modul',
+        'Status' => 'Status Publikasi',
+        'status' => 'Status Publikasi',
+        'Deadline' => 'Tenggat Waktu',
     ],
 ];
