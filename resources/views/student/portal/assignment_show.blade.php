@@ -6,8 +6,8 @@
 <div class="space-y-6">
     <x-page-header 
         title="{{ $assignment['Title'] ?? 'Detail Tugas' }}" 
-        description="Batas Waktu: {{ $assignment['Deadline'] ?? '-' }}"
-        :breadcrumbs="['Dashboard' => route('dashboard.student'), 'Tugas Saya' => route('student.portal.assignments'), 'Detail' => '#']"
+        description="Tenggat Waktu: {{ $assignment['Deadline'] ?? '-' }}"
+        :breadcrumbs="['Dasbor' => route('dashboard.student'), 'Tugas Saya' => route('student.portal.assignments'), 'Detail' => '#']"
     />
 
     @if(session('success'))

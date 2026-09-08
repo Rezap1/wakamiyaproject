@@ -6,7 +6,7 @@
     <x-page-header 
         title="Tugas Harian" 
         description="Kelola tugas untuk kelas yang Anda ajar."
-        :breadcrumbs="['Dashboard' => route('dashboard.teacher'), 'Tugas Harian' => '#']"
+        :breadcrumbs="['Dasbor' => route('dashboard.teacher'), 'Tugas Harian' => '#']"
     >
         <x-slot:actions>
             <x-button as="a" href="{{ route('assignments.create') }}" variant="primary">
@@ -29,18 +29,18 @@
                 <div class="p-4 bg-white space-y-2">
                     <div class="flex justify-between items-start">
                         <div>
-                            <p class="text-sm font-extrabold text-slate-900">{{ $assignment['Title'] ?? 'No Title' }}</p>
+                            <p class="text-sm font-extrabold text-slate-900">{{ $assignment['Title'] ?? 'Tanpa judul' }}</p>
                             <p class="text-xs font-semibold text-blue-600">Kelas: {{ $assignment['Class_Name'] ?? 'Kelas tidak ditemukan' }}</p>
                         </div>
-                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
-                            {{ \App\Support\Presentation\IndonesianPresentation::status($assignment['Status'] ?? 'Published') }}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
+                            {{ \App\Support\Academic\AssignmentStatus::label($assignment['Status'] ?? 'PUBLISHED') }}
                         </span>
                     </div>
                     <div class="text-xs text-slate-500">
-                        <p><span class="font-semibold">Deadline:</span> {{ $assignment['Deadline'] ?? '-' }}</p>
+                        <p><span class="font-semibold">Tenggat Waktu:</span> {{ $assignment['Deadline'] ?? '-' }}</p>
                     </div>
                     <div class="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                        <a href="{{ route('assignments.edit', $assignment['Assignment_ID']) }}" class="text-xs font-bold text-blue-600 hover:text-blue-700 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors">Edit</a>
+                        <a href="{{ route('assignments.edit', $assignment['Assignment_ID']) }}" class="text-xs font-bold text-blue-600 hover:text-blue-700 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors">Ubah</a>
                         <form action="{{ route('assignments.destroy', $assignment['Assignment_ID']) }}" method="POST" onsubmit="return confirm('Yakin ingin menghapus tugas ini?');">
                             @csrf
                             @method('DELETE')
@@ -70,18 +70,18 @@
                 <tbody class="divide-y divide-slate-100">
                     @forelse($assignments as $assignment)
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-6 py-4 font-bold text-slate-900">{{ $assignment['Title'] ?? '-' }}</td>
+                        <td class="px-6 py-4 font-bold text-slate-900">{{ $assignment['Title'] ?? 'Tanpa judul' }}</td>
                         <td class="px-6 py-4 font-semibold text-slate-600">{{ $assignment['Class_Name'] ?? 'Kelas tidak ditemukan' }}</td>
                         <td class="px-6 py-4 text-slate-500 italic max-w-xs truncate">{{ $assignment['Description'] ?? '-' }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ $assignment['Deadline'] ?? '-' }}</td>
                         <td class="px-6 py-4">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
-                                {{ \App\Support\Presentation\IndonesianPresentation::status($assignment['Status'] ?? 'PUBLISHED') }}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold {{ strtoupper(!empty($assignment['Status']) ? $assignment['Status'] : 'PUBLISHED') === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700' }}">
+                                {{ \App\Support\Academic\AssignmentStatus::label($assignment['Status'] ?? 'PUBLISHED') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 text-right">
                             <div class="flex items-center justify-end gap-2">
-                                <a href="{{ route('assignments.edit', $assignment['Assignment_ID']) }}" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                <a href="{{ route('assignments.edit', $assignment['Assignment_ID']) }}" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Ubah">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                                 </a>
                                 <form action="{{ route('assignments.destroy', $assignment['Assignment_ID']) }}" method="POST" class="inline-block" onsubmit="return confirm('Yakin ingin menghapus tugas ini?');">

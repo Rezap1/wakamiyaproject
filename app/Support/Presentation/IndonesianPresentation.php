@@ -220,6 +220,11 @@ final class IndonesianPresentation
         return self::knownLabel($raw) ?? $raw;
     }
 
+    public static function assignmentStatus(mixed $value, string $fallback = '-'): string
+    {
+        return \App\Support\Academic\AssignmentStatus::label($value, $fallback);
+    }
+
     public static function boolean(mixed $value, string $fallback = '-'): string
     {
         if (is_bool($value)) {

@@ -4,6 +4,7 @@ namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\AssignmentRepositoryInterface;
 use Illuminate\Support\Facades\Auth;
+use App\Support\Academic\AssignmentStatus;
 
 class AssignmentService
 {
@@ -47,10 +48,11 @@ class AssignmentService
             $data['Assignment_ID'] = $this->generateId();
         }
         $data['Created_At'] = now()->toDateTimeString();
-        $data['Status'] = !empty($data['Status']) ? $data['Status'] : 'Published';
+        $data['Status'] = AssignmentStatus::normalize($data['Status'] ?? null) ?? AssignmentStatus::PUBLISHED;
         
         $result = $this->repository->create($data);
         $this->repository->clearCache();
+        $this->verifyPersisted($data['Assignment_ID'], $data);
         
         $this->enterpriseEvent->dispatch(
             'ACADEMIC',
@@ -70,12 +72,11 @@ class AssignmentService
     {
         $this->validateAssignment($data);
         $data['Updated_At'] = now()->toDateTimeString();
-        if (isset($data['Status']) && empty($data['Status'])) {
-            $data['Status'] = 'Published';
-        }
+        $data['Status'] = AssignmentStatus::normalize($data['Status'] ?? null) ?? AssignmentStatus::PUBLISHED;
         
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
+        $this->verifyPersisted($id, $data);
 
         $this->enterpriseEvent->dispatch(
             'ACADEMIC',
@@ -89,6 +90,27 @@ class AssignmentService
         );
 
         return $result;
+    }
+
+    private function verifyPersisted(string $id, array $expected): void
+    {
+        // BaseSheetRepository provides a cache-free read. Keep this conditional
+        // so lightweight test doubles and alternate repositories remain valid.
+        if (!method_exists($this->repository, 'findByIdFresh')) {
+            return;
+        }
+
+        $persisted = $this->repository->findByIdFresh($id);
+        if (!$persisted) {
+            throw new \RuntimeException("Assignment {$id} tidak ditemukan setelah disimpan.");
+        }
+
+        foreach (['Title', 'Class_ID', 'Teacher_ID', 'Deadline', 'Status', 'Description'] as $field) {
+            if (array_key_exists($field, $expected)
+                && (string) ($persisted[$field] ?? '') !== (string) ($expected[$field] ?? '')) {
+                throw new \RuntimeException("Assignment {$id} gagal diverifikasi pada kolom {$field}.");
+            }
+        }
     }
     
     public function delete($id)

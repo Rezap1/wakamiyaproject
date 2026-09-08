@@ -1,43 +1,47 @@
 @extends('layouts.app')
 
-@section('header', 'Form Tugas')
+@section('header', 'Ubah Tugas')
 
 @section('content')
 @php
     $classOptions = [];
     if(isset($classes)) {
         foreach($classes as $c) {
-            $classOptions[$c['Class_ID'] ?? ''] = ($c['Class_Name'] ?? 'Unknown') . ' (' . ($c['Program_Name'] ?? '') . ')';
+            $className = trim((string) ($c['Class_Name'] ?? 'Kelas tidak ditemukan')) ?: 'Kelas tidak ditemukan';
+            $programName = trim((string) ($c['Program_Name'] ?? ''));
+            $classOptions[$c['Class_ID'] ?? ''] = $className . ($programName !== '' ? ' (' . $programName . ')' : '');
         }
     }
     $teacherOptions = [];
     if(isset($teachers)) {
         foreach($teachers as $t) {
-            $teacherOptions[$t['Teacher_ID'] ?? ''] = ($t['Full_Name'] ?? 'Unknown') . ' (' . ($t['Specialization'] ?? '') . ')';
+            $teacherName = trim((string) ($t['Full_Name'] ?? 'Pengajar tidak ditemukan')) ?: 'Pengajar tidak ditemukan';
+            $specialization = trim((string) ($t['Specialization'] ?? ''));
+            $teacherOptions[$t['Teacher_ID'] ?? ''] = $teacherName . ($specialization !== '' ? ' (' . $specialization . ')' : '');
         }
     }
 @endphp
 
 <div class="space-y-6">
-    <x-page-header 
-        title="Edit Tugas: {{ $assignment['Title'] ?? 'Tidak ada judul' }}" 
+    <x-page-header
+        title="Ubah Tugas: {{ $assignment['Title'] ?? 'Tidak ada judul' }}"
         description="Ubah informasi tugas dan tenggat waktu."
         :breadcrumbs="isset($currentTeacherId) && $currentTeacherId 
-            ? ['Dashboard' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Edit Tugas' => '#']
-            : ['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Edit' => '#']"
+            ? ['Dasbor' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Ubah Tugas' => '#']
+            : ['Dasbor' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Ubah' => '#']"
     >
         <x-slot:actions>
             @php
-                $status = $assignment['Status'] ?? 'Draft';
+                $status = strtoupper(trim((string) ($assignment['Status'] ?? 'DRAFT')));
                 $statusColor = match($status) {
-                    'Published' => 'green',
-                    'Draft' => 'gray',
-                    'Closed' => 'red',
+                    'PUBLISHED' => 'green',
+                    'DRAFT' => 'gray',
+                    'CLOSED' => 'red',
                     default => 'blue'
                 };
             @endphp
             <x-badge color="{{ $statusColor }}" type="solid" class="uppercase">
-                Status Saat Ini: {{ $status }}
+                Status Saat Ini: {{ \App\Support\Academic\AssignmentStatus::label($status) }}
             </x-badge>
         </x-slot:actions>
     </x-page-header>
@@ -88,14 +92,16 @@
                                 $deadline = date('Y-m-d\TH:i', strtotime($deadline));
                             }
                         @endphp
-                        <x-input type="datetime-local" name="Deadline" label="Tenggat Waktu (Deadline)" required value="{{ $deadline }}" />
+                        <x-input type="datetime-local" name="Deadline" label="Tenggat Waktu" required value="{{ $deadline }}" />
                     </div>
 
                     <div>
                         <x-select name="Status" label="Status Publikasi" required>
-                            <option value="Published" {{ old('Status', $assignment['Status'] ?? 'Published') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
-                            <option value="Draft" {{ old('Status', $assignment['Status'] ?? '') == 'Draft' ? 'selected' : '' }}>Draft (Belum Dipublikasikan)</option>
-                            <option value="Closed" {{ old('Status', $assignment['Status'] ?? '') == 'Closed' ? 'selected' : '' }}>Closed (Ditutup)</option>
+                            <option value="PUBLISHED" {{ old('Status', strtoupper((string) ($assignment['Status'] ?? 'PUBLISHED'))) == 'PUBLISHED' ? 'selected' : '' }}>Terpublikasi</option>
+                            <option value="DRAFT" {{ old('Status', strtoupper((string) ($assignment['Status'] ?? ''))) == 'DRAFT' ? 'selected' : '' }}>Draf</option>
+                            <option value="CLOSED" {{ old('Status', strtoupper((string) ($assignment['Status'] ?? ''))) == 'CLOSED' ? 'selected' : '' }}>Ditutup</option>
+                            <option value="ACTIVE" {{ old('Status', strtoupper((string) ($assignment['Status'] ?? ''))) == 'ACTIVE' ? 'selected' : '' }}>Aktif</option>
+                            <option value="ARCHIVED" {{ old('Status', strtoupper((string) ($assignment['Status'] ?? ''))) == 'ARCHIVED' ? 'selected' : '' }}>Diarsipkan</option>
                         </x-select>
                     </div>
 

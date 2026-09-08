@@ -4,6 +4,8 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use App\Support\Academic\AssignmentStatus;
 
 class UpdateAssignmentRequest extends FormRequest
 {
@@ -13,6 +15,13 @@ class UpdateAssignmentRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'Status' => AssignmentStatus::normalize(AssignmentStatus::extractFrom($this->all())),
+        ]);
     }
 
     /**
@@ -27,7 +36,7 @@ class UpdateAssignmentRequest extends FormRequest
             'Class_ID' => 'required|string',
             'Teacher_ID' => 'required|string',
             'Deadline' => 'required|date',
-            'Status' => 'required|string|in:Published,Closed,Active,Draft,Archived',
+            'Status' => ['required', 'string', Rule::in(AssignmentStatus::values())],
             'Description' => 'nullable|string',
         ];
     }

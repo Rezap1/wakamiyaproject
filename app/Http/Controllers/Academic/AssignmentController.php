@@ -37,21 +37,24 @@ class AssignmentController extends Controller
         }
 
         $classRepo = app(\App\Repositories\GoogleSheets\ClassRepository::class);
+        $subjectRepo = app(\App\Repositories\GoogleSheets\SubjectRepository::class);
         $classes = $classRepo->fetchAll()->keyBy('Class_ID');
+        $subjects = collect($subjectRepo->fetchAll())->keyBy('Subject_ID');
         $teachers = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
 
         return [
-            'moduleName' => 'Tugas Harian (Assignments)',
+            'moduleName' => 'Tugas Harian',
             'data' => collect(array_values($assignments->toArray())),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['Judul', 'Kelas', 'Guru', 'Deadline', 'Status'],
-            'mapRow' => function($row) use ($classes, $teachers) {
+            'headers' => ['Judul', 'Kelas', 'Mata Pelajaran', 'Guru', 'Deadline', 'Status'],
+            'mapRow' => function($row) use ($classes, $subjects, $teachers) {
                 return [
                     $row['Title'] ?? '-',
                     HumanReadableResolver::className($row['Class_ID'] ?? '', $classes),
+                    HumanReadableResolver::subjectName($row['Subject_ID'] ?? '', $subjects),
                     HumanReadableResolver::teacherName($row['Teacher_ID'] ?? '', $teachers),
                     $row['Deadline'] ?? '-',
-                    $row['Status'] ?? 'Active'
+                    \App\Support\Academic\AssignmentStatus::label($row['Status'] ?? 'PUBLISHED'),
                 ];
             },
             'isLandscape' => false,
@@ -105,7 +108,16 @@ class AssignmentController extends Controller
             return redirect()->route('teacher.workspace.assignments');
         }
 
-        $assignments = $this->assignmentService->getAll();
+        $assignments = collect($this->assignmentService->getAll());
+        $classes = collect(app(\App\Repositories\GoogleSheets\ClassRepository::class)->fetchAll())->keyBy('Class_ID');
+        $subjects = collect(app(\App\Repositories\GoogleSheets\SubjectRepository::class)->fetchAll())->keyBy('Subject_ID');
+        $teachers = collect(app(\App\Repositories\GoogleSheets\TeacherRepository::class)->fetchAll())->keyBy('Teacher_ID');
+        $assignments = $assignments->map(function ($assignment) use ($classes, $subjects, $teachers) {
+            $assignment['Class_Name'] = HumanReadableResolver::className($assignment['Class_ID'] ?? '', $classes);
+            $assignment['Subject_Name'] = HumanReadableResolver::subjectName($assignment['Subject_ID'] ?? '', $subjects);
+            $assignment['Teacher_Name'] = HumanReadableResolver::teacherName($assignment['Teacher_ID'] ?? '', $teachers);
+            return $assignment;
+        });
         return view('academic.assignments.index', compact('assignments'));
     }
     private function verifyAssignmentScope($assignmentId)

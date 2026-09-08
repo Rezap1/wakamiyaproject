@@ -4,10 +4,10 @@
 
 @section('content')
 <div class="space-y-6">
-    <x-page-header 
-        title="Daftar Tugas (Assignments)" 
+    <x-page-header
+        title="Daftar Tugas"
         description="Semua tugas yang diberikan kepada Anda."
-        :breadcrumbs="['Dashboard' => route('dashboard.student'), 'Portal' => '#', 'Tugas' => '#']"
+        :breadcrumbs="['Dasbor' => route('dashboard.student'), 'Portal' => '#', 'Tugas' => '#']"
     />
 
     @if(session('success'))
@@ -25,9 +25,9 @@
         @forelse($assignments as $assignment)
             <x-card class="flex flex-col h-full hover:border-blue-300 transition-colors">
                 <div class="flex justify-between items-start mb-4">
-                    <h3 class="text-lg font-bold text-slate-800">{{ $assignment['Title'] ?? 'Untitled' }}</h3>
+                    <h3 class="text-lg font-bold text-slate-800">{{ $assignment['Title'] ?? 'Tanpa judul' }}</h3>
                     <span class="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-lg whitespace-nowrap">
-                        DL: {{ $assignment['Deadline'] ?? '-' }}
+                        Tenggat: {{ $assignment['Deadline'] ?? '-' }}
                     </span>
                 </div>
                 <div class="text-sm text-slate-600 mb-6 flex-grow">

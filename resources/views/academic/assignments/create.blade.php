@@ -1,19 +1,23 @@
 @extends('layouts.app')
 
-@section('header', 'Form Assignment')
+@section('header', 'Form Tugas')
 
 @section('content')
 @php
     $classOptions = [];
     if(isset($classes)) {
         foreach($classes as $c) {
-            $classOptions[$c['Class_ID'] ?? ''] = ($c['Class_Name'] ?? 'Unknown') . ' (' . ($c['Program_Name'] ?? '') . ')';
+            $className = trim((string) ($c['Class_Name'] ?? 'Kelas tidak ditemukan')) ?: 'Kelas tidak ditemukan';
+            $programName = trim((string) ($c['Program_Name'] ?? ''));
+            $classOptions[$c['Class_ID'] ?? ''] = $className . ($programName !== '' ? ' (' . $programName . ')' : '');
         }
     }
     $teacherOptions = [];
     if(isset($teachers)) {
         foreach($teachers as $t) {
-            $teacherOptions[$t['Teacher_ID'] ?? ''] = ($t['Full_Name'] ?? 'Unknown') . ' (' . ($t['Specialization'] ?? '') . ')';
+            $teacherName = trim((string) ($t['Full_Name'] ?? 'Pengajar tidak ditemukan')) ?: 'Pengajar tidak ditemukan';
+            $specialization = trim((string) ($t['Specialization'] ?? ''));
+            $teacherOptions[$t['Teacher_ID'] ?? ''] = $teacherName . ($specialization !== '' ? ' (' . $specialization . ')' : '');
         }
     }
 @endphp
@@ -21,10 +25,10 @@
 <div class="space-y-6">
     <x-page-header 
         title="Buat Tugas Baru" 
-        description="Buat dan distribusikan tugas (assignment) untuk kelas."
+        description="Buat dan distribusikan tugas untuk kelas."
         :breadcrumbs="isset($currentTeacherId) && $currentTeacherId 
-            ? ['Dashboard' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Buat Tugas Baru' => '#']
-            : ['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Tambah Baru' => '#']"
+            ? ['Dasbor' => route('dashboard.teacher'), 'Tugas Harian' => route('teacher.workspace.assignments'), 'Buat Tugas Baru' => '#']
+            : ['Dasbor' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index'), 'Tambah Baru' => '#']"
     />
 
     <x-card class="p-0 overflow-hidden">
@@ -65,14 +69,16 @@
                     @endif
 
                     <div>
-                        <x-input type="datetime-local" name="Deadline" label="Tenggat Waktu (Deadline)" required value="{{ old('Deadline') }}" />
+                        <x-input type="datetime-local" name="Deadline" label="Tenggat Waktu" required value="{{ old('Deadline') }}" />
                     </div>
 
                     <div>
                         <x-select name="Status" label="Status Publikasi" required>
-                            <option value="Published" {{ old('Status', 'Published') == 'Published' ? 'selected' : '' }}>Published (Terpublikasi)</option>
-                            <option value="Draft" {{ old('Status') == 'Draft' ? 'selected' : '' }}>Draft (Belum Dipublikasikan)</option>
-                            <option value="Closed" {{ old('Status') == 'Closed' ? 'selected' : '' }}>Closed (Ditutup)</option>
+                            <option value="PUBLISHED" {{ old('Status', 'PUBLISHED') == 'PUBLISHED' ? 'selected' : '' }}>Terpublikasi</option>
+                            <option value="DRAFT" {{ old('Status') == 'DRAFT' ? 'selected' : '' }}>Draf</option>
+                            <option value="CLOSED" {{ old('Status') == 'CLOSED' ? 'selected' : '' }}>Ditutup</option>
+                            <option value="ACTIVE" {{ old('Status') == 'ACTIVE' ? 'selected' : '' }}>Aktif</option>
+                            <option value="ARCHIVED" {{ old('Status') == 'ARCHIVED' ? 'selected' : '' }}>Diarsipkan</option>
                         </x-select>
                     </div>
 

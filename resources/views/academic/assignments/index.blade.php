@@ -4,14 +4,14 @@
 
 @section('content')
 <div class="space-y-6">
-    <x-page-header 
-        title="Daftar Tugas (Assignments)" 
+    <x-page-header
+        title="Daftar Tugas"
         description="Kelola tugas siswa dan batas waktu."
-        :breadcrumbs="['Dashboard' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index')]"
+        :breadcrumbs="['Dasbor' => route('dashboard'), 'Akademik' => '#', 'Tugas' => route('assignments.index')]"
     >
         <x-slot:actions>
             <x-universal.multi-export route-prefix="assignments" />
-            <x-button as="a" href="{{ route('assignments.index') }}" variant="secondary" title="Refresh Data">
+            <x-button as="a" href="{{ route('assignments.index') }}" variant="secondary" title="Muat Ulang Data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </x-button>
             <x-button as="a" href="{{ route('assignments.create') }}" variant="primary">
@@ -28,9 +28,11 @@
         <div>
             <x-select id="statusFilter">
                 <option value="ALL">Semua Status</option>
-                <option value="Published">Published</option>
-                <option value="PUBLISHED">PUBLISHED</option>
-                <option value="Closed">Closed</option>
+                <option value="PUBLISHED">Terpublikasi</option>
+                <option value="DRAFT">Draf</option>
+                <option value="CLOSED">Ditutup</option>
+                <option value="ACTIVE">Aktif</option>
+                <option value="ARCHIVED">Diarsipkan</option>
             </x-select>
         </div>
     </div>
@@ -38,22 +40,30 @@
     <x-table :empty="count($assignments) === 0">
         <x-slot:header>
             <th class="px-6 py-4">Informasi Tugas</th>
-            <th class="px-6 py-4">Tenggat Waktu (Deadline)</th>
-            <th class="px-6 py-4 text-center">Max Score</th>
+            <th class="px-6 py-4">Tenggat Waktu</th>
+            <th class="px-6 py-4 text-center">Nilai Maksimal</th>
             <th class="px-6 py-4">Status</th>
             <th class="px-6 py-4 text-right">Aksi</th>
         </x-slot:header>
 
         @foreach($assignments as $a)
-        <tr class="hover:bg-slate-50 transition-colors filter-row" 
-            data-search="{{ strtolower(($a['Title'] ?? '').($a['Teacher_ID'] ?? '')) }}" 
-            data-status="{{ $a['Status'] ?? 'PUBLISHED' }}">
+        <tr class="hover:bg-slate-50 transition-colors filter-row"
+            data-search="{{ strtolower(($a['Title'] ?? '').' '.($a['Class_Name'] ?? '').' '.($a['Subject_Name'] ?? '').' '.($a['Teacher_Name'] ?? '')) }}"
+            data-status="{{ strtoupper(trim((string) ($a['Status'] ?? 'PUBLISHED'))) }}">
             
             <td class="px-6 py-4">
-                <div class="font-bold text-slate-800 text-sm mb-1">{{ $a['Title'] ?? 'No Title' }}</div>
+                <div class="font-bold text-slate-800 text-sm mb-1">{{ $a['Title'] ?? 'Tanpa judul' }}</div>
                 <div class="flex items-center text-[11px] text-slate-500 font-medium">
                     <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                    By: {{ $a['Teacher_ID'] ?? '-' }}
+                    Guru: {{ $a['Teacher_Name'] ?? 'Pengajar tidak ditemukan' }}
+                </div>
+                <div class="flex items-center text-[11px] text-slate-500 font-medium">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"></path></svg>
+                    Kelas: {{ $a['Class_Name'] ?? 'Kelas tidak ditemukan' }}
+                </div>
+                <div class="flex items-center text-[11px] text-slate-500 font-medium">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"></path></svg>
+                    Mata Pelajaran: {{ $a['Subject_Name'] ?? 'Mata pelajaran tidak ditemukan' }}
                 </div>
             </td>
             <td class="px-6 py-4">
@@ -72,7 +82,7 @@
                 @endphp
                 <x-badge color="{{ $deadlineColor }}" class="font-medium flex items-center w-max gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    {{ $deadline ? date('d M Y, H:i', $deadlineDate) : 'No Deadline' }}
+                    {{ $deadline ? date('d M Y, H:i', $deadlineDate) : 'Belum ada tenggat' }}
                 </x-badge>
                 @if($daysLeft !== null && $daysLeft >= 0)
                     <div class="text-[10px] font-bold text-slate-400 mt-1 ml-1">{{ $daysLeft }} hari lagi</div>
@@ -82,24 +92,24 @@
             </td>
             <td class="px-6 py-4 text-center">
                 <div class="inline-flex flex-col items-center justify-center w-16 h-12 rounded-xl bg-slate-50 border border-slate-200">
-                    <span class="text-[13px] font-bold text-slate-800 leading-none" title="Max Score">{{ $a['Max_Score'] ?? 100 }}</span>
+                    <span class="text-[13px] font-bold text-slate-800 leading-none" title="Nilai Maksimal">{{ $a['Max_Score'] ?? 100 }}</span>
                 </div>
             </td>
             <td class="px-6 py-4">
                 @php
-                    $status = $a['Status'] ?? 'PUBLISHED';
+                    $status = strtoupper(trim((string) ($a['Status'] ?? 'PUBLISHED')));
                     $statusColor = match($status) {
-                        'Published' => 'green',
-                        'PUBLISHED' => 'gray',
-                        'Closed' => 'red',
+                        'PUBLISHED' => 'green',
+                        'DRAFT' => 'gray',
+                        'CLOSED' => 'red',
                         default => 'blue'
                     };
                 @endphp
-                <x-badge color="{{ $statusColor }}" class="uppercase text-[10px] font-bold">{{ $status }}</x-badge>
+                    <x-badge color="{{ $statusColor }}" class="text-[10px] font-bold">{{ \App\Support\Academic\AssignmentStatus::label($status) }}</x-badge>
             </td>
             <td class="px-6 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
-                    <a href="{{ route('assignments.edit', $a['Assignment_ID']) }}" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                    <a href="{{ route('assignments.edit', $a['Assignment_ID']) }}" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Ubah">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                     </a>
                     <form action="{{ route('assignments.destroy', $a['Assignment_ID']) }}" method="POST" class="inline-block" onsubmit="return confirm('Yakin ingin menghapus tugas ini?');">
