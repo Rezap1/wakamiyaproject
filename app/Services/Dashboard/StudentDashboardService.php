@@ -10,6 +10,7 @@ use App\Services\Core\StudentService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use App\Services\Attendance\AttendanceRequestService;
+use App\Services\Academic\AnnouncementService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -24,6 +25,7 @@ class StudentDashboardService
     protected $activityLogService;
     protected $notificationService;
     protected $attendanceRequestService;
+    protected $announcementService;
 
     public function __construct(
         ScoreService $scoreService,
@@ -34,7 +36,8 @@ class StudentDashboardService
         StudentService $studentService,
         ActivityLogService $activityLogService,
         NotificationService $notificationService,
-        AttendanceRequestService $attendanceRequestService
+        AttendanceRequestService $attendanceRequestService,
+        ?AnnouncementService $announcementService = null
     ) {
         $this->scoreService = $scoreService;
         $this->scheduleService = $scheduleService;
@@ -45,6 +48,7 @@ class StudentDashboardService
         $this->activityLogService = $activityLogService;
         $this->notificationService = $notificationService;
         $this->attendanceRequestService = $attendanceRequestService;
+        $this->announcementService = $announcementService;
     }
 
     public function getDashboardData()
@@ -65,6 +69,25 @@ class StudentDashboardService
 
         $studentId = $student['Student_ID'];
         $studentClassId = $student['Class_ID'] ?? null;
+
+        // Announcements are resolved once using the authoritative student
+        // class. The service applies server-side WIB boundaries and targeting.
+        $announcements = collect();
+        try {
+            $announcementService = $this->announcementService ?: app(AnnouncementService::class);
+            $announcements = $announcementService->getActiveAnnouncements('STUDENT', $studentClassId)->take(3)->map(function ($announcement) use ($announcementService) {
+                $announcement = (array) $announcement;
+                $announcement['Priority_Label'] = $announcementService->priorityLabel($announcement['Priority'] ?? 'NORMAL');
+                $announcement['Audience_Label'] = $announcementService->audienceLabel($announcement);
+                $announcement['Start_At_Label'] = $this->formatAnnouncementDate($announcementService->startAt($announcement));
+                $announcement['Expires_At_Label'] = $this->formatAnnouncementDate($announcementService->expiresAt($announcement));
+                return $announcement;
+            })->values();
+        } catch (\Throwable) {
+            // A dashboard should remain usable if the optional sheet is
+            // temporarily unavailable; no announcement is safer than stale data.
+            $announcements = collect();
+        }
 
         // === Fetch data ONCE ===
         $allScores = collect($this->scoreService->getAll());
@@ -252,8 +275,13 @@ class StudentDashboardService
                 'totalOutstanding', 'latestInvoice', 'outstandingBills',
                 'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
                 'attendancePercentage', 'certificateStatus',
-                'reminders', 'recentActivities', 'unreadNotifications'
+                'reminders', 'recentActivities', 'unreadNotifications', 'announcements'
             );
+    }
+
+    private function formatAnnouncementDate($date): string
+    {
+        return $date ? $date->locale('id')->translatedFormat('j F Y, H.i') . ' WIB' : '-';
     }
 
     private function getTodayIndo()

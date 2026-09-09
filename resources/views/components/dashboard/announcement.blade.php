@@ -10,7 +10,8 @@
 <div class="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
     @forelse($announcements as $index => $announcement)
         @php
-            $priority = strtolower($announcement['priority'] ?? 'normal');
+            $priority = strtoupper($announcement['priority'] ?? 'NORMAL');
+            $priorityLabel = match ($priority) { 'URGENT', 'HIGH' => 'Mendesak', 'IMPORTANT' => 'Penting', default => 'Informasi' };
             
             // Cycle colors if no specific priority colors are needed, or use priority
             $badgeColors = [
@@ -20,7 +21,7 @@
             ];
             $colorIndex = $index % count($badgeColors);
             
-            if ($priority === 'high') {
+            if (in_array($priority, ['URGENT', 'HIGH'], true)) {
                 $badgeClass = 'bg-red-100 text-red-600';
             } elseif ($priority === 'low') {
                 $badgeClass = 'bg-slate-100 text-slate-600';
@@ -31,10 +32,10 @@
         
         <div class="{{ !$loop->last ? 'border-b border-slate-50 pb-3' : '' }}">
             <div class="flex items-center gap-2 mb-1">
-                <span class="{{ $badgeClass }} text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">INFO</span>
+                <span class="{{ $badgeClass }} text-[9px] font-extrabold px-2 py-0.5 rounded">{{ $priorityLabel }}</span>
                 <p class="text-[12px] font-bold text-slate-800">{{ $announcement['title'] ?? '' }}</p>
             </div>
-            <p class="text-[11px] text-slate-500 ml-10">{{ $announcement['content'] ?? '' }}</p>
+            <p class="text-[11px] text-slate-500 ml-10 whitespace-pre-line break-words">{{ $announcement['content'] ?? $announcement['message'] ?? '' }}</p>
             <p class="text-[10px] text-slate-400 font-medium ml-10 mt-1">{{ $announcement['date'] ?? \App\Helpers\DateHelper::format(now(), 'd M Y') }}</p>
         </div>
     @empty

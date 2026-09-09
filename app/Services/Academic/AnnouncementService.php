@@ -3,84 +3,339 @@
 namespace App\Services\Academic;
 
 use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
+/** Shared scheduling, targeting and presentation rules for announcements. */
 class AnnouncementService
 {
-    protected $repository;
+    public const TIMEZONE = 'Asia/Jakarta';
+    public const PRIORITIES = ['NORMAL', 'IMPORTANT', 'URGENT'];
+    public const AUDIENCES = ['ALL_STUDENTS', 'CLASS'];
+    public const STATUSES = ['DRAFT', 'PUBLISHED', 'ACTIVE', 'INACTIVE'];
 
-    public function __construct(AnnouncementRepositoryInterface $repository)
+    protected AnnouncementRepositoryInterface $repository;
+    protected ?ClassRepositoryInterface $classRepository;
+
+    public function __construct(AnnouncementRepositoryInterface $repository, ?ClassRepositoryInterface $classRepository = null)
     {
         $this->repository = $repository;
+        $this->classRepository = $classRepository;
     }
 
-    public function getAll()
+    public function getAll(): Collection
     {
-        return $this->repository->fetchAll();
+        $rows = $this->repository->fetchAll();
+        return $rows instanceof Collection ? $rows : collect($rows);
     }
 
     public function getById($id)
     {
-        return $this->repository->findById($id);
+        return $this->repository->findById((string) $id);
     }
 
-    public function generateId()
+    public function generateId(): string
     {
         return $this->repository->generateNewId('ANC', 6);
     }
 
-    public function getActiveAnnouncements($role = null, $classId = null)
+    /** Start is inclusive; expiry is exclusive and evaluated by the server clock. */
+    public function getActiveAnnouncements(?string $role = null, ?string $classId = null, $now = null): Collection
     {
-        return $this->getAll()->filter(function ($item) use ($role, $classId) {
-            // Check status and Is_Active
-            if (($item['Is_Active'] ?? 'TRUE') !== 'TRUE') return false;
-            if (($item['Status'] ?? 'PUBLISHED') !== 'PUBLISHED') return false;
-            
-            // Check expiry
-            if (!empty($item['Expired_Date'])) {
-                if (strtotime($item['Expired_Date']) < time()) return false;
-            }
-            if (!empty($item['Publish_Date'])) {
-                if (strtotime($item['Publish_Date']) > time()) return false;
-            }
+        $instant = $this->clock($now);
+        $role = strtoupper(trim((string) $role));
 
-            // Check target role
-            if ($role && !empty($item['Target_Role']) && strtoupper($item['Target_Role']) !== 'ALL') {
-                if (strtoupper($item['Target_Role']) !== strtoupper($role)) return false;
-            }
+        return $this->getAll()
+            ->filter(function ($item) use ($role, $classId, $instant) {
+                if (!$this->isActiveFlag($item['Is_Active'] ?? true)) return false;
+                $status = strtoupper(trim((string) ($item['Status'] ?? 'PUBLISHED')));
+                if (!in_array($status, ['PUBLISHED', 'ACTIVE'], true)) return false;
 
-            // Check target class
-            if ($classId && !empty($item['Target_ID'])) {
-                if ($item['Target_ID'] !== $classId) return false;
-            }
+                $start = $this->dateFrom($item, ['Start_At', 'Publish_Date', 'Start_Date']);
+                $expires = $this->dateFrom($item, ['Expires_At', 'Expired_Date', 'End_At', 'End_Date']);
+                // Expiry is required by H8.54. Legacy rows without one stay in
+                // master history but are fail-closed on student reads.
+                if (!$expires || ($start && $instant->lt($start)) || $instant->gte($expires)) return false;
+                return $this->matchesAudience($item, $role, $classId);
+            })
+            ->sort(function ($a, $b) {
+                $priority = $this->priorityRank($b) <=> $this->priorityRank($a);
+                if ($priority !== 0) return $priority;
+                $aExpiry = $this->dateFrom($a, ['Expires_At', 'Expired_Date', 'End_At', 'End_Date']);
+                $bExpiry = $this->dateFrom($b, ['Expires_At', 'Expired_Date', 'End_At', 'End_Date']);
+                $expiryOrder = ($aExpiry?->getTimestamp() ?? PHP_INT_MAX) <=> ($bExpiry?->getTimestamp() ?? PHP_INT_MAX);
+                if ($expiryOrder !== 0) return $expiryOrder;
+                $aStart = $this->dateFrom($a, ['Start_At', 'Publish_Date', 'Start_Date']);
+                $bStart = $this->dateFrom($b, ['Start_At', 'Publish_Date', 'Start_Date']);
+                $startOrder = ($bStart?->getTimestamp() ?? 0) <=> ($aStart?->getTimestamp() ?? 0);
+                if ($startOrder !== 0) return $startOrder;
+                return strcmp((string) ($b['Created_At'] ?? ''), (string) ($a['Created_At'] ?? ''));
+            })
+            ->values();
+    }
 
-            return true;
-        });
+    /** Fail-closed detail authorization for students. */
+    public function getVisibleForStudent(string $id, ?string $classId, $now = null): ?array
+    {
+        $row = $this->getById($id);
+        if (!$row) return null;
+        $visible = $this->getActiveAnnouncements('STUDENT', $classId, $now)
+            ->contains(fn ($item) => (string) ($item['Announcement_ID'] ?? '') === (string) $id);
+        return $visible ? (array) $row : null;
+    }
+
+    public function presentationStatus(array $item, $now = null): string
+    {
+        if (!$this->isActiveFlag($item['Is_Active'] ?? true) || strtoupper(trim((string) ($item['Status'] ?? 'PUBLISHED'))) === 'INACTIVE') return 'Nonaktif';
+        if (strtoupper(trim((string) ($item['Status'] ?? 'PUBLISHED'))) === 'DRAFT') return 'Draf';
+        $instant = $this->clock($now);
+        $start = $this->dateFrom($item, ['Start_At', 'Publish_Date', 'Start_Date']);
+        $expires = $this->dateFrom($item, ['Expires_At', 'Expired_Date', 'End_At', 'End_Date']);
+        if ($start && $instant->lt($start)) return 'Belum Tayang';
+        if ($expires && $instant->gte($expires)) return 'Berakhir';
+        return 'Aktif';
+    }
+
+    public function priorityLabel($priority): string
+    {
+        return match ($this->normalizePriority($priority)) {
+            'URGENT' => 'Mendesak',
+            'IMPORTANT' => 'Penting',
+            default => 'Informasi',
+        };
+    }
+
+    public function audienceLabel(array $item): string
+    {
+        return $this->audienceType($item) === 'CLASS' ? 'Kelas Tertentu' : 'Semua Siswa';
+    }
+
+    public function startAt(array $item): ?CarbonImmutable
+    {
+        return $this->dateFrom($item, ['Start_At', 'Publish_Date', 'Start_Date']);
+    }
+
+    public function expiresAt(array $item): ?CarbonImmutable
+    {
+        return $this->dateFrom($item, ['Expires_At', 'Expired_Date', 'End_At', 'End_Date']);
     }
 
     public function create(array $data)
     {
-        if (!isset($data['Announcement_ID'])) {
-            $data['Announcement_ID'] = $this->generateId();
-        }
-        $data['Created_At'] = now()->toDateTimeString();
-        
-        $result = $this->repository->create($data);
-        $this->repository->clearCache();
+        $payload = $this->preparePayload($data);
+        $payload['Announcement_ID'] ??= $this->generateId();
+        $payload['Created_At'] ??= $this->clock()->format('Y-m-d H:i:s');
+        $payload['Created_By'] ??= $this->actor();
+        $payload['Updated_At'] ??= $payload['Created_At'];
+        $payload['Updated_By'] ??= $payload['Created_By'];
+        $result = $this->repository->create($payload);
+        $this->clearRepositoryCache();
         return $result;
     }
-    
+
     public function update($id, array $data)
     {
-        $data['Updated_At'] = now()->toDateTimeString();
-        $result = $this->repository->update($id, $data);
-        $this->repository->clearCache();
+        $existing = $this->getById($id);
+        if (!$existing) throw new \InvalidArgumentException('Pengumuman tidak ditemukan.');
+        $payload = $this->preparePayload($data, (array) $existing);
+        $payload['Updated_At'] = $this->clock()->format('Y-m-d H:i:s');
+        $payload['Updated_By'] = $this->actor();
+        $result = $this->repository->update((string) $id, $payload);
+        $this->clearRepositoryCache();
+        if (method_exists($this->repository, 'findByIdFresh') && !$this->repository->findByIdFresh((string) $id)) {
+            throw new \RuntimeException('Perubahan pengumuman belum dapat dikonfirmasi.');
+        }
         return $result;
     }
-    
+
     public function delete($id)
     {
-        $result = $this->repository->delete($id);
-        $this->repository->clearCache();
+        if (!$this->getById($id)) throw new \InvalidArgumentException('Pengumuman tidak ditemukan.');
+        $result = method_exists($this->repository, 'softDelete')
+            ? $this->repository->softDelete((string) $id)
+            : $this->repository->update((string) $id, ['Is_Active' => 'FALSE', 'Status' => 'INACTIVE']);
+        $this->clearRepositoryCache();
         return $result;
+    }
+
+    public function normalizePriority($priority): string
+    {
+        return match (strtoupper(trim((string) $priority))) {
+            'URGENT', 'HIGH', 'TINGGI', 'MENDESAK' => 'URGENT',
+            'IMPORTANT', 'MEDIUM', 'PENTING' => 'IMPORTANT',
+            default => 'NORMAL',
+        };
+    }
+
+    public function normalizeAudience($audience): string
+    {
+        return match (strtoupper(trim((string) $audience))) {
+            'CLASS', 'KELAS', 'CLASSROOM' => 'CLASS',
+            default => 'ALL_STUDENTS',
+        };
+    }
+
+    /** Validate canonical and legacy payloads before they reach the sheet. */
+    public function validatePayload(array $data): array
+    {
+        $title = trim((string) ($data['Title'] ?? ''));
+        $message = trim((string) ($data['Message'] ?? $data['Content'] ?? ''));
+        if ($title === '') throw new \InvalidArgumentException('Judul pengumuman wajib diisi.');
+        if ($message === '') throw new \InvalidArgumentException('Isi pengumuman wajib diisi.');
+
+        $priorityRaw = strtoupper(trim((string) ($data['Priority'] ?? 'NORMAL')));
+        if (!in_array($priorityRaw, ['NORMAL', 'IMPORTANT', 'URGENT', 'LOW', 'MEDIUM', 'HIGH', 'PENTING', 'MENDESAK'], true)) {
+            throw new \InvalidArgumentException('Prioritas pengumuman tidak valid.');
+        }
+        $priority = $this->normalizePriority($priorityRaw);
+        $audienceRaw = $data['Audience_Type'] ?? $data['Target_Audience'] ?? $data['Target_Role'] ?? (!empty(trim((string) ($data['Class_ID'] ?? ''))) ? 'CLASS' : 'ALL_STUDENTS');
+        $audienceRawUpper = strtoupper(trim((string) $audienceRaw));
+        $legacyAudienceAllowed = ['ALL', 'ALL_USERS', 'STUDENT', 'TEACHER', 'ALL_STUDENTS', 'CLASS', 'KELAS', 'CLASSROOM'];
+        if (!in_array($audienceRawUpper, array_merge(self::AUDIENCES, $legacyAudienceAllowed), true)) throw new \InvalidArgumentException('Target audiens tidak valid.');
+        $audience = $this->normalizeAudience($audienceRaw);
+        $classId = trim((string) ($data['Audience_ID'] ?? $data['Class_ID'] ?? $data['Target_ID'] ?? ''));
+        if ($audience === 'CLASS') {
+            if ($classId === '') throw new \InvalidArgumentException('Kelas wajib dipilih untuk target kelas tertentu.');
+            if (!$this->classExists($classId)) throw new \InvalidArgumentException('Kelas yang dipilih tidak tersedia.');
+        }
+
+        $startRaw = $data['Start_At'] ?? $data['Publish_Date'] ?? $data['Start_Date'] ?? null;
+        $expiryRaw = $data['Expires_At'] ?? $data['Expired_Date'] ?? $data['End_At'] ?? $data['End_Date'] ?? null;
+        $start = $this->blankDate($startRaw) ? $this->clock() : $this->parseDate($startRaw);
+        if ($this->blankDate($expiryRaw)) throw new \InvalidArgumentException('Tanggal dan waktu berakhir wajib diisi.');
+        $expires = $this->parseDate($expiryRaw);
+        if ($expires->lessThanOrEqualTo($start)) throw new \InvalidArgumentException('Waktu berakhir harus setelah waktu mulai.');
+
+        $status = strtoupper(trim((string) ($data['Status'] ?? 'PUBLISHED')));
+        if (!in_array($status, self::STATUSES, true)) throw new \InvalidArgumentException('Status pengumuman tidak valid.');
+        return compact('title', 'message', 'priority', 'audience', 'classId', 'start', 'expires', 'status');
+    }
+
+    protected function preparePayload(array $data, ?array $existing = null): array
+    {
+        $n = $this->validatePayload($data);
+        $payload = $data;
+        $payload['Title'] = $n['title'];
+        $payload['Content'] = $n['message'];
+        $payload['Message'] = $n['message'];
+        $payload['Priority'] = $n['priority'];
+        $payload['Audience_Type'] = $n['audience'];
+        $payload['Audience_ID'] = $n['audience'] === 'CLASS' ? $n['classId'] : '';
+        $payload['Target_Audience'] = $n['audience'];
+        $payload['Target_Role'] = $n['audience'] === 'CLASS' ? 'CLASS' : 'ALL_STUDENTS';
+        $payload['Target_ID'] = $n['audience'] === 'CLASS' ? $n['classId'] : '';
+        $payload['Start_At'] = $n['start']->format('Y-m-d H:i:s');
+        $payload['Expires_At'] = $n['expires']->format('Y-m-d H:i:s');
+        $payload['Publish_Date'] = $payload['Start_At'];
+        $payload['Expired_Date'] = $payload['Expires_At'];
+        $payload['Status'] = $n['status'];
+        $payload['Is_Active'] = $data['Is_Active']
+            ?? ($n['status'] === 'INACTIVE'
+                ? 'FALSE'
+                : (($existing && strtoupper((string) ($existing['Status'] ?? '')) === 'INACTIVE' && array_key_exists('Status', $data))
+                    ? 'TRUE'
+                    : ($existing['Is_Active'] ?? 'TRUE')));
+        return $payload;
+    }
+
+    protected function matchesAudience(array $item, string $role, ?string $classId): bool
+    {
+        $audience = $this->audienceType($item);
+        $legacyRole = strtoupper(trim((string) ($item['Target_Role'] ?? '')));
+        if ($role === '') return true;
+        if ($role === 'STUDENT') {
+            if ($audience === 'CLASS') {
+                $targetClass = trim((string) ($item['Audience_ID'] ?? $item['Class_ID'] ?? $item['Target_ID'] ?? ''));
+                return $classId !== null && $classId !== '' && hash_equals($targetClass, (string) $classId);
+            }
+            return in_array($legacyRole, ['', 'ALL', 'ALL_USERS', 'STUDENT', 'ALL_STUDENTS'], true);
+        }
+        if ($legacyRole === '' || in_array($legacyRole, ['ALL', 'ALL_USERS'], true)) return true;
+        return $legacyRole === $role;
+    }
+
+    protected function audienceType(array $item): string
+    {
+        return $this->normalizeAudience($item['Audience_Type'] ?? $item['Target_Audience'] ?? $item['Target_Role'] ?? (!empty(trim((string) ($item['Class_ID'] ?? ''))) ? 'CLASS' : 'ALL_STUDENTS'));
+    }
+
+    protected function priorityRank(array $item): int
+    {
+        return match ($this->normalizePriority($item['Priority'] ?? 'NORMAL')) {
+            'URGENT' => 3,
+            'IMPORTANT' => 2,
+            default => 1,
+        };
+    }
+
+    protected function dateFrom(array $item, array $keys): ?CarbonImmutable
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $item) || $item[$key] === null) continue;
+            if ($item[$key] instanceof \DateTimeInterface) return CarbonImmutable::instance($item[$key])->setTimezone(self::TIMEZONE);
+            if (!(is_scalar($item[$key]) || $item[$key] instanceof \Stringable)) return null;
+            if (trim((string) $item[$key]) === '') continue;
+            try { return $this->parseDate($item[$key]); } catch (\Throwable) { return null; }
+        }
+        return null;
+    }
+
+    protected function parseDate($value): CarbonImmutable
+    {
+        if ($value instanceof \DateTimeInterface) return CarbonImmutable::instance($value)->setTimezone(self::TIMEZONE);
+        $raw = trim((string) $value);
+        if ($raw === '') throw new \InvalidArgumentException('Tanggal dan waktu tidak boleh kosong.');
+        try { return CarbonImmutable::parse($raw, self::TIMEZONE)->setTimezone(self::TIMEZONE); }
+        catch (\Throwable) { throw new \InvalidArgumentException('Format tanggal dan waktu tidak valid. Gunakan waktu Indonesia (WIB).'); }
+    }
+
+    protected function clock($now = null): CarbonImmutable
+    {
+        return $now instanceof \DateTimeInterface
+            ? CarbonImmutable::instance($now)->setTimezone(self::TIMEZONE)
+            : CarbonImmutable::now(self::TIMEZONE);
+    }
+
+    protected function blankDate($value): bool
+    {
+        if ($value === null || $value === '') return true;
+        if ($value instanceof \DateTimeInterface) return false;
+        if ($value instanceof \Stringable || is_scalar($value)) return trim((string) $value) === '';
+        return false;
+    }
+
+    protected function isActiveFlag($value): bool
+    {
+        return $value === true || in_array(strtoupper(trim((string) $value)), ['TRUE', '1', 'YES', 'Y', 'ON'], true);
+    }
+
+    protected function classExists(string $classId): bool
+    {
+        try {
+            if ($this->classRepository) {
+                $class = $this->classRepository->findById($classId);
+                return (bool) $class && $this->isActiveFlag($class['Is_Active'] ?? true);
+            }
+            if (function_exists('app') && app()->bound(ClassRepositoryInterface::class)) {
+                $class = app(ClassRepositoryInterface::class)->findById($classId);
+                return (bool) $class && $this->isActiveFlag($class['Is_Active'] ?? true);
+            }
+        } catch (\Throwable) { return false; }
+        return false;
+    }
+
+    protected function actor(): string
+    {
+        try { return Auth::check() ? \App\Support\ActorIdentity::required() : 'SYSTEM'; }
+        catch (\Throwable) { return 'SYSTEM'; }
+    }
+
+    protected function clearRepositoryCache(): void
+    {
+        if (method_exists($this->repository, 'clearCache')) {
+            $this->repository->clearCache();
+        }
     }
 }

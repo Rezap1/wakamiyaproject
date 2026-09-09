@@ -29,9 +29,19 @@ class AnnouncementRepository extends BaseSheetRepository implements Announcement
     {
         return $this->updateRow($id, $data);
     }
+
+    /** Announcements remain in master history; delete means deactivate. */
+    public function delete($id)
+    {
+        return $this->softDelete($id);
+    }
     
     public function softDelete($id)
     {
-        return $this->updateRow($id, ['Is_Active' => 'FALSE']);
+        return $this->updateRow($id, [
+            'Is_Active' => 'FALSE',
+            'Status' => 'INACTIVE',
+            'Updated_At' => now(config('app.timezone', 'Asia/Jakarta'))->toDateTimeString(),
+        ]);
     }
 }

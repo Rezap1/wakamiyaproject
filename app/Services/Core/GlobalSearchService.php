@@ -17,7 +17,10 @@ class GlobalSearchService
 
         $role = strtoupper(trim((string) $role));
         $context = $this->resolveUserContext($userId, $role);
-        $cacheKey = 'wms_search_' . md5($role . '|' . $userId . '|' . mb_strtolower($keyword));
+        $scopeKey = $role === 'STUDENT'
+            ? ($context['student']['Class_ID'] ?? '')
+            : ($role === 'TEACHER' ? ($context['teacher_id'] ?? '') : '');
+        $cacheKey = 'wms_search_' . md5($role . '|' . $userId . '|' . $scopeKey . '|' . mb_strtolower($keyword));
 
         return Cache::remember($cacheKey, 60, function () use ($keyword, $role, $context) {
             $results = [];
@@ -45,7 +48,7 @@ class GlobalSearchService
                 $this->searchHr($results, $keyword);
             }
 
-            $this->searchAnnouncements($results, $keyword, $role);
+            $this->searchAnnouncements($results, $keyword, $role, $context);
 
             return array_filter($results, fn ($group) => count($group) > 0);
         });
@@ -352,11 +355,11 @@ class GlobalSearchService
         }
     }
 
-    private function searchAnnouncements(array &$results, string $keyword, string $role): void
+    private function searchAnnouncements(array &$results, string $keyword, string $role, array $context = []): void
     {
         $route = match ($role) {
             'ADMINISTRATOR', 'ACADEMIC' => Route::has('announcements.index') ? 'announcements.index' : null,
-            'STUDENT' => Route::has('student.portal.materials') ? 'student.portal.materials' : null,
+            'STUDENT' => Route::has('student.portal.announcements') ? 'student.portal.announcements' : (Route::has('student.portal.materials') ? 'student.portal.materials' : null),
             default => null,
         };
 
@@ -365,8 +368,11 @@ class GlobalSearchService
         }
 
         try {
-            collect(app(\App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface::class)->fetchAll())
-                ->filter(fn ($item) => $this->matches($item, $keyword, ['Announcement_ID', 'Title', 'Content', 'Target_Audience']))
+            $items = $role === 'STUDENT'
+                ? app(\App\Services\Academic\AnnouncementService::class)->getActiveAnnouncements('STUDENT', $context['student']['Class_ID'] ?? null)
+                : app(\App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface::class)->fetchAll();
+            collect($items)
+                ->filter(fn ($item) => $this->matches($item, $keyword, ['Announcement_ID', 'Title', 'Message', 'Content', 'Target_Audience', 'Audience_Type']))
                 ->take(5)
                 ->each(function ($item) use (&$results, $route) {
                     $this->add($results, 'Pengumuman', [

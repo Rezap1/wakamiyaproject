@@ -1,11 +1,11 @@
 @extends('layouts.app')
 
-@section('header', 'Announcement Center')
+@section('header', 'Pusat Pengumuman')
 
 @section('content')
 <div class="space-y-6">
     <x-page-header 
-        title="Pusat Pengumuman (Announcements)" 
+        title="Pusat Pengumuman"
         description="Kelola dan sebarkan informasi penting ke seluruh atau sebagian warga sekolah."
         :breadcrumbs="['Dashboard' => route('dashboard'), 'Academic' => '#', 'Announcement' => route('announcements.index')]"
     >
@@ -30,9 +30,8 @@
         <div>
             <x-select id="targetFilter">
                 <option value="ALL">Semua Target</option>
-                <option value="STUDENT">Siswa</option>
-                <option value="TEACHER">Guru</option>
-                <option value="ALL_USERS">Semua Pengguna</option>
+                <option value="ALL_STUDENTS">Semua Siswa</option>
+                <option value="CLASS">Kelas Tertentu</option>
             </x-select>
         </div>
     </div>
@@ -49,37 +48,29 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             @foreach($announcements as $ann)
                 @php
-                    $target = $ann['Target_Role'] ?? 'ALL';
+                    $target = $ann['Audience_Label'] ?? ((($ann['Target_Role'] ?? 'ALL') === 'CLASS') ? 'Kelas Tertentu' : 'Semua Siswa');
                     $targetColor = match($target) {
-                        'STUDENT' => 'blue',
-                        'TEACHER' => 'purple',
-                        'ALL', 'ALL_USERS' => 'gray',
+                        'Kelas Tertentu' => 'blue',
+                        'Semua Siswa' => 'gray',
                         default => 'cyan'
                     };
                     
-                    // Simple priority logic (can be adapted)
-                    $priority = 'Normal';
-                    $priorityColor = 'blue';
-                    $title = strtolower($ann['Title'] ?? '');
-                    if (str_contains($title, 'penting') || str_contains($title, 'urgent')) {
-                        $priority = 'High';
-                        $priorityColor = 'red';
-                    }
+                    $priority = $ann['Priority_Label'] ?? 'Informasi';
+                    $priorityColor = $priority === 'Mendesak' ? 'red' : ($priority === 'Penting' ? 'amber' : 'blue');
                 @endphp
                 
                 <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-slate-200 transition-all duration-300 filter-item group relative"
-                     data-search="{{ strtolower(($ann['Title'] ?? '').($ann['Content'] ?? '')) }}"
-                     data-target="{{ $ann['Target_Role'] ?? 'ALL' }}">
+                     data-search="{{ strtolower(($ann['Title'] ?? '').($ann['Message'] ?? $ann['Content'] ?? '')) }}"
+                     data-target="{{ $ann['Audience_Label'] ?? 'Semua Siswa' }}">
                      
                     @if(in_array($userRole ?? 'ADMINISTRATOR', ['ADMINISTRATOR', 'ACADEMIC', 'MASTER']))
                         <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                            <a href="{{ route('announcements.edit', $ann['Announcement_ID']) }}" class="p-2 bg-white text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg shadow-sm border border-slate-200 block transition-colors" title="Edit Pengumuman">
+                            <a href="{{ route('announcements.show', $ann['Announcement_ID']) }}" class="p-2 bg-white text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg shadow-sm border border-slate-200 block transition-colors" title="Lihat Pengumuman">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                             </a>
-                            <form action="{{ route('announcements.destroy', $ann['Announcement_ID']) }}" method="POST" class="inline-block" onsubmit="return confirm('Yakin ingin menghapus pengumuman ini?');">
+                            <form action="{{ route('announcements.deactivate', $ann['Announcement_ID']) }}" method="POST" class="inline-block" onsubmit="return confirm('Nonaktifkan pengumuman ini? Riwayat tetap disimpan.');">
                                 @csrf
-                                @method('DELETE')
-                                <button type="submit" class="p-2 bg-white text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg shadow-sm border border-slate-200 block transition-colors" title="Hapus">
+                                <button type="submit" class="p-2 bg-white text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg shadow-sm border border-slate-200 block transition-colors" title="Nonaktifkan">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                 </button>
                             </form>
@@ -89,17 +80,18 @@
                     <div class="flex items-center gap-2 mb-3">
                         <x-badge color="{{ $priorityColor }}" class="uppercase text-[10px] font-bold">{{ $priority }}</x-badge>
                         <x-badge color="{{ $targetColor }}" class="text-[10px]"><span class="font-normal text-slate-500 mr-1">Target:</span>{{ $target }}</x-badge>
+                        <x-badge color="{{ ($ann['Status_Label'] ?? '') === 'Aktif' ? 'green' : 'gray' }}" class="text-[10px]">{{ $ann['Status_Label'] ?? 'Aktif' }}</x-badge>
                     </div>
                     
                     <h3 class="font-bold text-lg text-slate-800 mb-2 leading-tight group-hover:text-primary-600 transition-colors">{{ $ann['Title'] ?? 'No Title' }}</h3>
                     
                     <div class="text-[11px] font-medium text-slate-500 flex items-center mb-4">
                         <svg class="w-3.5 h-3.5 mr-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        Dipublikasikan: {{ $ann['Publish_Date'] ?? '-' }}
+                        Mulai: {{ $ann['Start_Label'] ?? $ann['Publish_Date'] ?? '-' }} · Berakhir: {{ $ann['Expiry_Label'] ?? $ann['Expired_Date'] ?? '-' }}
                     </div>
                     
                     <p class="text-sm text-slate-600 line-clamp-3 leading-relaxed">
-                        {{ $ann['Content'] ?? '' }}
+                        {{ $ann['Message'] ?? $ann['Content'] ?? '' }}
                     </p>
                 </div>
             @endforeach
@@ -129,13 +121,10 @@
                 let matchesTarget = false;
                 if (targetValue === 'ALL') {
                     matchesTarget = true;
-                } else if (targetValue === 'ALL_USERS' && (itemTarget === 'ALL' || itemTarget === 'ALL_USERS')) {
-                    matchesTarget = true;
-                } else if (itemTarget === targetValue || itemTarget === 'ALL' || itemTarget === 'ALL_USERS') {
-                     // If announcement targets everyone, show it regardless of filter
+                } else if (targetValue === 'ALL_STUDENTS' && itemTarget === 'Semua Siswa') {
                     matchesTarget = true;
                 } else {
-                    matchesTarget = itemTarget === targetValue;
+                    matchesTarget = targetValue === 'CLASS' && itemTarget === 'Kelas Tertentu';
                 }
                 
                 if (matchesSearch && matchesTarget) {

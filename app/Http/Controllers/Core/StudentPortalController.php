@@ -87,7 +87,13 @@ class StudentPortalController extends Controller
 
         // Fetch announcements as materials
         $announcementService = app(\App\Services\Academic\AnnouncementService::class);
-        $announcements = $announcementService->getActiveAnnouncements('STUDENT', $classId);
+        $announcements = $announcementService->getActiveAnnouncements('STUDENT', $classId)->map(function ($announcement) use ($announcementService) {
+            $announcement = (array) $announcement;
+            $announcement['Priority_Label'] = $announcementService->priorityLabel($announcement['Priority'] ?? 'NORMAL');
+            $expiry = $announcementService->expiresAt($announcement);
+            $announcement['Expiry_Label'] = $expiry ? $expiry->locale('id')->translatedFormat('j F Y, H.i') . ' WIB' : '-';
+            return $announcement;
+        })->values();
 
         $subjects = collect([]);
         if ($classId) {

@@ -22,6 +22,7 @@ class ProtectMassAssignment
         'assignments.store',
         'assignments.update',
         // Other validated forms that intentionally expose a Status selector.
+        'announcements.store',
         'announcements.update',
         'assessments.update',
         'attendances.update',

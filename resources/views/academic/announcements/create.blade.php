@@ -21,7 +21,7 @@
                     </div>
 
                     <div class="sm:col-span-2">
-                        <x-textarea name="Content" label="Konten / Isi Pengumuman" rows="6" required placeholder="Tuliskan informasi lengkap di sini...">{{ old('Content') }}</x-textarea>
+                        <x-textarea name="Message" label="Pesan Pengumuman" rows="6" required placeholder="Tuliskan informasi lengkap di sini...">{{ old('Message', old('Content')) }}</x-textarea>
                     </div>
                 </x-form-section>
                 
@@ -30,26 +30,43 @@
                 <x-form-section title="Pengaturan Publikasi" description="Tentukan siapa yang dapat melihat dan kapan pengumuman tayang.">
                     <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
-                            <x-select name="Target_Role" label="Target Penerima" required>
-                                <option value="ALL" {{ old('Target_Role') == 'ALL' ? 'selected' : '' }}>Semua Pengguna (ALL)</option>
-                                <option value="TEACHER" {{ old('Target_Role') == 'TEACHER' ? 'selected' : '' }}>Guru Saja (TEACHER)</option>
-                                <option value="STUDENT" {{ old('Target_Role') == 'STUDENT' ? 'selected' : '' }}>Siswa Saja (STUDENT)</option>
+                            <x-select name="Audience_Type" id="audienceType" label="Target Penerima" required>
+                                <option value="ALL_STUDENTS" {{ old('Audience_Type', 'ALL_STUDENTS') == 'ALL_STUDENTS' ? 'selected' : '' }}>Semua Siswa</option>
+                                <option value="CLASS" {{ old('Audience_Type') == 'CLASS' ? 'selected' : '' }}>Kelas Tertentu</option>
                             </x-select>
                         </div>
                         <div>
                             <x-select name="Priority" label="Prioritas" required>
-                                <option value="Normal" {{ old('Priority') == 'Normal' ? 'selected' : '' }}>Normal (Informasi Biasa)</option>
-                                <option value="High" {{ old('Priority') == 'High' ? 'selected' : '' }}>High (Penting & Mendesak)</option>
+                                <option value="NORMAL" {{ old('Priority', 'NORMAL') == 'NORMAL' ? 'selected' : '' }}>Informasi</option>
+                                <option value="IMPORTANT" {{ old('Priority') == 'IMPORTANT' ? 'selected' : '' }}>Penting</option>
+                                <option value="URGENT" {{ old('Priority') == 'URGENT' ? 'selected' : '' }}>Mendesak</option>
                             </x-select>
                         </div>
                     </div>
 
-                    <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div id="classTarget" class="sm:col-span-2 {{ old('Audience_Type') === 'CLASS' ? '' : 'hidden' }}">
+                        <x-select name="Audience_ID" label="Kelas" :value="old('Audience_ID')">
+                            <option value="">Pilih kelas</option>
+                            @foreach($classes ?? [] as $class)
+                                <option value="{{ $class['Class_ID'] }}" {{ old('Audience_ID') == $class['Class_ID'] ? 'selected' : '' }}>{{ $class['Class_Code'] ?? $class['Class_ID'] }} — {{ $class['Class_Name'] ?? 'Kelas' }}</option>
+                            @endforeach
+                        </x-select>
+                    </div>
+
+                    <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6">
                         <div>
-                            <x-input type="date" name="Publish_Date" label="Tanggal Publikasi" value="{{ old('Publish_Date') }}" />
+                            <x-input type="datetime-local" name="Start_At" label="Mulai Tayang (WIB)" value="{{ old('Start_At') }}" />
+                            <p class="mt-1 text-xs text-slate-500">Kosongkan untuk tayang segera.</p>
                         </div>
                         <div>
-                            <x-input type="date" name="Expired_Date" label="Tanggal Berakhir (Opsional)" value="{{ old('Expired_Date') }}" />
+                            <x-input type="datetime-local" name="Expires_At" label="Berakhir (WIB)" required value="{{ old('Expires_At') }}" />
+                        </div>
+                        <div>
+                            <x-select name="Status" label="Status Publikasi">
+                                <option value="PUBLISHED" {{ old('Status', 'PUBLISHED') === 'PUBLISHED' ? 'selected' : '' }}>Terpublikasi</option>
+                                <option value="DRAFT" {{ old('Status') === 'DRAFT' ? 'selected' : '' }}>Draf</option>
+                                <option value="INACTIVE" {{ old('Status') === 'INACTIVE' ? 'selected' : '' }}>Nonaktif</option>
+                            </x-select>
                         </div>
                     </div>
                 </x-form-section>
@@ -68,6 +85,9 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const audience = document.getElementById('audienceType');
+        const classTarget = document.getElementById('classTarget');
+        if (audience && classTarget) audience.addEventListener('change', () => classTarget.classList.toggle('hidden', audience.value !== 'CLASS'));
         document.querySelector('form').addEventListener('submit', function() {
             const btn = this.querySelector('button[type="submit"]');
             btn.disabled = true;

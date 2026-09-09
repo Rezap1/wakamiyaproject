@@ -26,6 +26,7 @@
             ['label' => 'Program Studi', 'route' => 'programs.index', 'active_route' => 'programs.*', 'icon' => 'book-open'],
             ['label' => 'Batch', 'route' => 'batches.index', 'active_route' => 'batches.*', 'icon' => 'collection'],
             ['label' => 'Kelas', 'route' => 'classes.index', 'active_route' => 'classes.*', 'icon' => 'view-boards'],
+            ['label' => 'Pengumuman', 'route' => 'announcements.index', 'active_route' => 'announcements.*', 'icon' => 'inbox'],
             ['label' => 'Mata Pelajaran', 'route' => 'subjects.index', 'active_route' => 'subjects.*', 'icon' => 'library'],
             ['label' => 'Jadwal Kelas', 'route' => 'schedules.index', 'active_route' => 'schedules.*', 'icon' => 'calendar'],
             ['label' => 'Presensi Akademik', 'route' => 'attendances.index', 'active_route' => 'attendances.*', 'icon' => 'clock'],
@@ -162,6 +163,7 @@
                     <x-sidebar.nav-link href="{{ route('settings.index') }}" active="{{ request()->routeIs('settings.*') }}" icon="cog">Pengaturan Sistem</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('users.index') }}" active="{{ request()->routeIs('users.*') }}" icon="users">Pengguna</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('modules.index') }}" active="{{ request()->routeIs('modules.*') }}" icon="puzzle-piece">Modul</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('announcements.index') }}" active="{{ request()->routeIs('announcements.*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                 @elseif($userRole === 'HR')
                     <x-sidebar.nav-link href="{{ route('dashboard.hr') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('employees.index') }}" active="{{ request()->routeIs('employees.*') }}" icon="identification">Pegawai</x-sidebar.nav-link>
@@ -180,6 +182,7 @@
                     <x-sidebar.nav-link href="{{ route('programs.index') }}" active="{{ request()->routeIs('programs.*') }}" icon="book-open">Program</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('batches.index') }}" active="{{ request()->routeIs('batches.*') }}" icon="collection">Batch</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('classes.index') }}" active="{{ request()->routeIs('classes.*') }}" icon="view-boards">Kelas</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('announcements.index') }}" active="{{ request()->routeIs('announcements.*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('subjects.index') }}" active="{{ request()->routeIs('subjects.*') }}" icon="library">Materi</x-sidebar.nav-link>
                     <div class="px-3 pt-4 pb-1"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operasional Akademik</span></div>
                     <x-sidebar.nav-link href="{{ route('schedules.index') }}" active="{{ request()->routeIs('schedules.*') }}" icon="calendar">Jadwal Kelas</x-sidebar.nav-link>
@@ -228,6 +231,7 @@
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.reports') }}" active="{{ request()->routeIs('teacher.workspace.reports') }}" icon="chart-bar">Laporan Pengajaran</x-sidebar.nav-link>
                 @elseif($userRole === 'STUDENT')
                     <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.portal.announcements') }}" active="{{ request()->routeIs('student.portal.announcements*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">Presensi QR</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>

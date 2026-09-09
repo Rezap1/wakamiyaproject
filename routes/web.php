@@ -430,6 +430,8 @@ Route::middleware('auth')->group(function () {
 
     // Student Portal
     Route::prefix('student/portal')->name('student.portal.')->middleware('role:STUDENT')->group(function () {
+        Route::get('/announcements', [\App\Http\Controllers\Core\StudentAnnouncementController::class, 'index'])->name('announcements');
+        Route::get('/announcements/{id}', [\App\Http\Controllers\Core\StudentAnnouncementController::class, 'show'])->name('announcements.show');
         Route::get('/assignments', [StudentPortalController::class, 'assignments'])->name('assignments');
         Route::get('/assignments/{id}', [StudentPortalController::class, 'showAssignment'])->name('assignments.show');
         Route::get('/materials', [StudentPortalController::class, 'materials'])->name('materials');
@@ -509,7 +511,7 @@ Route::middleware('auth')->group(function () {
         ];
 
         foreach ($academicControllers as $prefix => $controller) {
-            Route::prefix($prefix)->name($prefix . '.')->group(function () use ($controller) {
+            Route::prefix($prefix)->name($prefix . '.')->group(function () use ($controller, $prefix) {
                 Route::get('/preview-pdf', [$controller, 'previewPdf'])->name('preview-pdf');
                 Route::get('/export-pdf', [$controller, 'exportPdf'])->name('export-pdf');
                 Route::get('/export-excel', [$controller, 'exportExcel'])->name('export-excel');
@@ -519,6 +521,9 @@ Route::middleware('auth')->group(function () {
                 Route::get('/', [$controller, 'index'])->name('index');
                 Route::get('/create', [$controller, 'create'])->name('create');
                 Route::post('/', [$controller, 'store'])->name('store');
+                if ($prefix === 'announcements') {
+                    Route::post('/{id}/deactivate', [$controller, 'deactivate'])->name('deactivate');
+                }
                 Route::get('/{id}', [$controller, 'show'])->name('show');
                 Route::get('/{id}/edit', [$controller, 'edit'])->name('edit');
                 Route::put('/{id}', [$controller, 'update'])->name('update');
