@@ -24,8 +24,8 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
             ->reject(fn (string $class) => $class === BaseSheetRepository::class)
             ->values();
 
-        $this->assertCount(44, $files);
-        $this->assertCount(43, $classes);
+        $this->assertCount(45, $files);
+        $this->assertCount(44, $classes);
 
         $sheetCacheKeys = [];
 

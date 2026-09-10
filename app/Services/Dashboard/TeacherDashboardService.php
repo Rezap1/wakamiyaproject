@@ -1,6 +1,7 @@
 <?php
 namespace App\Services\Dashboard;
 
+use App\Helpers\SheetValue;
 use App\Services\Academic\ScheduleService;
 use App\Services\Academic\AttendanceService as AcademicAttendanceService;
 use App\Services\Academic\AssessmentService;
@@ -71,7 +72,8 @@ class TeacherDashboardService
         $allAttendances = collect($this->attendanceService->getAll());
         $allAssessments = collect($this->assessmentService->getAll());
         $allScores = collect($this->scoreService->getAll());
-        $allStudents = collect($this->studentService->getAllStudents())->where('Is_Active', '!=', 'FALSE');
+        $allStudents = collect($this->studentService->getAllStudents())
+            ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
 
         // === Filter by Teacher ===
         $mySchedules = $allSchedules

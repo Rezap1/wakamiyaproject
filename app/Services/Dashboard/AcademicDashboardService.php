@@ -1,6 +1,7 @@
 <?php
 namespace App\Services\Dashboard;
 
+use App\Helpers\SheetValue;
 use App\Services\Academic\AssessmentService;
 use App\Services\Academic\ScoreService;
 use App\Services\Academic\ScheduleService;
@@ -67,7 +68,8 @@ class AcademicDashboardService
         $batches  = collect($this->batchService->getAllBatches())->where('Is_Active', '!=', 'FALSE');
         $classes  = collect($this->classService->getAllClasses())->where('Is_Active', '!=', 'FALSE');
         $teachers = collect($this->teacherService->getAllTeachers())->where('Is_Active', '!=', 'FALSE');
-        $students = collect($this->studentService->getAllStudents())->where('Is_Active', '!=', 'FALSE');
+        $students = collect($this->studentService->getAllStudents())
+            ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
         $schedules = collect($this->scheduleService->getAll())->where('Is_Active', '!=', 'FALSE');
         $assessments = collect($this->assessmentService->getAll());
         $scores = collect($this->scoreService->getAll());

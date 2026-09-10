@@ -3,6 +3,7 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\AlumniRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
@@ -16,19 +17,22 @@ class StudentService
     protected $batchRepository;
     protected $classRepository;
     protected $enterpriseEvent;
+    protected $alumniRepository;
 
     public function __construct(
         StudentRepositoryInterface $studentRepository,
         ProgramRepositoryInterface $programRepository,
         BatchRepositoryInterface $batchRepository,
         ClassRepositoryInterface $classRepository,
-        EnterpriseEventService $enterpriseEvent
+        EnterpriseEventService $enterpriseEvent,
+        ?AlumniRepositoryInterface $alumniRepository = null
     ) {
         $this->studentRepository = $studentRepository;
         $this->programRepository = $programRepository;
         $this->batchRepository = $batchRepository;
         $this->classRepository = $classRepository;
         $this->enterpriseEvent = $enterpriseEvent;
+        $this->alumniRepository = $alumniRepository;
     }
 
     public function getAllStudents()
@@ -237,8 +241,11 @@ class StudentService
                 $scores = [];
                 try {
                     $scoreRepo = app(\App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class);
-                    $scores = collect($scoreRepo->getAll())->where('Student_ID', $id)->values()->toArray();
-                } catch (\Exception $e) {}
+                    $scoreRows = method_exists($scoreRepo, 'getAll')
+                        ? $scoreRepo->getAll()
+                        : $scoreRepo->fetchAll();
+                    $scores = collect($scoreRows)->where('Student_ID', $id)->values()->toArray();
+                } catch (\Throwable $e) {}
 
                 $docAutomation = app(\App\Services\Core\DocumentAutomationService::class);
                 
@@ -262,7 +269,7 @@ class StudentService
                     \App\Support\ActorIdentity::required()
                 );
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Failed to generate Graduation Documents for Student {$id}: " . $e->getMessage());
         }
 
@@ -320,20 +327,41 @@ class StudentService
 
     public function isAlumni($student)
     {
-        if (empty($student)) return false;
-        
-        $gradStatus = strtolower(trim($student['Graduation_Status'] ?? ''));
-        $enrollStatus = strtolower(trim($student['Enrollment_Status'] ?? ''));
-        
-        return in_array($gradStatus, ['lulus', 'graduated', 'completed']) || in_array($enrollStatus, ['alumni', 'lulus', 'graduated']);
+        $studentId = trim((string) (($student['Student_ID'] ?? null)));
+        if ($studentId === '' || !$this->alumniRepository) {
+            return false;
+        }
+
+        try {
+            return collect($this->alumniRepository->fetchAll())
+                ->contains(function ($alumni) use ($studentId) {
+                    return strtoupper(trim((string) ($alumni['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+                        && strcasecmp(trim((string) ($alumni['Student_ID'] ?? '')), $studentId) === 0;
+                });
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public function getAlumniStudents()
     {
-        $students = $this->getAllStudents();
-        return $students->filter(function ($student) {
-            return $this->isAlumni($student);
-        })->values();
+        if (!$this->alumniRepository) {
+            return collect();
+        }
+
+        try {
+            $students = $this->getAllStudents()->keyBy('Student_ID');
+            return collect($this->alumniRepository->fetchAll())
+                ->filter(fn ($alumni) => strtoupper(trim((string) ($alumni['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+                ->map(function ($alumni) use ($students) {
+                    $alumni = (array) $alumni;
+                    $student = $students->get($alumni['Student_ID'] ?? '', []);
+                    return array_merge((array) $student, $alumni);
+                })
+                ->values();
+        } catch (\Throwable $e) {
+            return collect();
+        }
     }
 
     private function firstFilled(...$values): string
@@ -361,9 +389,11 @@ class StudentService
             throw new Exception("Data Siswa dengan ID {$id} tidak ditemukan.");
         }
 
+        $additionalData = collect($additionalData)
+            ->except(['Enrollment_Status', 'Is_Active'])
+            ->all();
         $updatePayload = array_merge($additionalData, [
             'Graduation_Status' => 'Lulus',
-            'Enrollment_Status' => 'Alumni',
             'Updated_At' => now()->toDateTimeString(),
             'Updated_By' => \App\Support\ActorIdentity::required()
         ]);

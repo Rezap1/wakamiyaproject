@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\SheetValue;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -49,7 +50,9 @@ class DirectorDashboardController extends Controller
 
                 // 1. Executive KPI Counts
                 $kpi = [
-                    'students' => $countActive($this->studentRepo),
+                    'students' => collect($this->studentRepo->fetchAll())
+                        ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student))
+                        ->count(),
                     'teachers' => $countActive($this->teacherRepo),
                     'employees' => $countActive($this->employeeRepo),
                     'companies' => $countActive($this->companyRepo),
@@ -57,7 +60,8 @@ class DirectorDashboardController extends Controller
                 ];
 
                 // 2. Executive Charts Data
-                $students = collect($this->studentRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
+                $students = collect($this->studentRepo->fetchAll())
+                    ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
                 
                 // Student per Program
                 $programs = collect($this->programRepo->fetchAll())->keyBy('Program_ID');

@@ -184,6 +184,9 @@ class TeacherScopeResolver
         $row = is_array($row) ? $row : (array) $row;
         foreach (['Is_Active', 'Status', 'Enrollment_Status'] as $field) {
             $value = strtoupper(trim((string) ($row[$field] ?? '')));
+            if ($field === 'Enrollment_Status' && $value === 'ALUMNI') {
+                return true;
+            }
             if (in_array($value, ['FALSE', 'INACTIVE', 'NONACTIVE', 'NON_ACTIVE', 'CANCELLED', 'DROPPED', 'ARCHIVED'], true)) {
                 return true;
             }

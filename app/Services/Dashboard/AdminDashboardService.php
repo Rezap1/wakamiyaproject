@@ -2,6 +2,7 @@
 
 namespace App\Services\Dashboard;
 
+use App\Helpers\SheetValue;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
@@ -58,7 +59,8 @@ class AdminDashboardService
         $userId = Auth::id() ?? 'anonymous';
         // === Fetch all data ONCE ===
         $users = collect($this->userRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
-        $students = collect($this->studentRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
+        $students = collect($this->studentRepo->fetchAll())
+            ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
         $employees = collect($this->employeeRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
         $programs = collect($this->programRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
         $batches = collect($this->batchRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
@@ -135,7 +137,8 @@ class AdminDashboardService
 
             $activeInMonth = $allStudentsRaw->filter(function ($s) use ($monthKey) {
                 $createdAt = $s['Created_At'] ?? $s['Registration_Date'] ?? '';
-                return $createdAt <= $monthKey . '-31' && ($s['Is_Active'] ?? 'TRUE') !== 'FALSE';
+                return $createdAt <= $monthKey . '-31'
+                    && SheetValue::isOperationalStudent((array) $s);
             })->count();
             $growthActive[] = $activeInMonth;
         }

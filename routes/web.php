@@ -174,6 +174,12 @@ Route::middleware('auth')->group(function () {
     // Alumni Management
     Route::prefix('academic/alumni')->name('alumni.')->middleware('role:ADMINISTRATOR,ACADEMIC')->group(function () {
         Route::get('/', [\App\Http\Controllers\Academic\AlumniController::class, 'index'])->name('index');
+        Route::get('/export-csv', [\App\Http\Controllers\Academic\AlumniController::class, 'exportCsv'])->name('export-csv');
+        Route::get('/create', [\App\Http\Controllers\Academic\AlumniController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Academic\AlumniController::class, 'store'])->name('store');
+        Route::get('/{id}/edit', [\App\Http\Controllers\Academic\AlumniController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [\App\Http\Controllers\Academic\AlumniController::class, 'update'])->name('update');
+        Route::delete('/{id}', [\App\Http\Controllers\Academic\AlumniController::class, 'destroy'])->name('destroy');
         Route::get('/{id}', [\App\Http\Controllers\Academic\AlumniController::class, 'show'])->name('show');
     });
 

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\SheetValue;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreStudentRequest;
 use App\Http\Requests\UpdateStudentRequest;
 use App\Services\Core\StudentService;
+use App\Services\Core\AlumniService;
 use App\Services\Core\ProgramService;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
@@ -49,11 +51,11 @@ class StudentController extends Controller
         if ($request->filled('batch')) { $students = $students->where('Batch_ID', $request->input('batch')); }
         if ($request->filled('class')) { $students = $students->where('Class_ID', $request->input('class')); }
 
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if ($status !== 'all') {
-                $students = $students->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
-            }
+        $status = strtolower((string) $request->input('status', 'active'));
+        if ($status !== 'all') {
+            $students = $students->filter(fn ($student) => $status === 'inactive'
+                ? !SheetValue::isOperationalStudent((array) $student)
+                : SheetValue::isOperationalStudent((array) $student));
         }
         
         return [
@@ -69,7 +71,7 @@ class StudentController extends Controller
                     $row['Program_Name'] ?? '-',
                     $row['Batch_Name'] ?? '-',
                     $row['Class_Name'] ?? '-',
-                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                    SheetValue::isOperationalStudent((array) $row) ? 'Aktif' : 'Tidak Aktif'
                 ];
                     },
             'isLandscape' => true,
@@ -138,11 +140,11 @@ class StudentController extends Controller
                 $students = $students->where('Class_ID', $request->input('class'));
             }
 
-            if ($request->filled('status')) {
-                $status = $request->input('status');
-                if ($status !== 'all') {
-                    $students = $students->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
-                }
+            $status = strtolower((string) $request->input('status', 'active'));
+            if ($status !== 'all') {
+                $students = $students->filter(fn ($student) => $status === 'inactive'
+                    ? !SheetValue::isOperationalStudent((array) $student)
+                    : SheetValue::isOperationalStudent((array) $student));
             }
 
             if ($request->filled('date_from')) {
@@ -167,7 +169,7 @@ class StudentController extends Controller
                 ->groupBy(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) ?: 'NO_CLASS')
                 ->map(function ($group, $classId) {
                     $first = $group->first();
-                    $active = $group->where('Is_Active', 'TRUE')->count();
+                    $active = $group->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student))->count();
 
                     return [
                         'id' => $classId,
@@ -262,7 +264,14 @@ class StudentController extends Controller
             $student['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Tidak Ditemukan';
             $student['Class_Name'] = $class ? $class['Class_Name'] : 'Tidak Ditemukan';
 
-            return view('students.show', compact('student'));
+            $alumni = null;
+            try {
+                $alumni = app(AlumniService::class)->getByStudentId((string) $id, false);
+            } catch (\Throwable $e) {
+                Log::notice('Alumni registry lookup skipped on student detail', ['student_id' => $id]);
+            }
+
+            return view('students.show', compact('student', 'alumni'));
         } catch (\Exception $e) {
             Log::error('Error showing student: ' . $e->getMessage());
             return redirect()->route('students.index')->with('error', 'Terjadi kesalahan saat memuat profil siswa.');
@@ -404,9 +413,8 @@ class StudentController extends Controller
                 return redirect()->route('students.show', $id)->with('error', 'Data siswa tidak ditemukan.');
             }
 
-            $this->studentService->processGraduation($id);
-
-            return redirect()->route('alumni.show', $id)->with('success', 'Siswa ' . ($student['Full_Name'] ?? '') . ' telah berhasil diproses sebagai LULUS dan dipindahkan ke Alumni!');
+            return redirect()->route('alumni.create', ['student_id' => $id])
+                ->with('info', 'Lengkapi data keberangkatan untuk mendaftarkan siswa ini sebagai Alumni.');
         } catch (\Exception $e) {
             Log::error('Error graduating student: ' . $e->getMessage());
             return redirect()->route('students.show', $id)->with('error', 'Terjadi kesalahan: ' . $this->safeExceptionMessage($e));

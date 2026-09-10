@@ -34,6 +34,8 @@ use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Repositories\GoogleSheets\ClassRepository;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Repositories\GoogleSheets\StudentRepository;
+use App\Interfaces\GoogleSheets\AlumniRepositoryInterface;
+use App\Repositories\GoogleSheets\AlumniRepository;
 use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
 use App\Repositories\GoogleSheets\CompanyRepository;
 use App\Interfaces\GoogleSheets\ModuleRepositoryInterface;
@@ -123,6 +125,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(BatchRepositoryInterface::class, BatchRepository::class);
         $this->app->bind(ClassRepositoryInterface::class, ClassRepository::class);
         $this->app->bind(StudentRepositoryInterface::class, StudentRepository::class);
+        $this->app->bind(AlumniRepositoryInterface::class, AlumniRepository::class);
         $this->app->bind(CompanyRepositoryInterface::class, CompanyRepository::class);
         $this->app->bind(ModuleRepositoryInterface::class, ModuleRepository::class);
         $this->app->bind(DocumentRepositoryInterface::class, DocumentRepository::class);

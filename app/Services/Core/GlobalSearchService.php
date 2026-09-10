@@ -27,6 +27,7 @@ class GlobalSearchService
 
             if (in_array($role, ['ADMINISTRATOR', 'ACADEMIC'], true)) {
                 $this->searchStudents($results, $keyword, route('students.index'));
+                $this->searchAlumni($results, $keyword);
                 $this->searchTeachers($results, $keyword, route('teachers.index'));
                 $this->searchAcademicMaster($results, $keyword);
                 $this->searchAcademicWork($results, $keyword);
@@ -133,6 +134,39 @@ class GlobalSearchService
                 ]);
             }
         } catch (\Exception $e) {
+        }
+    }
+
+    private function searchAlumni(array &$results, string $keyword): void
+    {
+        if (!Route::has('alumni.show')) {
+            return;
+        }
+
+        try {
+            $rows = app(\App\Interfaces\GoogleSheets\AlumniRepositoryInterface::class)->fetchAll();
+            collect($rows)
+                ->filter(fn ($row) => strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE')
+                ->filter(fn ($row) => $this->matches($row, $keyword, [
+                    'Alumni_ID',
+                    'Full_Name',
+                    'NIK',
+                    'Parent_Name',
+                    'Indonesia_Address',
+                    'Visa_Number',
+                    'Japan_City',
+                    'Departure_Date',
+                ]))
+                ->take(8)
+                ->each(function ($row) use (&$results) {
+                    $this->add($results, 'Alumni', [
+                        'title' => $row['Full_Name'] ?? $row['Alumni_ID'] ?? 'Alumni',
+                        'desc' => trim(($row['Japan_City'] ?? '') . ' ' . ($row['Departure_Date'] ?? '')),
+                        'url' => route('alumni.show', $row['Alumni_ID']),
+                    ]);
+                });
+        } catch (\Throwable $e) {
+            // Alumni schema may not exist in older deployments.
         }
     }
 

@@ -4,7 +4,7 @@
 
 <x-universal.index-layout 
     title="Daftar Induk Siswa" 
-    description="Kelola data pendaftaran dan profil seluruh siswa aktif maupun alumni."
+    description="Kelola data pendaftaran dan profil siswa yang masih aktif dalam operasional WMS."
     :breadcrumbs="['Dashboard' => route('dashboard'), 'Master' => '#', 'Siswa' => route('students.index')]"
     add-action="{{ route('students.create') }}"
     add-text="Daftarkan Siswa"
