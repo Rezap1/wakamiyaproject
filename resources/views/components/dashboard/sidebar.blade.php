@@ -233,7 +233,7 @@
                     <x-sidebar.nav-link href="{{ route('dashboard.student') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.announcements') }}" active="{{ request()->routeIs('student.portal.announcements*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendances.student.scanner') }}" active="{{ request()->routeIs('attendances.student.*') }}" icon="qrcode">Presensi QR</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Presensi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('attendances.my-history') }}" active="{{ request()->routeIs('attendances.my-history') }}" icon="clock">Riwayat Absensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.schedule') }}" active="{{ request()->routeIs('student.schedule') }}" icon="calendar">Jadwal</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.calendar') }}" active="{{ request()->routeIs('student.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.subjects') }}" active="{{ request()->routeIs('student.subjects') }}" icon="book-open">Materi Saya</x-sidebar.nav-link>

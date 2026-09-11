@@ -19,7 +19,7 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+<div class="mt-6">
     <div class="bg-white rounded-2xl shadow overflow-hidden">
         <div class="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
             <h3 class="font-bold text-slate-800">Riwayat Nilai</h3>
@@ -144,52 +144,5 @@
         </div>
     </div>
 
-    <div class="bg-white rounded-2xl shadow overflow-hidden">
-        <div class="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-            <h3 class="font-bold text-slate-800">Riwayat Kehadiran</h3>
-            <div class="flex flex-wrap gap-2">
-                <a href="{{ route('student.export-attendances-pdf') }}" class="text-xs px-3 py-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-bold">PDF</a>
-                <a href="{{ route('student.print-attendances') }}" target="_blank" class="text-xs px-3 py-1 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-bold">Cetak</a>
-                <a href="{{ route('student.export-attendances') }}" class="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-bold">CSV</a>
-            </div>
-        </div>
-        <div class="overflow-x-auto max-h-96">
-            <table class="w-full text-left text-sm whitespace-nowrap">
-                <thead class="bg-slate-50 text-slate-500 sticky top-0">
-                    <tr>
-                        <th class="px-4 py-3 font-semibold">Tanggal</th>
-                        <th class="px-4 py-3 font-semibold">Status</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @forelse($myAttendances as $att)
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-4 py-3 text-slate-600">{{ $att['Attendance_Date'] ?? $att['Date'] ?? '-' }}</td>
-                        <td class="px-4 py-3">
-                            @php
-                                $statusRaw = strtoupper(trim($att['Resolved_Status'] ?? ''));
-                                $translated = match($statusRaw) {
-                                    'PRESENT', 'HADIR' => ['Hadir', 'bg-emerald-100 text-emerald-700'],
-                                    'LATE', 'TERLAMBAT' => ['Terlambat', 'bg-orange-100 text-orange-700'],
-                                    'SICK', 'SAKIT' => ['Sakit', 'bg-amber-100 text-amber-700'],
-                                    'PERMITTED', 'IZIN' => ['Izin', 'bg-blue-100 text-blue-700'],
-                                    'ABSENT', 'ALPHA', 'ALPA' => ['Alpa', 'bg-rose-100 text-rose-700'],
-                                    default => ['Status tidak diketahui', 'bg-slate-100 text-slate-700']
-                                };
-                            @endphp
-                            <span class="px-2 py-1 text-[10px] font-bold rounded-full {{ $translated[1] }}">
-                                {{ $translated[0] }}
-                            </span>
-                        </td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="2" class="px-4 py-8 text-center text-slate-500">Belum ada riwayat kehadiran.</td>
-                    </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
 </div>
 @endsection

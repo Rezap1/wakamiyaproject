@@ -8,8 +8,8 @@ use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Attendance\AttendanceRequestService;
 use Carbon\Carbon;
-use App\Helpers\CollectionHelper;
 use App\Helpers\AttendanceStatusHelper;
+use App\Helpers\DateHelper;
 
 class AttendanceHistoryController extends Controller
 {
@@ -36,31 +36,30 @@ class AttendanceHistoryController extends Controller
         }
 
         // 2. Fetch the single student identity
-        $allStudents = collect($this->studentRepository->fetchAll());
-        $student = $allStudents->firstWhere('User_ID', $user->User_ID);
+        $userId = trim((string) ($user->User_ID ?? ''));
+        $student = collect($this->studentRepository->fetchAll())->first(function ($candidate) use ($userId) {
+            return $userId !== '' && trim((string) ($candidate['User_ID'] ?? '')) === $userId;
+        });
 
         if (!$student) {
-            return back()->with('error', 'Profil siswa Anda tidak ditemukan.');
+            abort(403, 'Profil siswa tidak ditemukan.');
         }
 
-        $studentId = $student['Student_ID'];
+        $studentId = trim((string) ($student['Student_ID'] ?? ''));
+        if ($studentId === '') {
+            abort(403, 'Profil siswa tidak ditemukan.');
+        }
 
         // 3. Fetch all attendances and filter securely
         $allAttendances = collect($this->attendanceRepository->fetchAll());
         
-        $myAttendances = $allAttendances->filter(function($att) use ($studentId) {
-            $attStudentId = trim($att['Student_ID'] ?? '');
+        $myAttendances = $allAttendances->filter(function ($att) use ($studentId) {
+            $attStudentId = trim((string) ($att['Student_ID'] ?? ''));
             return $attStudentId === $studentId;
-        });
+        })->sort(fn ($left, $right) => $this->compareAttendanceNewestFirst($left, $right))->values();
 
-        // 4. Sort by Date DESC
-        $myAttendances = $myAttendances->sortByDesc(function($a) {
-            $date = $a['Attendance_Date'] ?? '1970-01-01';
-            $time = $a['Created_At'] ?? '00:00:00';
-            return $date . ' ' . $time;
-        })->values();
-
-        // 5. KPIs Calculation
+        // 4. KPIs are calculated from this student's complete history. The
+        // visible list is limited separately and never deletes persisted rows.
         $currentMonth = date('Y-m');
         
         $attendancesThisMonth = $myAttendances->filter(function($a) use ($currentMonth) {
@@ -75,9 +74,12 @@ class AttendanceHistoryController extends Controller
         $terlambatBulanIni = $attendancesThisMonth->filter(fn($a) => AttendanceStatusHelper::normalize($a['Status'] ?? '') === 'LATE')->count();
         $totalPresensiSaya = $myAttendances->count();
 
-        // 6. Enrich with Requests Data
+        // 5. Student presentation rule: filter first, then sort, then limit.
+        $latestAttendances = $myAttendances->take(5)->values();
+
+        // 6. Enrich only the five visible rows with request status data.
         $myRequests = $this->requestService->getStudentRequests($studentId);
-        $myAttendances = $myAttendances->map(function($att) use ($myRequests) {
+        $latestAttendances = $latestAttendances->map(function ($att) use ($myRequests) {
             $attId = $att['Attendance_ID'] ?? '';
             $attendanceType = strtoupper(trim((string) ($att['Attendance_Type'] ?? '')));
             $attendanceClassId = trim((string) ($att['Class_ID'] ?? ''));
@@ -110,11 +112,63 @@ class AttendanceHistoryController extends Controller
             return $att;
         });
 
-        // 7. Pagination
-        $paginated = CollectionHelper::paginate($myAttendances, 25)->withQueryString();
-
         return view('attendance.my_history', compact(
-            'paginated', 'student', 'hadirBulanIni', 'terlambatBulanIni', 'totalPresensiSaya'
+            'latestAttendances', 'student', 'hadirBulanIni', 'terlambatBulanIni', 'totalPresensiSaya'
         ));
+    }
+
+    private function compareAttendanceNewestFirst(array $left, array $right): int
+    {
+        $leftKey = $this->attendanceSortKey($left);
+        $rightKey = $this->attendanceSortKey($right);
+
+        foreach ([0, 1, 2] as $index) {
+            if ($leftKey[$index] !== $rightKey[$index]) {
+                return $rightKey[$index] <=> $leftKey[$index];
+            }
+        }
+
+        return strcmp($rightKey[3], $leftKey[3]);
+    }
+
+    private function attendanceSortKey(array $attendance): array
+    {
+        $createdAt = DateHelper::parse($attendance['Created_At'] ?? null);
+        $canonicalDate = trim((string) ($attendance['Attendance_Date'] ?? ''));
+        $attendanceDate = DateHelper::parse($canonicalDate !== '' ? $canonicalDate : ($attendance['Date'] ?? null));
+        $dateTimestamp = $attendanceDate?->copy()->startOfDay()->timestamp
+            ?? $createdAt?->copy()->startOfDay()->timestamp
+            ?? 0;
+
+        $checkInSeconds = $this->timeInSeconds($attendance['Check_In_Time'] ?? null);
+        if ($checkInSeconds === null) {
+            $checkInSeconds = $createdAt
+                ? ($createdAt->hour * 3600) + ($createdAt->minute * 60) + $createdAt->second
+                : 0;
+        }
+
+        return [
+            $dateTimestamp,
+            $checkInSeconds,
+            $createdAt?->timestamp ?? 0,
+            trim((string) ($attendance['Attendance_ID'] ?? '')),
+        ];
+    }
+
+    private function timeInSeconds(mixed $value): ?int
+    {
+        $time = trim((string) $value);
+        if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?/', $time, $parts)) {
+            return null;
+        }
+
+        $hour = (int) $parts[1];
+        $minute = (int) $parts[2];
+        $second = (int) ($parts[3] ?? 0);
+        if ($hour > 23 || $minute > 59 || $second > 59) {
+            return null;
+        }
+
+        return ($hour * 3600) + ($minute * 60) + $second;
     }
 }

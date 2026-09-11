@@ -9,6 +9,7 @@
             ['label' => 'Dashboard', 'route' => 'dashboard.student', 'icon' => 'home', 'active' => request()->routeIs('dashboard.student')],
             ['label' => 'Jadwal', 'route' => 'student.schedule', 'icon' => 'calendar', 'active' => request()->routeIs('student.schedule')],
             ['label' => 'Scan QR Siswa', 'route' => 'attendances.student.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('attendances.student.*')],
+            ['label' => 'Riwayat Absensi', 'route' => 'attendances.my-history', 'icon' => 'clock', 'active' => request()->routeIs('attendances.my-history')],
             ['label' => 'Nilai', 'route' => 'student.progress', 'icon' => 'academic-cap', 'active' => request()->routeIs('student.progress')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
@@ -148,7 +149,7 @@
                     @endif
                 </div>
 
-                <span class="w-full truncate text-center text-[10px] font-medium mt-1 tracking-tight leading-tight">{{ $item['label'] }}</span>
+                <span class="line-clamp-2 w-full text-center text-[9px] font-medium mt-1 tracking-tight leading-[1.05] sm:text-[10px]">{{ $item['label'] }}</span>
 
                 @if($isActive)
                     <span class="absolute bottom-0 w-8 h-1 bg-sky-500 rounded-t-full"></span>
