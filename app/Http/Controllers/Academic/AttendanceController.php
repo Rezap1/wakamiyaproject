@@ -136,6 +136,102 @@ class AttendanceController extends Controller
 
         return view('academic.attendances.index', compact('paginatedClasses', 'classOptions', 'dateFilter', 'dateEndFilter', 'search', 'statusFilter', 'classFilter'));
     }
+
+    /** Export the same filtered class-roster read model shown by index(). */
+    public function exportPdf(Request $request)
+    {
+        return $this->attendanceReportResponse($request, 'pdf');
+    }
+
+    public function previewPdf(Request $request)
+    {
+        return $this->attendanceReportResponse($request, 'preview');
+    }
+
+    private function attendanceReportResponse(Request $request, string $format)
+    {
+        $report = $this->buildAttendanceReport($request);
+
+        return \App\Helpers\ReportHelper::export(
+            $format,
+            'Laporan Presensi Akademik',
+            collect($report['rows']),
+            [
+                'scopeLabel' => $report['scopeLabel'],
+                'summary' => $report['summary'],
+                'filterLabel' => $report['filterLabel'],
+            ],
+            'pdf.academic_attendance_report',
+            [],
+            null,
+            true
+        );
+    }
+
+    private function buildAttendanceReport(Request $request): array
+    {
+        $dateFilter = $request->input('date', date('Y-m-d'));
+        $dateEndFilter = $request->input('date_end');
+        $classFilter = $request->input('class_id');
+        $statusFilter = $request->input('status');
+        $search = strtolower($request->input('search', ''));
+
+        $classRows = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll());
+        $classes = $classRows->filter(fn ($c) => in_array(strtoupper(trim((string) ($c['Is_Active'] ?? ''))), ['TRUE', ''], true))->values();
+        $schedules = collect(app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class)->fetchAll());
+        $students = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll());
+        $attendances = $this->attendanceService->getAll();
+        $groups = $this->attendanceService->buildClassAttendanceGroups($classes, $students, $attendances, $schedules, $dateFilter, $dateEndFilter, $classFilter, $statusFilter, $search);
+
+        $classesById = $classes->keyBy('Class_ID');
+        $schedulesById = $schedules->keyBy('Schedule_ID');
+        $subjectsById = collect(app(\App\Interfaces\GoogleSheets\SubjectRepositoryInterface::class)->fetchAll())->keyBy('Subject_ID');
+        $teachersById = collect(app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class)->fetchAll())->keyBy('Teacher_ID');
+        $rows = [];
+        foreach ($groups as $group) {
+            foreach (($group['Students'] ?? collect()) as $student) {
+                $attendance = $student['Attendance'] ?? null;
+                $date = $attendance['Normalized_Attendance_Date'] ?? ($attendance['Attendance_Date'] ?? null);
+                $scheduleId = trim((string) ($attendance['Resolved_Schedule_ID'] ?? ($attendance['Schedule_ID'] ?? '')));
+                $scheduleLabel = $scheduleId !== ''
+                    ? \App\Support\Reporting\HumanReadableResolver::scheduleLabel($scheduleId, $schedulesById, $classesById, $subjectsById, $teachersById)
+                    : 'Absensi Kelas / QR';
+                $rows[] = [
+                    'date' => $date,
+                    'day' => $date ? \App\Support\Presentation\IndonesianPresentation::day(\Carbon\Carbon::parse($date)->format('l')) : '-',
+                    'student_name' => $student['Student_Name'] ?? '-',
+                    'student_number' => $student['Student_Number'] ?? '-',
+                    'class_name' => $group['Class_Name'] ?? '-',
+                    'schedule' => $scheduleLabel,
+                    'check_in' => $student['Check_In_Time'] ?? '-',
+                    'check_out' => $student['Check_Out_Time'] ?? '-',
+                    'status' => $student['Display_Status'] ?? \App\Helpers\AttendanceStatusHelper::label($student['Status'] ?? ''),
+                    'notes' => $student['Notes'] ?? '-',
+                ];
+            }
+        }
+        $rows = collect($rows)->sortBy(fn ($row) => [
+            $row['date'] ? strtotime((string) $row['date']) : PHP_INT_MAX,
+            $row['student_name'], $row['class_name'], $row['check_in'], $row['student_number'],
+        ])->values()->all();
+
+        $counts = collect($groups)->flatMap(fn ($group) => $group['Students'] ?? [])->countBy('Status_Key');
+        $summary = '<tr><td>Total Siswa</td><td>: ' . count($rows) . '</td></tr>'
+            . '<tr><td>Hadir</td><td>: ' . ($counts['PRESENT'] ?? 0) . '</td></tr>'
+            . '<tr><td>Terlambat</td><td>: ' . ($counts['LATE'] ?? 0) . '</td></tr>'
+            . '<tr><td>Sakit</td><td>: ' . ($counts['SICK'] ?? 0) . '</td></tr>'
+            . '<tr><td>Izin</td><td>: ' . ($counts['PERMITTED'] ?? 0) . '</td></tr>'
+            . '<tr><td>Alpa</td><td>: ' . ($counts['ABSENT'] ?? 0) . '</td></tr>'
+            . '<tr><td>Belum Absen</td><td>: ' . ($counts['NOT_ATTENDED'] ?? 0) . '</td></tr>';
+        $classLabel = $classFilter ? \App\Support\Reporting\HumanReadableResolver::className($classFilter, $classesById) : 'Semua kelas aktif';
+        $period = $dateEndFilter && $dateEndFilter !== $dateFilter ? $dateFilter . ' - ' . $dateEndFilter : $dateFilter;
+        return [
+            'rows' => $rows,
+            'summary' => $summary,
+            'scopeLabel' => 'Kelas: ' . $classLabel . ' | Periode: ' . $period,
+            'filterLabel' => 'Pencarian: ' . ($search ?: 'Semua') . ' | Status: ' . ($statusFilter ?: 'Semua'),
+        ];
+    }
 public function create()
     {
         try {

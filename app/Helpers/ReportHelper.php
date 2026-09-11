@@ -30,7 +30,9 @@ class ReportHelper
         $isLandscape = false
     ) {
         $timestamp = date('Ymd_His');
-        $filename = strtoupper($moduleName) . '_' . $timestamp;
+        $safeModuleName = preg_replace('/[^A-Za-z0-9_-]+/', '-', trim((string) $moduleName));
+        $safeModuleName = trim((string) $safeModuleName, '-_') ?: 'WMS-Report';
+        $filename = strtoupper($safeModuleName) . '_' . $timestamp;
         
         $moduleLabel = strtoupper(str_replace('_', ' ', (string) $moduleName));
         $metadata['reportTitle'] = str_starts_with($moduleLabel, 'LAPORAN ')

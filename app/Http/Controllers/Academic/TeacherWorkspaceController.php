@@ -332,12 +332,72 @@ class TeacherWorkspaceController extends Controller
 
     public function exportScoresPdf()
     {
-        return $this->teacherReportResponse('pdf', 'Laporan Nilai Guru', $this->teacherScoreHeaders(), $this->teacherScoreRows());
+        return $this->teacherScoreReportResponse('pdf');
     }
 
     public function printScores()
     {
-        return $this->teacherReportResponse('print', 'Laporan Nilai Guru', $this->teacherScoreHeaders(), $this->teacherScoreRows());
+        return $this->teacherScoreReportResponse('print');
+    }
+
+    private function teacherScoreReportResponse(string $format)
+    {
+        $teacherId = $this->verifyTeacherAccess();
+        $scope = $this->teacherScope($teacherId);
+        $teacherRows = collect($this->teacherService->getAllTeachers())->keyBy('Teacher_ID');
+        $teacherName = HumanReadableResolver::teacherName($teacherId, $teacherRows);
+
+        $classesById = collect($this->classService->getAllClasses())->keyBy('Class_ID');
+        $subjectsById = collect($this->subjectService->getAll())->keyBy('Subject_ID');
+        $schedulesById = collect($this->scheduleService->getAll())->keyBy('Schedule_ID');
+        $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
+        $assessmentsById = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
+        $assignmentsById = collect($this->assignmentService->getAll())->keyBy('Assignment_ID');
+        $rows = collect($this->teacherScopedScores($teacherId))
+            ->map(function ($score) use ($classesById, $subjectsById, $schedulesById, $studentsById, $assessmentsById, $assignmentsById) {
+                $scheduleId = trim((string) ($score['Schedule_ID'] ?? ''));
+                $schedule = $scheduleId !== '' ? $schedulesById->get($scheduleId, []) : [];
+                $classId = $score['Class_ID'] ?? ($schedule['Class_ID'] ?? '');
+                $subjectId = $score['Subject_ID'] ?? ($schedule['Subject_ID'] ?? '');
+                $details = $score['Parsed_Details'] ?? $this->scoreService->parseEvaluationDetails($score);
+                $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
+                $assignmentId = trim((string) ($score['Assignment_ID'] ?? ''));
+                $title = $assessmentId !== ''
+                    ? HumanReadableResolver::assessmentTitle($assessmentId, $assessmentsById)
+                    : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian');
+                return [
+                    'date' => $score['Assessment_Date'] ?? $score['Created_At'] ?? '-',
+                    'student_name' => HumanReadableResolver::studentName($score['Student_ID'] ?? '', $studentsById),
+                    'class_name' => HumanReadableResolver::className($classId, $classesById),
+                    'subject_name' => HumanReadableResolver::subjectName($subjectId, $subjectsById),
+                    'category' => $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
+                    'title' => $title,
+                    'score' => $score['Score'] ?? $score['Score_Value'] ?? '-',
+                    'grade' => $score['Grade'] ?? '-',
+                    'status' => trim((string) ($score['Status'] ?? '')) ?: '-',
+                    'details' => $this->summarizeScoreDetails(is_array($details) ? $details : []),
+                ];
+            })
+            ->sortBy(fn ($row) => [strtotime((string) $row['date']) ?: 0, $row['student_name'], $row['class_name'], $row['subject_name']])
+            ->values();
+
+        $classLabels = collect($scope['class_ids'] ?? [])->map(fn ($id) => HumanReadableResolver::className($id, $classesById))->filter()->unique()->implode(', ');
+        $subjectLabels = collect($scope['subject_ids'] ?? [])->map(fn ($id) => HumanReadableResolver::subjectName($id, $subjectsById))->filter()->unique()->implode(', ');
+
+        return ReportHelper::export(
+            $format,
+            'Laporan Nilai Guru',
+            $rows,
+            [
+                'scopeLabel' => 'Guru: ' . $teacherName . ' | Kelas: ' . ($classLabels ?: 'Semua kelas terotorisasi') . ' | Mata pelajaran: ' . ($subjectLabels ?: 'Semua mata pelajaran terotorisasi'),
+                'teacherName' => $teacherName,
+                'summary' => '<tr><td>Total Data Nilai</td><td>: ' . $rows->count() . '</td></tr>',
+            ],
+            'pdf.teacher_score_report',
+            [],
+            null,
+            true
+        );
     }
 
     private function teacherAttendanceHeaders(): array
