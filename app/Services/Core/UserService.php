@@ -137,7 +137,11 @@ class UserService
             return false;
         }
 
-        $userId = $id;
+        $userId = trim((string) ($user['User_ID'] ?? ''));
+        if ($userId === '' || strcasecmp($userId, trim((string) $id)) !== 0) {
+            throw new RuntimeException('Identitas akun pengguna tidak konsisten; penghapusan dihentikan.');
+        }
+
         $email = strtolower(trim($user['Email'] ?? ''));
         $username = strtolower(trim($user['Username'] ?? ''));
         $employeeSeedIds = $this->compactIds([$user['Employee_ID'] ?? null]);
@@ -150,8 +154,23 @@ class UserService
         }
         $emails = $this->compactIds($emailAliases);
 
-        $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
         $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
+        $studentRows = $this->matchingRows($this->repoRows($studentRepo), function (array $row) use ($userIds, $studentSeedIds) {
+            return $this->matchesAny($row, ['User_ID'], $userIds)
+                || $this->matchesAny($row, ['Student_ID'], $studentSeedIds);
+        });
+        $studentIds = $this->compactIds($this->idsFromRows($studentRows, ['Student_ID']), $studentSeedIds);
+
+        // A login account and a historical student entity have different
+        // lifecycles. An exact MASTER_STUDENT.User_ID link is authoritative even
+        // if the role row is temporarily inconsistent. A student role without a
+        // profile is also deactivated rather than sent through the destructive
+        // employee/user cascade.
+        if ($studentRows->isNotEmpty() || $this->hasStudentRole($user)) {
+            return $this->deactivateStudentAccount($userId, $studentRepo, $studentRows, $studentIds);
+        }
+
+        $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
         $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
         $payrollRepo = app(\App\Interfaces\GoogleSheets\PayrollRepositoryInterface::class);
         $leaveRepo = app(\App\Interfaces\GoogleSheets\LeaveRepositoryInterface::class);
@@ -178,12 +197,6 @@ class UserService
                 || $this->matchesAny($row, ['Employee_ID'], $employeeSeedIds);
         });
         $employeeIds = $this->compactIds($this->idsFromRows($employeeRows, ['Employee_ID']), $employeeSeedIds);
-
-        $studentRows = $this->matchingRows($this->repoRows($studentRepo), function (array $row) use ($userIds, $studentSeedIds) {
-            return $this->matchesAny($row, ['User_ID'], $userIds)
-                || $this->matchesAny($row, ['Student_ID'], $studentSeedIds);
-        });
-        $studentIds = $this->compactIds($this->idsFromRows($studentRows, ['Student_ID']), $studentSeedIds);
 
         $teacherRows = $this->matchingRows($this->repoRows($teacherRepo), function (array $row) use ($userIds, $employeeIds, $teacherSeedIds) {
             return $this->matchesAny($row, ['User_ID'], $userIds)
@@ -341,6 +354,71 @@ class UserService
         }
 
         return collect();
+    }
+
+    private function hasStudentRole(array $user): bool
+    {
+        $roleId = trim((string) ($user['Role_ID'] ?? ''));
+        if ($roleId === '') {
+            return false;
+        }
+        if (strtoupper($roleId) === 'STUDENT') {
+            return true;
+        }
+
+        $roleRepo = app(\App\Interfaces\GoogleSheets\RoleRepositoryInterface::class);
+        $role = collect($roleRepo->fetchAll())->first(function ($row) use ($roleId) {
+            return strcasecmp(trim((string) ($row['Role_ID'] ?? '')), $roleId) === 0;
+        });
+        if (!$role) {
+            throw new RuntimeException("Role akun {$user['User_ID']} tidak dapat diverifikasi; penghapusan dihentikan.");
+        }
+
+        return strtoupper(trim((string) ($role['Role_Name'] ?? ''))) === 'STUDENT';
+    }
+
+    private function deactivateStudentAccount(string $userId, object $studentRepository, $studentRows, array $studentIds): bool
+    {
+        $result = $this->userRepository->update($userId, [
+            'Is_Active' => 'FALSE',
+            'Updated_At' => now()->toDateTimeString(),
+            'Updated_By' => \App\Support\ActorIdentity::required(),
+        ]);
+        if ($result === false || $result === null) {
+            throw new RuntimeException("Gagal menonaktifkan akun pengguna: {$userId}");
+        }
+
+        // BaseSheetRepository::update clears MASTER_USER caches, so this lookup
+        // is a fresh persisted read in production. Never accept a successful API
+        // response without verifying the resulting authentication state.
+        $persistedUser = $this->userRepository->findById($userId);
+        if (!$persistedUser || strtoupper(trim((string) ($persistedUser['Is_Active'] ?? ''))) !== 'FALSE') {
+            throw new RuntimeException("Verifikasi penonaktifan akun pengguna gagal: {$userId}");
+        }
+
+        // MASTER_STUDENT is deliberately not written. Evict its repository cache
+        // and read it again to prove that every exact Student_ID/User_ID relation
+        // survived and that the sheet remains readable after the account write.
+        if (method_exists($studentRepository, 'clearCache')) {
+            $studentRepository->clearCache();
+        }
+        $studentsAfter = $this->repoRows($studentRepository)->keyBy(function (array $row) {
+            return strtolower(trim((string) ($row['Student_ID'] ?? '')));
+        });
+        foreach (collect($studentRows) as $student) {
+            $studentId = trim((string) ($student['Student_ID'] ?? ''));
+            $originalUserId = trim((string) ($student['User_ID'] ?? ''));
+            $persistedStudent = $studentsAfter->get(strtolower($studentId));
+
+            if ($studentId === '' || !$persistedStudent
+                || strcasecmp(trim((string) ($persistedStudent['User_ID'] ?? '')), $originalUserId) !== 0) {
+                throw new RuntimeException("Verifikasi integritas MASTER_STUDENT gagal setelah penonaktifan akun {$userId}.");
+            }
+        }
+
+        $this->clearUserCascadeCaches([], $studentIds);
+
+        return true;
     }
 
     private function matchingRows($rows, callable $predicate)

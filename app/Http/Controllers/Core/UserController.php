@@ -126,10 +126,9 @@ class UserController extends Controller
                 return back()->withErrors(['error' => 'Pengguna tidak ditemukan.']);
             }
 
-            // Cascade hard delete all owned user data before removing the account.
             $this->userService->deleteUser($id);
 
-            return redirect()->route('users.index')->with('success', 'Pengguna beserta data terkait berhasil dihapus permanen.');
+            return redirect()->route('users.index')->with('success', 'Akun pengguna berhasil dihapus atau dinonaktifkan sesuai kebijakan data.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $this->safeExceptionMessage($e)]);
         }

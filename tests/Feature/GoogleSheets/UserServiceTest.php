@@ -80,7 +80,7 @@ class UserServiceTest extends TestCase
         $this->assertTrue($result);
     }
 
-    public function test_delete_user_cascades_all_owned_records()
+    public function test_delete_non_student_user_cascades_owned_employee_records()
     {
         $userId = 'USR000001';
 
@@ -96,8 +96,7 @@ class UserServiceTest extends TestCase
                 'delete' => ['EMP001'],
             ],
             \App\Interfaces\GoogleSheets\StudentRepositoryInterface::class => [
-                'rows' => [['Student_ID' => 'STU001', 'User_ID' => $userId, 'Email' => 'user@example.test']],
-                'delete' => ['STU001'],
+                'rows' => [],
             ],
             \App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class => [
                 'rows' => [['Teacher_ID' => 'TCH001', 'Employee_ID' => 'EMP001', 'User_ID' => $userId]],
@@ -123,40 +122,36 @@ class UserServiceTest extends TestCase
             ],
             \App\Interfaces\GoogleSheets\InvoiceRepositoryInterface::class => [
                 'rows' => [['Invoice_ID' => 'INV001', 'Student_ID' => 'STU001']],
-                'delete' => ['INV001'],
             ],
             \App\Interfaces\GoogleSheets\PaymentRepositoryInterface::class => [
                 'rows' => [['Payment_ID' => 'PMT001', 'Student_ID' => 'STU001', 'Invoice_ID' => 'INV001', 'Proof_File' => 'payments/proof.png']],
-                'delete' => ['PMT001'],
             ],
             \App\Interfaces\GoogleSheets\TransactionRepositoryInterface::class => [
                 'rows' => [
                     ['Transaction_ID' => 'TRX001', 'Reference_ID' => 'PMT001'],
                     ['Transaction_ID' => 'TRX002', 'Reference_ID' => 'PAYROLL001'],
                 ],
-                'delete' => ['TRX001', 'TRX002'],
+                'delete' => ['TRX002'],
             ],
             \App\Interfaces\GoogleSheets\ScoreRepositoryInterface::class => [
                 'rows' => [
                     ['Score_ID' => 'SCR001', 'Student_ID' => 'STU001'],
                     ['Score_ID' => 'SCR002', 'Teacher_ID' => 'TCH001'],
                 ],
-                'delete' => ['SCR001', 'SCR002'],
+                'delete' => ['SCR002'],
             ],
             \App\Interfaces\GoogleSheets\AttendanceRepositoryInterface::class => [
                 'rows' => [
                     ['Attendance_ID' => 'ATT001', 'Employee_ID' => 'EMP001'],
                     ['Attendance_ID' => 'ATT002', 'Student_ID' => 'STU001'],
                 ],
-                'delete' => ['ATT001', 'ATT002'],
+                'delete' => ['ATT001'],
             ],
             \App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface::class => [
                 'rows' => [['Request_ID' => 'REQ001', 'Student_ID' => 'STU001', 'Evidence_URL' => 'storage/attendance-evidence/letter.png']],
-                'delete' => ['REQ001'],
             ],
             \App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class => [
                 'rows' => [['Enrollment_ID' => 'ENR001', 'Student_ID' => 'STU001']],
-                'delete' => ['ENR001'],
             ],
             \App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class => [
                 'rows' => [['Schedule_ID' => 'SCH001', 'Teacher_ID' => 'TCH001']],
@@ -171,16 +166,14 @@ class UserServiceTest extends TestCase
                 'delete' => ['ASM001'],
             ],
             \App\Interfaces\GoogleSheets\DocumentRepositoryInterface::class => [
-                'rows' => [['Document_ID' => 'DOC001', 'Student_ID' => 'STU001', 'File_Path' => 'documents/certificates/certificate.pdf']],
+                'rows' => [['Document_ID' => 'DOC001', 'Employee_ID' => 'EMP001', 'File_Path' => 'documents/certificates/certificate.pdf']],
                 'delete' => ['DOC001'],
             ],
             \App\Interfaces\GoogleSheets\ApprovalRepositoryInterface::class => [
                 'rows' => [['Approval_ID' => 'APR001', 'Reference_ID' => 'INV001']],
-                'delete' => ['APR001'],
             ],
             \App\Interfaces\GoogleSheets\ApprovalHistoryRepositoryInterface::class => [
                 'rows' => [['History_ID' => 'APH001', 'Reference_ID' => 'PMT001']],
-                'delete' => ['APH001'],
             ],
             \App\Interfaces\GoogleSheets\WorkflowRepositoryInterface::class => [
                 'rows' => [['Workflow_ID' => 'WFL001', 'Requester_ID' => $userId]],
@@ -216,8 +209,8 @@ class UserServiceTest extends TestCase
             ->andReturn(true);
 
         $this->assertTrue($this->userService->deleteUser($userId));
-        Storage::disk('local')->assertMissing('payments/proof.png');
-        Storage::disk('local')->assertMissing('attendance-evidence/letter.png');
+        Storage::disk('local')->assertExists('payments/proof.png');
+        Storage::disk('local')->assertExists('attendance-evidence/letter.png');
         Storage::disk('public')->assertMissing('documents/certificates/certificate.pdf');
     }
 
