@@ -130,7 +130,12 @@ class UserService
 
     public function deleteUser($id)
     {
-        \App\Support\ActorIdentity::required();
+        return $this->hardDeleteUserAccount($id);
+    }
+
+    public function hardDeleteUserAccount($id)
+    {
+        $actorUserId = \App\Support\ActorIdentity::required();
 
         $user = $this->userRepository->findById($id);
         if (!$user) {
@@ -141,11 +146,16 @@ class UserService
         if ($userId === '' || strcasecmp($userId, trim((string) $id)) !== 0) {
             throw new RuntimeException('Identitas akun pengguna tidak konsisten; penghapusan dihentikan.');
         }
+        if (strcasecmp($userId, $actorUserId) === 0) {
+            throw new RuntimeException('Akun yang sedang digunakan tidak dapat dihapus.');
+        }
+
+        $roleName = $this->resolveUserRoleName($user);
+        $this->assertPrivilegedAccountSurvives($userId, $roleName);
 
         $email = strtolower(trim($user['Email'] ?? ''));
         $username = strtolower(trim($user['Username'] ?? ''));
         $employeeSeedIds = $this->compactIds([$user['Employee_ID'] ?? null]);
-        $studentSeedIds = $this->compactIds([$user['Student_ID'] ?? null]);
         $teacherSeedIds = $this->compactIds([$user['Teacher_ID'] ?? null]);
         $userIds = $this->compactIds([$userId]);
         $emailAliases = [$email];
@@ -155,19 +165,25 @@ class UserService
         $emails = $this->compactIds($emailAliases);
 
         $studentRepo = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class);
-        $studentRows = $this->matchingRows($this->repoRows($studentRepo), function (array $row) use ($userIds, $studentSeedIds) {
-            return $this->matchesAny($row, ['User_ID'], $userIds)
-                || $this->matchesAny($row, ['Student_ID'], $studentSeedIds);
-        });
-        $studentIds = $this->compactIds($this->idsFromRows($studentRows, ['Student_ID']), $studentSeedIds);
+        $studentRows = $this->matchingRows(
+            $this->repoRows($studentRepo),
+            fn (array $row) => $this->matchesAny($row, ['User_ID'], $userIds)
+        );
+        $this->assertUniqueDeleteTargets($studentRows, ['Student_ID'], 'student reference');
+        $studentIds = $this->idsFromRows($studentRows, ['Student_ID']);
 
-        // A login account and a historical student entity have different
-        // lifecycles. An exact MASTER_STUDENT.User_ID link is authoritative even
-        // if the role row is temporarily inconsistent. A student role without a
-        // profile is also deactivated rather than sent through the destructive
-        // employee/user cascade.
-        if ($studentRows->isNotEmpty() || $this->hasStudentRole($user)) {
-            return $this->deactivateStudentAccount($userId, $studentRepo, $studentRows, $studentIds);
+        // User Management owns the login account, not the historical student
+        // entity. Hard-delete the credential and its private notification inbox,
+        // while retaining the canonical Student_ID anchor required by finance,
+        // academic, attendance, document, and alumni history.
+        if ($studentRows->isNotEmpty() || $roleName === 'STUDENT') {
+            return $this->hardDeleteStudentLinkedAccount(
+                $userId,
+                $email,
+                $studentRepo,
+                $studentRows,
+                $studentIds
+            );
         }
 
         $employeeRepo = app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class);
@@ -356,14 +372,15 @@ class UserService
         return collect();
     }
 
-    private function hasStudentRole(array $user): bool
+    private function resolveUserRoleName(array $user): string
     {
         $roleId = trim((string) ($user['Role_ID'] ?? ''));
         if ($roleId === '') {
-            return false;
+            return '';
         }
-        if (strtoupper($roleId) === 'STUDENT') {
-            return true;
+        $literalRole = strtoupper($roleId);
+        if (in_array($literalRole, ['MASTER', 'ADMINISTRATOR', 'STUDENT', 'TEACHER', 'HR', 'ACADEMIC', 'FINANCE', 'MARKETING', 'DIRECTOR'], true)) {
+            return $literalRole;
         }
 
         $roleRepo = app(\App\Interfaces\GoogleSheets\RoleRepositoryInterface::class);
@@ -374,31 +391,67 @@ class UserService
             throw new RuntimeException("Role akun {$user['User_ID']} tidak dapat diverifikasi; penghapusan dihentikan.");
         }
 
-        return strtoupper(trim((string) ($role['Role_Name'] ?? ''))) === 'STUDENT';
+        return strtoupper(trim((string) ($role['Role_Name'] ?? '')));
     }
 
-    private function deactivateStudentAccount(string $userId, object $studentRepository, $studentRows, array $studentIds): bool
+    private function assertPrivilegedAccountSurvives(string $targetUserId, string $targetRoleName): void
     {
-        $result = $this->userRepository->update($userId, [
-            'Is_Active' => 'FALSE',
-            'Updated_At' => now()->toDateTimeString(),
-            'Updated_By' => \App\Support\ActorIdentity::required(),
-        ]);
-        if ($result === false || $result === null) {
-            throw new RuntimeException("Gagal menonaktifkan akun pengguna: {$userId}");
+        if (!in_array($targetRoleName, ['ADMINISTRATOR', 'MASTER'], true)) {
+            return;
         }
 
-        // BaseSheetRepository::update clears MASTER_USER caches, so this lookup
-        // is a fresh persisted read in production. Never accept a successful API
-        // response without verifying the resulting authentication state.
-        $persistedUser = $this->userRepository->findById($userId);
-        if (!$persistedUser || strtoupper(trim((string) ($persistedUser['Is_Active'] ?? ''))) !== 'FALSE') {
-            throw new RuntimeException("Verifikasi penonaktifan akun pengguna gagal: {$userId}");
+        $remainingPrivileged = $this->repoRows($this->userRepository)->filter(function (array $candidate) use ($targetUserId) {
+            $candidateId = trim((string) ($candidate['User_ID'] ?? ''));
+            if ($candidateId === '' || strcasecmp($candidateId, $targetUserId) === 0 || !$this->isActiveUser($candidate)) {
+                return false;
+            }
+
+            return in_array($this->resolveUserRoleName($candidate), ['ADMINISTRATOR', 'MASTER'], true);
+        });
+
+        if ($remainingPrivileged->isEmpty()) {
+            throw new RuntimeException('Administrator/Master aktif terakhir tidak dapat dihapus.');
+        }
+    }
+
+    private function hardDeleteStudentLinkedAccount(
+        string $userId,
+        string $email,
+        object $studentRepository,
+        $studentRows,
+        array $studentIds
+    ): bool {
+        $notificationRepository = app(\App\Interfaces\GoogleSheets\NotificationRepositoryInterface::class);
+        $notifications = $this->matchingRows($this->repoRows($notificationRepository), function (array $row) use ($userId, $email) {
+            $recipientEmail = strtolower(trim((string) ($row['Recipient_Email'] ?? $row['Email'] ?? '')));
+
+            return $this->matchesAny($row, ['User_ID', 'Recipient_User_ID', 'Recipient_ID'], [$userId])
+                || ($email !== '' && $recipientEmail === $email);
+        });
+        $this->assertUniqueDeleteTargets($notifications, ['Notification_ID', 'id'], 'notification');
+
+        // Operational inbox rows are the only dependent records owned solely by
+        // this login identity. Each hardDelete re-resolves its canonical ID from
+        // a fresh sheet read, so earlier row shifts cannot stale later targets.
+        $this->deleteRows($notificationRepository, $notifications, ['Notification_ID', 'id'], 'notification');
+        if (method_exists($notificationRepository, 'clearCache')) {
+            $notificationRepository->clearCache();
+        }
+        $remainingNotifications = $this->matchingRows($this->repoRows($notificationRepository), function (array $row) use ($userId, $email) {
+            $recipientEmail = strtolower(trim((string) ($row['Recipient_Email'] ?? $row['Email'] ?? '')));
+
+            return $this->matchesAny($row, ['User_ID', 'Recipient_User_ID', 'Recipient_ID'], [$userId])
+                || ($email !== '' && $recipientEmail === $email);
+        });
+        if ($remainingNotifications->isNotEmpty()) {
+            throw new RuntimeException("Verifikasi penghapusan notification akun gagal: {$userId}");
         }
 
-        // MASTER_STUDENT is deliberately not written. Evict its repository cache
-        // and read it again to prove that every exact Student_ID/User_ID relation
-        // survived and that the sheet remains readable after the account write.
+        $this->deleteRecord($this->userRepository, $userId, 'user');
+        if ($this->userRepository->findById($userId)) {
+            throw new RuntimeException("Verifikasi hard delete akun pengguna gagal: {$userId}");
+        }
+
         if (method_exists($studentRepository, 'clearCache')) {
             $studentRepository->clearCache();
         }
@@ -412,13 +465,37 @@ class UserService
 
             if ($studentId === '' || !$persistedStudent
                 || strcasecmp(trim((string) ($persistedStudent['User_ID'] ?? '')), $originalUserId) !== 0) {
-                throw new RuntimeException("Verifikasi integritas MASTER_STUDENT gagal setelah penonaktifan akun {$userId}.");
+                throw new RuntimeException("Verifikasi integritas MASTER_STUDENT gagal setelah hard delete akun {$userId}.");
             }
         }
 
         $this->clearUserCascadeCaches([], $studentIds);
 
         return true;
+    }
+
+    private function assertUniqueDeleteTargets($rows, array $idKeys, string $label): void
+    {
+        $seen = [];
+        foreach (collect($rows) as $row) {
+            $id = $this->firstValue((array) $row, $idKeys);
+            if ($id === null) {
+                throw new RuntimeException("Target {$label} tidak memiliki primary key; penghapusan dihentikan.");
+            }
+
+            $normalized = strtolower($id);
+            if (isset($seen[$normalized])) {
+                throw new RuntimeException("Target {$label} memiliki primary key duplikat: {$id}");
+            }
+            $seen[$normalized] = true;
+        }
+    }
+
+    private function isActiveUser(array $user): bool
+    {
+        $status = strtoupper(trim((string) ($user['Is_Active'] ?? 'TRUE')));
+
+        return !in_array($status, ['FALSE', '0', 'INACTIVE', 'DISABLED'], true);
     }
 
     private function matchingRows($rows, callable $predicate)

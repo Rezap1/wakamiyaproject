@@ -38,7 +38,9 @@
             $isForm = true;
             $method = 'DELETE';
             $confirm = true;
-            $confirmMessage = 'Apakah Anda yakin ingin menghapus data ini?';
+            if ($confirmMessage === 'Apakah Anda yakin?') {
+                $confirmMessage = 'Apakah Anda yakin ingin menghapus data ini?';
+            }
             break;
         case 'history':
             $icon = '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />';

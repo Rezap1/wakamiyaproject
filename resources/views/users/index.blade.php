@@ -70,7 +70,7 @@
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-2">
                         <x-universal.action-button action="edit" url="{{ route('users.edit', $user['User_ID']) }}" />
-                        <x-universal.action-button action="delete" url="{{ route('users.destroy', $user['User_ID']) }}" confirmMessage="Hapus akun ini? Akun siswa akan dinonaktifkan tanpa menghapus profil dan riwayat siswa." />
+                        <x-universal.action-button action="delete" url="{{ route('users.destroy', $user['User_ID']) }}" confirmMessage="Hapus akun ini secara permanen? Data terkait akun yang termasuk dalam scope penghapusan juga akan dihapus. Data historis yang wajib dipertahankan tetap tersimpan. Tindakan ini tidak dapat dibatalkan." />
                     </div>
                 </td>
             </tr>

@@ -126,9 +126,9 @@ class UserController extends Controller
                 return back()->withErrors(['error' => 'Pengguna tidak ditemukan.']);
             }
 
-            $this->userService->deleteUser($id);
+            $this->userService->hardDeleteUserAccount($id);
 
-            return redirect()->route('users.index')->with('success', 'Akun pengguna berhasil dihapus atau dinonaktifkan sesuai kebijakan data.');
+            return redirect()->route('users.index')->with('success', 'Akun pengguna berhasil dihapus permanen. Data historis yang wajib dipertahankan tetap tersimpan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menghapus data di Spreadsheet: ' . $this->safeExceptionMessage($e)]);
         }
