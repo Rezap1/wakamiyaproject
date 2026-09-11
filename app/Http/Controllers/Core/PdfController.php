@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Document\PdfService;
 use App\Services\Document\SignatureService;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PdfController extends Controller
 {
@@ -39,13 +40,20 @@ class PdfController extends Controller
 
     public function download($id)
     {
-        // Placeholder for actual PDF download response
         $data = $this->pdfService->DownloadPDF($id);
         if(!$data) abort(404);
-        
-        // Normally: return PDF::loadHTML($data['html'])->download($data['document']['Generated_File']);
-        // For now, render HTML print view
-        return view('document.pdf.wrapper', $data);
+
+        $configuredName = basename((string) ($data['document']['Generated_File'] ?? ''));
+        $filename = str_ends_with(strtolower($configuredName), '.pdf')
+            ? $configuredName
+            : 'Dokumen-' . preg_replace('/[^A-Za-z0-9_-]/', '-', (string) $id) . '.pdf';
+        $orientation = strtolower((string) config('pdf.orientation', 'portrait')) === 'landscape'
+            ? 'landscape'
+            : 'portrait';
+
+        return Pdf::loadHTML($data['html'])
+            ->setPaper((string) config('pdf.paper_size', 'A4'), $orientation)
+            ->download($filename);
     }
 
     public function verify($verificationCode)

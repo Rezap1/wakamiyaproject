@@ -108,10 +108,6 @@ trait Exportable
 
         $config['data'] = $data;
 
-        if (isset($config['summary'])) {
-            view()->share('executive_summary', $config['summary']);
-        }
-
         return ReportHelper::export(
             $format,
             $config['moduleName'],

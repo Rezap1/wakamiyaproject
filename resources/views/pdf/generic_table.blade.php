@@ -17,7 +17,7 @@
                 @endforeach
             </tr>
         @empty
-            <tr><td colspan="{{ count($headers ?? ['']) }}" style="text-align:center;">No data available</td></tr>
+            <tr><td colspan="{{ count($headers ?? ['']) }}" class="empty-state">Tidak ada data yang tersedia.</td></tr>
         @endforelse
     </tbody>
 </table>

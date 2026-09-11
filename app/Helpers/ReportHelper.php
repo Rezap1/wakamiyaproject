@@ -32,10 +32,13 @@ class ReportHelper
         $timestamp = date('Ymd_His');
         $filename = strtoupper($moduleName) . '_' . $timestamp;
         
-        $metadata['reportTitle'] = strtoupper($moduleName) . ' REPORT';
+        $moduleLabel = strtoupper(str_replace('_', ' ', (string) $moduleName));
+        $metadata['reportTitle'] = str_starts_with($moduleLabel, 'LAPORAN ')
+            ? $moduleLabel
+            : 'LAPORAN ' . $moduleLabel;
         $metadata['documentNumber'] = 'REP-' . date('Ymd') . '-' . rand(100000, 999999);
         $metadata['generatedBy'] = Auth::check() ? Auth::user()->Full_Name ?? 'Administrator' : 'System';
-        $metadata['generatedDate'] = now()->format('d F Y, H:i:s') . ' WIB';
+        $metadata['generatedDate'] = DateHelper::format(now(), 'd F Y, H:i:s') . ' WIB';
         $metadata['totalRecords'] = $data->count();
         $metadata['version'] = '1.0.0';
         
@@ -56,6 +59,8 @@ class ReportHelper
         $metadata['records'] = $data;
         $metadata['headers'] = $headers;
         $metadata['mapRow'] = $mapRow;
+        $metadata['executive_summary'] = $metadata['summary'] ?? null;
+        $metadata['isLandscape'] = $isLandscape;
 
         if ($format === 'pdf' || $format === 'preview') {
             return self::generatePdf($filename, $pdfView, $metadata, $format === 'preview', $isLandscape);

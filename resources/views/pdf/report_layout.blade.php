@@ -1,287 +1,90 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
     <meta charset="utf-8">
-    <title>{{ $reportTitle ?? 'Report' }}</title>
+    <title>{{ $reportTitle ?? 'Laporan WMS' }}</title>
     <style>
-        body {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 11px;
-            color: #333;
-            margin: 0;
-            padding: 0;
-        }
-        
-        /* Header Enterprise */
-        .header-container {
-            width: 100%;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-            display: table;
-        }
-        .header-logo {
-            display: table-cell;
-            width: 80px;
-            vertical-align: middle;
-            text-align: center;
-        }
-        .header-logo img {
-            max-width: 70px;
-            height: auto;
-        }
-        .header-text {
-            display: table-cell;
-            vertical-align: middle;
-            text-align: center;
-            padding-left: 10px;
-        }
-        .company-name {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 0 0 5px 0;
-            text-decoration: underline;
-            letter-spacing: 1px;
-        }
-        .company-address {
-            font-size: 11px;
-            font-style: italic;
-            margin: 2px 0;
-            color: #444;
-        }
-        
-        /* Metadata */
-        .metadata-container {
-            width: 100%;
-            margin-bottom: 15px;
-        }
-        .report-title {
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-            color: #1f2937;
-        }
-        .metadata-table {
-            width: 100%;
-            border: none;
-            font-size: 10px;
-        }
-        .metadata-table td {
-            padding: 2px;
-            vertical-align: top;
-        }
-        
-        /* Table Content */
-        .enterprise-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            page-break-inside: auto;
-        }
-        .enterprise-table tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-        }
-        .enterprise-table thead {
-            display: table-header-group;
-        }
-        .enterprise-table tfoot {
-            display: table-footer-group;
-        }
-        .enterprise-table th {
-            background-color: #e5e7eb;
-            color: #111827;
-            font-weight: bold;
-            padding: 6px 4px;
-            border: 0.5px solid #9ca3af;
-            text-align: left;
-            font-size: 10px;
-            text-transform: uppercase;
-        }
-        .enterprise-table td {
-            padding: 5px 4px;
-            border: 0.5px solid #d1d5db;
-            font-size: 10px;
-            vertical-align: top;
-            word-wrap: break-word;
-        }
-        .enterprise-table tr:nth-child(even) {
-            background-color: #f9fafb;
-        }
-
-        /* Executive Summary */
-        .exec-summary {
-            width: 100%;
-            margin-bottom: 15px;
-            border: 1px solid #d1d5db;
-            background-color: #f3f4f6;
-            padding: 10px;
-        }
-        .exec-summary table {
-            width: 100%;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        
-        /* Signatures */
-        .signature-container {
-            width: 100%;
-            margin-top: 30px;
-            page-break-inside: avoid;
-            font-size: 10px;
-            text-align: center;
-        }
-        .signature-box {
-            display: inline-block;
-            width: 30%;
-            vertical-align: top;
-        }
-        .signature-space {
-            height: 60px;
-        }
-        .signature-line {
-            border-top: 1px solid #000;
-            width: 80%;
-            margin: 0 auto;
-            padding-top: 5px;
-        }
-
-        /* Footer */
-        .footer {
-            position: fixed;
-            bottom: -30px;
-            left: 0;
-            right: 0;
-            height: 40px;
-            font-size: 8px;
-            color: #6b7280;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 5px;
-        }
-        .footer table {
-            width: 100%;
-            border: none;
-        }
-        .page-number:before {
-            content: counter(page);
-        }
-        
-        /* Watermark */
-        .watermark {
-            position: fixed;
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 90px;
-            color: rgba(200, 200, 200, 0.15);
-            font-weight: bold;
-            z-index: -1;
-            white-space: nowrap;
-        }
+        @page { margin: 14mm 14mm 16mm; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1f2937; margin: 0; line-height: 1.35; }
+        .header-container { width: 100%; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+        .header-container table, .metadata-table, .document-context, .summary-cards { width: 100%; border-collapse: collapse; }
+        .header-logo { width: 58px; vertical-align: middle; padding-right: 10px; }
+        .header-logo img { max-width: 52px; max-height: 52px; }
+        .header-text { vertical-align: middle; }
+        .company-name { font-size: 16px; font-weight: bold; margin: 0; letter-spacing: .3px; }
+        .company-address { font-size: 8.5px; color: #64748b; margin: 2px 0 0; }
+        .metadata-container { margin-bottom: 12px; }
+        .report-title { text-align: center; font-size: 15px; font-weight: bold; text-transform: uppercase; color: #0f172a; margin: 4px 0 8px; }
+        .metadata-table { font-size: 9px; }
+        .metadata-table td { padding: 2px 3px; vertical-align: top; }
+        .metadata-table td:nth-child(odd) { color: #64748b; font-weight: bold; }
+        .document-context { margin: 0 0 12px; border: 1px solid #cbd5e1; background: #f8fafc; }
+        .document-context td { width: 50%; padding: 7px 9px; vertical-align: top; }
+        .summary-cards { margin: 0 0 12px; table-layout: fixed; }
+        .summary-cards td { border: 1px solid #dbe3ec; background: #f8fafc; text-align: center; padding: 5px; }
+        .summary-cards span { display: block; color: #64748b; font-size: 8px; text-transform: uppercase; }
+        .summary-cards strong { display: block; font-size: 14px; color: #0f172a; }
+        .enterprise-table { width: 100%; border-collapse: collapse; page-break-inside: auto; margin-bottom: 12px; table-layout: fixed; }
+        .enterprise-table thead { display: table-header-group; }
+        .enterprise-table tr { page-break-inside: avoid; }
+        .enterprise-table th { background: #e2e8f0; color: #0f172a; font-weight: bold; padding: 6px 5px; border: .5px solid #94a3b8; text-align: left; font-size: 8.5px; text-transform: uppercase; }
+        .enterprise-table td { padding: 5px; border: .5px solid #cbd5e1; vertical-align: top; overflow-wrap: anywhere; word-wrap: break-word; }
+        .enterprise-table tr:nth-child(even) td { background: #f8fafc; }
+        .empty-state { text-align: center; color: #64748b; font-style: italic; padding: 16px !important; }
+        .exec-summary { margin-bottom: 12px; padding: 7px 9px; border: 1px solid #dbe3ec; background: #f8fafc; }
+        .exec-summary table { width: 100%; font-size: 9px; }
+        .footer { position: fixed; bottom: -8mm; left: 0; right: 0; border-top: 1px solid #e2e8f0; padding-top: 4px; color: #64748b; font-size: 8px; }
+        .footer table { width: 100%; border-collapse: collapse; }
+        .page-number:before { content: counter(page); }
+        .no-print { display: none; }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="header-container">
-        <div class="header-logo">
-            @php
-                $imagePath = public_path('img/logo.png.jpeg');
-                if (file_exists($imagePath)) {
-                    $imageData = base64_encode(file_get_contents($imagePath));
-                    echo '<img src="data:image/jpeg;base64,'.$imageData.'" alt="Logo">';
-                }
-            @endphp
-        </div>
-        <div class="header-text">
-            <h1 class="company-name">PT. WAKAMIYA MANDIRI SEJAHTERA</h1>
-            <p class="company-address">Perum Graha Samolo Indah Blok B1 No 22, Desa Babakan Caringin Kecamatan Karangtengah</p>
-            <p class="company-address">Cianjur, 43281 | Email: info@lpkwakamiya.com | Web: www.lpkwakamiya.com | Telp: 0813-1811-5151</p>
-        </div>
+        <table>
+            <tr>
+                <td class="header-logo">
+                    @php($imagePath = public_path('img/logo.png.jpeg'))
+                    @if(is_file($imagePath))
+                        <img src="data:image/jpeg;base64,{{ base64_encode(file_get_contents($imagePath)) }}" alt="Logo">
+                    @endif
+                </td>
+                <td class="header-text">
+                    <div class="company-name">PT. WAKAMIYA MANDIRI SEJAHTERA</div>
+                    <div class="company-address">Laporan resmi WAKAMIYA MANAGEMENT SYSTEM (WMS)</div>
+                </td>
+            </tr>
+        </table>
     </div>
 
-    <!-- Report Metadata -->
     <div class="metadata-container">
-        <div class="report-title">{{ $reportTitle ?? 'Enterprise Report' }}</div>
-        
+        <div class="report-title">{{ $reportTitle ?? 'Laporan WMS' }}</div>
         <table class="metadata-table">
             <tr>
-                <td width="15%"><strong>Document Number</strong></td>
-                <td width="35%">: {{ $documentNumber ?? 'REP-'.date('Ymd').'-'.rand(100000, 999999) }}</td>
-                <td width="15%"><strong>Printed By</strong></td>
-                <td width="35%">: {{ $generatedBy ?? auth()->user()->Full_Name ?? 'System Administrator' }}</td>
+                <td width="17%">Nomor Dokumen</td><td width="33%">: {{ $documentNumber ?? '-' }}</td>
+                <td width="17%">Dibuat Oleh</td><td width="33%">: {{ $generatedBy ?? 'Sistem' }}</td>
             </tr>
             <tr>
-                <td><strong>Printed At</strong></td>
-                <td>: {{ $generatedDate ?? \App\Helpers\DateHelper::format(now(), 'd M Y, H:i:s').' WIB' }}</td>
-                <td><strong>Total Records</strong></td>
-                <td>: {{ $totalRecords ?? 0 }} Data</td>
+                <td>Dibuat Pada</td><td>: {{ $generatedDate ?? '-' }}</td>
+                <td>Total Data</td><td>: {{ $totalRecords ?? 0 }}</td>
             </tr>
-            <tr>
-                <td><strong>WMS Version</strong></td>
-                <td>: {{ $version ?? 'v1.0.0 (Enterprise)' }}</td>
-                <td><strong>Filter yang Digunakan</strong></td>
-                <td>: {{ $filterUsed ?? 'None (All Records)' }}</td>
-            </tr>
+            @if(!empty($scopeLabel))
+            <tr><td>Ruang Lingkup</td><td colspan="3">: {{ $scopeLabel }}</td></tr>
+            @endif
         </table>
     </div>
 
-    <!-- Executive Summary -->
-    @hasSection('executive_summary')
-    <div class="exec-summary">
-        <table>
-            @yield('executive_summary')
-        </table>
-    </div>
+    @if(!empty($executive_summary))
+        <div class="exec-summary"><table>{!! $executive_summary !!}</table></div>
     @endif
 
-    <!-- Main Content -->
     @yield('content')
 
-    <!-- Signatures -->
-    <div class="signature-container" style="text-align: center; margin-top: 40px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold; text-decoration: underline;">PT. WAKAMIYA MANDIRI SEJAHTERA</h3>
-        
-        <div style="margin: 15px 0;">
-            @php
-                // Menggunakan path logo karena sepertinya gambar cap dan tanda tangan tersimpan sebagai logo di database
-                $stampPath = public_path('storage/companies/logos/dUBX7qmwgFlSFVCc6yfAkYiHua3lLB8ci1qw2IhS.jpg');
-                if (file_exists($stampPath)) {
-                    $stampData = base64_encode(file_get_contents($stampPath));
-                    echo '<img src="data:image/jpeg;base64,'.$stampData.'" alt="Signature" style="max-height: 120px;">';
-                }
-            @endphp
-        </div>
-        
-        <h3 style="margin: 10px 0 2px 0; font-size: 16px; font-weight: bold; text-decoration: underline;">HELMI MAULANA</h3>
-        <p style="margin: 0; font-size: 14px;">ADMINISTRATION/<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGYAAAAVCAYAAAC0aZsNAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFeSURBVGhD7ZOLqsMwDEPz/z+9kQsBo8iOnEfXCzkQhuWH3KYrn8srKShc9lBK+TsjzUOrCmhmqmHEjjl2H5yF8QxsLoPVMc1Dq3JAE4wz2N6VOZXWb1+E8lIy+VHtKnS6+kCoY5xh50Pb3dkvI8pVRvndULeTFxPVRF4erB4vAn8RT7coNTtZcsNlMUZG+SzePO8iMM6w0jsDdatL2OOBOYwtUa6iejaUGgXVc5TfTefGFmBaQ3mwKFdheaY1olwGnMNi75xGclhZZLbX6/P0LN6crH4K123nF6L2q55RTsWbkdVPQd1wCYxnGM3APMbIKD8CPwJ7GJ5+is6NLcC0Gbw5TGcaotR4ZHuz9at0bmwBps3CZqkaQ61DvL6sforODReoMWq7wflPeFbQA2NLlDsBdWsvpi3zxIv6hWcFfT1G+d086/bPsJdxL+ZlKP+mEzzveJG4F/NS7sW8lC/wujh8pjWy4gAAAABJRU5ErkJggg==" alt="事務部" style="height: 14px; vertical-align: middle; margin-bottom: 2px;"></p>
-    </div>
-
-    <!-- Footer -->
     <div class="footer">
-        <table>
-            <tr>
-                <td style="text-align: left; width: 33%;">
-                    Dibuat oleh<br>
-                    <strong>WAKAMIYA MANAGEMENT SYSTEM</strong>
-                </td>
-                <td style="text-align: center; width: 34%;">
-                    Page <span class="page-number"></span>
-                </td>
-                <td style="text-align: right; width: 33%;">
-                    @if(isset($qrCodeSvg) && $qrCodeSvg)
-                        <!-- Inline SVG QR Code -->
-                        <div style="float: right; margin-left: 10px;">
-                            {!! $qrCodeSvg !!}
-                        </div>
-                    @endif
-                    Generated: <br>
-                    {{ $generatedDate ?? \App\Helpers\DateHelper::format(now(), 'd M Y, H:i').' WIB' }}
-                </td>
-            </tr>
-        </table>
+        <table><tr>
+            <td style="text-align:left; width: 50%;">WAKAMIYA MANAGEMENT SYSTEM</td>
+            <td style="text-align:right; width: 50%;">Halaman <span class="page-number"></span></td>
+        </tr></table>
     </div>
-
 </body>
 </html>

@@ -98,8 +98,6 @@ class PdfService
 
     public function DownloadPDF($docId)
     {
-        // Simulate PDF download by returning the raw HTML for now (PDF Engine not installed yet phase 9.6 is HTML wrapper)
-        // In real world, we would pass HTML to dompdf here.
         $preview = $this->PreviewPDF($docId);
         if(!$preview) abort(404);
         

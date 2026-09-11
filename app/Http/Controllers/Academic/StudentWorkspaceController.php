@@ -231,12 +231,36 @@ class StudentWorkspaceController extends Controller
 
     public function exportScoresPdf()
     {
-        return $this->studentReportResponse('pdf', 'Riwayat Nilai Siswa', $this->studentScoreHeaders(), $this->studentScoreRows());
+        return $this->studentScoreReportResponse('pdf');
     }
 
     public function printScores()
     {
-        return $this->studentReportResponse('print', 'Riwayat Nilai Siswa', $this->studentScoreHeaders(), $this->studentScoreRows());
+        return $this->studentScoreReportResponse('print');
+    }
+
+    private function studentScoreReportResponse(string $format)
+    {
+        $rows = $this->studentScoreRows();
+        $studentId = $this->getStudentId();
+        $student = $this->studentRepo->findById($studentId) ?: ['Student_ID' => $studentId];
+        $scores = collect($this->scoreService->getAll())->where('Student_ID', $studentId);
+        $numericScores = $scores->filter(fn ($score) => is_numeric($score['Score'] ?? $score['Score_Value'] ?? null));
+
+        return $this->studentReportResponse(
+            $format,
+            'Riwayat Nilai Siswa',
+            $this->studentScoreHeaders(),
+            $rows,
+            'pdf.student_score_report',
+            [
+                'student' => $student,
+                'scopeLabel' => 'Siswa terautentikasi',
+                'averageScore' => $numericScores->isNotEmpty()
+                    ? round($numericScores->avg(fn ($score) => (float) ($score['Score'] ?? $score['Score_Value'] ?? 0)), 1)
+                    : null,
+            ]
+        );
     }
 
     private function studentScoreHeaders(): array
@@ -254,7 +278,7 @@ class StudentWorkspaceController extends Controller
         $rows = [];
 
         foreach ($scores as $s) {
-            $date = $this->formatCsvDate($s['Created_At'] ?? null);
+            $date = $this->formatCsvDate($s['Created_At'] ?? $s['Assessment_Date'] ?? null);
             $category = strtoupper(trim((string) ($s['Assessment_Category'] ?? '')));
             $categoryLabel = $this->assessmentConfigService->categoryLabel($category);
             $assessmentId = trim((string) ($s['Assessment_ID'] ?? ''));
@@ -304,12 +328,12 @@ class StudentWorkspaceController extends Controller
 
     public function exportAttendancesPdf()
     {
-        return $this->studentReportResponse('pdf', 'Riwayat Kehadiran Siswa', $this->studentAttendanceHeaders(), $this->studentAttendanceRows());
+        return $this->studentReportResponse('pdf', 'Riwayat Kehadiran Siswa', $this->studentAttendanceHeaders(), $this->studentAttendanceRows(), 'pdf.student_attendance_report');
     }
 
     public function printAttendances()
     {
-        return $this->studentReportResponse('print', 'Riwayat Kehadiran Siswa', $this->studentAttendanceHeaders(), $this->studentAttendanceRows());
+        return $this->studentReportResponse('print', 'Riwayat Kehadiran Siswa', $this->studentAttendanceHeaders(), $this->studentAttendanceRows(), 'pdf.student_attendance_report');
     }
 
     private function studentAttendanceHeaders(): array
@@ -336,14 +360,38 @@ class StudentWorkspaceController extends Controller
         return $rows;
     }
 
-    private function studentReportResponse(string $format, string $title, array $headers, array $rows)
+    private function studentReportResponse(string $format, string $title, array $headers, array $rows, string $view = 'pdf.generic_table', array $extra = [])
     {
+        $studentId = $this->getStudentId();
+        $student = $extra['student'] ?? ($this->studentRepo->findById($studentId) ?: ['Student_ID' => $studentId]);
+        $metadata = array_merge([
+            'summary' => '<tr><td>Total Data</td><td>: ' . count($rows) . '</td></tr>',
+            'student' => $student,
+            'scopeLabel' => 'Siswa terautentikasi',
+        ], $extra);
+
+        if (str_contains(strtolower($title), 'kehadiran')) {
+            $statusCounts = collect($rows)->groupBy(fn ($row) => (string) ($row[1] ?? '-'))->map->count();
+            $dates = collect($rows)->pluck(0)
+                ->filter(fn ($date) => $date && $date !== '-')
+                ->sortBy(fn ($date) => \App\Helpers\DateHelper::parse($date)?->timestamp ?? PHP_INT_MAX)
+                ->values();
+            $metadata['attendanceSummary'] = [
+                'present' => $statusCounts->get('Hadir', 0),
+                'late' => $statusCounts->get('Terlambat', 0),
+                'absent' => $statusCounts->get('Alpa', 0),
+                'excused' => $statusCounts->get('Izin', 0) + $statusCounts->get('Sakit', 0),
+                'from' => $dates->first(),
+                'to' => $dates->last(),
+            ];
+        }
+
         return ReportHelper::export(
             $format,
             $title,
             collect($rows),
-            ['summary' => '<tr><td>Total Data</td><td>: ' . count($rows) . '</td></tr>'],
-            'pdf.generic_table',
+            $metadata,
+            $view,
             $headers,
             fn ($row) => $row,
             true
@@ -353,7 +401,7 @@ class StudentWorkspaceController extends Controller
     private function formatCsvDate($value)
     {
         if (empty($value)) {
-            return now()->toDateString();
+            return '-';
         }
 
         try {
