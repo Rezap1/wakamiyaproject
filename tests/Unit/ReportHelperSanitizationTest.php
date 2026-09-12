@@ -24,4 +24,13 @@ class ReportHelperSanitizationTest extends TestCase
         $this->assertSame('4.5', ReportHelper::sanitizeCsvCell('4.5'));
         $this->assertSame('2026', ReportHelper::sanitizeCsvCell('2026'));
     }
+
+    public function test_report_filename_is_ascii_safe_and_human_readable(): void
+    {
+        $this->assertSame(
+            'LAPORAN-NILAI-Jose-Alvarez-20260912',
+            ReportHelper::safeFilename('LAPORAN NILAI José Álvarez 20260912')
+        );
+        $this->assertSame('WMS-Report', ReportHelper::safeFilename('///'));
+    }
 }

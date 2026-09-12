@@ -17,7 +17,9 @@ use App\Services\Academic\ScoreService;
 use App\Services\Academic\AssessmentConfigService;
 use Illuminate\Support\Facades\Log;
 use App\Helpers\ReportHelper;
+use App\Helpers\DateHelper;
 use App\Helpers\AttendanceStatusHelper;
+use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
 use App\Support\Academic\TeacherScopeResolver;
 use App\Support\Reporting\HumanReadableResolver;
 
@@ -330,74 +332,153 @@ class TeacherWorkspaceController extends Controller
         );
     }
 
-    public function exportScoresPdf()
+    public function exportScoresPdf(Request $request)
     {
-        return $this->teacherScoreReportResponse('pdf');
+        return $this->teacherScoreReportResponse('pdf', $request);
     }
 
-    public function printScores()
+    public function printScores(Request $request)
     {
-        return $this->teacherScoreReportResponse('print');
+        return $this->teacherScoreReportResponse('print', $request);
     }
 
-    private function teacherScoreReportResponse(string $format)
+    private function teacherScoreReportResponse(string $format, Request $request)
     {
+        $filters = $request->validate([
+            'mode' => ['required', 'string', 'in:student,class'],
+            'student_id' => ['nullable', 'string', 'required_if:mode,student', 'prohibited_unless:mode,student'],
+            'class_id' => ['nullable', 'string', 'required_if:mode,class', 'prohibited_unless:mode,class'],
+            'date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,class', 'prohibited_unless:mode,class'],
+        ], [
+            'mode.required' => 'Jenis laporan wajib dipilih.',
+            'mode.in' => 'Jenis laporan tidak valid.',
+            'student_id.required_if' => 'Siswa wajib dipilih untuk laporan nilai per siswa.',
+            'student_id.prohibited_unless' => 'Siswa hanya boleh dipilih untuk laporan nilai per siswa.',
+            'class_id.required_if' => 'Kelas wajib dipilih untuk laporan nilai satu kelas.',
+            'class_id.prohibited_unless' => 'Kelas hanya boleh dipilih untuk laporan nilai satu kelas.',
+            'date.required_if' => 'Tanggal wajib dipilih untuk laporan nilai satu kelas.',
+            'date.date_format' => 'Format tanggal laporan harus YYYY-MM-DD.',
+            'date.prohibited_unless' => 'Tanggal hanya boleh dipilih untuk laporan nilai satu kelas.',
+        ]);
+
         $teacherId = $this->verifyTeacherAccess();
-        $scope = $this->teacherScope($teacherId);
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+        $mode = $filters['mode'];
+        $studentId = trim((string) ($filters['student_id'] ?? ''));
+        $classId = trim((string) ($filters['class_id'] ?? ''));
+        $reportDate = trim((string) ($filters['date'] ?? ''));
+
+        if ($mode === 'student' && !in_array($studentId, $scope['student_ids'] ?? [], true)) {
+            abort(403, 'Siswa berada di luar ruang lingkup pengajaran Anda.');
+        }
+        if ($mode === 'class' && !in_array($classId, $scope['class_ids'] ?? [], true)) {
+            abort(403, 'Kelas berada di luar ruang lingkup pengajaran Anda.');
+        }
+
         $teacherRows = collect($this->teacherService->getAllTeachers())->keyBy('Teacher_ID');
         $teacherName = HumanReadableResolver::teacherName($teacherId, $teacherRows);
-
         $classesById = collect($this->classService->getAllClasses())->keyBy('Class_ID');
         $subjectsById = collect($this->subjectService->getAll())->keyBy('Subject_ID');
         $schedulesById = collect($this->scheduleService->getAll())->keyBy('Schedule_ID');
         $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
-        $assessmentsById = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
+        $assessmentsById = collect(app(AssessmentRepositoryInterface::class)->getAll())->keyBy('Assessment_ID');
         $assignmentsById = collect($this->assignmentService->getAll())->keyBy('Assignment_ID');
-        $rows = collect($this->teacherScopedScores($teacherId))
-            ->map(function ($score) use ($classesById, $subjectsById, $schedulesById, $studentsById, $assessmentsById, $assignmentsById) {
-                $scheduleId = trim((string) ($score['Schedule_ID'] ?? ''));
-                $schedule = $scheduleId !== '' ? $schedulesById->get($scheduleId, []) : [];
-                $classId = $score['Class_ID'] ?? ($schedule['Class_ID'] ?? '');
-                $subjectId = $score['Subject_ID'] ?? ($schedule['Subject_ID'] ?? '');
-                $details = $score['Parsed_Details'] ?? $this->scoreService->parseEvaluationDetails($score);
-                $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
-                $assignmentId = trim((string) ($score['Assignment_ID'] ?? ''));
-                $title = $assessmentId !== ''
-                    ? HumanReadableResolver::assessmentTitle($assessmentId, $assessmentsById)
-                    : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian');
-                return [
-                    'date' => $score['Assessment_Date'] ?? $score['Created_At'] ?? '-',
-                    'student_name' => HumanReadableResolver::studentName($score['Student_ID'] ?? '', $studentsById),
-                    'class_name' => HumanReadableResolver::className($classId, $classesById),
-                    'subject_name' => HumanReadableResolver::subjectName($subjectId, $subjectsById),
-                    'category' => $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
-                    'title' => $title,
-                    'score' => $score['Score'] ?? $score['Score_Value'] ?? '-',
-                    'grade' => $score['Grade'] ?? '-',
-                    'status' => trim((string) ($score['Status'] ?? '')) ?: '-',
-                    'details' => $this->summarizeScoreDetails(is_array($details) ? $details : []),
-                ];
-            })
-            ->sortBy(fn ($row) => [strtotime((string) $row['date']) ?: 0, $row['student_name'], $row['class_name'], $row['subject_name']])
-            ->values();
 
-        $classLabels = collect($scope['class_ids'] ?? [])->map(fn ($id) => HumanReadableResolver::className($id, $classesById))->filter()->unique()->implode(', ');
-        $subjectLabels = collect($scope['subject_ids'] ?? [])->map(fn ($id) => HumanReadableResolver::subjectName($id, $subjectsById))->filter()->unique()->implode(', ');
+        $scores = $this->teacherScopedScores($teacherId, $scope)
+            ->filter(fn ($score) => $this->scoreBelongsToResolvedScope((array) $score, $scope, $schedulesById))
+            ->filter(function ($score) use ($mode, $studentId, $classId, $reportDate, $schedulesById) {
+                if ($mode === 'student') {
+                    return trim((string) ($score['Student_ID'] ?? '')) === $studentId;
+                }
 
-        return ReportHelper::export(
-            $format,
-            'Laporan Nilai Guru',
-            $rows,
-            [
-                'scopeLabel' => 'Guru: ' . $teacherName . ' | Kelas: ' . ($classLabels ?: 'Semua kelas terotorisasi') . ' | Mata pelajaran: ' . ($subjectLabels ?: 'Semua mata pelajaran terotorisasi'),
-                'teacherName' => $teacherName,
-                'summary' => '<tr><td>Total Data Nilai</td><td>: ' . $rows->count() . '</td></tr>',
-            ],
-            'pdf.teacher_score_report',
-            [],
-            null,
-            true
-        );
+                return $this->scoreClassId((array) $score, $schedulesById) === $classId
+                    && $this->scoreReportDate((array) $score) === $reportDate;
+            });
+
+        $rows = $scores->map(function ($score) use ($classesById, $subjectsById, $schedulesById, $studentsById, $assessmentsById, $assignmentsById) {
+            $schedule = (array) $schedulesById->get(trim((string) ($score['Schedule_ID'] ?? '')), []);
+            $resolvedClassId = trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? ''));
+            $subjectId = trim((string) ($schedule['Subject_ID'] ?? $score['Subject_ID'] ?? ''));
+            $details = $score['Parsed_Details'] ?? $this->scoreService->parseEvaluationDetails($score);
+            $details = is_array($details) ? $details : [];
+            $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
+            $assignmentId = trim((string) ($score['Assignment_ID'] ?? ''));
+            $title = $assessmentId !== ''
+                ? HumanReadableResolver::assessmentTitle($assessmentId, $assessmentsById)
+                : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignmentsById) : 'Penilaian');
+
+            return [
+                'date' => $this->scoreReportDate($score),
+                'student_id' => trim((string) ($score['Student_ID'] ?? '')),
+                'student_name' => HumanReadableResolver::studentName($score['Student_ID'] ?? '', $studentsById),
+                'student_number' => data_get($studentsById->get($score['Student_ID'] ?? '', []), 'Student_Number', '-'),
+                'class_name' => HumanReadableResolver::className($resolvedClassId, $classesById),
+                'subject_name' => HumanReadableResolver::subjectName($subjectId, $subjectsById),
+                'category' => $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
+                'title' => $title,
+                'score' => $score['Score'] ?? $score['Score_Value'] ?? '-',
+                'grade' => trim((string) ($score['Grade'] ?? '')) ?: '-',
+                'status' => $this->scoreStatusLabel($score['Status'] ?? ''),
+                'detail_lines' => $this->scoreDetailLines($details),
+                'details' => $this->summarizeScoreDetails($details),
+                'notes' => trim((string) ($details['notes'] ?? '')),
+            ];
+        })->sortBy(fn ($row) => ($row['date'] ?? '') . '|' . ($row['student_name'] ?? '') . '|' . ($row['subject_name'] ?? ''))->values();
+
+        $rosterIds = $mode === 'student'
+            ? collect([$studentId])
+            : collect(data_get($scope, 'students_by_class.' . $classId, []));
+        if ($mode === 'class' && $rosterIds->isEmpty()) {
+            $rosterIds = $studentsById->filter(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) === $classId)->keys();
+        }
+        $rosterIds = $rosterIds->filter(fn ($id) => in_array(trim((string) $id), $scope['student_ids'] ?? [], true))->map(fn ($id) => trim((string) $id))->unique()->values();
+        $studentGroups = $rosterIds->map(function ($id) use ($studentsById, $rows, $classesById, $classId) {
+            $student = (array) $studentsById->get($id, []);
+            $studentClassId = trim((string) ($student['Class_ID'] ?? $classId));
+            return [
+                'student_id' => $id,
+                'student_name' => HumanReadableResolver::studentName($id, $studentsById),
+                'student_number' => trim((string) ($student['Student_Number'] ?? '')) ?: '-',
+                'class_name' => HumanReadableResolver::className($studentClassId, $classesById),
+                'records' => $rows->where('student_id', $id)->values(),
+            ];
+        })->sortBy('student_name')->values();
+
+        $selectedStudent = $mode === 'student' ? (array) $studentGroups->first() : [];
+        $selectedClassName = $mode === 'class' ? HumanReadableResolver::className($classId, $classesById) : '';
+        $authorizedClassLabels = collect($scope['class_ids'] ?? [])
+            ->map(fn ($id) => HumanReadableResolver::className($id, $classesById))
+            ->filter()->unique()->implode(', ');
+        $authorizedSubjectLabels = collect($scope['subject_ids'] ?? [])
+            ->map(fn ($id) => HumanReadableResolver::subjectName($id, $subjectsById))
+            ->filter()->unique()->implode(', ');
+        $teachingScopeLabel = 'Kelas: ' . ($authorizedClassLabels ?: '-')
+            . ' | Mata pelajaran: ' . ($authorizedSubjectLabels ?: '-');
+        $title = $mode === 'student' ? 'Laporan Nilai Siswa' : 'Laporan Nilai Kelas';
+        $filename = $mode === 'student'
+            ? 'LAPORAN-NILAI-' . ($selectedStudent['student_name'] ?? $studentId) . '-' . now()->format('Ymd')
+            : 'LAPORAN-NILAI-' . $selectedClassName . '-' . str_replace('-', '', $reportDate);
+        $emptyMessage = $mode === 'student'
+            ? 'Belum ada data nilai untuk siswa ini.'
+            : 'Belum ada data nilai pada tanggal yang dipilih.';
+        $scopeLabel = $mode === 'student'
+            ? 'Siswa: ' . ($selectedStudent['student_name'] ?? $studentId)
+            : 'Kelas: ' . $selectedClassName . ' | Tanggal: ' . DateHelper::format($reportDate, 'd F Y');
+
+        return ReportHelper::export($format, $title, $rows, [
+            'filename' => $filename,
+            'scopeLabel' => $scopeLabel,
+            'teachingScopeLabel' => $teachingScopeLabel,
+            'teacherName' => $teacherName,
+            'reportMode' => $mode,
+            'selectedStudent' => $selectedStudent,
+            'selectedClassName' => $selectedClassName,
+            'reportDate' => $reportDate,
+            'studentCount' => $studentGroups->count(),
+            'studentGroups' => $studentGroups,
+            'emptyMessage' => $emptyMessage,
+            'summary' => '<tr><td>Total Siswa</td><td>: ' . $studentGroups->count() . '</td><td>Total Data Nilai</td><td>: ' . $rows->count() . '</td></tr>',
+        ], 'pdf.teacher_score_report', [], null, true);
     }
 
     private function teacherAttendanceHeaders(): array
@@ -524,10 +605,85 @@ class TeacherWorkspaceController extends Controller
             if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
                 continue;
             }
-            $summary[] = ucwords(str_replace('_', ' ', (string) $key)) . ': ' . $value;
+            $displayValue = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
+            $summary[] = ucwords(str_replace('_', ' ', (string) $key)) . ': ' . $displayValue;
         }
 
         return implode('; ', $summary) ?: ($details['notes'] ?? '-');
+    }
+
+    private function scoreBelongsToResolvedScope(array $score, array $scope, $schedulesById): bool
+    {
+        $studentId = trim((string) ($score['Student_ID'] ?? ''));
+        if ($studentId === '' || !in_array($studentId, $scope['student_ids'] ?? [], true)) {
+            return false;
+        }
+
+        $scheduleId = trim((string) ($score['Schedule_ID'] ?? ''));
+        $schedule = (array) $schedulesById->get($scheduleId, []);
+        if ($scheduleId !== '') {
+            if (!in_array($scheduleId, $scope['schedule_ids'] ?? [], true)) {
+                return false;
+            }
+            if (!in_array($studentId, data_get($scope, 'schedule_student_ids.' . $scheduleId, []), true)) {
+                return false;
+            }
+        } else {
+            $assessmentId = trim((string) ($score['Assessment_ID'] ?? $score['Assignment_ID'] ?? ''));
+            if ($assessmentId === '' || !in_array($assessmentId, $scope['assessment_ids'] ?? [], true)) {
+                return false;
+            }
+        }
+
+        $classId = trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? ''));
+        $subjectId = trim((string) ($schedule['Subject_ID'] ?? $score['Subject_ID'] ?? ''));
+
+        return ($classId === '' || in_array($classId, $scope['class_ids'] ?? [], true))
+            && ($subjectId === '' || in_array($subjectId, $scope['subject_ids'] ?? [], true));
+    }
+
+    private function scoreClassId(array $score, $schedulesById): string
+    {
+        $schedule = (array) $schedulesById->get(trim((string) ($score['Schedule_ID'] ?? '')), []);
+
+        return trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? ''));
+    }
+
+    private function scoreReportDate(array $score): string
+    {
+        $date = DateHelper::parse($score['Assessment_Date'] ?? $score['Date'] ?? $score['Created_At'] ?? null);
+
+        return $date?->format('Y-m-d') ?? '';
+    }
+
+    private function scoreStatusLabel($status): string
+    {
+        return match (strtoupper(trim((string) $status))) {
+            'PASS', 'PASSED', 'LULUS' => 'Lulus',
+            'FAIL', 'FAILED', 'BELUM LULUS' => 'Belum Lulus',
+            'COMPLETED', 'SELESAI' => 'Selesai',
+            'PUBLISHED', 'PUBLISH', 'DIPUBLIKASIKAN' => 'Dipublikasikan',
+            default => trim((string) $status) ?: '-',
+        };
+    }
+
+    private function scoreDetailLines(array $details): array
+    {
+        $scale = [1 => 'Sangat Kurang', 2 => 'Kurang', 3 => 'Cukup', 4 => 'Baik', 5 => 'Sangat Baik'];
+        $lines = [];
+        foreach ($details as $key => $value) {
+            if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                continue;
+            }
+            $label = ucwords(str_replace('_', ' ', (string) $key));
+            $display = is_array($value) ? implode(', ', array_map('strval', $value)) : trim((string) $value);
+            if (is_numeric($value) && isset($scale[(int) $value])) {
+                $display .= ' - ' . $scale[(int) $value];
+            }
+            $lines[] = ['label' => $label, 'value' => $display ?: '-'];
+        }
+
+        return $lines;
     }
 
     private function csvResponse(string $filename, array $headers, array $rows)
@@ -619,7 +775,8 @@ class TeacherWorkspaceController extends Controller
     public function scores()
     {
         $teacherId = $this->verifyTeacherAccess();
-        $scores = $this->teacherScopedScores($teacherId);
+        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+        $scores = $this->teacherScopedScores($teacherId, $scope);
 
         $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
         $scores = $scores->map(function ($s) use ($studentsById) {
@@ -632,7 +789,29 @@ class TeacherWorkspaceController extends Controller
             ->keyBy(fn ($config) => strtoupper(trim((string) ($config['Category_ID'] ?? ''))))
             ->toArray();
 
-        return view('academic.teacher.scores', compact('scores', 'teacherId', 'assessmentConfigs'));
+        $reportStudents = $studentsById
+            ->filter(fn ($student, $id) => in_array(trim((string) $id), $scope['student_ids'] ?? [], true))
+            ->map(fn ($student) => [
+                'Student_ID' => trim((string) ($student['Student_ID'] ?? '')),
+                'Full_Name' => trim((string) ($student['Full_Name'] ?? $student['Username'] ?? $student['Student_ID'] ?? 'Siswa')),
+                'Student_Number' => trim((string) ($student['Student_Number'] ?? '')),
+            ])->sortBy('Full_Name')->values();
+
+        $reportClasses = collect($scope['classes'] ?? [])
+            ->filter(fn ($class) => in_array(trim((string) ($class['Class_ID'] ?? '')), $scope['class_ids'] ?? [], true))
+            ->map(fn ($class) => [
+                'Class_ID' => trim((string) ($class['Class_ID'] ?? '')),
+                'Class_Name' => trim((string) ($class['Class_Name'] ?? $class['Name'] ?? $class['Class_ID'] ?? 'Kelas')),
+            ]);
+        if ($reportClasses->isEmpty()) {
+            $reportClasses = collect($scope['class_ids'] ?? [])->map(fn ($id) => [
+                'Class_ID' => trim((string) $id),
+                'Class_Name' => trim((string) $id),
+            ]);
+        }
+        $reportClasses = $reportClasses->sortBy('Class_Name')->values();
+
+        return view('academic.teacher.scores', compact('scores', 'teacherId', 'assessmentConfigs', 'reportStudents', 'reportClasses'));
     }
 
     public function scoresCreate()
@@ -900,9 +1079,9 @@ class TeacherWorkspaceController extends Controller
         return view('academic.teacher.calendar', compact('events', 'teacherId'));
     }
 
-    private function teacherScopedScores(string $teacherId)
+    private function teacherScopedScores(string $teacherId, ?array $scope = null)
     {
-        $scope = $this->scoreService->getTeacherScoreScope($teacherId);
+        $scope ??= $this->scoreService->getTeacherScoreScope($teacherId);
         return collect($this->scoreService->getAll())
             ->filter(fn ($score) => $this->scoreService->isScoreInTeacherScope($score, $teacherId, $scope))
             ->values();

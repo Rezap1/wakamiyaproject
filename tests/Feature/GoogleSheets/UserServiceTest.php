@@ -3,6 +3,7 @@
 namespace Tests\Feature\GoogleSheets;
 
 use Tests\TestCase;
+use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\UserService;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use Illuminate\Auth\GenericUser;
@@ -22,6 +23,10 @@ class UserServiceTest extends TestCase
 
         $this->userRepositoryMock = Mockery::mock(UserRepositoryInterface::class);
         $this->app->instance(UserRepositoryInterface::class, $this->userRepositoryMock);
+
+        $enterpriseEventMock = Mockery::mock(EnterpriseEventService::class);
+        $enterpriseEventMock->shouldReceive('dispatch')->zeroOrMoreTimes()->andReturnNull();
+        $this->app->instance(EnterpriseEventService::class, $enterpriseEventMock);
         
         $this->userService = $this->app->make(UserService::class);
     }

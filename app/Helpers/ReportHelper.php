@@ -5,6 +5,7 @@ namespace App\Helpers;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class ReportHelper
 {
@@ -30,9 +31,9 @@ class ReportHelper
         $isLandscape = false
     ) {
         $timestamp = date('Ymd_His');
-        $safeModuleName = preg_replace('/[^A-Za-z0-9_-]+/', '-', trim((string) $moduleName));
-        $safeModuleName = trim((string) $safeModuleName, '-_') ?: 'WMS-Report';
-        $filename = strtoupper($safeModuleName) . '_' . $timestamp;
+        $filename = !empty($metadata['filename'])
+            ? self::safeFilename((string) $metadata['filename'])
+            : self::safeFilename(strtoupper((string) $moduleName) . '_' . $timestamp);
         
         $moduleLabel = strtoupper(str_replace('_', ' ', (string) $moduleName));
         $metadata['reportTitle'] = str_starts_with($moduleLabel, 'LAPORAN ')
@@ -118,6 +119,14 @@ class ReportHelper
             return "'" . $value;
         }
         return $value;
+    }
+
+    public static function safeFilename(string $filename): string
+    {
+        $ascii = Str::ascii(trim($filename));
+        $safe = preg_replace('/[^A-Za-z0-9_-]+/', '-', $ascii);
+
+        return trim((string) $safe, '-_') ?: 'WMS-Report';
     }
 
     private static function generateCsv($filename, $data, $headers, $mapRow)

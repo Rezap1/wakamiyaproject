@@ -22,6 +22,12 @@ use Tests\TestCase;
 
 class AttendanceQrFlowTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->configureEmployeeSettings(60);
+    }
+
     public function test_permanent_qr_respects_activation_window(): void
     {
         $service = new PermanentQrService(

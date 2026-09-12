@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Services\Core\EmployeeService;
@@ -23,6 +24,16 @@ class ProfileContactSyncTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Cache::flush();
+
+        $roleRepository = Mockery::mock(RoleRepositoryInterface::class);
+        $roleRepository->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([[
+            'Role_ID' => 'ROL000008',
+            'Role_Name' => 'STUDENT',
+            'Is_Active' => 'TRUE',
+        ]]));
+        $this->app->instance(RoleRepositoryInterface::class, $roleRepository);
+
         $this->actingAs(new GenericUser(['id' => 'USR-ADMIN', 'User_ID' => 'USR-ADMIN']));
     }
 

@@ -20,14 +20,75 @@
             </div>
             <div>
                 <div class="flex flex-wrap gap-2">
-                <a href="{{ route('teacher.workspace.reports.scores-pdf') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
-                    Unduh PDF
+                <a href="#score-pdf-filter" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
+                    Pilih Filter PDF
                 </a>
                 <a href="{{ route('teacher.workspace.scores.create') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     Tambah Penilaian
                 </a>
                 </div>
+            </div>
+        </div>
+
+        <div id="score-pdf-filter" class="p-5 border-b border-slate-200 bg-red-50/40" x-data="{ reportMode: @js(old('mode', 'student')) }">
+            <div class="max-w-4xl">
+                <h4 class="text-base font-extrabold text-slate-900">Unduh laporan nilai PDF</h4>
+                <p class="mt-1 text-sm text-slate-600">Pilih satu siswa untuk seluruh riwayat nilainya, atau satu kelas pada tanggal tertentu.</p>
+
+                @if(isset($errors) && $errors->hasAny(['mode', 'student_id', 'class_id', 'date']))
+                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
+                        {{ $errors->first() }}
+                    </div>
+                @endif
+
+                <form method="GET" action="{{ route('teacher.workspace.reports.scores-pdf') }}" class="mt-4 space-y-4">
+                    <fieldset>
+                        <legend class="text-sm font-bold text-slate-700">Jenis laporan</legend>
+                        <div class="mt-2 flex flex-wrap gap-4">
+                            <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                <input type="radio" name="mode" value="student" x-model="reportMode" required @checked(old('mode', 'student') === 'student') class="text-red-600 focus:ring-red-500">
+                                Satu siswa
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                <input type="radio" name="mode" value="class" x-model="reportMode" required @checked(old('mode') === 'class') class="text-red-600 focus:ring-red-500">
+                                Satu kelas
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <div x-show="reportMode === 'student'" x-cloak>
+                        <label for="report_student_id" class="block text-sm font-bold text-slate-700">Siswa</label>
+                        <select id="report_student_id" name="student_id" :disabled="reportMode !== 'student'" :required="reportMode === 'student'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                            <option value="">Pilih siswa</option>
+                            @foreach($reportStudents ?? [] as $student)
+                                <option value="{{ $student['Student_ID'] }}" @selected(old('student_id') === $student['Student_ID'])>
+                                    {{ $student['Full_Name'] }}{{ $student['Student_Number'] ? ' - ' . $student['Student_Number'] : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div x-show="reportMode === 'class'" x-cloak class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label for="report_class_id" class="block text-sm font-bold text-slate-700">Kelas</label>
+                            <select id="report_class_id" name="class_id" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                                <option value="">Pilih kelas</option>
+                                @foreach($reportClasses ?? [] as $class)
+                                    <option value="{{ $class['Class_ID'] }}" @selected(old('class_id') === $class['Class_ID'])>{{ $class['Class_Name'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label for="report_date" class="block text-sm font-bold text-slate-700">Tanggal nilai</label>
+                            <input id="report_date" type="date" name="date" value="{{ old('date') }}" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="inline-flex items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
+                        Unduh PDF sesuai filter
+                    </button>
+                </form>
             </div>
         </div>
 
