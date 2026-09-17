@@ -11,8 +11,7 @@ class EducationPaymentMonitoringController extends Controller
 {
     public function __construct(
         private EducationPaymentMonitoringService $monitoringService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -26,5 +25,13 @@ class EducationPaymentMonitoringController extends Controller
             'finance.education-payments.index',
             $this->monitoringService->build($filters),
         );
+    }
+
+    public function show(string $studentId)
+    {
+        $detail = $this->monitoringService->detail($studentId);
+        abort_if($detail === null, 404, 'Data monitoring pembayaran siswa tidak ditemukan.');
+
+        return view('finance.education-payments.show', $detail);
     }
 }

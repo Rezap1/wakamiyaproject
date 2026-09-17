@@ -5,7 +5,7 @@
 @php
     $rupiah = fn ($amount) => 'Rp ' . number_format((float) $amount, 0, ',', '.');
     $badgeClasses = [
-        'no_invoice' => 'bg-slate-100 text-slate-700 ring-slate-200',
+        'fee_unset' => 'bg-slate-100 text-slate-700 ring-slate-200',
         'unpaid' => 'bg-rose-100 text-rose-700 ring-rose-200',
         'partial' => 'bg-amber-100 text-amber-800 ring-amber-200',
         'paid' => 'bg-emerald-100 text-emerald-700 ring-emerald-200',
@@ -57,7 +57,7 @@
             ['label' => 'Lunas', 'value' => number_format($kpi['paid_students'], 0, ',', '.')],
             ['label' => 'Cicilan', 'value' => number_format($kpi['partial_students'], 0, ',', '.')],
             ['label' => 'Belum Bayar', 'value' => number_format($kpi['unpaid_students'], 0, ',', '.')],
-            ['label' => 'Total Tagihan', 'value' => $rupiah($kpi['total'])],
+            ['label' => 'Total Biaya Pendidikan', 'value' => $rupiah($kpi['education_fee'])],
             ['label' => 'Total Terbayar', 'value' => $rupiah($kpi['paid'])],
             ['label' => 'Total Sisa', 'value' => $rupiah($kpi['remaining'])],
         ] as $item)
@@ -89,15 +89,11 @@
                             <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 {{ $badgeClasses[$student['status']] }}">{{ $student['status_label'] }}</span>
                         </div>
                         <dl class="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-xs">
-                            <div class="min-w-0"><dt class="text-slate-500">Tagihan</dt><dd class="mt-1 break-words font-extrabold text-slate-900">{{ $rupiah($student['total']) }}</dd></div>
-                            <div class="min-w-0"><dt class="text-slate-500">Terbayar</dt><dd class="mt-1 break-words font-extrabold text-emerald-700">{{ $rupiah($student['paid']) }}</dd></div>
+                            <div class="min-w-0"><dt class="text-slate-500">Biaya Pendidikan</dt><dd class="mt-1 break-words font-extrabold text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
+                            <div class="min-w-0"><dt class="text-slate-500">Sudah Dibayar</dt><dd class="mt-1 break-words font-extrabold text-emerald-700">{{ $rupiah($student['paid']) }}</dd></div>
                             <div class="min-w-0"><dt class="text-slate-500">Sisa</dt><dd class="mt-1 break-words font-extrabold text-rose-700">{{ $rupiah($student['remaining']) }}</dd></div>
                         </dl>
-                        @if($student['detail_invoice_id'])
-                            <a href="{{ route('invoices.show', $student['detail_invoice_id']) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-sky-700 hover:text-sky-900">Detail tagihan</a>
-                        @elseif($student['invoice_count'] > 1)
-                            <span class="text-xs font-semibold text-slate-500">{{ $student['invoice_count'] }} tagihan pendidikan diringkas</span>
-                        @endif
+                        <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-sky-700 hover:text-sky-900">Lihat Detail</a>
                     </article>
                 @endforeach
             </div>
@@ -107,7 +103,7 @@
                     <thead class="bg-white text-xs font-bold uppercase tracking-wider text-slate-500">
                         <tr>
                             <th class="w-[28%] px-6 py-4">Nama Siswa</th>
-                            <th class="w-[16%] px-4 py-4 text-right">Total Tagihan</th>
+                            <th class="w-[16%] px-4 py-4 text-right">Biaya Pendidikan</th>
                             <th class="w-[16%] px-4 py-4 text-right">Sudah Dibayar</th>
                             <th class="w-[16%] px-4 py-4 text-right">Sisa</th>
                             <th class="w-[14%] px-4 py-4">Status</th>
@@ -121,18 +117,12 @@
                                     <p class="break-words font-extrabold text-slate-900">{{ $student['student_name'] }}</p>
                                     <p class="mt-1 text-xs text-slate-500">{{ $student['student_number'] }}</p>
                                 </td>
-                                <td class="px-4 py-4 text-right font-bold text-slate-800">{{ $rupiah($student['total']) }}</td>
+                                <td class="px-4 py-4 text-right font-bold text-slate-800">{{ $rupiah($student['education_fee']) }}</td>
                                 <td class="px-4 py-4 text-right font-bold text-emerald-700">{{ $rupiah($student['paid']) }}</td>
                                 <td class="px-4 py-4 text-right font-bold text-rose-700">{{ $rupiah($student['remaining']) }}</td>
                                 <td class="px-4 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ring-1 {{ $badgeClasses[$student['status']] }}">{{ $student['status_label'] }}</span></td>
                                 <td class="px-6 py-4 text-right">
-                                    @if($student['detail_invoice_id'])
-                                        <a href="{{ route('invoices.show', $student['detail_invoice_id']) }}" class="font-bold text-sky-700 hover:text-sky-900">Buka</a>
-                                    @elseif($student['invoice_count'] > 1)
-                                        <span class="text-xs font-semibold text-slate-500">{{ $student['invoice_count'] }} tagihan</span>
-                                    @else
-                                        <span class="text-slate-400">—</span>
-                                    @endif
+                                    <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="font-bold text-sky-700 hover:text-sky-900">Buka</a>
                                 </td>
                             </tr>
                         @endforeach

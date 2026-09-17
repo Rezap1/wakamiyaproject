@@ -279,6 +279,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/education-payments', [\App\Http\Controllers\Finance\EducationPaymentMonitoringController::class, 'index'])
         ->middleware('role:ADMINISTRATOR')
         ->name('finance.education-payments.index');
+    Route::get('/finance/education-payments/{studentId}', [\App\Http\Controllers\Finance\EducationPaymentMonitoringController::class, 'show'])
+        ->middleware('role:ADMINISTRATOR')
+        ->name('finance.education-payments.show');
 
     Route::prefix('finance/invoices')->name('invoices.')->middleware('role:ADMINISTRATOR,FINANCE')->group(function () {
         Route::get('/preview-pdf', [\App\Http\Controllers\Finance\InvoiceController::class, 'previewPdf'])->name('preview-pdf');
