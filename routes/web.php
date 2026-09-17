@@ -276,6 +276,10 @@ Route::middleware('auth')->group(function () {
     });
 
     // Finance - Invoices
+    Route::get('/finance/education-payments', [\App\Http\Controllers\Finance\EducationPaymentMonitoringController::class, 'index'])
+        ->middleware('role:ADMINISTRATOR')
+        ->name('finance.education-payments.index');
+
     Route::prefix('finance/invoices')->name('invoices.')->middleware('role:ADMINISTRATOR,FINANCE')->group(function () {
         Route::get('/preview-pdf', [\App\Http\Controllers\Finance\InvoiceController::class, 'previewPdf'])->name('preview-pdf');
         Route::get('/export-pdf', [\App\Http\Controllers\Finance\InvoiceController::class, 'exportPdf'])->name('export-pdf');

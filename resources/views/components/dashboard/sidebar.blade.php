@@ -33,6 +33,7 @@
             ['label' => 'Tinjau Pengajuan', 'route' => 'academic.attendance.requests.index', 'active_route' => 'academic.attendance.requests.*', 'icon' => 'clipboard-check'],
         ]],
         ['group' => 'FINANCE', 'items' => [
+            ['label' => 'Pembayaran Pendidikan', 'route' => 'finance.education-payments.index', 'active_route' => 'finance.education-payments.*', 'icon' => 'cash'],
             ['label' => 'Master Akun', 'route' => 'accounts.index', 'active_route' => 'accounts.*', 'icon' => 'collection'],
             ['label' => 'Transaksi', 'route' => 'transactions.index', 'active_route' => 'transactions.*', 'icon' => 'switch-horizontal'],
             ['label' => 'Tagihan', 'route' => 'invoices.index', 'active_route' => 'invoices.*', 'icon' => 'document-duplicate'],
@@ -153,6 +154,7 @@
             <div class="space-y-1">
                 @if($userRole === 'ADMINISTRATOR')
                     <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('finance.education-payments.index') }}" active="{{ request()->routeIs('finance.education-payments.*') }}" icon="cash">Pembayaran Pendidikan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
