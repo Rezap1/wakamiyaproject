@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Exceptions\FinancialIntegrityException;
 use App\Helpers\SheetValue;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
@@ -50,7 +51,8 @@ class EducationPaymentMonitoringService
         }
 
         $snapshots = $this->snapshots();
-        $projection = $this->buildFromSnapshots($snapshots);
+        // Historical ownership survives placement, enrolment and login changes.
+        $projection = $this->buildFromSnapshots($snapshots, [], true);
         $student = $projection['groups']
             ->flatMap(fn ($group) => $group['students'])
             ->firstWhere('student_id', $studentId);
@@ -62,6 +64,7 @@ class EducationPaymentMonitoringService
         $educationSnapshot = AcceptedPaymentCalculator::educationSnapshot(
             $snapshots['payments'],
             $educationInvoicesById->all(),
+            $snapshots['invoices']->pluck('Invoice_ID')->all(),
         );
         $acceptedByInvoice = $this->invoiceService->acceptedPaymentTotalsByInvoice(
             $snapshots['payments'],
@@ -95,6 +98,7 @@ class EducationPaymentMonitoringService
                     'status' => $status,
                     'status_label' => IndonesianPresentation::paymentStatus($status),
                     'verified_at' => $payment['Verified_At'] ?? null,
+                    'created_at' => $payment['Created_At'] ?? null,
                     'notes' => trim((string) ($payment['Notes'] ?? '')) ?: '-',
                     'invoice_id' => $invoiceId !== '' ? $invoiceId : null,
                     'invoice_amount' => $invoice['Amount'] ?? null,
@@ -107,9 +111,14 @@ class EducationPaymentMonitoringService
             ->sortByDesc(fn ($payment) => implode('|', [
                 $payment['payment_date'] ?? '',
                 $payment['verified_at'] ?? '',
+                $payment['created_at'] ?? '',
                 $payment['payment_id'],
             ]))
             ->values();
+
+        $student['verified_payment_count'] = $history
+            ->filter(fn ($payment) => PaymentStatus::verified($payment['status'] ?? null))
+            ->count();
 
         return ['student' => $student, 'history' => $history];
     }
@@ -126,8 +135,9 @@ class EducationPaymentMonitoringService
         ];
     }
 
-    private function buildFromSnapshots(array $snapshots, array $filters = []): array
+    private function buildFromSnapshots(array $snapshots, array $filters = [], bool $includeHistorical = false): array
     {
+        $allClasses = $snapshots['classes']->keyBy(fn ($class) => trim((string) ($class['Class_ID'] ?? '')));
         $activeClasses = $snapshots['classes']
             ->filter(fn ($class) => SheetValue::isActive((array) $class))
             ->filter(fn ($class) => trim((string) ($class['Class_ID'] ?? '')) !== '')
@@ -137,12 +147,12 @@ class EducationPaymentMonitoringService
         $batchesById = $snapshots['batches']->keyBy('Batch_ID');
 
         $operationalStudents = $snapshots['students']
-            ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student))
-            ->filter(function ($student) use ($activeClasses) {
+            ->filter(fn ($student) => $includeHistorical || SheetValue::isOperationalStudent((array) $student))
+            ->filter(function ($student) use ($activeClasses, $includeHistorical) {
                 $studentId = trim((string) ($student['Student_ID'] ?? ''));
                 $classId = trim((string) ($student['Class_ID'] ?? ''));
 
-                return $studentId !== '' && $classId !== '' && $activeClasses->has($classId);
+                return $studentId !== '' && ($includeHistorical || ($classId !== '' && $activeClasses->has($classId)));
             })
             ->unique(fn ($student) => trim((string) $student['Student_ID']))
             ->values();
@@ -151,18 +161,27 @@ class EducationPaymentMonitoringService
         $educationSnapshot = AcceptedPaymentCalculator::educationSnapshot(
             $snapshots['payments'],
             $educationInvoicesById->all(),
+            $snapshots['invoices']->pluck('Invoice_ID')->all(),
         );
 
+        $studentIds = $snapshots['students']->map(fn ($student) => trim((string) ($student['Student_ID'] ?? '')))->all();
+        foreach (array_keys($educationSnapshot['totals_by_student']) as $ownerId) {
+            if (! in_array((string) $ownerId, $studentIds, true)) {
+                throw new FinancialIntegrityException("Student_ID #{$ownerId} pada pembayaran pendidikan tidak ditemukan.");
+            }
+        }
+
         $rows = $operationalStudents->map(function ($student) use (
-            $activeClasses,
+
+            $allClasses,
             $programsById,
             $batchesById,
             $snapshots,
             $educationSnapshot,
         ) {
             $studentId = trim((string) $student['Student_ID']);
-            $classId = trim((string) $student['Class_ID']);
-            $class = (array) $activeClasses->get($classId);
+            $classId = trim((string) ($student['Class_ID'] ?? ''));
+            $class = (array) $allClasses->get($classId);
             $program = (array) $programsById->get($student['Program_ID'] ?? '');
             $batch = (array) $batchesById->get($student['Batch_ID'] ?? '');
             $educationFee = $this->invoiceService->getStudentTuitionFee(
@@ -180,7 +199,7 @@ class EducationPaymentMonitoringService
                 'student_number' => $student['Student_Number'] ?? $student['NIS'] ?? '-',
                 'student_name' => $student['Full_Name'] ?? $student['Name'] ?? $studentId,
                 'class_id' => $classId,
-                'class_name' => $class['Class_Name'] ?? $class['Class_Code'] ?? $classId,
+                'class_name' => $class['Class_Name'] ?? $class['Class_Code'] ?? ($classId ?: '-'),
                 'program_name' => $program['Program_Name'] ?? '-',
                 'batch_name' => $batch['Batch_Name'] ?? '-',
                 'education_fee' => (float) $educationFee,
@@ -251,21 +270,26 @@ class EducationPaymentMonitoringService
 
     private function educationInvoicesById(Collection $invoices): Collection
     {
-        return $invoices
-            ->filter(function ($invoice) {
-                $invoice = (array) $invoice;
-                $invoiceType = strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT')));
-                $status = strtolower(trim((string) ($invoice['Status'] ?? '')));
+        $unique = [];
+        foreach ($invoices as $invoice) {
+            $invoice = (array) $invoice;
+            $id = trim((string) ($invoice['Invoice_ID'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            $invoice['Invoice_ID'] = $id;
+            $invoice['Student_ID'] = trim((string) ($invoice['Student_ID'] ?? ''));
+            if (isset($unique[$id]) && $unique[$id] !== $invoice) {
+                throw new FinancialIntegrityException("Invoice_ID #{$id} duplikat dengan data berbeda.");
+            }
+            $unique[$id] = $invoice;
+        }
 
-                return trim((string) ($invoice['Invoice_ID'] ?? '')) !== ''
-                    && trim((string) ($invoice['Student_ID'] ?? '')) !== ''
-                    && SheetValue::isActive($invoice)
-                    && $invoiceType === 'STUDENT'
-                    && in_array($status, ['waiting payment', 'partial paid', 'paid', 'overdue'], true)
-                    && $this->invoiceService->isEducationInvoice($invoice);
-            })
-            ->unique(fn ($invoice) => trim((string) $invoice['Invoice_ID']))
-            ->keyBy(fn ($invoice) => trim((string) $invoice['Invoice_ID']));
+        // Lifecycle controls collection of new money, never erases verified
+        // cash history. Keep cancelled/inactive/replaced invoice evidence.
+        return collect($unique)->filter(fn ($invoice) => strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT'))) === 'STUDENT'
+            && $this->invoiceService->isEducationInvoice($invoice)
+        );
     }
 
     private function summaryStatus(float $educationFee, float $paid): string

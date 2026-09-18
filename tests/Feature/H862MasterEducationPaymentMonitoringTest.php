@@ -80,7 +80,7 @@ class H862MasterEducationPaymentMonitoringTest extends TestCase
         );
     }
 
-    public function test_only_verified_payments_for_official_education_invoices_are_counted(): void
+    public function test_verified_education_payments_survive_invoice_lifecycle_and_exclude_medical(): void
     {
         $service = $this->service(
             students: [$this->student('STU-1', 'Budi', 'CLS-A')],
@@ -105,8 +105,8 @@ class H862MasterEducationPaymentMonitoringTest extends TestCase
 
         $detail = $service->detail('STU-1');
 
-        $this->assertSame(1_500.0, $detail['student']['paid']);
-        $this->assertSame(['PAY-EDU'], $detail['history']->pluck('payment_id')->all());
+        $this->assertSame(2_800.0, $detail['student']['paid']);
+        $this->assertSame(['PAY-DRAFT', 'PAY-EDU', 'PAY-INACTIVE'], $detail['history']->pluck('payment_id')->sort()->values()->all());
         $this->assertSame('Tagihan dari Master', $detail['history']->first()['source_label']);
     }
 

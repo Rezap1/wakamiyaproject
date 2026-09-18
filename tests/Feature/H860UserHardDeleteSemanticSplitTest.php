@@ -3,15 +3,28 @@
 namespace Tests\Feature;
 
 use App\Interfaces\GoogleSheets\AlumniRepositoryInterface;
+use App\Interfaces\GoogleSheets\ApprovalHistoryRepositoryInterface;
+use App\Interfaces\GoogleSheets\ApprovalRepositoryInterface;
+use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\AssignmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
+use App\Interfaces\GoogleSheets\AuditLogRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
 use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
+use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
+use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
 use App\Providers\GoogleSheetsUserProvider;
 use App\Services\Academic\PlacementService;
 use App\Services\Core\BatchService;
@@ -19,7 +32,9 @@ use App\Services\Core\ClassService;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\ProgramService;
 use App\Services\Core\StudentService;
+use App\Services\Core\SystemSettingService;
 use App\Services\Core\UserService;
+use App\Services\Finance\EducationPaymentMonitoringService;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Hash;
 use Mockery;
@@ -28,9 +43,13 @@ use Tests\TestCase;
 class H860UserHardDeleteSemanticSplitTest extends TestCase
 {
     private H860UserRepository $users;
+
     private H860StudentRepository $students;
+
     private H860NotificationRepository $notifications;
+
     private H860RoleRepository $roles;
+
     private $eventService;
 
     protected function setUp(): void
@@ -129,6 +148,37 @@ class H860UserHardDeleteSemanticSplitTest extends TestCase
         $this->assertSame([], $this->notifications->deletedIds);
     }
 
+    public function test_h863_cumulative_education_payment_survives_actual_account_deletion(): void
+    {
+        foreach ([ProgramRepositoryInterface::class, BatchRepositoryInterface::class] as $interface) {
+            $this->mock($interface)->shouldReceive('fetchAll')->andReturn(collect());
+        }
+        $this->mock(ClassRepositoryInterface::class)->shouldReceive('fetchAll')->andReturn(collect([
+            ['Class_ID' => 'CLASS-H860', 'Class_Name' => 'Class H860', 'Is_Active' => 'TRUE'],
+        ]));
+        $this->mock(InvoiceRepositoryInterface::class)->shouldReceive('getAll')->andReturn(collect());
+        $this->mock(PaymentRepositoryInterface::class)
+            ->shouldReceive('getAll')->andReturn(collect([
+                ['Payment_ID' => 'PAY-H863', 'Student_ID' => 'STD-STUDENT-H860', 'Invoice_ID' => '',
+                    'Amount_Paid' => 2_500_000, 'Status' => 'Verified', 'Payment_Type' => 'STUDENT_SELF_SERVICE'],
+            ]));
+        $this->mock(SystemSettingService::class)->shouldIgnoreMissing()
+            ->shouldReceive('getDefaultTuitionFee')->andReturn(7_500_000);
+        $monitoring = app(EducationPaymentMonitoringService::class);
+        $before = $monitoring->detail('STD-STUDENT-H860');
+
+        $this->actingAs($this->adminUser());
+        $this->delete(route('users.destroy', 'USR-STUDENT-H860'))
+            ->assertRedirect(route('users.index'))->assertSessionHas('success');
+
+        $this->assertNull($this->users->findById('USR-STUDENT-H860'));
+        $after = $monitoring->detail('STD-STUDENT-H860');
+        $this->assertSame(2_500_000.0, $after['student']['paid']);
+        $this->assertSame($before['student'], $after['student']);
+        $this->assertSame($before['history']->all(), $after['history']->all());
+        $this->assertSame(0, $this->students->deleteCalls);
+    }
+
     public function test_self_delete_and_last_privileged_account_are_rejected(): void
     {
         $this->actingAs($this->adminUser());
@@ -210,20 +260,20 @@ class H860UserHardDeleteSemanticSplitTest extends TestCase
     private function bindPreservedHistoryRepositories(): void
     {
         foreach ([
-            \App\Interfaces\GoogleSheets\AttendanceRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\PaymentRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\TransactionRepositoryInterface::class,
+            AttendanceRepositoryInterface::class,
+            AttendanceRequestRepositoryInterface::class,
+            PaymentRepositoryInterface::class,
+            TransactionRepositoryInterface::class,
             AlumniRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\DocumentRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\AssignmentRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\AssessmentRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\AuditLogRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\ApprovalRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\ApprovalHistoryRepositoryInterface::class,
-            \App\Interfaces\GoogleSheets\WorkflowRepositoryInterface::class,
+            DocumentRepositoryInterface::class,
+            ClassEnrollmentRepositoryInterface::class,
+            ScheduleRepositoryInterface::class,
+            AssignmentRepositoryInterface::class,
+            AssessmentRepositoryInterface::class,
+            AuditLogRepositoryInterface::class,
+            ApprovalRepositoryInterface::class,
+            ApprovalHistoryRepositoryInterface::class,
+            WorkflowRepositoryInterface::class,
         ] as $interface) {
             $repository = Mockery::mock($interface);
             foreach (['fetchAll', 'getAll', 'delete', 'hardDelete', 'update', 'softDelete'] as $operation) {
@@ -308,18 +358,59 @@ class H860UserHardDeleteSemanticSplitTest extends TestCase
 class H860UserRepository implements UserRepositoryInterface
 {
     public int $deleteCalls = 0;
+
     public int $updateCalls = 0;
 
     public function __construct(public array $rows = []) {}
-    public function fetchAll() { return collect(array_values($this->rows)); }
-    public function findById(string $id) { return $this->find('User_ID', $id); }
-    public function findByEmail(string $email) { return $this->find('Email', $email); }
-    public function findByUsername(string $username) { return $this->find('Username', $username); }
-    public function create(array $data) { $this->rows[] = $data; return true; }
-    public function generateNewId(string $prefix, int $padding = 6): string { return $prefix.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT); }
-    public function softDelete(string $id) { return $this->update($id, ['Is_Active' => 'FALSE']); }
-    public function update(string $id, array $data) { $this->updateCalls++; return false; }
-    public function delete(string $id) { return $this->hardDelete($id); }
+
+    public function fetchAll()
+    {
+        return collect(array_values($this->rows));
+    }
+
+    public function findById(string $id)
+    {
+        return $this->find('User_ID', $id);
+    }
+
+    public function findByEmail(string $email)
+    {
+        return $this->find('Email', $email);
+    }
+
+    public function findByUsername(string $username)
+    {
+        return $this->find('Username', $username);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+
+        return true;
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT);
+    }
+
+    public function softDelete(string $id)
+    {
+        return $this->update($id, ['Is_Active' => 'FALSE']);
+    }
+
+    public function update(string $id, array $data)
+    {
+        $this->updateCalls++;
+
+        return false;
+    }
+
+    public function delete(string $id)
+    {
+        return $this->hardDelete($id);
+    }
 
     public function hardDelete(string $id)
     {
@@ -328,9 +419,11 @@ class H860UserRepository implements UserRepositoryInterface
             if (strcasecmp((string) ($row['User_ID'] ?? ''), $id) === 0) {
                 unset($this->rows[$index]);
                 $this->rows = array_values($this->rows);
+
                 return true;
             }
         }
+
         return false;
     }
 
@@ -341,6 +434,7 @@ class H860UserRepository implements UserRepositoryInterface
                 return $row;
             }
         }
+
         return null;
     }
 }
@@ -348,19 +442,61 @@ class H860UserRepository implements UserRepositoryInterface
 class H860StudentRepository implements StudentRepositoryInterface
 {
     public int $fetchCalls = 0;
+
     public int $deleteCalls = 0;
+
     public int $clearCacheCalls = 0;
 
     public function __construct(public array $rows = []) {}
-    public function fetchAll() { $this->fetchCalls++; return collect(array_values($this->rows)); }
-    public function findById(string $id) { return collect($this->rows)->first(fn ($row) => strcasecmp((string) ($row['Student_ID'] ?? ''), $id) === 0); }
-    public function findByStudentNumber(string $number) { return collect($this->rows)->firstWhere('Student_Number', $number); }
-    public function findByNationalId(string $nationalId) { return collect($this->rows)->firstWhere('National_ID', $nationalId); }
-    public function generateNewId(string $prefix, int $padding = 6): string { return $prefix.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT); }
-    public function create(array $data) { $this->rows[] = $data; return true; }
-    public function update(string $id, array $data) { return false; }
-    public function softDelete(string $id) { return false; }
-    public function clearCache() { $this->clearCacheCalls++; }
+
+    public function fetchAll()
+    {
+        $this->fetchCalls++;
+
+        return collect(array_values($this->rows));
+    }
+
+    public function findById(string $id)
+    {
+        return collect($this->rows)->first(fn ($row) => strcasecmp((string) ($row['Student_ID'] ?? ''), $id) === 0);
+    }
+
+    public function findByStudentNumber(string $number)
+    {
+        return collect($this->rows)->firstWhere('Student_Number', $number);
+    }
+
+    public function findByNationalId(string $nationalId)
+    {
+        return collect($this->rows)->firstWhere('National_ID', $nationalId);
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+
+        return true;
+    }
+
+    public function update(string $id, array $data)
+    {
+        return false;
+    }
+
+    public function softDelete(string $id)
+    {
+        return false;
+    }
+
+    public function clearCache()
+    {
+        $this->clearCacheCalls++;
+    }
 
     public function delete(string $id)
     {
@@ -369,9 +505,11 @@ class H860StudentRepository implements StudentRepositoryInterface
             if (strcasecmp((string) ($row['Student_ID'] ?? ''), $id) === 0) {
                 unset($this->rows[$index]);
                 $this->rows = array_values($this->rows);
+
                 return true;
             }
         }
+
         return false;
     }
 }
@@ -379,16 +517,47 @@ class H860StudentRepository implements StudentRepositoryInterface
 class H860NotificationRepository implements NotificationRepositoryInterface
 {
     public int $fetchCalls = 0;
+
     public array $deletedIds = [];
+
     public array $rowCountsAtDelete = [];
 
     public function __construct(public array $rows = []) {}
-    public function fetchAll() { $this->fetchCalls++; return collect(array_values($this->rows)); }
-    public function getAll() { return $this->fetchAll(); }
-    public function getById($id) { return collect($this->rows)->firstWhere('Notification_ID', $id); }
-    public function create(array $data) { $this->rows[] = $data; return true; }
-    public function update($id, array $data) { return false; }
-    public function delete($id) { return $this->hardDelete($id); }
+
+    public function fetchAll()
+    {
+        $this->fetchCalls++;
+
+        return collect(array_values($this->rows));
+    }
+
+    public function getAll()
+    {
+        return $this->fetchAll();
+    }
+
+    public function getById($id)
+    {
+        return collect($this->rows)->firstWhere('Notification_ID', $id);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+
+        return true;
+    }
+
+    public function update($id, array $data)
+    {
+        return false;
+    }
+
+    public function delete($id)
+    {
+        return $this->hardDelete($id);
+    }
+
     public function clearCache() {}
 
     public function hardDelete($id)
@@ -399,9 +568,11 @@ class H860NotificationRepository implements NotificationRepositoryInterface
                 $this->deletedIds[] = $id;
                 unset($this->rows[$index]);
                 $this->rows = array_values($this->rows);
+
                 return true;
             }
         }
+
         return false;
     }
 }
@@ -409,8 +580,26 @@ class H860NotificationRepository implements NotificationRepositoryInterface
 class H860RoleRepository implements RoleRepositoryInterface
 {
     public function __construct(public array $rows = []) {}
-    public function fetchAll() { return collect($this->rows); }
-    public function findById(string $id) { return collect($this->rows)->firstWhere('Role_ID', $id); }
-    public function create(array $data) { $this->rows[] = $data; return true; }
-    public function update(string $id, array $data) { return false; }
+
+    public function fetchAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function findById(string $id)
+    {
+        return collect($this->rows)->firstWhere('Role_ID', $id);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+
+        return true;
+    }
+
+    public function update(string $id, array $data)
+    {
+        return false;
+    }
 }

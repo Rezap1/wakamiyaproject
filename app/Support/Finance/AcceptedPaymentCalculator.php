@@ -137,25 +137,43 @@ final class AcceptedPaymentCalculator
      * @param  array<string, array>  $educationInvoicesById
      * @return array{totals_by_student: array<string, float>, payments: array<int, array>}
      */
-    public static function educationSnapshot(iterable $payments, array $educationInvoicesById): array
+    public static function educationSnapshot(iterable $payments, array $educationInvoicesById, ?array $knownInvoiceIds = null): array
     {
         $totalsInCents = [];
         $educationPayments = [];
         $seenPaymentIds = [];
+        $knownInvoices = $knownInvoiceIds === null ? null : array_fill_keys(array_map(fn ($id) => trim((string) $id), $knownInvoiceIds), true);
 
         foreach ($payments as $payment) {
             $payment = (array) $payment;
-            if (strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
-                continue;
+            $paymentId = strtoupper(trim((string) ($payment['Payment_ID'] ?? '')));
+            if ($paymentId === '') {
+                throw new FinancialIntegrityException('Payment_ID kosong; identitas pembayaran tidak dapat dibuktikan.');
             }
-
-            $paymentId = trim((string) ($payment['Payment_ID'] ?? ''));
-            if ($paymentId !== '' && isset($seenPaymentIds[$paymentId])) {
-                continue;
-            }
-
             $invoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
             $studentId = trim((string) ($payment['Student_ID'] ?? ''));
+            $status = PaymentStatus::canonical($payment['Status'] ?? null);
+            $active = strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) !== 'FALSE';
+            $identity = [$studentId, $invoiceId, (string) ($payment['Amount_Paid'] ?? ''), $status, $active,
+                strtoupper(trim((string) ($payment['Payment_Type'] ?? '')))];
+            if (isset($seenPaymentIds[$paymentId])) {
+                if ($seenPaymentIds[$paymentId] !== $identity) {
+                    throw new FinancialIntegrityException("Payment_ID #{$paymentId} duplikat dengan data berbeda.");
+                }
+
+                continue;
+            }
+            $seenPaymentIds[$paymentId] = $identity;
+            if (! $active) {
+                if ($status === 'Verified') {
+                    throw new FinancialIntegrityException("Payment VERIFIED #{$paymentId} tidak aktif; audit histori diperlukan.");
+                }
+
+                continue;
+            }
+            if ($status === 'Verified' && $invoiceId !== '' && $knownInvoices !== null && ! isset($knownInvoices[$invoiceId])) {
+                throw new FinancialIntegrityException("Invoice #{$invoiceId} untuk payment VERIFIED #{$paymentId} tidak ditemukan.");
+            }
             $source = null;
 
             if ($invoiceId === '') {
@@ -167,8 +185,11 @@ final class AcceptedPaymentCalculator
                 // optional Payment_Type is present, accept only its canonical
                 // self-service value.
                 $paymentType = strtoupper(str_replace(' ', '_', trim((string) ($payment['Payment_Type'] ?? ''))));
-                if ($studentId === '' || ! in_array($paymentType, ['', 'STUDENT_SELF_SERVICE'], true)) {
+                if (! in_array($paymentType, ['', 'STUDENT_SELF_SERVICE'], true)) {
                     continue;
+                }
+                if ($studentId === '') {
+                    throw new FinancialIntegrityException("Student_ID payment #{$paymentId} kosong.");
                 }
                 $source = self::EDUCATION_SOURCE_SELF_SERVICE;
             } elseif (isset($educationInvoicesById[$invoiceId])) {
@@ -184,16 +205,15 @@ final class AcceptedPaymentCalculator
             if ($source === null) {
                 continue;
             }
-            if ($paymentId !== '') {
-                $seenPaymentIds[$paymentId] = true;
-            }
-
+            $payment['Payment_ID'] = $paymentId;
+            $payment['Student_ID'] = $studentId;
+            $payment['Invoice_ID'] = $invoiceId;
             $payment['Education_Source'] = $source;
             $educationPayments[] = $payment;
 
-            if (PaymentStatus::verified($payment['Status'] ?? null)) {
+            if ($status === 'Verified') {
                 $totalsInCents[$studentId] = ($totalsInCents[$studentId] ?? 0)
-                    + Money::cents($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran pendidikan');
+                    + Money::cents($payment['Amount_Paid'] ?? null, "Nominal payment #{$paymentId}", false);
             }
         }
 

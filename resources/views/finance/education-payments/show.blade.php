@@ -17,7 +17,7 @@
 <div class="min-w-0 space-y-6">
     <x-page-header
         title="Detail Pembayaran Pendidikan"
-        description="Riwayat pembayaran pendidikan siswa dari sumber payment canonical."
+        description="Riwayat pembayaran dan verifikasi biaya pendidikan siswa."
         :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Pembayaran Pendidikan' => route('finance.education-payments.index'), 'Detail' => '#']"
     />
 
@@ -38,13 +38,14 @@
                 <div><p class="text-xs font-bold uppercase tracking-wider text-sky-600">Ringkasan Biaya Pendidikan</p><p class="mt-1 text-sm text-slate-500">Status keseluruhan, terpisah dari status setiap invoice.</p></div>
                 <span class="rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 {{ $statusClasses[$student['status']] }}">{{ $student['status_label'] }}</span>
             </div>
-            <dl class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <dl class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-xl bg-slate-50 p-4"><dt class="text-xs font-bold text-slate-500">Biaya Pendidikan</dt><dd class="mt-2 break-words text-lg font-black text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
                 <div class="rounded-xl bg-emerald-50 p-4"><dt class="text-xs font-bold text-emerald-700">Total Sudah Dibayar</dt><dd class="mt-2 break-words text-lg font-black text-emerald-800">{{ $rupiah($student['paid']) }}</dd></div>
                 <div class="rounded-xl bg-rose-50 p-4"><dt class="text-xs font-bold text-rose-700">Sisa</dt><dd class="mt-2 break-words text-lg font-black text-rose-800">{{ $rupiah($student['remaining']) }}</dd></div>
+                <div class="rounded-xl bg-sky-50 p-4"><dt class="text-xs font-bold text-sky-700">Jumlah Pembayaran Terverifikasi</dt><dd class="mt-2 break-words text-lg font-black text-sky-800">{{ $student['verified_payment_count'] }} kali</dd></div>
             </dl>
             @if($student['excess'] > 0)
-                <p class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">Kelebihan pembayaran terverifikasi: {{ $rupiah($student['excess']) }}</p>
+                <p class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
             @endif
         </div>
     </section>
@@ -70,7 +71,7 @@
                     </dl>
                 </article>
             @empty
-                <div class="p-8"><x-empty-state icon="cash" title="Belum ada riwayat pembayaran pendidikan" message="Pembayaran akan muncul setelah dikirim melalui Bayar Mandiri atau tagihan pendidikan." /></div>
+                <div class="p-8"><x-empty-state icon="cash" title="Belum ada riwayat pembayaran Biaya Pendidikan." message="Pembayaran akan muncul setelah dikirim melalui Bayar Mandiri atau tagihan pendidikan." /></div>
             @endforelse
         </div>
 
@@ -81,7 +82,7 @@
                     @forelse($history as $payment)
                         <tr class="align-top hover:bg-slate-50"><td class="px-4 py-4 font-semibold text-slate-700">{{ $date($payment['payment_date']) }}</td><td class="px-4 py-4 font-bold text-slate-900">{{ $payment['source_label'] }}</td><td class="px-4 py-4 text-slate-700">{{ $payment['method_label'] }}</td><td class="px-4 py-4 text-right font-black text-slate-900">{{ $rupiah($payment['amount']) }}</td><td class="px-4 py-4"><p class="font-bold text-slate-800">{{ $payment['status_label'] }}</p><p class="mt-2 text-[11px] font-bold uppercase text-slate-400">Tanggal Verifikasi</p><p class="mt-1 text-xs text-slate-500">{{ $dateTime($payment['verified_at']) }}</p></td><td class="px-4 py-4"><p class="break-all font-semibold text-slate-800">{{ $payment['invoice_id'] ?? '-' }}</p><p class="mt-2 text-[11px] font-bold uppercase text-slate-400">Nominal Invoice</p><p class="mt-1 text-xs text-slate-500">{{ $payment['invoice_id'] ? $rupiah($payment['invoice_amount']) : '-' }}</p><p class="mt-2 text-[11px] font-bold uppercase text-slate-400">Status Invoice</p><p class="mt-1 text-xs text-slate-500">{{ $payment['invoice_status_label'] }}</p></td><td class="px-4 py-4"><p class="break-all font-semibold text-slate-700">{{ $payment['payment_id'] }}</p><p class="mt-1 break-all text-xs text-slate-500">{{ $payment['reference'] }}</p><p class="mt-2 text-[11px] font-bold uppercase text-slate-400">Catatan</p><p class="mt-1 break-words text-xs text-slate-500">{{ $payment['notes'] }}</p></td></tr>
                     @empty
-                        <tr><td colspan="7" class="p-8"><x-empty-state icon="cash" title="Belum ada riwayat pembayaran pendidikan" message="Pembayaran akan muncul setelah dikirim melalui Bayar Mandiri atau tagihan pendidikan." /></td></tr>
+                        <tr><td colspan="7" class="p-8"><x-empty-state icon="cash" title="Belum ada riwayat pembayaran Biaya Pendidikan." message="Pembayaran akan muncul setelah dikirim melalui Bayar Mandiri atau tagihan pendidikan." /></td></tr>
                     @endforelse
                 </tbody>
             </table>

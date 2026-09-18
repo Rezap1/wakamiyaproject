@@ -93,6 +93,9 @@
                             <div class="min-w-0"><dt class="text-slate-500">Sudah Dibayar</dt><dd class="mt-1 break-words font-extrabold text-emerald-700">{{ $rupiah($student['paid']) }}</dd></div>
                             <div class="min-w-0"><dt class="text-slate-500">Sisa</dt><dd class="mt-1 break-words font-extrabold text-rose-700">{{ $rupiah($student['remaining']) }}</dd></div>
                         </dl>
+                        @if($student['excess'] > 0)
+                            <p class="rounded-xl bg-sky-50 p-3 text-xs font-bold text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
+                        @endif
                         <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-sky-700 hover:text-sky-900">Lihat Detail</a>
                     </article>
                 @endforeach
@@ -118,7 +121,12 @@
                                     <p class="mt-1 text-xs text-slate-500">{{ $student['student_number'] }}</p>
                                 </td>
                                 <td class="px-4 py-4 text-right font-bold text-slate-800">{{ $rupiah($student['education_fee']) }}</td>
-                                <td class="px-4 py-4 text-right font-bold text-emerald-700">{{ $rupiah($student['paid']) }}</td>
+                                <td class="px-4 py-4 text-right font-bold text-emerald-700">
+                                    {{ $rupiah($student['paid']) }}
+                                    @if($student['excess'] > 0)
+                                        <p class="mt-2 text-xs text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-4 text-right font-bold text-rose-700">{{ $rupiah($student['remaining']) }}</td>
                                 <td class="px-4 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ring-1 {{ $badgeClasses[$student['status']] }}">{{ $student['status_label'] }}</span></td>
                                 <td class="px-6 py-4 text-right">
