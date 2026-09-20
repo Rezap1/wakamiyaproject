@@ -2,33 +2,47 @@
 
 namespace App\Services\Finance;
 
-use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
-use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Exceptions\FinancialIntegrityException;
+use App\Helpers\PublicVerificationUrl;
 use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
+use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Services\Core\EnterpriseEventService;
+use App\Services\Core\RoleService;
+use App\Services\Core\SystemSettingService;
+use App\Support\ActorIdentity;
+use App\Support\Finance\AcceptedPaymentCalculator;
+use App\Support\Finance\Money;
+use App\Support\Finance\PaymentStatus;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Exception;
-use App\Support\Finance\Money;
-use App\Support\Finance\PaymentStatus;
-use App\Support\Finance\AcceptedPaymentCalculator;
-use App\Support\Reporting\HumanReadableResolver;
-use App\Exceptions\FinancialIntegrityException;
-use App\Exceptions\DuplicatePrimaryKeyException;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class PaymentService
 {
     protected $paymentRepository;
+
     protected $invoiceRepository;
+
     protected $studentRepository;
+
     protected $companyRepository;
+
     protected $accountRepository;
+
     protected $transactionRepository;
+
     protected $enterpriseEvent;
+
     protected $transactionService;
 
     public function __construct(
@@ -51,11 +65,11 @@ class PaymentService
         $this->transactionService = $transactionService;
     }
 
-    public function getAll() 
-    { 
+    public function getAll()
+    {
         $payments = collect($this->paymentRepository->getAll())->where('Is_Active', '!=', 'FALSE')->values();
         $user = auth()->user();
-        
+
         // Resolve the role case-insensitively; RoleMiddleware normalizes role names
         // from the SSOT, while legacy user rows may still contain mixed casing.
         if ($user && $this->authenticatedRoleName($user) === 'STUDENT') {
@@ -63,33 +77,35 @@ class PaymentService
             if ($student) {
                 return $payments->where('Student_ID', $student['Student_ID'])->values();
             }
+
             return collect();
         }
-        
+
         return $payments;
     }
 
-    public function getById($id) { 
-        return $this->paymentRepository->getById($id); 
+    public function getById($id)
+    {
+        return $this->paymentRepository->getById($id);
     }
 
     public function getPaymentReceiptData(string $paymentId, bool $allowPublicVerification = false): array
     {
         $documentData = $this->getPaymentDocumentState($paymentId, $allowPublicVerification);
         // Public Verification URL
-        $verificationUrl = \App\Helpers\PublicVerificationUrl::make('payments.verify-receipt-public', $paymentId);
+        $verificationUrl = PublicVerificationUrl::make('payments.verify-receipt-public', $paymentId);
 
         // QR Code SVG
         $qrCodeSvg = null;
         if (class_exists('\SimpleSoftwareIO\QrCode\Facades\QrCode')) {
             try {
-                $qrCodeSvg = \SimpleSoftwareIO\QrCode\Facades\QrCode::size(90)->margin(1)->generate($verificationUrl);
-            } catch (\Exception $e) {
+                $qrCodeSvg = QrCode::size(90)->margin(1)->generate($verificationUrl);
+            } catch (Exception $e) {
                 $qrCodeSvg = null;
             }
         }
 
-        $systemSettingService = app(\App\Services\Core\SystemSettingService::class);
+        $systemSettingService = app(SystemSettingService::class);
         $companyProfile = $systemSettingService->getCompanyProfile();
 
         return [
@@ -98,7 +114,7 @@ class PaymentService
             'bank' => $companyProfile['bank'],
             'document' => $companyProfile['document'],
             'verificationUrl' => $verificationUrl,
-            'qrCodeSvg' => $qrCodeSvg
+            'qrCodeSvg' => $qrCodeSvg,
         ] + $documentData;
     }
 
@@ -111,22 +127,22 @@ class PaymentService
     {
         $payments = collect($this->documentRows($this->paymentRepository, 'getAllFresh', 'getAll'));
         $payment = $payments->firstWhere('Payment_ID', $paymentId);
-        if (!$payment || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+        if (! $payment || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
             abort(404, 'Pembayaran tidak ditemukan.');
         }
         $students = collect($this->documentRows($this->studentRepository, 'fetchAllFresh', 'fetchAll'));
         $user = auth()->user();
-        if (!$allowPublicVerification) {
+        if (! $allowPublicVerification) {
             $role = $user ? $this->authenticatedRoleName($user) : '';
             if ($role === 'STUDENT') {
                 $student = $students->firstWhere('User_ID', $user->User_ID);
-                abort_unless($student && !empty($student['Student_ID']) && ($payment['Student_ID'] ?? '') === $student['Student_ID'], 403, 'Akses dokumen pembayaran ditolak.');
+                abort_unless($student && ! empty($student['Student_ID']) && ($payment['Student_ID'] ?? '') === $student['Student_ID'], 403, 'Akses dokumen pembayaran ditolak.');
             } else {
                 abort_unless(in_array($role, ['MASTER', 'ADMINISTRATOR', 'FINANCE'], true), 403, 'Akses dokumen pembayaran ditolak.');
             }
         }
-        $classRepository = app()->bound(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)
-            ? app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)
+        $classRepository = app()->bound(ClassRepositoryInterface::class)
+            ? app(ClassRepositoryInterface::class)
             : null;
 
         $snapshot = [
@@ -138,6 +154,7 @@ class PaymentService
             'accounts' => $this->documentRows($this->accountRepository, 'fetchAllFresh', 'fetchAll'),
             'transactions' => $this->documentRows($this->transactionRepository, 'fetchAllFresh', 'fetchAll'),
         ];
+
         return app(FinanceDocumentPresenter::class)->payment($payment, $snapshot);
     }
 
@@ -150,15 +167,15 @@ class PaymentService
     {
         $prefix = $type === 'COMPANY' ? 'RCT-CORP' : 'RCT-STU';
         $year = date('Y');
-        
-        $counterKey = 'receipt_counter_' . $prefix . '_' . $year;
+
+        $counterKey = 'receipt_counter_'.$prefix.'_'.$year;
         $lockKey = 'receipt_write_lock';
 
         return Cache::lock($lockKey, 120)->block(15, function () use ($prefix, $year, $counterKey) {
             $rows = method_exists($this->paymentRepository, 'getAllFresh')
                 ? $this->paymentRepository->getAllFresh()
                 : $this->paymentRepository->getAll();
-            $pattern = '/^' . preg_quote($prefix, '/') . '-' . $year . '-(\d+)$/i';
+            $pattern = '/^'.preg_quote($prefix, '/').'-'.$year.'-(\d+)$/i';
             $maxPersisted = 0;
             $existing = [];
             foreach ($rows as $item) {
@@ -175,8 +192,9 @@ class PaymentService
             $candidate = max($maxPersisted, $cached) + 1;
             for ($attempt = 1; $attempt <= 5; $attempt++) {
                 $receipt = sprintf('%s-%s-%06d', $prefix, $year, $candidate);
-                if (!isset($existing[strtolower($receipt)])) {
+                if (! isset($existing[strtolower($receipt)])) {
                     Cache::forever($counterKey, $candidate);
+
                     return $receipt;
                 }
                 $candidate++;
@@ -191,8 +209,8 @@ class PaymentService
             ? $this->accountRepository->fetchAllFresh()
             : $this->accountRepository->fetchAll();
         $allAccounts = collect($accountRows)->where('Is_Active', '!=', 'FALSE');
-        
-        if (!empty($explicitAccountId)) {
+
+        if (! empty($explicitAccountId)) {
             $matched = $allAccounts->firstWhere('Account_ID', $explicitAccountId) ?? $allAccounts->firstWhere('Account_Code', $explicitAccountId);
             if ($matched) {
                 return $matched['Account_Code'] ?? $matched['Account_ID'];
@@ -200,8 +218,9 @@ class PaymentService
             throw new FinancialIntegrityException("Account {$explicitAccountId} tidak ditemukan atau tidak aktif.");
         }
 
-        $assets = $allAccounts->filter(function($acc) {
+        $assets = $allAccounts->filter(function ($acc) {
             $cat = strtoupper($acc['Account_Category'] ?? '');
+
             return str_contains($cat, 'ASSET') || str_contains($cat, 'ASET');
         });
 
@@ -209,26 +228,33 @@ class PaymentService
         $configuredId = $methodUpper === 'CASH' || $methodUpper === 'TUNAI'
             ? config('finance.accounts.cash_id')
             : config('finance.accounts.bank_id');
-        if (!empty($configuredId)) {
+        if (! empty($configuredId)) {
             $configured = $assets->first(fn ($acc) => ($acc['Account_ID'] ?? '') === $configuredId || ($acc['Account_Code'] ?? '') === $configuredId);
-            if (!$configured) {
+            if (! $configured) {
                 throw new FinancialIntegrityException('Akun pembayaran terkonfigurasi tidak ditemukan atau tidak aktif.');
             }
+
             return $configured['Account_Code'] ?? $configured['Account_ID'];
         }
 
         if ($methodUpper === 'CASH' || $methodUpper === 'TUNAI') {
-            $cashCandidates = $assets->filter(function($acc) {
+            $cashCandidates = $assets->filter(function ($acc) {
                 $name = strtolower($acc['Account_Name'] ?? '');
+
                 return str_contains($name, 'kas') || str_contains($name, 'cash');
             });
-            if ($cashCandidates->count() === 1) return $cashCandidates->first()['Account_Code'] ?? $cashCandidates->first()['Account_ID'];
+            if ($cashCandidates->count() === 1) {
+                return $cashCandidates->first()['Account_Code'] ?? $cashCandidates->first()['Account_ID'];
+            }
         } else {
-            $bankCandidates = $assets->filter(function($acc) {
+            $bankCandidates = $assets->filter(function ($acc) {
                 $name = strtolower($acc['Account_Name'] ?? '');
+
                 return str_contains($name, 'bank') || str_contains($name, 'bsi');
             });
-            if ($bankCandidates->count() === 1) return $bankCandidates->first()['Account_Code'] ?? $bankCandidates->first()['Account_ID'];
+            if ($bankCandidates->count() === 1) {
+                return $bankCandidates->first()['Account_Code'] ?? $bankCandidates->first()['Account_ID'];
+            }
         }
 
         // Payment_Method is reporting metadata; WMS does not connect to a
@@ -238,6 +264,7 @@ class PaymentService
         // exist, because automatic selection would then be ambiguous.
         if ($assets->count() === 1) {
             $fallback = $assets->first();
+
             return $fallback['Account_Code'] ?? $fallback['Account_ID'];
         }
 
@@ -252,21 +279,21 @@ class PaymentService
     public function submitPayment(array $data)
     {
         $invoiceId = trim((string) ($data['Invoice_ID'] ?? ''));
-        $selfService = !empty($data['Self_Service'])
+        $selfService = ! empty($data['Self_Service'])
             || strcasecmp(trim((string) ($data['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0;
-        $actorId = \App\Support\ActorIdentity::required();
+        $actorId = ActorIdentity::required();
         $actorRole = $this->authenticatedRoleName(auth()->user());
-        if (!$selfService && !in_array($actorRole, ['STUDENT', 'FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
-            throw new \Illuminate\Auth\Access\AuthorizationException('Role pengguna tidak diizinkan membuat pembayaran.');
+        if (! $selfService && ! in_array($actorRole, ['STUDENT', 'FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
+            throw new AuthorizationException('Role pengguna tidak diizinkan membuat pembayaran.');
         }
         if ($selfService) {
             $user = auth()->user();
-            if (!$user || $this->authenticatedRoleName($user) !== 'STUDENT') {
-                throw new \Illuminate\Auth\Access\AuthorizationException('Self-service payment hanya dapat dibuat oleh siswa.');
+            if (! $user || $this->authenticatedRoleName($user) !== 'STUDENT') {
+                throw new AuthorizationException('Self-service payment hanya dapat dibuat oleh siswa.');
             }
             $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$student || empty($student['Student_ID'])) {
-                throw new \Illuminate\Auth\Access\AuthorizationException('Identitas siswa tidak dapat dipastikan.');
+            if (! $student || empty($student['Student_ID'])) {
+                throw new AuthorizationException('Identitas siswa tidak dapat dipastikan.');
             }
             foreach (['Payment_ID', 'Transaction_ID', 'Receipt_Number', 'Reference_Type', 'Reference_ID', 'Account_ID', 'Invoice_ID'] as $forbidden) {
                 if (array_key_exists($forbidden, $data) && trim((string) ($data[$forbidden] ?? '')) !== '') {
@@ -282,7 +309,7 @@ class PaymentService
             $data['Payment_Type'] = 'STUDENT_SELF_SERVICE';
             $data['Invoice_ID'] = '';
         } elseif ($invoiceId === '') {
-            throw new Exception("ID Tagihan (Invoice_ID) wajib diisi.");
+            throw new Exception('ID Tagihan (Invoice_ID) wajib diisi.');
         }
         $idempotencyKey = trim((string) ($data['Idempotency_Key'] ?? request()->header('Idempotency-Key', '')));
         if ($idempotencyKey === '') {
@@ -291,7 +318,7 @@ class PaymentService
             // older internal callers functional while preventing blank scope.
             $idempotencyKey = (string) Str::uuid();
         }
-        if (!Str::isUuid($idempotencyKey)) {
+        if (! Str::isUuid($idempotencyKey)) {
             throw new FinancialIntegrityException('Idempotency_Key pembayaran harus berupa UUID.');
         }
         $data['Idempotency_Key'] = $idempotencyKey;
@@ -299,11 +326,12 @@ class PaymentService
         unset($fingerprintData['Idempotency_Key']);
         unset($fingerprintData['Created_At'], $fingerprintData['Payment_ID']);
         $fingerprint = hash('sha256', json_encode($fingerprintData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $idempotencyCacheKey = 'payment_idempotency_' . hash('sha256', $actorId . ':' . $idempotencyKey);
+        $idempotencyCacheKey = 'payment_idempotency_'.hash('sha256', $actorId.':'.$idempotencyKey);
 
         $lockKey = $selfService
-            ? 'payment_submit_self_service_' . hash('sha256', $actorId . ':' . $idempotencyKey)
+            ? InvoiceService::educationCapacityLockKey((string) ($data['Student_ID'] ?? ''))
             : "payment_submit_{$invoiceId}";
+
         return Cache::lock($lockKey, 120)->block(15, function () use ($data, $invoiceId, $actorId, $idempotencyCacheKey, $fingerprint, $idempotencyKey, $selfService) {
             // Cache is only an optimisation.  The persisted row is the source
             // of truth, so a stale/poisoned cache entry can never manufacture
@@ -314,16 +342,26 @@ class PaymentService
             $invoiceService = app(InvoiceService::class);
             $preloadedInvoice = null;
             $student = null;
+            if ($selfService) {
+                $studentRows = method_exists($this->studentRepository, 'fetchAllFresh')
+                    ? $this->studentRepository->fetchAllFresh()
+                    : $this->studentRepository->fetchAll();
+                $student = collect($studentRows)->firstWhere('User_ID', auth()->user()->User_ID);
+                if (! $student || trim((string) ($student['Student_ID'] ?? '')) !== trim((string) ($data['Student_ID'] ?? ''))) {
+                    throw new AuthorizationException('Identitas siswa pembayaran mandiri berubah atau tidak dapat dipastikan.');
+                }
+                $data['Student_ID'] = trim((string) $student['Student_ID']);
+            }
             // For a student-linked payment, establish ownership before any
             // payment collection read.  This preserves the IDOR boundary even
             // when the caller has supplied a duplicate idempotency token.
-            if (!$selfService && $this->authenticatedRoleName(auth()->user()) === 'STUDENT') {
+            if (! $selfService && $this->authenticatedRoleName(auth()->user()) === 'STUDENT') {
                 $preloadedInvoice = $this->freshInvoice($invoiceId, $invoiceService);
-                if (!$preloadedInvoice || ($preloadedInvoice['Is_Active'] ?? 'TRUE') === 'FALSE') {
+                if (! $preloadedInvoice || ($preloadedInvoice['Is_Active'] ?? 'TRUE') === 'FALSE') {
                     throw new Exception("Tagihan #{$invoiceId} tidak ditemukan atau sedang tidak aktif.");
                 }
                 $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', auth()->user()->User_ID);
-                if (!$student || ($preloadedInvoice['Student_ID'] ?? '') !== ($student['Student_ID'] ?? '')) {
+                if (! $student || ($preloadedInvoice['Student_ID'] ?? '') !== ($student['Student_ID'] ?? '')) {
                     throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
                 }
             }
@@ -345,147 +383,183 @@ class PaymentService
                         'payment_id' => (string) ($persisted['Payment_ID'] ?? 'UNKNOWN'),
                     ]);
                 }
+
                 return $persisted;
             }
             $invoice = $selfService ? null : ($preloadedInvoice ?? $this->freshInvoice($invoiceId, $invoiceService));
-        if (!$selfService && (!$invoice || ($invoice['Is_Active'] ?? 'TRUE') === 'FALSE')) {
-            throw new Exception("Tagihan #{$invoiceId} tidak ditemukan atau sedang tidak aktif.");
-        }
-
-        // 1. IDOR Ownership Verification for STUDENT role
-        $user = auth()->user();
-        if ($selfService) {
-            // Student identity was resolved above from the authenticated user.
-        } elseif ($user && $this->authenticatedRoleName($user) === 'STUDENT') {
-            $student = $student ?? collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
-            if (!$student || ($invoice['Student_ID'] ?? '') !== $student['Student_ID']) {
-                throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
+            if (! $selfService && (! $invoice || ($invoice['Is_Active'] ?? 'TRUE') === 'FALSE')) {
+                throw new Exception("Tagihan #{$invoiceId} tidak ditemukan atau sedang tidak aktif.");
             }
-            $data['Student_ID'] = $student['Student_ID'];
-        } else {
-            $data['Student_ID'] = $data['Student_ID'] ?? $invoice['Student_ID'] ?? null;
-            $data['Company_ID'] = $data['Company_ID'] ?? $invoice['Company_ID'] ?? null;
-        }
-        if (!$selfService && ($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
-            && !empty($invoice['Student_ID'])
-            && ($data['Student_ID'] ?? '') !== $invoice['Student_ID']) {
-            throw new FinancialIntegrityException("Student {$data['Student_ID']} bukan pemilik invoice {$invoiceId}.");
-        }
-        if (!$selfService && ($invoice['Invoice_Type'] ?? '') === 'COMPANY'
-            && !empty($invoice['Company_ID'])
-            && ($data['Company_ID'] ?? '') !== $invoice['Company_ID']) {
-            throw new FinancialIntegrityException("Company {$data['Company_ID']} tidak cocok dengan invoice {$invoiceId}.");
-        }
 
-        // 2. Invoice State Protection
-        $invoiceStatus = $invoice['Status'] ?? 'Draft';
-        if ($selfService) {
-            $invoiceStatus = 'SELF_SERVICE';
-        }
-        if (strcasecmp($invoiceStatus, 'Draft') === 0) {
-            throw new Exception("Tagihan #{$invoiceId} masih berstatus Draft dan belum diterbitkan.");
-        }
-        if (strcasecmp($invoiceStatus, 'Cancelled') === 0) {
-            throw new Exception("Tagihan #{$invoiceId} telah Dibatalkan dan tidak dapat menerima pembayaran.");
-        }
-        if (strcasecmp($invoiceStatus, 'Paid') === 0) {
-            throw new Exception("Tagihan #{$invoiceId} telah Lunas (PAID) dan tidak dapat menerima pembayaran lagi.");
-        }
-
-        // 3. Overpayment Guard
-        $remainingAmount = $selfService ? null : (method_exists($this->paymentRepository, 'getAllFresh')
-            ? max(0.0, round(
-                Money::value($invoice['Amount'] ?? 0, 'Invoice Amount')
-                - AcceptedPaymentCalculator::forInvoice($allPayments, $invoiceId),
-                Money::SCALE
-            ))
-            : $invoiceService->calculateRemainingAmount($invoice));
-        if (!$selfService && $remainingAmount <= 0) {
-            throw new Exception("Tagihan #{$invoiceId} tidak memiliki sisa piutang (Sisa Rp 0).");
-        }
-
-        $amountPaid = Money::value($data['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
-        if (!$selfService && $amountPaid > $remainingAmount) {
-            throw new Exception("Nominal pembayaran (Rp " . number_format($amountPaid, 0, ',', '.') . ") melebihi sisa tagihan (Rp " . number_format($remainingAmount, 0, ',', '.') . ").");
-        }
-
-        // Assign default receipt & metadata
-        $data['Payment_Type'] = $data['Payment_Type'] ?? ($selfService ? 'STUDENT_SELF_SERVICE' : ($invoice['Invoice_Type'] ?? 'STUDENT'));
-        $data['Payment_Method'] = $data['Payment_Method'] ?? 'TRANSFER';
-        $data['Idempotency_Fingerprint'] = $fingerprint;
-        if (empty($data['Payment_ID'])) {
-            if (empty($data['Receipt_Number'])) {
-                $data['Receipt_Number'] = $this->generateReceiptNumber($data['Payment_Type']);
+            $amountPaid = Money::value($data['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
+            if ($selfService) {
+                $educationState = $invoiceService->getStudentEducationPaymentState(
+                    (string) $data['Student_ID'],
+                    null,
+                    $allPayments,
+                    (array) $student,
+                );
+                if ((float) $educationState['tuition_fee'] <= 0) {
+                    throw new FinancialIntegrityException('Biaya Pendidikan canonical belum ditetapkan. Pembayaran mandiri tidak dapat dibuat.');
+                }
+                if (Money::cents($educationState['verified_paid']) >= Money::cents($educationState['tuition_fee'])) {
+                    throw new FinancialIntegrityException('Biaya Pendidikan Anda sudah lunas.');
+                }
+                if (Money::cents($amountPaid) > Money::cents($educationState['remaining_payable'])) {
+                    throw new FinancialIntegrityException(
+                        'Nominal pembayaran melebihi sisa Biaya Pendidikan sebesar Rp'
+                        .number_format((float) $educationState['remaining_payable'], 0, ',', '.').'.'
+                    );
+                }
+            } elseif (($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
+                && ! empty($invoice['Student_ID'])
+                && $invoiceService->isEducationInvoice($invoice)) {
+                $educationState = $invoiceService->getStudentEducationPaymentState(
+                    (string) $invoice['Student_ID'],
+                    null,
+                    $allPayments,
+                );
+                if (Money::cents($amountPaid) > Money::cents($educationState['remaining_payable'])) {
+                    throw new FinancialIntegrityException(
+                        'Nominal pembayaran melebihi sisa Biaya Pendidikan sebesar Rp'
+                        .number_format((float) $educationState['remaining_payable'], 0, ',', '.').'.'
+                    );
+                }
             }
-            // Deterministic business identity survives cache loss and makes an
-            // HTTP retry converge on the same primary key.
-            $data['Payment_ID'] = 'PAY-' . strtoupper(substr(hash('sha256', $actorId . ':' . $idempotencyKey), 0, 24));
-        } elseif (empty($data['Receipt_Number'])) {
-            $data['Receipt_Number'] = $data['Payment_ID'];
-        }
-        
-        $data['Status'] = 'Waiting Verification';
-        $data['Payment_Date'] = $data['Payment_Date'] ?? $data['Transfer_Date'] ?? now()->toDateString();
-        try {
-            $data['Payment_Date'] = \Carbon\Carbon::parse($data['Payment_Date'])->timezone(config('app.timezone', 'Asia/Jakarta'))->toDateString();
-        } catch (\Throwable $e) {
-            throw new FinancialIntegrityException('Tanggal pembayaran tidak valid.');
-        }
-        $data['Amount_Paid'] = $amountPaid;
-        $data['Created_At'] = now()->toDateTimeString();
-        $data['Created_By'] = $actorId;
-        $data['Updated_By'] = $actorId;
-        $data['Is_Active'] = 'TRUE';
 
-        Cache::put($idempotencyCacheKey, ['status' => 'processing', 'payment_id' => $data['Payment_ID'], 'fingerprint' => $fingerprint], now()->addHours(2));
+            // 1. IDOR Ownership Verification for STUDENT role
+            $user = auth()->user();
+            if ($selfService) {
+                // Student identity was resolved above from the authenticated user.
+            } elseif ($user && $this->authenticatedRoleName($user) === 'STUDENT') {
+                $student = $student ?? collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
+                if (! $student || ($invoice['Student_ID'] ?? '') !== $student['Student_ID']) {
+                    throw new Exception("Akses Ditolak: Tagihan #{$invoiceId} bukan milik akun Anda.");
+                }
+                $data['Student_ID'] = $student['Student_ID'];
+            } else {
+                $data['Student_ID'] = $data['Student_ID'] ?? $invoice['Student_ID'] ?? null;
+                $data['Company_ID'] = $data['Company_ID'] ?? $invoice['Company_ID'] ?? null;
+            }
+            if (! $selfService && ($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
+                && ! empty($invoice['Student_ID'])
+                && ($data['Student_ID'] ?? '') !== $invoice['Student_ID']) {
+                throw new FinancialIntegrityException("Student {$data['Student_ID']} bukan pemilik invoice {$invoiceId}.");
+            }
+            if (! $selfService && ($invoice['Invoice_Type'] ?? '') === 'COMPANY'
+                && ! empty($invoice['Company_ID'])
+                && ($data['Company_ID'] ?? '') !== $invoice['Company_ID']) {
+                throw new FinancialIntegrityException("Company {$data['Company_ID']} tidak cocok dengan invoice {$invoiceId}.");
+            }
 
-        try {
-            $res = $this->paymentRepository->create($data);
-        } catch (DuplicatePrimaryKeyException $e) {
+            // 2. Invoice State Protection
+            $invoiceStatus = $invoice['Status'] ?? 'Draft';
+            if ($selfService) {
+                $invoiceStatus = 'SELF_SERVICE';
+            }
+            if (strcasecmp($invoiceStatus, 'Draft') === 0) {
+                throw new Exception("Tagihan #{$invoiceId} masih berstatus Draft dan belum diterbitkan.");
+            }
+            if (strcasecmp($invoiceStatus, 'Cancelled') === 0) {
+                throw new Exception("Tagihan #{$invoiceId} telah Dibatalkan dan tidak dapat menerima pembayaran.");
+            }
+            if (strcasecmp($invoiceStatus, 'Paid') === 0) {
+                throw new Exception("Tagihan #{$invoiceId} telah Lunas (PAID) dan tidak dapat menerima pembayaran lagi.");
+            }
+
+            // 3. Overpayment Guard
+            $remainingAmount = $selfService ? null : (method_exists($this->paymentRepository, 'getAllFresh')
+                ? max(0.0, round(
+                    Money::value($invoice['Amount'] ?? 0, 'Invoice Amount')
+                    - AcceptedPaymentCalculator::forInvoice($allPayments, $invoiceId),
+                    Money::SCALE
+                ))
+                : $invoiceService->calculateRemainingAmount($invoice));
+            if (! $selfService && $remainingAmount <= 0) {
+                throw new Exception("Tagihan #{$invoiceId} tidak memiliki sisa piutang (Sisa Rp 0).");
+            }
+
+            if (! $selfService && $amountPaid > $remainingAmount) {
+                throw new Exception('Nominal pembayaran (Rp '.number_format($amountPaid, 0, ',', '.').') melebihi sisa tagihan (Rp '.number_format($remainingAmount, 0, ',', '.').').');
+            }
+
+            // Assign default receipt & metadata
+            $data['Payment_Type'] = $data['Payment_Type'] ?? ($selfService ? 'STUDENT_SELF_SERVICE' : ($invoice['Invoice_Type'] ?? 'STUDENT'));
+            $data['Payment_Method'] = $data['Payment_Method'] ?? 'TRANSFER';
+            $data['Idempotency_Fingerprint'] = $fingerprint;
+            if (empty($data['Payment_ID'])) {
+                if (empty($data['Receipt_Number'])) {
+                    $data['Receipt_Number'] = $this->generateReceiptNumber($data['Payment_Type']);
+                }
+                // Deterministic business identity survives cache loss and makes an
+                // HTTP retry converge on the same primary key.
+                $data['Payment_ID'] = 'PAY-'.strtoupper(substr(hash('sha256', $actorId.':'.$idempotencyKey), 0, 24));
+            } elseif (empty($data['Receipt_Number'])) {
+                $data['Receipt_Number'] = $data['Payment_ID'];
+            }
+
+            $data['Status'] = 'Waiting Verification';
+            $data['Payment_Date'] = $data['Payment_Date'] ?? $data['Transfer_Date'] ?? now()->toDateString();
+            try {
+                $data['Payment_Date'] = Carbon::parse($data['Payment_Date'])->timezone(config('app.timezone', 'Asia/Jakarta'))->toDateString();
+            } catch (\Throwable $e) {
+                throw new FinancialIntegrityException('Tanggal pembayaran tidak valid.');
+            }
+            $data['Amount_Paid'] = $amountPaid;
+            $data['Created_At'] = now()->toDateTimeString();
+            $data['Created_By'] = $actorId;
+            $data['Updated_By'] = $actorId;
+            $data['Is_Active'] = 'TRUE';
+
+            Cache::put($idempotencyCacheKey, ['status' => 'processing', 'payment_id' => $data['Payment_ID'], 'fingerprint' => $fingerprint], now()->addHours(2));
+
+            try {
+                $res = $this->paymentRepository->create($data);
+            } catch (DuplicatePrimaryKeyException $e) {
+                $persisted = $this->freshPayment($data['Payment_ID']);
+                if (! $persisted || ! $this->samePaymentBusinessPayload($persisted, $data)) {
+                    throw new FinancialIntegrityException('Payment_ID idempotent bertabrakan dengan payload pembayaran berbeda.', 0, $e);
+                }
+                $res = $persisted;
+            }
+            if ($res === false || $res === null) {
+                throw new Exception("Gagal menyimpan pembayaran {$data['Payment_ID']}.");
+            }
+            // Never report success from the append response alone.  A fresh read
+            // must prove the identity fields survived persistence (especially
+            // Payment_Type for self-service and both idempotency columns).
             $persisted = $this->freshPayment($data['Payment_ID']);
-            if (!$persisted || !$this->samePaymentBusinessPayload($persisted, $data)) {
-                throw new FinancialIntegrityException('Payment_ID idempotent bertabrakan dengan payload pembayaran berbeda.', 0, $e);
+            if (! $persisted) {
+                throw new FinancialIntegrityException("Payment {$data['Payment_ID']} tersimpan tetapi belum dapat dibaca ulang secara authoritative.");
             }
-            $res = $persisted;
-        }
-        if ($res === false || $res === null) {
-            throw new Exception("Gagal menyimpan pembayaran {$data['Payment_ID']}.");
-        }
-        // Never report success from the append response alone.  A fresh read
-        // must prove the identity fields survived persistence (especially
-        // Payment_Type for self-service and both idempotency columns).
-        $persisted = $this->freshPayment($data['Payment_ID']);
-        if (!$persisted) {
-            throw new FinancialIntegrityException("Payment {$data['Payment_ID']} tersimpan tetapi belum dapat dibaca ulang secara authoritative.");
-        }
-        $this->assertPersistedIdempotency($persisted, $idempotencyKey, $fingerprint, $actorId, $data);
-        if ($selfService && !$this->isSelfServicePayment($persisted)) {
-            throw new FinancialIntegrityException('Payment_Type self-service tidak bertahan setelah persistence.');
-        }
-        $resultData = $persisted;
-        $this->paymentRepository->clearCache();
-        
-        if (!empty($data['Student_ID'])) {
-            Cache::forget("student_billing_{$data['Student_ID']}");
-        }
-        Cache::forget('finance_dashboard');
-        Cache::forget('dashboard_finance');
+            $this->assertPersistedIdempotency($persisted, $idempotencyKey, $fingerprint, $actorId, $data);
+            if ($selfService && ! $this->isSelfServicePayment($persisted)) {
+                throw new FinancialIntegrityException('Payment_Type self-service tidak bertahan setelah persistence.');
+            }
+            $resultData = $persisted;
+            $this->paymentRepository->clearCache();
 
-        try {
-            $this->enterpriseEvent->dispatch(
-                'FINANCE', 'CREATE', 'PAYMENT', $data['Payment_ID'], $actorId,
-                ['FINANCE'], !empty($data['Student_ID']) ? [$data['Student_ID']] : [],
-                array_intersect_key($data, array_flip(['Invoice_ID', 'Student_ID', 'Amount_Paid', 'Payment_Date', 'Payment_Type']))
-            );
-        } catch (\Throwable $e) {
-            Log::error('Payment side effect dispatch failed after primary persistence', [
-                'payment_id' => $data['Payment_ID'], 'invoice_id' => $invoiceId,
-                'exception' => get_class($e),
-            ]);
-        }
+            if (! empty($data['Student_ID'])) {
+                Cache::forget("student_billing_{$data['Student_ID']}");
+            }
+            Cache::forget('finance_dashboard');
+            Cache::forget('dashboard_finance');
 
-        Cache::put($idempotencyCacheKey, ['status' => 'completed', 'payment_id' => $data['Payment_ID'], 'fingerprint' => $fingerprint, 'data' => $resultData], now()->addHours(24));
-        
+            try {
+                $this->enterpriseEvent->dispatch(
+                    'FINANCE', 'CREATE', 'PAYMENT', $data['Payment_ID'], $actorId,
+                    ['FINANCE'], ! empty($data['Student_ID']) ? [$data['Student_ID']] : [],
+                    array_intersect_key($data, array_flip(['Invoice_ID', 'Student_ID', 'Amount_Paid', 'Payment_Date', 'Payment_Type']))
+                );
+            } catch (\Throwable $e) {
+                Log::error('Payment side effect dispatch failed after primary persistence', [
+                    'payment_id' => $data['Payment_ID'], 'invoice_id' => $invoiceId,
+                    'exception' => get_class($e),
+                ]);
+            }
+
+            Cache::put($idempotencyCacheKey, ['status' => 'completed', 'payment_id' => $data['Payment_ID'], 'fingerprint' => $fingerprint, 'data' => $resultData], now()->addHours(24));
+
             return $resultData;
         });
     }
@@ -494,36 +568,43 @@ class PaymentService
     {
         $this->assertFinanceMutationActor();
         $initialPayment = $this->freshPayment($paymentId);
-        if (!$initialPayment) {
+        if (! $initialPayment) {
             throw new Exception("Payment #{$paymentId} tidak ditemukan.");
         }
 
         $originalInvoiceId = trim((string) ($initialPayment['Invoice_ID'] ?? ''));
         $requestedInvoiceId = trim((string) $targetInvoiceId);
         $selfService = $this->isSelfServicePayment($initialPayment);
-        if ($originalInvoiceId === '' && !$selfService) {
+        if ($originalInvoiceId === '' && ! $selfService) {
             throw new FinancialIntegrityException("Pembayaran #{$paymentId} tidak memiliki Invoice_ID yang valid.");
         }
         if ($originalInvoiceId !== '' && $requestedInvoiceId !== '' && $originalInvoiceId !== $requestedInvoiceId) {
             throw new FinancialIntegrityException("Payment #{$paymentId} sudah terkait ke invoice lain dan tidak dapat dipindahkan.");
         }
-        if ($requestedInvoiceId !== '' && !$selfService) {
+        if ($requestedInvoiceId !== '' && ! $selfService) {
             throw new FinancialIntegrityException('Invoice payment biasa tidak dapat direlasikan ulang saat verifikasi.');
         }
 
         $lockInvoiceId = $originalInvoiceId !== '' ? $originalInvoiceId : $requestedInvoiceId;
-        $lockKey = $lockInvoiceId !== '' ? "payment_verify_invoice_{$lockInvoiceId}" : "payment_verify_payment_{$paymentId}";
+        $lockKeys = [];
+        if ($selfService && trim((string) ($initialPayment['Student_ID'] ?? '')) !== '') {
+            $lockKeys[] = InvoiceService::educationCapacityLockKey((string) $initialPayment['Student_ID']);
+        }
+        $lockKeys[] = $lockInvoiceId !== ''
+            ? "payment_verify_invoice_{$lockInvoiceId}"
+            : "payment_verify_payment_{$paymentId}";
+        $lockKeys = array_values(array_unique($lockKeys));
 
         try {
-            return Cache::lock($lockKey, 120)->block(15, function () use ($paymentId, $status, $notes, $explicitAccountId, $requestedInvoiceId, $initialPayment) {
-                if (!in_array($status, ['Verified', 'Rejected', 'Need Revision'], true)) {
+            $operation = function () use ($paymentId, $status, $notes, $explicitAccountId, $requestedInvoiceId, $initialPayment) {
+                if (! in_array($status, ['Verified', 'Rejected', 'Need Revision'], true)) {
                     throw new Exception('Status verifikasi pembayaran tidak valid.');
                 }
 
                 $payment = method_exists($this->paymentRepository, 'getByIdFresh')
                     ? $this->freshPayment($paymentId)
                     : $initialPayment;
-                if (!$payment) {
+                if (! $payment) {
                     throw new Exception("Payment #{$paymentId} tidak ditemukan.");
                 }
 
@@ -536,11 +617,11 @@ class PaymentService
                     };
                     throw new FinancialIntegrityException($message);
                 }
-                if (!in_array($currentStatus, ['Waiting Verification', 'Need Revision'], true)) {
+                if (! in_array($currentStatus, ['Waiting Verification', 'Need Revision'], true)) {
                     throw new FinancialIntegrityException("Pembayaran #{$paymentId} tidak dapat diverifikasi dari status {$currentStatus}.");
                 }
 
-                $actorId = \App\Support\ActorIdentity::required();
+                $actorId = ActorIdentity::required();
                 $persistedInvoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
                 if ($persistedInvoiceId !== '' && $requestedInvoiceId !== '' && $persistedInvoiceId !== $requestedInvoiceId) {
                     throw new FinancialIntegrityException("Payment #{$paymentId} berubah relasi invoice saat verifikasi.");
@@ -549,24 +630,32 @@ class PaymentService
 
                 if ($status === 'Verified') {
                     $isSelfService = $this->isSelfServicePayment($payment);
-                    if ($effectiveInvoiceId === '' && !$isSelfService) {
+                    $isEducationPayment = $isSelfService;
+                    if ($effectiveInvoiceId === '' && ! $isSelfService) {
                         throw new Exception("Pembayaran #{$paymentId} tidak memiliki Invoice_ID yang valid.");
                     }
 
                     if ($effectiveInvoiceId === '') {
-                        if ($this->studentHasOpenInvoice((string) ($payment['Student_ID'] ?? ''))) {
-                            throw new FinancialIntegrityException("Pilih invoice aktif milik siswa sebelum memverifikasi Payment #{$paymentId}.");
+                        if ($this->studentHasOpenEducationInvoice((string) ($payment['Student_ID'] ?? ''))) {
+                            throw new FinancialIntegrityException("Pilih invoice Biaya Pendidikan aktif milik siswa sebelum memverifikasi Payment #{$paymentId}.");
                         }
                     } else {
-                        $invoice = $this->freshInvoice($effectiveInvoiceId, app(InvoiceService::class));
-                        if (!$invoice) {
+                        $invoiceService = app(InvoiceService::class);
+                        $invoice = $this->freshInvoice($effectiveInvoiceId, $invoiceService);
+                        if (! $invoice) {
                             throw new Exception("Tagihan #{$effectiveInvoiceId} tidak ditemukan.");
                         }
                         if (($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
-                            && !empty($invoice['Student_ID'])
+                            && ! empty($invoice['Student_ID'])
                             && ($payment['Student_ID'] ?? '') !== $invoice['Student_ID']) {
                             throw new FinancialIntegrityException("Payment #{$paymentId} tidak dimiliki oleh student invoice {$effectiveInvoiceId}.");
                         }
+                        if ($isSelfService && ! $invoiceService->isEducationInvoice($invoice)) {
+                            throw new FinancialIntegrityException('Bayar Mandiri hanya dapat direlasikan ke invoice Biaya Pendidikan.');
+                        }
+                        $isEducationPayment = ($invoice['Invoice_Type'] ?? 'STUDENT') === 'STUDENT'
+                            && ! empty($invoice['Student_ID'])
+                            && $invoiceService->isEducationInvoice($invoice);
 
                         $invoiceStatus = trim((string) ($invoice['Status'] ?? 'Draft'));
                         if (in_array(strtolower($invoiceStatus), ['draft', 'cancelled', 'paid'], true)) {
@@ -585,9 +674,33 @@ class PaymentService
                             throw new Exception(
                                 "Verifikasi pembayaran #{$paymentId} ditolak karena nominal Rp "
                                 .number_format($paymentAmount, 0, ',', '.')
-                                ." melebihi sisa tagihan Rp "
+                                .' melebihi sisa tagihan Rp '
                                 .number_format($remaining, 0, ',', '.')
                                 .'.'
+                            );
+                        }
+                    }
+
+                    if ($isEducationPayment) {
+                        $invoiceService ??= app(InvoiceService::class);
+                        $allFreshPayments ??= method_exists($this->paymentRepository, 'getAllFresh')
+                            ? $this->paymentRepository->getAllFresh()
+                            : $this->paymentRepository->getAll();
+                        $educationState = $invoiceService->getStudentEducationPaymentState(
+                            (string) ($payment['Student_ID'] ?? ''),
+                            null,
+                            $allFreshPayments,
+                            null,
+                            null,
+                            null,
+                            $paymentId,
+                        );
+                        $paymentAmount ??= Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
+                        if ((float) $educationState['tuition_fee'] <= 0
+                            || Money::cents($paymentAmount) > Money::cents($educationState['remaining_verified'])) {
+                            throw new FinancialIntegrityException(
+                                "Verifikasi Payment #{$paymentId} ditolak karena melebihi sisa Biaya Pendidikan Rp"
+                                .number_format((float) $educationState['remaining_verified'], 0, ',', '.').'.'
                             );
                         }
                     }
@@ -606,12 +719,12 @@ class PaymentService
                 }
 
                 $res = $this->paymentRepository->update($paymentId, $data);
-                if (!$res) {
+                if (! $res) {
                     throw new Exception("Gagal menyimpan status pembayaran #{$paymentId}.");
                 }
                 $this->paymentRepository->clearCache();
 
-                if (!empty($payment['Student_ID'])) {
+                if (! empty($payment['Student_ID'])) {
                     Cache::forget("student_billing_{$payment['Student_ID']}");
                 }
                 Cache::forget('finance_dashboard');
@@ -630,12 +743,12 @@ class PaymentService
                                 'Updated_By' => $actorId,
                                 'Updated_At' => now()->toDateTimeString(),
                             ]);
-                            if (!$rolledBack) {
+                            if (! $rolledBack) {
                                 throw new FinancialIntegrityException('Rollback status pembayaran gagal disimpan.');
                             }
                             $this->paymentRepository->clearCache();
                             $persistedRollback = $this->freshPayment($paymentId);
-                            if (!$persistedRollback
+                            if (! $persistedRollback
                                 || PaymentStatus::canonical($persistedRollback['Status'] ?? null) !== $currentStatus
                                 || trim((string) ($persistedRollback['Invoice_ID'] ?? '')) !== $persistedInvoiceId) {
                                 throw new FinancialIntegrityException('Rollback pembayaran tidak dapat dikonfirmasi.');
@@ -660,7 +773,7 @@ class PaymentService
                     try {
                         $this->enterpriseEvent->dispatch(
                             'FINANCE', 'VERIFY', 'PAYMENT', $paymentId, $actorId,
-                            ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
+                            ['STUDENT'], ! empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
                             ['Status' => $status, 'Notes' => $notes, 'Invoice_ID' => $effectiveInvoiceId]
                         );
                     } catch (\Throwable $e) {
@@ -672,7 +785,7 @@ class PaymentService
                     try {
                         $this->enterpriseEvent->dispatch(
                             'FINANCE', 'UPDATE', 'PAYMENT', $paymentId, $actorId,
-                            ['STUDENT'], !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
+                            ['STUDENT'], ! empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
                             ['Status' => $status, 'Notes' => $notes]
                         );
                     } catch (\Throwable $e) {
@@ -683,7 +796,13 @@ class PaymentService
                 }
 
                 return $res;
-            });
+            };
+            foreach (array_reverse($lockKeys) as $lockKey) {
+                $next = $operation;
+                $operation = fn () => Cache::lock($lockKey, 120)->block(15, $next);
+            }
+
+            return $operation();
         } catch (\Throwable $e) {
             Log::warning('Payment verification lock or critical section failed safely', [
                 'payment_id' => $paymentId,
@@ -705,10 +824,10 @@ class PaymentService
 
         return Cache::lock("payment_link_invoice_{$invoiceId}", 120)->block(15, function () use ($paymentId, $invoiceId) {
             $payment = $this->freshPayment($paymentId);
-            if (!$payment || !PaymentStatus::verified($payment['Status'] ?? null)) {
+            if (! $payment || ! PaymentStatus::verified($payment['Status'] ?? null)) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} harus berstatus Verified.");
             }
-            if (!$this->isSelfServicePayment($payment)) {
+            if (! $this->isSelfServicePayment($payment)) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} bukan pembayaran mandiri.");
             }
 
@@ -721,11 +840,14 @@ class PaymentService
             }
 
             $invoice = $this->freshInvoice($invoiceId, app(InvoiceService::class));
-            if (!$invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            if (! $invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
                 throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak ditemukan atau tidak aktif.");
             }
             if (($invoice['Student_ID'] ?? '') !== ($payment['Student_ID'] ?? '')) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} bukan milik siswa pada Invoice #{$invoiceId}.");
+            }
+            if (! app(InvoiceService::class)->isEducationInvoice($invoice)) {
+                throw new FinancialIntegrityException('Bayar Mandiri hanya dapat direlasikan ke invoice Biaya Pendidikan.');
             }
             $invoiceStatus = strtolower(trim((string) ($invoice['Status'] ?? 'draft')));
             if (in_array($invoiceStatus, ['draft', 'cancelled', 'paid'], true)) {
@@ -742,9 +864,9 @@ class PaymentService
                 throw new FinancialIntegrityException("Payment #{$paymentId} melebihi sisa Invoice #{$invoiceId}.");
             }
 
-            if (!$this->paymentRepository->update($paymentId, [
+            if (! $this->paymentRepository->update($paymentId, [
                 'Invoice_ID' => $invoiceId,
-                'Updated_By' => \App\Support\ActorIdentity::required(),
+                'Updated_By' => ActorIdentity::required(),
                 'Updated_At' => now()->toDateTimeString(),
             ])) {
                 throw new FinancialIntegrityException("Relasi Invoice untuk Payment #{$paymentId} gagal disimpan.");
@@ -756,11 +878,11 @@ class PaymentService
             } catch (\Throwable $exception) {
                 $rolledBack = $this->paymentRepository->update($paymentId, [
                     'Invoice_ID' => '',
-                    'Updated_By' => \App\Support\ActorIdentity::required(),
+                    'Updated_By' => ActorIdentity::required(),
                     'Updated_At' => now()->toDateTimeString(),
                 ]);
                 $this->paymentRepository->clearCache();
-                if (!$rolledBack || trim((string) (($this->freshPayment($paymentId)['Invoice_ID'] ?? ''))) !== '') {
+                if (! $rolledBack || trim((string) (($this->freshPayment($paymentId)['Invoice_ID'] ?? ''))) !== '') {
                     throw new FinancialIntegrityException("Rollback relasi Invoice untuk Payment #{$paymentId} gagal.", 0, $exception);
                 }
                 throw $exception;
@@ -779,6 +901,7 @@ class PaymentService
         $all = method_exists($this->paymentRepository, 'getAllFresh')
             ? $this->paymentRepository->getAllFresh()
             : $this->paymentRepository->getAll();
+
         return AcceptedPaymentCalculator::forInvoice($all, $invoiceId);
     }
 
@@ -787,6 +910,7 @@ class PaymentService
         $payment = method_exists($this->paymentRepository, 'getByIdFresh')
             ? $this->paymentRepository->getByIdFresh($paymentId)
             : $this->paymentRepository->getById($paymentId);
+
         return $payment ? (array) $payment : null;
     }
 
@@ -794,8 +918,10 @@ class PaymentService
     {
         if (method_exists($this->invoiceRepository, 'findByIdFresh')) {
             $invoice = $this->invoiceRepository->findByIdFresh($invoiceId);
+
             return $invoice ? (array) $invoice : null;
         }
+
         return ($invoice = $invoiceService->getById($invoiceId)) ? (array) $invoice : null;
     }
 
@@ -806,13 +932,14 @@ class PaymentService
             // include optional fields such as Payment_Date or Method.  Only
             // compare values the caller actually supplied; the persisted
             // fingerprint remains the complete canonical payload check.
-            if (!array_key_exists($field, $candidate)) {
+            if (! array_key_exists($field, $candidate)) {
                 continue;
             }
             if (trim((string) ($persisted[$field] ?? '')) !== trim((string) ($candidate[$field] ?? ''))) {
                 return false;
             }
         }
+
         return Money::equal($persisted['Amount_Paid'] ?? null, $candidate['Amount_Paid'] ?? null);
     }
 
@@ -823,19 +950,19 @@ class PaymentService
         if ($storedKey === '' || $storedFingerprint === '') {
             throw new FinancialIntegrityException('Payment tersimpan tidak memiliki identitas idempotency durable.');
         }
-        if ($storedKey !== $idempotencyKey || !hash_equals($storedFingerprint, $fingerprint)) {
+        if ($storedKey !== $idempotencyKey || ! hash_equals($storedFingerprint, $fingerprint)) {
             throw new FinancialIntegrityException('Idempotency key sudah digunakan untuk payload pembayaran yang berbeda.');
         }
         $createdBy = trim((string) ($persisted['Created_By'] ?? ''));
-        if ($createdBy === '' || !hash_equals($createdBy, $actorId)) {
+        if ($createdBy === '' || ! hash_equals($createdBy, $actorId)) {
             throw new FinancialIntegrityException('Idempotency identity pembayaran dimiliki actor lain.');
         }
         $paymentId = trim((string) ($persisted['Payment_ID'] ?? ''));
-        $expectedPaymentId = 'PAY-' . strtoupper(substr(hash('sha256', $actorId . ':' . $idempotencyKey), 0, 24));
-        if ($paymentId === '' || !hash_equals($paymentId, $expectedPaymentId)) {
+        $expectedPaymentId = 'PAY-'.strtoupper(substr(hash('sha256', $actorId.':'.$idempotencyKey), 0, 24));
+        if ($paymentId === '' || ! hash_equals($paymentId, $expectedPaymentId)) {
             throw new FinancialIntegrityException('Payment_ID deterministic tidak konsisten dengan idempotency identity.');
         }
-        if (!$this->samePaymentBusinessPayload($persisted, $candidate)) {
+        if (! $this->samePaymentBusinessPayload($persisted, $candidate)) {
             throw new FinancialIntegrityException('Payment identity tersimpan tidak konsisten dengan payload pembayaran.');
         }
     }
@@ -853,19 +980,19 @@ class PaymentService
 
         try {
             $payment = $this->freshPayment($paymentId);
-            if (!$payment || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            if (! $payment || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
                 throw new FinancialIntegrityException("Payment #{$paymentId} tidak ditemukan atau tidak aktif.");
             }
-            if (!PaymentStatus::verified($payment['Status'] ?? null)) {
+            if (! PaymentStatus::verified($payment['Status'] ?? null)) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} harus berstatus Verified untuk rekonsiliasi ledger.");
             }
             $invoiceId = trim((string) ($payment['Invoice_ID'] ?? ''));
             $selfService = $this->isSelfServicePayment($payment);
-            if ($invoiceId === '' && !$selfService) {
+            if ($invoiceId === '' && ! $selfService) {
                 throw new FinancialIntegrityException("Payment #{$paymentId} tidak memiliki Invoice_ID yang valid.");
             }
             $invoice = $invoiceId !== '' ? $this->freshInvoice($invoiceId, app(InvoiceService::class)) : null;
-            if ($invoiceId !== '' && (!$invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE')) {
+            if ($invoiceId !== '' && (! $invoice || strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) === 'FALSE')) {
                 throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak ditemukan atau tidak aktif.");
             }
             $amount = Money::value($payment['Amount_Paid'] ?? null, 'Nominal pembayaran', false);
@@ -881,21 +1008,19 @@ class PaymentService
             )) {
                 throw new FinancialIntegrityException("Deterministic ledger identity untuk Payment #{$paymentId} telah digunakan oleh reference lain.");
             }
-            $conflictingReference = $transactions->first(fn ($row) =>
-                trim((string) ($row['Reference_ID'] ?? '')) === $paymentId
-                && !in_array(strtolower(trim((string) ($row['Reference_Type'] ?? ''))), ['payment', 'paymentreversal'], true)
+            $conflictingReference = $transactions->first(fn ($row) => trim((string) ($row['Reference_ID'] ?? '')) === $paymentId
+                && ! in_array(strtolower(trim((string) ($row['Reference_Type'] ?? ''))), ['payment', 'paymentreversal'], true)
             );
             if ($conflictingReference) {
                 throw new FinancialIntegrityException("Reference ledger untuk Payment #{$paymentId} tidak konsisten.");
             }
-            $income = $transactions->first(fn ($row) =>
-                strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+            $income = $transactions->first(fn ($row) => strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
                 && strcasecmp(trim((string) ($row['Reference_Type'] ?? '')), 'Payment') === 0
                 && trim((string) ($row['Reference_ID'] ?? '')) === $paymentId
             );
             if ($income) {
                 if (strcasecmp(trim((string) ($income['Type'] ?? '')), 'Income') !== 0
-                    || !Money::equal($income['Amount'] ?? null, $amount)
+                    || ! Money::equal($income['Amount'] ?? null, $amount)
                     || trim((string) ($income['Account_ID'] ?? '')) !== trim((string) $expectedAccount)) {
                     throw new FinancialIntegrityException("Income ledger untuk Payment #{$paymentId} tidak konsisten; rekonsiliasi dihentikan.");
                 }
@@ -920,7 +1045,7 @@ class PaymentService
                 $verified = $this->getVerifiedPaymentTotalForInvoice($invoiceId);
                 $invoiceStatus = Money::cents($verified) >= Money::cents(Money::value($invoice['Amount'] ?? 0, 'Invoice Amount'))
                     ? 'Paid' : 'Partial Paid';
-                if (!$this->invoiceRepository->update($invoiceId, [
+                if (! $this->invoiceRepository->update($invoiceId, [
                     'Status' => $invoiceStatus,
                     'Updated_By' => $actor,
                     'Updated_At' => now()->toDateTimeString(),
@@ -932,6 +1057,7 @@ class PaymentService
             Log::notice('finance.payment_ledger_repair_succeeded', [
                 'payment_id' => $paymentId, 'invoice_id' => $invoiceId, 'actor' => $actor,
             ]);
+
             return $this->freshPayment($paymentId) ?? $payment;
         } catch (\Throwable $e) {
             Log::warning('finance.payment_ledger_repair_failed', [
@@ -946,12 +1072,12 @@ class PaymentService
     {
         $this->assertFinanceMutationActor();
         $payment = $this->freshPayment($paymentId);
-        if (!$payment) {
+        if (! $payment) {
             throw new Exception('Pembayaran tidak ditemukan.');
         }
 
         $state = PaymentStatus::canonical($payment['Status'] ?? null);
-        if (!in_array($state, ['Waiting Verification', 'Need Revision'], true)) {
+        if (! in_array($state, ['Waiting Verification', 'Need Revision'], true)) {
             throw new FinancialIntegrityException("Pembayaran #{$paymentId} berstatus {$payment['Status']} dan tidak dapat dihapus atau dibatalkan.");
         }
 
@@ -959,22 +1085,22 @@ class PaymentService
         // or concurrent verification cannot bypass the state machine.
         $payment = $this->freshPayment($paymentId);
         $state = PaymentStatus::canonical($payment['Status'] ?? null);
-        if (!in_array($state, ['Waiting Verification', 'Need Revision'], true)) {
+        if (! in_array($state, ['Waiting Verification', 'Need Revision'], true)) {
             throw new FinancialIntegrityException("Pembayaran #{$paymentId} berubah status dan tidak dapat dihapus atau dibatalkan.");
         }
 
         $deleted = $this->paymentRepository->update($paymentId, [
             'Status' => 'Cancelled',
             'Is_Active' => 'FALSE',
-            'Updated_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => ActorIdentity::required(),
             'Updated_At' => now()->toDateTimeString(),
         ]);
         if ($deleted === false || $deleted === null) {
             throw new Exception("Gagal menghapus pembayaran #{$paymentId}.");
         }
         $this->paymentRepository->clearCache();
-        
-        if (!empty($payment['Student_ID'])) {
+
+        if (! empty($payment['Student_ID'])) {
             Cache::forget("student_billing_{$payment['Student_ID']}");
         }
         Cache::forget('finance_dashboard');
@@ -983,8 +1109,8 @@ class PaymentService
         try {
             $this->enterpriseEvent->dispatch(
                 'FINANCE', 'UPDATE', 'PAYMENT', $paymentId,
-                \App\Support\ActorIdentity::required(), ['FINANCE'],
-                !empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
+                ActorIdentity::required(), ['FINANCE'],
+                ! empty($payment['Student_ID']) ? [$payment['Student_ID']] : [],
                 ['Status' => 'Cancelled']
             );
         } catch (\Throwable $e) {
@@ -992,7 +1118,7 @@ class PaymentService
                 'payment_id' => $paymentId, 'exception' => get_class($e),
             ]);
         }
-        
+
         return true;
     }
 
@@ -1018,7 +1144,7 @@ class PaymentService
             throw new FinancialIntegrityException('Alasan reversal wajib diisi.');
         }
         $initial = $this->freshPayment($paymentId);
-        if (!$initial) {
+        if (! $initial) {
             throw new FinancialIntegrityException("Payment #{$paymentId} tidak ditemukan.");
         }
         $invoiceId = trim((string) ($initial['Invoice_ID'] ?? ''));
@@ -1028,24 +1154,23 @@ class PaymentService
         try {
             return Cache::lock("payment_verify_{$lockScope}", 120)->block(15, function () use ($paymentId, $reason, $explicitAccountId, $actor) {
                 $payment = $this->freshPayment($paymentId);
-                if (!$payment) {
+                if (! $payment) {
                     throw new FinancialIntegrityException("Payment #{$paymentId} tidak ditemukan.");
                 }
                 $state = PaymentStatus::canonical($payment['Status'] ?? null);
-                if (!in_array($state, ['Verified', 'Reversed'], true)) {
+                if (! in_array($state, ['Verified', 'Reversed'], true)) {
                     throw new FinancialIntegrityException("Payment #{$paymentId} harus berstatus Verified atau Reversed untuk recovery reversal.");
                 }
 
                 $transactions = collect(method_exists($this->transactionRepository, 'fetchAllFresh')
                     ? $this->transactionRepository->fetchAllFresh()
                     : $this->transactionRepository->fetchAll());
-                $original = $transactions->first(fn ($row) =>
-                    strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+                $original = $transactions->first(fn ($row) => strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
                     && strcasecmp(trim((string) ($row['Reference_Type'] ?? '')), 'Payment') === 0
                     && trim((string) ($row['Reference_ID'] ?? '')) === $paymentId
                 );
-                if (!$original || strcasecmp(trim((string) ($original['Type'] ?? '')), 'Income') !== 0
-                    || !Money::equal($original['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
+                if (! $original || strcasecmp(trim((string) ($original['Type'] ?? '')), 'Income') !== 0
+                    || ! Money::equal($original['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
                     || trim((string) ($original['Reference_ID'] ?? '')) !== $paymentId) {
                     throw new FinancialIntegrityException("Income ledger asli untuk payment #{$paymentId} tidak valid.");
                 }
@@ -1063,15 +1188,14 @@ class PaymentService
                     || trim((string) ($idCollision['Reference_ID'] ?? '')) !== $paymentId)) {
                     throw new FinancialIntegrityException("Deterministic reversal identity untuk Payment #{$paymentId} telah digunakan oleh reference lain.");
                 }
-                $reversal = $transactions->first(fn ($row) =>
-                    strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+                $reversal = $transactions->first(fn ($row) => strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
                     && strcasecmp(trim((string) ($row['Reference_Type'] ?? '')), 'PaymentReversal') === 0
                     && trim((string) ($row['Reference_ID'] ?? '')) === $paymentId
                 );
                 if ($reversal) {
                     if (trim((string) ($reversal['Transaction_ID'] ?? '')) !== $deterministicId
                         || strcasecmp(trim((string) ($reversal['Type'] ?? '')), 'Expense') !== 0
-                        || !Money::equal($reversal['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
+                        || ! Money::equal($reversal['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
                         || trim((string) ($reversal['Account_ID'] ?? '')) !== $accountId) {
                         throw new FinancialIntegrityException("Reversal ledger untuk Payment #{$paymentId} tidak konsisten.");
                     }
@@ -1086,7 +1210,7 @@ class PaymentService
                             'Amount' => Money::value($payment['Amount_Paid'] ?? 0, 'Nominal reversal', false),
                             'Reference_Type' => 'PaymentReversal',
                             'Reference_ID' => $paymentId,
-                            'Description' => 'Reversal payment #' . $paymentId . ': ' . $reason,
+                            'Description' => 'Reversal payment #'.$paymentId.': '.$reason,
                             '_domain_reversal' => true,
                         ]);
                     } catch (\Throwable $e) {
@@ -1094,21 +1218,21 @@ class PaymentService
                             ? $this->transactionRepository->fetchAllFresh()
                             : $this->transactionRepository->fetchAll())
                             ->first(fn ($row) => trim((string) ($row['Transaction_ID'] ?? '')) === $deterministicId);
-                        if (!$fresh) {
+                        if (! $fresh) {
                             throw $e;
                         }
                         if (strcasecmp(trim((string) ($fresh['Reference_Type'] ?? '')), 'PaymentReversal') !== 0
                             || trim((string) ($fresh['Reference_ID'] ?? '')) !== $paymentId
                             || strcasecmp(trim((string) ($fresh['Type'] ?? '')), 'Expense') !== 0
-                            || !Money::equal($fresh['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
+                            || ! Money::equal($fresh['Amount'] ?? null, $payment['Amount_Paid'] ?? null)
                             || trim((string) ($fresh['Account_ID'] ?? '')) !== $accountId) {
-                            throw new FinancialIntegrityException("Ambiguous reversal append menghasilkan ledger yang tidak konsisten.", 0, $e);
+                            throw new FinancialIntegrityException('Ambiguous reversal append menghasilkan ledger yang tidak konsisten.', 0, $e);
                         }
                     }
                 }
 
                 if ($state === 'Verified') {
-                    if (!$this->paymentRepository->update($paymentId, [
+                    if (! $this->paymentRepository->update($paymentId, [
                         'Status' => 'Reversed', 'Notes' => $reason,
                         'Updated_By' => $actor, 'Updated_At' => now()->toDateTimeString(),
                     ])) {
@@ -1122,6 +1246,7 @@ class PaymentService
                 }
                 $result = $this->freshPayment($paymentId) ?? array_merge($payment, ['Status' => 'Reversed']);
                 Log::notice('finance.payment_reversal_repair_succeeded', ['payment_id' => $paymentId, 'actor' => $actor]);
+
                 return $result;
             });
         } catch (\Throwable $e) {
@@ -1134,11 +1259,12 @@ class PaymentService
 
     private function assertFinanceMutationActor(): string
     {
-        $actor = \App\Support\ActorIdentity::required();
+        $actor = ActorIdentity::required();
         $role = $this->authenticatedRoleName(auth()->user());
-        if (!in_array($role, ['FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
-            throw new \Illuminate\Auth\Access\AuthorizationException('Role pengguna tidak diizinkan melakukan mutasi keuangan.');
+        if (! in_array($role, ['FINANCE', 'ADMINISTRATOR', 'MASTER'], true)) {
+            throw new AuthorizationException('Role pengguna tidak diizinkan melakukan mutasi keuangan.');
         }
+
         return $actor;
     }
 
@@ -1149,7 +1275,7 @@ class PaymentService
      */
     private function authenticatedRoleName($user): string
     {
-        if (!$user) {
+        if (! $user) {
             return '';
         }
         $role = trim((string) ($user->Role ?? $user->Role_Name ?? ''));
@@ -1161,7 +1287,8 @@ class PaymentService
             return '';
         }
         try {
-            $roleRow = app(\App\Services\Core\RoleService::class)->getRoleById($roleId);
+            $roleRow = app(RoleService::class)->getRoleById($roleId);
+
             return strtoupper(trim((string) ($roleRow['Role_Name'] ?? '')));
         } catch (\Throwable) {
             return '';
@@ -1170,21 +1297,21 @@ class PaymentService
 
     private function paymentLedgerTransactionId(string $paymentId): string
     {
-        return 'TRX-PAY-' . strtoupper(substr(hash('sha256', $paymentId), 0, 20));
+        return 'TRX-PAY-'.strtoupper(substr(hash('sha256', $paymentId), 0, 20));
     }
 
     private function paymentReversalTransactionId(string $paymentId): string
     {
-        return 'TRX-REV-' . strtoupper(substr(hash('sha256', $paymentId), 0, 20));
+        return 'TRX-REV-'.strtoupper(substr(hash('sha256', $paymentId), 0, 20));
     }
 
     private function isSelfServicePayment(array $payment): bool
     {
         return strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0
-            || !empty($payment['Self_Service']);
+            || ! empty($payment['Self_Service']);
     }
 
-    private function studentHasOpenInvoice(string $studentId): bool
+    private function studentHasOpenEducationInvoice(string $studentId): bool
     {
         if ($studentId === '') {
             return false;
@@ -1194,12 +1321,15 @@ class PaymentService
             ? $this->invoiceRepository->getAllFresh()
             : $this->invoiceRepository->getAll();
 
-        return collect($invoices)->contains(function ($invoice) use ($studentId) {
+        $invoiceService = app(InvoiceService::class);
+
+        return collect($invoices)->contains(function ($invoice) use ($studentId, $invoiceService) {
             $status = strtolower(trim((string) ($invoice['Status'] ?? 'draft')));
 
             return ($invoice['Student_ID'] ?? '') === $studentId
                 && strtoupper(trim((string) ($invoice['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
-                && !in_array($status, ['draft', 'cancelled', 'paid'], true);
+                && ! in_array($status, ['draft', 'cancelled', 'paid'], true)
+                && $invoiceService->isEducationInvoice((array) $invoice);
         });
     }
 
@@ -1207,7 +1337,7 @@ class PaymentService
     {
         $invoiceService = app(InvoiceService::class);
         $invoice = $this->freshInvoice($invoiceId, $invoiceService);
-        if (!$invoice) {
+        if (! $invoice) {
             throw new FinancialIntegrityException("Invoice #{$invoiceId} tidak ditemukan saat rekonsiliasi.");
         }
         $verified = $this->getVerifiedPaymentTotalForInvoice($invoiceId);
@@ -1215,9 +1345,9 @@ class PaymentService
         $status = Money::cents($verified) >= Money::cents($amount)
             ? 'Paid'
             : (Money::cents($verified) > 0 ? 'Partial Paid' : 'Waiting Payment');
-        if (!$this->invoiceRepository->update($invoiceId, [
+        if (! $this->invoiceRepository->update($invoiceId, [
             'Status' => $status,
-            'Updated_By' => \App\Support\ActorIdentity::required(),
+            'Updated_By' => ActorIdentity::required(),
             'Updated_At' => now()->toDateTimeString(),
         ])) {
             throw new FinancialIntegrityException("Status invoice #{$invoiceId} gagal direkonsiliasi.");

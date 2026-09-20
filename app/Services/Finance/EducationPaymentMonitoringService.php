@@ -270,26 +270,9 @@ class EducationPaymentMonitoringService
 
     private function educationInvoicesById(Collection $invoices): Collection
     {
-        $unique = [];
-        foreach ($invoices as $invoice) {
-            $invoice = (array) $invoice;
-            $id = trim((string) ($invoice['Invoice_ID'] ?? ''));
-            if ($id === '') {
-                continue;
-            }
-            $invoice['Invoice_ID'] = $id;
-            $invoice['Student_ID'] = trim((string) ($invoice['Student_ID'] ?? ''));
-            if (isset($unique[$id]) && $unique[$id] !== $invoice) {
-                throw new FinancialIntegrityException("Invoice_ID #{$id} duplikat dengan data berbeda.");
-            }
-            $unique[$id] = $invoice;
-        }
-
         // Lifecycle controls collection of new money, never erases verified
         // cash history. Keep cancelled/inactive/replaced invoice evidence.
-        return collect($unique)->filter(fn ($invoice) => strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT'))) === 'STUDENT'
-            && $this->invoiceService->isEducationInvoice($invoice)
-        );
+        return collect($this->invoiceService->educationInvoicesById($invoices));
     }
 
     private function summaryStatus(float $educationFee, float $paid): string

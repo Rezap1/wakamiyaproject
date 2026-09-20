@@ -2,60 +2,71 @@
 
 namespace App\Http\Controllers\Finance;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\Finance\PaymentService;
-use App\Services\Finance\TransactionPresentationService;
-use App\Http\Requests\StorePaymentRequest;
-use App\Http\Requests\UpdatePaymentRequest;
+use App\Helpers\CollectionHelper;
 use App\Helpers\ReportHelper;
 use App\Helpers\StoragePathHelper;
 use App\Helpers\UserResolverHelper;
-use App\Support\Reporting\HumanReadableResolver;
-use App\Support\Presentation\IndonesianPresentation;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StorePaymentRequest;
+use App\Http\Requests\UpdatePaymentRequest;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Finance\InvoiceService;
+use App\Services\Finance\PaymentService;
+use App\Services\Finance\TransactionPresentationService;
 use App\Support\Finance\Money;
+use App\Support\Presentation\IndonesianPresentation;
+use App\Support\Reporting\HumanReadableResolver;
+use App\Traits\Exportable;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class PaymentController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Payment_Date';
 
-    protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
         $payments = $this->paymentService->getAll();
-        
+
         $search = $request->input('search');
-        if (!empty($search)) {
-            $payments = \App\Helpers\CollectionHelper::search($payments, $search, ['Payment_ID', 'Invoice_ID', 'Student_ID', 'Payment_Method']);
+        if (! empty($search)) {
+            $payments = CollectionHelper::search($payments, $search, ['Payment_ID', 'Invoice_ID', 'Student_ID', 'Payment_Method']);
         }
 
         if ($request->filled('date_from') && $request->filled('date_to')) {
-            $dateFrom = \Carbon\Carbon::parse($request->input('date_from'))->startOfDay();
-            $dateTo = \Carbon\Carbon::parse($request->input('date_to'))->endOfDay();
-            
+            $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
+            $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
+
             $payments = $payments->filter(function ($item) use ($dateFrom, $dateTo) {
                 $dateStr = $item['Payment_Date'] ?? $item['Created_At'] ?? null;
                 if ($dateStr) {
-                    $itemDate = \Carbon\Carbon::parse($dateStr);
+                    $itemDate = Carbon::parse($dateStr);
+
                     return $itemDate->between($dateFrom, $dateTo);
                 }
+
                 return false;
             });
         }
 
-        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
+        $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())
             ->keyBy('Student_ID');
-        $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())
+        $companiesById = collect(app(CompanyRepositoryInterface::class)->fetchAll())
             ->keyBy('Company_ID');
-        
+
         return [
             'moduleName' => 'Pembayaran',
             'data' => collect(array_values($payments->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['No. Pembayaran', 'No. Kwitansi', 'Nomor Tagihan', 'Siswa / Pembayar', 'Tanggal', 'Metode', 'Jumlah (Rp)', 'Status'],
-            'mapRow' => function($row) use ($studentsById, $companiesById) {
+            'mapRow' => function ($row) use ($studentsById, $companiesById) {
                 $payerName = HumanReadableResolver::financialParty($row, $studentsById, $companiesById)['name'];
+
                 return [
                     $row['Payment_ID'] ?? '-',
                     $row['Receipt_Number'] ?? '-',
@@ -63,16 +74,17 @@ class PaymentController extends Controller
                     $payerName,
                     IndonesianPresentation::date($row['Payment_Date'] ?? null),
                     IndonesianPresentation::paymentMethod($row['Payment_Method'] ?? null),
-                    'Rp ' . number_format(Money::value($row['Amount_Paid'] ?? 0), 0, ',', '.'),
-                    IndonesianPresentation::paymentStatus($row['Status'] ?? null)
+                    'Rp '.number_format(Money::value($row['Amount_Paid'] ?? 0), 0, ',', '.'),
+                    IndonesianPresentation::paymentStatus($row['Status'] ?? null),
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Jumlah Data Pembayaran</td><td>: '.$payments->count().'</td></tr>'
+            'summary' => '<tr><td>Jumlah Data Pembayaran</td><td>: '.$payments->count().'</td></tr>',
         ];
     }
 
     protected $paymentService;
+
     protected $transactionPresentationService;
 
     public function __construct(PaymentService $paymentService, TransactionPresentationService $transactionPresentationService)
@@ -84,11 +96,12 @@ class PaymentController extends Controller
     public function index(Request $request)
     {
         $payments = $this->paymentService->getAll();
-        
+
         $search = $request->input('search');
         if ($search) {
-            $payments = $payments->filter(function($item) use ($search) {
+            $payments = $payments->filter(function ($item) use ($search) {
                 $stdName = UserResolverHelper::getName($item['Student_ID'] ?? '');
+
                 return stripos($item['Payment_ID'] ?? '', $search) !== false ||
                        stripos($item['Invoice_ID'] ?? '', $search) !== false ||
                        stripos($item['Receipt_Number'] ?? '', $search) !== false ||
@@ -96,10 +109,11 @@ class PaymentController extends Controller
             });
         }
 
-        $payments = $payments->map(function($pay) {
+        $payments = $payments->map(function ($pay) {
             $pay['student_name'] = UserResolverHelper::getName($pay['Student_ID'] ?? '');
             $pay['Created_By_Name'] = UserResolverHelper::getName($pay['Created_By'] ?? '');
             $pay['Approved_By_Name'] = UserResolverHelper::getName($pay['Verified_By'] ?? $pay['Approved_By'] ?? '');
+
             return $pay;
         });
 
@@ -116,11 +130,12 @@ class PaymentController extends Controller
             })
             ->sortBy(function ($group) {
                 $order = array_search($group['id'], ['Waiting Verification', 'Need Revision', 'Verified', 'Rejected'], true);
+
                 return $order === false ? 99 : $order;
             })
             ->values();
 
-        $payments = \App\Helpers\CollectionHelper::paginate($payments, 10)->withQueryString();
+        $payments = CollectionHelper::paginate($payments, 10)->withQueryString();
 
         return view('finance.payments.index', compact('payments', 'paymentGroups', 'search'));
     }
@@ -130,9 +145,9 @@ class PaymentController extends Controller
         $invoiceId = $request->input('invoice_id');
         $invoice = null;
         if ($invoiceId) {
-            $invoice = app(\App\Services\Finance\InvoiceService::class)->getById($invoiceId);
+            $invoice = app(InvoiceService::class)->getById($invoiceId);
         }
-        $invoices = app(\App\Services\Finance\InvoiceService::class)->getAll()
+        $invoices = app(InvoiceService::class)->getAll()
             ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
 
         return view('finance.payments.create', compact('invoices', 'invoice'));
@@ -151,6 +166,7 @@ class PaymentController extends Controller
             }
 
             $payment = $this->paymentService->create($data);
+
             return redirect()->route('payments.show', $payment['Payment_ID'])->with('success', 'Pembayaran berhasil direkam dan menunggu verifikasi.');
         } catch (\Exception $e) {
             if ($proofFile !== '') {
@@ -158,13 +174,14 @@ class PaymentController extends Controller
                     $persisted = collect($this->paymentService->getAll())->contains(function ($payment) use ($proofFile) {
                         return ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile;
                     });
-                    if (!$persisted) {
-                        \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+                    if (! $persisted) {
+                        Storage::disk('local')->delete($proofFile);
                     }
                 } catch (\Throwable $lookupFailure) {
                     // Preserve the file when persistence cannot be determined safely.
                 }
             }
+
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
@@ -187,10 +204,9 @@ class PaymentController extends Controller
         try {
             $docData = $this->paymentService->getReceiptDocumentData($id);
 
-            
             return ReportHelper::export(
                 'pdf',
-                'Kwitansi_' . $id,
+                'Kwitansi_'.$id,
                 collect([$docData['payment']]),
                 $docData,
                 'pdf.official_receipt',
@@ -198,7 +214,7 @@ class PaymentController extends Controller
                 null,
                 false
             );
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+        } catch (HttpExceptionInterface $e) {
             throw $e;
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -220,6 +236,7 @@ class PaymentController extends Controller
     {
         try {
             $this->paymentService->deletePayment($id);
+
             return redirect()->route('payments.index')->with('success', 'Pembayaran berhasil dibatalkan.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -237,7 +254,7 @@ class PaymentController extends Controller
 
             $user = auth()->user();
             $verifiedBy = $user->User_ID ?? $user->Email ?? $user->email ?? null;
-            if (!$verifiedBy) {
+            if (! $verifiedBy) {
                 abort(403, 'Identitas verifikator tidak valid.');
             }
 
@@ -252,6 +269,7 @@ class PaymentController extends Controller
                 null,
                 $validated['Invoice_ID'] ?? null
             );
+
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diverifikasi.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -263,6 +281,7 @@ class PaymentController extends Controller
         try {
             $validated = $request->validate(['reason' => 'required|string|max:1000']);
             $this->paymentService->reversePayment($id, $validated['reason']);
+
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil direversal melalui transaksi kompensasi.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
@@ -274,6 +293,7 @@ class PaymentController extends Controller
         try {
             $validated = $request->validate(['Account_ID' => 'nullable|string|max:100']);
             $this->paymentService->reconcileVerifiedPaymentLedger($id, $validated['Account_ID'] ?? null);
+
             return redirect()->route('payments.show', $id)->with('success', 'Ledger pembayaran berhasil direkonsiliasi.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -285,6 +305,7 @@ class PaymentController extends Controller
         try {
             $validated = $request->validate(['reason' => 'nullable|string|max:1000']);
             $this->paymentService->reconcilePaymentReversal($id, $validated['reason'] ?? 'Recovery reversal');
+
             return redirect()->route('payments.show', $id)->with('success', 'Ledger reversal berhasil direkonsiliasi.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -314,7 +335,7 @@ class PaymentController extends Controller
             $data = $request->validated();
             $user = auth()->user();
             $verifiedBy = $user->User_ID ?? $user->Email ?? $user->email ?? null;
-            if (!$verifiedBy) {
+            if (! $verifiedBy) {
                 abort(403, 'Identitas verifikator tidak valid.');
             }
             $this->paymentService->verifyPayment(
@@ -324,6 +345,7 @@ class PaymentController extends Controller
                 $data['Notes'] ?? '',
                 $data['Account_ID'] ?? null
             );
+
             return redirect()->route('payments.show', $id)->with('success', 'Pembayaran berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
@@ -333,7 +355,7 @@ class PaymentController extends Controller
     public function downloadProof(Request $request, $id)
     {
         $payment = $this->paymentService->getById($id);
-        if (!$payment) {
+        if (! $payment) {
             abort(404, 'Bukti pembayaran tidak ditemukan.');
         }
 
@@ -342,7 +364,7 @@ class PaymentController extends Controller
             abort(404, 'Bukti pembayaran tidak ditemukan.');
         }
         $path = StoragePathHelper::privateFileResponsePath($storedPath);
-        if (!$path) {
+        if (! $path) {
             abort(404, 'File bukti pembayaran tidak ditemukan di server.');
         }
 
@@ -361,9 +383,10 @@ class PaymentController extends Controller
 
         $amount = (float) ($payment['Amount_Paid'] ?? 0);
 
-        return app(\App\Services\Finance\InvoiceService::class)->getAll()
+        return app(InvoiceService::class)->getAll()
             ->where('Student_ID', $payment['Student_ID'] ?? '')
             ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
+            ->filter(fn ($invoice) => app(InvoiceService::class)->isEducationInvoice((array) $invoice))
             ->filter(fn ($invoice) => (float) ($invoice['Remaining_Amount'] ?? 0) >= $amount)
             ->values();
     }
@@ -373,6 +396,6 @@ class PaymentController extends Controller
         $safeId = preg_replace('/[^A-Za-z0-9_-]/', '_', $id);
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
-        return $prefix . '-' . $safeId . ($extension ? '.' . $extension : '');
+        return $prefix.'-'.$safeId.($extension ? '.'.$extension : '');
     }
 }

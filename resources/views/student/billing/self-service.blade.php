@@ -1,8 +1,39 @@
 @extends('layouts.app')
 @section('header', 'Pembayaran Mandiri')
 @section('content')
+@php
+    $rupiah = fn ($amount) => 'Rp' . number_format((float) $amount, 0, ',', '.');
+    $educationPaymentState = $educationPaymentState ?? [];
+    $isPaid = ($educationPaymentState['status'] ?? null) === 'paid';
+    $canSubmit = !$isPaid
+        && (float)($educationPaymentState['tuition_fee'] ?? 0) > 0
+        && (float)($educationPaymentState['remaining_payable'] ?? 0) > 0;
+@endphp
 <div class="max-w-3xl mx-auto space-y-5 sm:space-y-6">
-    <x-page-header title="Pembayaran Mandiri" description="Kirim bukti pembayaran untuk kewajiban yang belum memiliki invoice resmi. Finance akan melakukan verifikasi." :breadcrumbs="['Dashboard' => route('dashboard.student'), 'Billing' => route('student.billing.index'), 'Pembayaran Mandiri' => '#']" />
+    <x-page-header title="Pembayaran Mandiri" description="Kirim bukti pembayaran Biaya Pendidikan untuk diverifikasi Finance." :breadcrumbs="['Dashboard' => route('dashboard.student'), 'Billing' => route('student.billing.index'), 'Pembayaran Mandiri' => '#']" />
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="education-payment-summary">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div><h2 id="education-payment-summary" class="font-black text-slate-900">Ringkasan Biaya Pendidikan</h2><p class="mt-1 text-xs text-slate-500">Pending menjadi reservasi dan belum termasuk Sudah Dibayar.</p></div>
+            <span class="rounded-full px-3 py-1 text-xs font-black {{ $isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">{{ $isPaid ? 'Lunas' : ((float)($educationPaymentState['verified_paid'] ?? 0) > 0 ? 'Cicilan' : 'Belum Bayar') }}</span>
+        </div>
+        <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="rounded-xl bg-slate-50 p-3"><dt class="text-[11px] font-bold text-slate-500">Biaya Pendidikan</dt><dd class="mt-1 font-black text-slate-900">{{ $rupiah($educationPaymentState['tuition_fee'] ?? 0) }}</dd></div>
+            <div class="rounded-xl bg-emerald-50 p-3"><dt class="text-[11px] font-bold text-emerald-700">Sudah Dibayar</dt><dd class="mt-1 font-black text-emerald-900">{{ $rupiah($educationPaymentState['verified_paid'] ?? 0) }}</dd></div>
+            <div class="rounded-xl bg-amber-50 p-3"><dt class="text-[11px] font-bold text-amber-700">Pending / Reservasi</dt><dd class="mt-1 font-black text-amber-900">{{ $rupiah($educationPaymentState['pending_reserved'] ?? 0) }}</dd></div>
+            <div class="rounded-xl bg-sky-50 p-3"><dt class="text-[11px] font-bold text-sky-700">Sisa Dapat Dibayar</dt><dd class="mt-1 font-black text-sky-900">{{ $rupiah($educationPaymentState['remaining_payable'] ?? 0) }}</dd></div>
+        </dl>
+    </section>
+
+    @if($isPaid)
+        <section class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><h2 class="font-black">Biaya Pendidikan Anda sudah lunas.</h2><p class="mt-1 text-sm">Bayar Mandiri tidak tersedia karena sisa Biaya Pendidikan Anda Rp0.</p></section>
+    @elseif((float)($educationPaymentState['tuition_fee'] ?? 0) <= 0)
+        <section class="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-900"><h2 class="font-black">Biaya Pendidikan belum ditetapkan.</h2><p class="mt-1 text-sm">Hubungi Administrator sebelum mengirim pembayaran.</p></section>
+    @elseif((float)($educationPaymentState['remaining_payable'] ?? 0) <= 0)
+        <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900"><h2 class="font-black">Pembayaran sedang menunggu verifikasi.</h2><p class="mt-1 text-sm">Tidak ada sisa yang dapat dibayar sampai Finance memproses pembayaran pending.</p></section>
+    @endif
+
+    @if($canSubmit)
 
     <section class="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 text-amber-950" aria-labelledby="payment-info-title">
         <div class="flex items-start gap-3">
@@ -32,9 +63,9 @@
                         <label for="amount-paid" class="mb-1.5 block text-sm font-bold text-slate-700">Nominal Pembayaran <span class="text-rose-600" aria-hidden="true">*</span><span class="sr-only">wajib</span></label>
                         <div class="relative">
                             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-bold text-slate-500" aria-hidden="true">Rp</span>
-                            <input id="amount-paid" type="number" name="Amount_Paid" value="{{ old('Amount_Paid') }}" min="0.01" step="0.01" inputmode="decimal" class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-base font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:bg-white focus:ring-4 focus:ring-sky-100" required aria-describedby="amount-help">
+                            <input id="amount-paid" type="number" name="Amount_Paid" value="{{ old('Amount_Paid') }}" min="0.01" max="{{ $educationPaymentState['remaining_payable'] }}" step="0.01" inputmode="decimal" class="block min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-base font-semibold text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:bg-white focus:ring-4 focus:ring-sky-100" required aria-describedby="amount-help">
                         </div>
-                        <p id="amount-help" class="mt-1.5 text-xs text-slate-500">Masukkan nominal yang Anda laporkan.</p>
+                        <p id="amount-help" class="mt-1.5 text-xs text-slate-500">Maksimum {{ $rupiah($educationPaymentState['remaining_payable']) }} sesuai sisa Biaya Pendidikan setelah reservasi.</p>
                         @error('Amount_Paid')<p class="mt-1.5 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
                     </div>
 
@@ -145,4 +176,5 @@
         });
     });
 </script>
+    @endif
 @endsection

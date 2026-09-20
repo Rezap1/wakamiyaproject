@@ -1,25 +1,39 @@
 <?php
+
 namespace App\Http\Controllers\Finance;
 
+use App\Helpers\ReportHelper;
+use App\Helpers\StoragePathHelper;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Core\SystemSettingService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
-use Illuminate\Support\Facades\Cache;
-use App\Services\Core\SystemSettingService;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
-use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
-use App\Helpers\StoragePathHelper;
-use App\Helpers\ReportHelper;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class StudentBillingController extends Controller
 {
-    protected $invoiceService, $paymentService, $systemSettingService, $studentRepo, $programRepo, $batchRepo;
+    protected $invoiceService;
+
+    protected $paymentService;
+
+    protected $systemSettingService;
+
+    protected $studentRepo;
+
+    protected $programRepo;
+
+    protected $batchRepo;
 
     public function __construct(
-        InvoiceService $invoiceService, 
+        InvoiceService $invoiceService,
         PaymentService $paymentService,
         SystemSettingService $systemSettingService,
         StudentRepositoryInterface $studentRepo,
@@ -50,6 +64,7 @@ class StudentBillingController extends Controller
     private function getStudentId()
     {
         $student = $this->getStudentProfile();
+
         return $student['Student_ID'];
     }
 
@@ -57,18 +72,17 @@ class StudentBillingController extends Controller
     {
         $student = $this->getStudentProfile();
         $studentId = $student['Student_ID'];
-        
+
         $allInvoices = $this->invoiceService->getAll();
-        $myInvoices = $allInvoices->filter(function($inv) use ($studentId) {
+        $myInvoices = $allInvoices->filter(function ($inv) use ($studentId) {
             return ($inv['Student_ID'] ?? '') == $studentId && strcasecmp(trim($inv['Status'] ?? ''), 'Draft') !== 0;
         })->values();
 
         $allPayments = $this->paymentService->getAll();
-        $myPayments = $allPayments->filter(function($pay) use ($studentId) {
+        $myPayments = $allPayments->filter(function ($pay) use ($studentId) {
             return ($pay['Student_ID'] ?? '') == $studentId;
         })->values();
-        $selfServicePayments = $myPayments->filter(fn ($payment) =>
-            strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0
+        $selfServicePayments = $myPayments->filter(fn ($payment) => strcasecmp(trim((string) ($payment['Payment_Type'] ?? '')), 'STUDENT_SELF_SERVICE') === 0
             || empty($payment['Invoice_ID']))->values();
 
         // Use the dynamic remaining amount so partial and overdue invoices are
@@ -79,27 +93,44 @@ class StudentBillingController extends Controller
         $totalBilled = (float) $financialInvoices->sum('Amount');
         $companyProfile = $this->systemSettingService->getCompanyProfile();
         $bank = $companyProfile['bank'];
+        $educationPaymentState = $this->educationPaymentState($student);
 
-        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function($invs) {
+        $categoryBreakdown = $myInvoices->groupBy('Category')->map(function ($invs) {
             return [
                 'total_billed' => $invs->sum('Amount'),
                 'total_paid' => $invs->sum('Paid_Amount'),
                 'outstanding' => $invs
                     ->whereNotIn('Status', ['Paid', 'Cancelled', 'Draft'])
-                    ->sum('Remaining_Amount')
+                    ->sum('Remaining_Amount'),
             ];
         });
 
-        $data = compact('myInvoices', 'myPayments', 'selfServicePayments', 'totalOutstanding', 'totalPaid', 'totalBilled', 'categoryBreakdown', 'bank');
+        $data = compact('myInvoices', 'myPayments', 'selfServicePayments', 'totalOutstanding', 'totalPaid', 'totalBilled', 'categoryBreakdown', 'bank', 'educationPaymentState');
 
         return view('student.billing.index', $data);
     }
 
     public function selfService()
     {
-        $this->getStudentId();
+        $student = $this->getStudentProfile();
         $companyProfile = $this->systemSettingService->getCompanyProfile();
-        return view('student.billing.self-service', ['bank' => $companyProfile['bank'] ?? []]);
+
+        return view('student.billing.self-service', [
+            'bank' => $companyProfile['bank'] ?? [],
+            'educationPaymentState' => $this->educationPaymentState($student),
+        ]);
+    }
+
+    private function educationPaymentState(array $student): array
+    {
+        return $this->invoiceService->getStudentEducationPaymentState(
+            (string) ($student['Student_ID'] ?? ''),
+            null,
+            null,
+            $student,
+            $this->programRepo->fetchAll(),
+            $this->batchRepo->fetchAll(),
+        );
     }
 
     public function selfServicePay(Request $request)
@@ -113,12 +144,12 @@ class StudentBillingController extends Controller
                 'Transfer_Date' => 'required|date_format:Y-m-d',
                 'Payment_Method' => 'required|string|in:TRANSFER,CASH',
                 'Idempotency_Key' => 'required|uuid',
-                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120),
+                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:'.config('upload.max_kb', 5120),
             ]);
             if ($request->hasFile('Proof_File')) {
                 $proofFile = $request->file('Proof_File')->store('payments');
             }
-            \Illuminate\Support\Facades\Log::notice('finance.student_payment_verification_requested', [
+            Log::notice('finance.student_payment_verification_requested', [
                 'student_id' => $studentId,
             ]);
             $payment = $this->paymentService->submitPayment([
@@ -134,31 +165,32 @@ class StudentBillingController extends Controller
                 'Proof_Image' => $proofFile,
                 'Proof_File' => $proofFile,
             ]);
-            \Illuminate\Support\Facades\Log::notice('finance.student_payment_submitted', [
+            Log::notice('finance.student_payment_submitted', [
                 'student_id' => $studentId,
                 'payment_id' => (string) ($payment['Payment_ID'] ?? 'UNKNOWN'),
             ]);
+
             return redirect()->route('student.billing.index')->with('success', 'Pembayaran mandiri terkirim dan menunggu verifikasi Finance.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e;
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+        } catch (HttpExceptionInterface $e) {
             throw $e;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('finance.student_payment_submission_failed', [
+            Log::warning('finance.student_payment_submission_failed', [
                 'student_id' => isset($studentId) ? (string) $studentId : 'UNKNOWN',
                 'reason' => get_class($e),
             ]);
             if ($proofFile !== '') {
                 try {
-                    $persisted = collect($this->paymentService->getAll())->contains(fn ($payment) =>
-                        ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile);
-                    if (!$persisted) {
-                        \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+                    $persisted = collect($this->paymentService->getAll())->contains(fn ($payment) => ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile);
+                    if (! $persisted) {
+                        Storage::disk('local')->delete($proofFile);
                     }
                 } catch (\Throwable) {
                     // Preserve the file when persistence cannot be determined safely.
                 }
             }
+
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
         }
     }
@@ -167,8 +199,8 @@ class StudentBillingController extends Controller
     {
         $studentId = $this->getStudentId();
         $invoice = $this->invoiceService->getById($id);
-        
-        if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
+
+        if (! $invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda atau belum diterbitkan.");
         }
 
@@ -186,7 +218,7 @@ class StudentBillingController extends Controller
         $studentId = $this->getStudentId();
         $invoice = $this->invoiceService->getById($id);
 
-        if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
+        if (! $invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda atau belum diterbitkan.");
         }
 
@@ -196,7 +228,7 @@ class StudentBillingController extends Controller
 
             return ReportHelper::export(
                 'pdf',
-                'Invoice_' . $id,
+                'Invoice_'.$id,
                 collect([$docData['invoice']]),
                 $docData,
                 'pdf.official_invoice',
@@ -217,7 +249,7 @@ class StudentBillingController extends Controller
             $studentId = $this->getStudentId();
 
             $invoice = $this->invoiceService->getById($id);
-            if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
+            if (! $invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
                 abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda atau belum diterbitkan.");
             }
 
@@ -226,7 +258,7 @@ class StudentBillingController extends Controller
                 'Sender_Name' => 'required|string|max:255',
                 'Transfer_Date' => 'required|date',
                 'Idempotency_Key' => 'nullable|uuid',
-                'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:' . config('upload.max_kb', 5120)
+                'Proof_File' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:'.config('upload.max_kb', 5120),
             ]);
 
             if ($request->hasFile('Proof_File')) {
@@ -242,15 +274,15 @@ class StudentBillingController extends Controller
                 'Payment_Date' => $validated['Transfer_Date'],
                 'Idempotency_Key' => $validated['Idempotency_Key'] ?? (string) Str::uuid(),
                 'Proof_Image' => $proofFile,
-                'Proof_File' => $proofFile
+                'Proof_File' => $proofFile,
             ];
 
             $this->paymentService->submitPayment($paymentData);
-            
+
             return redirect()->route('student.billing.show', $id)->with('success', 'Pembayaran berhasil dikirim dan sedang menunggu verifikasi.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e;
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+        } catch (HttpExceptionInterface $e) {
             throw $e;
         } catch (\Exception $e) {
             if ($proofFile !== '') {
@@ -258,13 +290,14 @@ class StudentBillingController extends Controller
                     $persisted = collect($this->paymentService->getAll())->contains(function ($payment) use ($proofFile) {
                         return ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile;
                     });
-                    if (!$persisted) {
-                        \Illuminate\Support\Facades\Storage::disk('local')->delete($proofFile);
+                    if (! $persisted) {
+                        Storage::disk('local')->delete($proofFile);
                     }
                 } catch (\Throwable $lookupFailure) {
                     // Preserve the file when persistence cannot be determined safely.
                 }
             }
+
             return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
@@ -274,21 +307,21 @@ class StudentBillingController extends Controller
         $studentId = $this->getStudentId();
         $invoice = $this->invoiceService->getById($id);
 
-        if (!$invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
+        if (! $invoice || ($invoice['Student_ID'] ?? '') !== $studentId || strcasecmp(trim($invoice['Status'] ?? ''), 'Draft') === 0) {
             abort(403, "Akses Ditolak: Tagihan #{$id} bukan milik akun Anda atau belum diterbitkan.");
         }
 
         $payment = collect($this->paymentService->getAll())->first(function ($payment) use ($id, $studentId) {
             return ($payment['Invoice_ID'] ?? '') === $id
                 && ($payment['Student_ID'] ?? '') === $studentId
-                && (!empty($payment['Proof_File']) || !empty($payment['Proof_Image']));
+                && (! empty($payment['Proof_File']) || ! empty($payment['Proof_Image']));
         });
 
-        if (!$payment) {
+        if (! $payment) {
             abort(404, 'Bukti pembayaran tidak ditemukan.');
         }
 
-        return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-' . $id);
+        return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-'.$id);
     }
 
     public function downloadPaymentProof(Request $request, $paymentId)
@@ -297,21 +330,21 @@ class StudentBillingController extends Controller
         $payment = collect($this->paymentService->getAll())->first(function ($payment) use ($paymentId, $studentId) {
             return ($payment['Payment_ID'] ?? '') === $paymentId
                 && ($payment['Student_ID'] ?? '') === $studentId
-                && (!empty($payment['Proof_File']) || !empty($payment['Proof_Image']));
+                && (! empty($payment['Proof_File']) || ! empty($payment['Proof_Image']));
         });
 
-        if (!$payment) {
+        if (! $payment) {
             abort(404, 'Bukti pembayaran tidak ditemukan.');
         }
 
-        return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-' . $paymentId);
+        return $this->paymentProofResponse($payment, $request, 'bukti-pembayaran-'.$paymentId);
     }
 
     private function paymentProofResponse(array $payment, Request $request, string $filenamePrefix)
     {
         $proofPath = $payment['Proof_File'] ?? $payment['Proof_Image'] ?? null;
         $path = StoragePathHelper::privateFileResponsePath($proofPath);
-        if (!$path) {
+        if (! $path) {
             abort(404, 'File bukti pembayaran tidak ditemukan di server.');
         }
 
@@ -327,6 +360,6 @@ class StudentBillingController extends Controller
         $safePrefix = preg_replace('/[^A-Za-z0-9_-]/', '_', $prefix);
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
-        return $safePrefix . ($extension ? '.' . $extension : '');
+        return $safePrefix.($extension ? '.'.$extension : '');
     }
 }

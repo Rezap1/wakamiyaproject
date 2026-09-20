@@ -29,7 +29,7 @@ class FinancePersistenceBoundaryTest extends TestCase
             'Account_Category' => 'ASSET',
         ]);
         $repository->shouldReceive('update')->with('ACC-1', Mockery::on(
-            fn (array $data) => $data['Account_Name'] === 'Kas Utama' && !empty($data['Updated_At'])
+            fn (array $data) => $data['Account_Name'] === 'Kas Utama' && ! empty($data['Updated_At'])
         ))->once()->andReturnTrue();
         $repository->shouldReceive('clearCache')->once();
 
@@ -78,6 +78,7 @@ class FinancePersistenceBoundaryTest extends TestCase
             'Amount' => 100000,
             'Is_Active' => 'TRUE',
         ]);
+        $invoiceService->shouldReceive('isEducationInvoice')->once()->andReturn(false);
         $invoiceService->shouldReceive('calculateRemainingAmount')->once()->andReturn(100000.0);
         $this->app->instance(InvoiceService::class, $invoiceService);
 

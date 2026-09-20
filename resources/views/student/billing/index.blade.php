@@ -46,7 +46,13 @@
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-w-0">
         <div class="p-4 sm:p-6 border-b border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="font-bold text-slate-800">Daftar Tagihan Saya</h3>
-            <a href="{{ route('student.billing.self-service') }}" class="inline-flex min-h-11 w-full items-center justify-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold sm:w-auto">Bayar Mandiri</a>
+            @if(($educationPaymentState['status'] ?? null) === 'paid')
+                <span class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800 sm:w-auto">Biaya Pendidikan Lunas</span>
+            @elseif((float)($educationPaymentState['remaining_payable'] ?? 0) <= 0)
+                <span class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800 sm:w-auto">Pembayaran sedang diproses</span>
+            @else
+                <a href="{{ route('student.billing.self-service') }}" class="inline-flex min-h-11 w-full items-center justify-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold sm:w-auto">Bayar Mandiri</a>
+            @endif
         </div>
         <div class="space-y-3 p-4 md:hidden" data-mobile-billing-cards>
             @forelse($myInvoices as $item)
