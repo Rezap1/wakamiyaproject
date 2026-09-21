@@ -31,19 +31,20 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         $this->assertStringContainsString("\$kpi['status_biaya_pendidikan']", $source);
     }
 
-    public function test_lower_kpi_contains_exact_final_four_cards_without_duplicates(): void
+    public function test_lower_kpi_contains_exact_final_three_cards_without_duplicates(): void
     {
         $source = $this->studentDashboardSource();
         preg_match('/\$formattedKpi = \[(.*?)\n    \];/s', $source, $matches);
         $kpi = $matches[1] ?? '';
 
-        $this->assertSame(4, substr_count($kpi, "['title' =>"));
+        $this->assertSame(3, substr_count($kpi, "['title' =>"));
         $this->assertStringContainsString('"Kelas Hari Ini"', $kpi);
-        $this->assertStringContainsString("'Tagihan dari Master'", $kpi);
-        $this->assertStringContainsString("'Sisa Biaya Pendidikan'", $kpi);
+        $this->assertStringContainsString("'Tagihan dari LPK'", $kpi);
         $this->assertStringContainsString("'Pengajuan Presensi'", $kpi);
         $this->assertStringNotContainsString("'Biaya Pendidikan'", $kpi);
         $this->assertStringNotContainsString("'Sudah Dibayar'", $kpi);
+        $this->assertStringNotContainsString("'Sisa Biaya Pendidikan'", $kpi);
+        $this->assertStringNotContainsString("'Tagihan dari Master'", $kpi);
     }
 
     public function test_money_values_are_non_wrapping_and_mobile_summary_stacks_until_tablet(): void
@@ -55,7 +56,7 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         $this->assertStringContainsString('grid grid-cols-1 gap-3 sm:grid-cols-3', $dashboard);
         $this->assertStringContainsString("'whitespace-nowrap text-xl min-[390px]:text-2xl'", $mobileHero);
         $this->assertStringContainsString("'min-[360px]:grid-cols-2'", $mobileHero);
-        $this->assertStringContainsString("'min-[360px]:col-span-2'", $mobileHero);
+        $this->assertStringContainsString('count($metrics) % 2 === 1', $mobileHero);
     }
 
     #[DataProvider('mobileViewports')]
@@ -69,7 +70,8 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         $this->assertStringContainsString('Rp 7.500.000', $html);
         $this->assertStringContainsString('Rp 0', $html);
         $this->assertStringContainsString('Sisa Biaya Pendidikan', $html);
-        $this->assertStringContainsString('Tagihan dari Master', $html);
+        $this->assertStringContainsString('Tagihan dari LPK', $html);
+        $this->assertStringNotContainsString('Tagihan dari Master', $html);
     }
 
     public static function mobileViewports(): array
@@ -81,13 +83,13 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         ];
     }
 
-    public function test_desktop_contract_uses_four_proportional_kpi_columns(): void
+    public function test_desktop_contract_uses_three_proportional_kpi_columns(): void
     {
         $dashboard = $this->studentDashboardSource();
         $actionCenter = file_get_contents(resource_path('views/components/dashboard/action-center.blade.php'));
 
-        $this->assertSame(4, substr_count($this->formattedKpiSource($dashboard), "['title' =>"));
-        $this->assertStringContainsString("4 => 'lg:grid-cols-4'", $actionCenter);
+        $this->assertSame(3, substr_count($this->formattedKpiSource($dashboard), "['title' =>"));
+        $this->assertStringContainsString("3 => 'lg:grid-cols-3'", $actionCenter);
     }
 
     public function test_bottom_navigation_safe_spacing_remains_intact(): void

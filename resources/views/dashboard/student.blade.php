@@ -68,8 +68,7 @@
 @php
     $formattedKpi = [
         ['title' => "Kelas Hari Ini", 'value' => $kpi['today_class'] ?? 0, 'icon' => 'calendar', 'color' => 'indigo', 'link' => route('student.schedule')],
-        ['title' => 'Tagihan dari Master', 'value' => 'Rp '.number_format($kpi['tagihan_master'] ?? 0, 0, ',', '.'), 'icon' => 'document-text', 'color' => 'blue', 'link' => route('student.billing.index')],
-        ['title' => 'Sisa Biaya Pendidikan', 'value' => 'Rp '.number_format($kpi['sisa_biaya_pendidikan'] ?? 0, 0, ',', '.') . ' (' . ($kpi['status_biaya_pendidikan'] ?? 'BELUM BAYAR') . ')', 'icon' => 'cash', 'color' => ($kpi['sisa_biaya_pendidikan'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('student.billing.index')],
+        ['title' => 'Tagihan dari LPK', 'value' => 'Rp '.number_format($kpi['tagihan_master'] ?? 0, 0, ',', '.'), 'icon' => 'document-text', 'color' => 'blue', 'link' => route('student.billing.index')],
         ['title' => 'Pengajuan Presensi', 'value' => ($kpi['request_pending'] ?? 0) . ' Pending / ' . ($kpi['request_approved'] ?? 0) . ' Setuju', 'icon' => 'document-text', 'color' => ($kpi['request_pending'] ?? 0) > 0 ? 'amber' : 'emerald', 'link' => route('student.attendance.requests.index')],
     ];
 

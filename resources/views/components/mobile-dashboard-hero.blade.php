@@ -139,12 +139,11 @@
         ];
     } elseif ($role === 'STUDENT') {
         $summaryTitle = 'Ringkasan Siswa';
-        $summaryLabel = 'Sisa Biaya Pendidikan';
-        $summaryValue = $formatMoney($kpiData['sisa_biaya_pendidikan'] ?? 0);
-        $summaryTone = ($kpiData['sisa_biaya_pendidikan'] ?? 0) > 0 ? 'border-rose-400' : 'border-emerald-400';
+        $summaryLabel = 'Kelas Hari Ini';
+        $summaryValue = number_format((int) ($kpiData['today_class'] ?? 0), 0, ',', '.').' kelas';
+        $summaryTone = 'border-sky-400';
         $metrics = [
-            ['label' => 'Kelas hari ini', 'value' => $kpiData['today_class'] ?? 0],
-            ['label' => 'Tagihan dari Master', 'value' => $formatMoney($kpiData['tagihan_master'] ?? 0), 'nowrap' => true],
+            ['label' => 'Tagihan dari LPK', 'value' => $formatMoney($kpiData['tagihan_master'] ?? 0), 'nowrap' => true],
             ['label' => 'Pengajuan tertunda', 'value' => $kpiData['request_pending'] ?? 0],
         ];
     } elseif ($role === 'EMPLOYEE') {
@@ -175,7 +174,7 @@
         @if($metrics !== [])
             <dl class="mt-4 grid grid-cols-1 gap-2 border-t border-white/15 pt-4 {{ $role === 'STUDENT' ? 'min-[360px]:grid-cols-2' : 'min-[360px]:grid-cols-3' }}">
                 @foreach($metrics as $metric)
-                    <div class="min-w-0 rounded-lg bg-white/10 px-3 py-2.5 {{ $role === 'STUDENT' && $loop->last ? 'min-[360px]:col-span-2' : '' }}">
+                    <div class="min-w-0 rounded-lg bg-white/10 px-3 py-2.5 {{ $role === 'STUDENT' && count($metrics) % 2 === 1 && $loop->last ? 'min-[360px]:col-span-2' : '' }}">
                         <dt class="text-[11px] font-medium leading-snug text-slate-300">{{ $metric['label'] }}</dt>
                         <dd class="mt-1 {{ !empty($metric['nowrap']) ? 'whitespace-nowrap' : 'break-words' }} text-sm font-extrabold leading-snug text-white">{{ $metric['value'] }}</dd>
                     </div>
