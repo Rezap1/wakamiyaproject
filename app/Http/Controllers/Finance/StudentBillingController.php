@@ -12,6 +12,7 @@ use App\Services\Core\SystemSettingService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -146,9 +147,7 @@ class StudentBillingController extends Controller
                 'Idempotency_Key' => 'required|uuid',
                 'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:'.config('upload.max_kb', 5120),
             ]);
-            if ($request->hasFile('Proof_File')) {
-                $proofFile = $request->file('Proof_File')->store('payments');
-            }
+            $proofFile = $this->storePaymentProof($request->file('Proof_File'));
             Log::notice('finance.student_payment_verification_requested', [
                 'student_id' => $studentId,
             ]);
@@ -165,6 +164,10 @@ class StudentBillingController extends Controller
                 'Proof_Image' => $proofFile,
                 'Proof_File' => $proofFile,
             ]);
+            $persistedProof = (string) ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '');
+            if ($persistedProof !== $proofFile) {
+                $this->deletePaymentProof($proofFile);
+            }
             Log::notice('finance.student_payment_submitted', [
                 'student_id' => $studentId,
                 'payment_id' => (string) ($payment['Payment_ID'] ?? 'UNKNOWN'),
@@ -192,6 +195,46 @@ class StudentBillingController extends Controller
             }
 
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
+        }
+    }
+
+    public function replacePaymentProof(Request $request, string $paymentId)
+    {
+        $proofFile = '';
+
+        try {
+            $request->validate([
+                'Proof_File' => 'required|file|mimes:jpg,jpeg,png,pdf|max:'.config('upload.max_kb', 5120),
+            ]);
+            $proofFile = $this->storePaymentProof($request->file('Proof_File'));
+            $result = $this->paymentService->replaceSelfServiceProof($paymentId, $proofFile);
+            $previousProof = (string) ($result['previous_proof'] ?? '');
+            if ($previousProof !== '' && $previousProof !== $proofFile) {
+                $this->deletePaymentProof($previousProof);
+            }
+
+            return redirect()->route('student.billing.index')
+                ->with('success', 'Bukti pembayaran diperbarui dan dikirim kembali untuk verifikasi Finance.');
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            if ($proofFile !== '') {
+                try {
+                    $persisted = collect($this->paymentService->getAll())->contains(function ($payment) use ($paymentId, $proofFile) {
+                        return ($payment['Payment_ID'] ?? '') === $paymentId
+                            && ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '') === $proofFile;
+                    });
+                    if (! $persisted) {
+                        $this->deletePaymentProof($proofFile);
+                    }
+                } catch (\Throwable) {
+                    // Preserve the file when persistence cannot be determined safely.
+                }
+            }
+
+            return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
 
@@ -361,5 +404,29 @@ class StudentBillingController extends Controller
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
         return $safePrefix.($extension ? '.'.$extension : '');
+    }
+
+    private function storePaymentProof(?UploadedFile $file): string
+    {
+        if (! $file || ! $file->isValid()) {
+            throw new \RuntimeException('Bukti pembayaran gagal diunggah.');
+        }
+
+        $path = $file->store('payments', 'local');
+        if (! is_string($path) || $path === '' || ! Storage::disk('local')->exists($path)) {
+            throw new \RuntimeException('Bukti pembayaran gagal disimpan. Silakan unggah ulang.');
+        }
+
+        return $path;
+    }
+
+    private function deletePaymentProof(string $path): void
+    {
+        $normalized = str_replace('\\', '/', trim($path));
+        if ($normalized === '' || ! str_starts_with($normalized, 'payments/') || str_contains($normalized, '../')) {
+            return;
+        }
+
+        Storage::disk('local')->delete($normalized);
     }
 }

@@ -814,6 +814,82 @@ class PaymentService
         }
     }
 
+    public function replaceSelfServiceProof(string $paymentId, string $proofPath): array
+    {
+        $actorId = ActorIdentity::required();
+        $user = auth()->user();
+        if (! $user || $this->authenticatedRoleName($user) !== 'STUDENT') {
+            throw new AuthorizationException('Bukti pembayaran mandiri hanya dapat diperbarui oleh siswa.');
+        }
+
+        $proofPath = str_replace('\\', '/', trim($proofPath));
+        if (! str_starts_with($proofPath, 'payments/') || str_contains($proofPath, '../')) {
+            throw new FinancialIntegrityException('Path bukti pembayaran tidak valid.');
+        }
+
+        $studentRows = method_exists($this->studentRepository, 'fetchAllFresh')
+            ? $this->studentRepository->fetchAllFresh()
+            : $this->studentRepository->fetchAll();
+        $student = collect($studentRows)->firstWhere('User_ID', $user->User_ID);
+        if (! $student || empty($student['Student_ID'])) {
+            throw new AuthorizationException('Identitas siswa tidak dapat dipastikan.');
+        }
+        $studentId = trim((string) $student['Student_ID']);
+
+        return Cache::lock(InvoiceService::educationCapacityLockKey($studentId), 120)->block(15, function () use ($paymentId, $proofPath, $actorId, $studentId) {
+            $payment = $this->freshPayment($paymentId);
+            if (! $payment
+                || strtoupper(trim((string) ($payment['Is_Active'] ?? 'TRUE'))) === 'FALSE'
+                || trim((string) ($payment['Student_ID'] ?? '')) !== $studentId
+                || ! $this->isSelfServicePayment($payment)) {
+                throw new AuthorizationException('Pembayaran tidak ditemukan atau bukan milik akun Anda.');
+            }
+            if (! PaymentStatus::is($payment['Status'] ?? '', 'Need Revision')) {
+                throw new FinancialIntegrityException('Bukti hanya dapat diperbarui untuk pembayaran berstatus Need Revision.');
+            }
+
+            $previousProof = (string) ($payment['Proof_File'] ?? $payment['Proof_Image'] ?? '');
+            $updated = [
+                'Proof_File' => $proofPath,
+                'Proof_Image' => $proofPath,
+                'Status' => 'Waiting Verification',
+                'Verified_By' => '',
+                'Verified_At' => '',
+                'Updated_By' => $actorId,
+                'Updated_At' => now()->toDateTimeString(),
+            ];
+            if (! $this->paymentRepository->update($paymentId, $updated)) {
+                throw new FinancialIntegrityException("Bukti pembayaran #{$paymentId} gagal diperbarui.");
+            }
+            $this->paymentRepository->clearCache();
+
+            $persisted = $this->freshPayment($paymentId);
+            if (! $persisted
+                || (string) ($persisted['Proof_File'] ?? '') !== $proofPath
+                || ! PaymentStatus::is($persisted['Status'] ?? '', 'Waiting Verification')
+                || trim((string) ($persisted['Student_ID'] ?? '')) !== $studentId) {
+                throw new FinancialIntegrityException("Bukti pembayaran #{$paymentId} belum dapat dikonfirmasi secara authoritative.");
+            }
+
+            Cache::forget("student_billing_{$studentId}");
+            Cache::forget('finance_dashboard');
+            Cache::forget('dashboard_finance');
+
+            try {
+                $this->enterpriseEvent->dispatch(
+                    'FINANCE', 'UPDATE', 'PAYMENT', $paymentId, $actorId,
+                    ['FINANCE'], [$studentId], ['Status' => 'Waiting Verification', 'Proof_Replaced' => true]
+                );
+            } catch (\Throwable $e) {
+                Log::error('Payment proof replacement side effect failed after persistence', [
+                    'payment_id' => $paymentId, 'exception' => get_class($e),
+                ]);
+            }
+
+            return ['payment' => $persisted, 'previous_proof' => $previousProof];
+        });
+    }
+
     public function linkVerifiedSelfServicePaymentToInvoice(string $paymentId, string $invoiceId): array
     {
         $this->assertFinanceMutationActor();

@@ -180,12 +180,25 @@
             <h3 class="font-bold text-slate-800 mb-4">Pembayaran Mandiri</h3>
             <div class="space-y-3">
                 @foreach($selfServicePayments as $payment)
-                    <div class="flex flex-col gap-3 rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-col gap-3 rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                             <p class="break-all font-mono text-xs font-bold text-slate-500">{{ $payment['Payment_ID'] ?? '' }}</p>
                             <p class="font-black text-slate-800">Rp {{ number_format($payment['Amount_Paid'] ?? 0, 0, ',', '.') }}</p>
+                            @if(!empty($payment['Notes']))
+                                <p class="mt-1 text-xs font-semibold text-rose-700">Catatan Finance: {{ $payment['Notes'] }}</p>
+                            @endif
                         </div>
-                        <span class="inline-flex w-fit px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Waiting Verification') }}</span>
+                        <div class="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
+                            <span class="inline-flex w-fit px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">{{ \App\Support\Presentation\IndonesianPresentation::status($payment['Status'] ?? 'Waiting Verification') }}</span>
+                            @if(\App\Support\Finance\PaymentStatus::is($payment['Status'] ?? '', 'Need Revision'))
+                                <form action="{{ route('student.billing.payment-proof.replace', $payment['Payment_ID']) }}" method="POST" enctype="multipart/form-data" class="w-full space-y-2 sm:w-72">
+                                    @csrf
+                                    <label class="block text-xs font-bold text-slate-700" for="proof-revision-{{ $loop->index }}">Unggah bukti pengganti</label>
+                                    <input id="proof-revision-{{ $loop->index }}" type="file" name="Proof_File" accept="image/jpeg,image/png,application/pdf" required class="block min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:font-bold file:text-emerald-700">
+                                    <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">Kirim Ulang Bukti</button>
+                                </form>
+                            @endif
+                        </div>
                     </div>
                 @endforeach
             </div>

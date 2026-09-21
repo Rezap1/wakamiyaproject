@@ -456,6 +456,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/self-service', [\App\Http\Controllers\Finance\StudentBillingController::class, 'selfService'])->name('self-service');
         Route::post('/self-service', [\App\Http\Controllers\Finance\StudentBillingController::class, 'selfServicePay'])->name('self-service.pay');
         Route::get('/payments/{paymentId}/proof', [\App\Http\Controllers\Finance\StudentBillingController::class, 'downloadPaymentProof'])->name('payment-proof');
+        Route::post('/payments/{paymentId}/proof', [\App\Http\Controllers\Finance\StudentBillingController::class, 'replacePaymentProof'])->name('payment-proof.replace');
         Route::get('/payments/{id}/receipt', [\App\Http\Controllers\Finance\PaymentController::class, 'downloadReceiptPdf'])->name('payment-receipt');
         Route::get('/{id}/pdf', [\App\Http\Controllers\Finance\StudentBillingController::class, 'downloadInvoicePdf'])->name('invoice-pdf');
         Route::get('/{id}', [\App\Http\Controllers\Finance\StudentBillingController::class, 'show'])->name('show');
