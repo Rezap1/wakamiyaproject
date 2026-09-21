@@ -146,6 +146,41 @@ class H867StudentDashboardEducationSummaryTest extends TestCase
         }
     }
 
+    public function test_master_invoice_kpi_uses_active_student_invoice_remaining_and_excludes_bayar_mandiri(): void
+    {
+        $data = $this->dashboardData(
+            [$this->payment('PAY-SELF-SERVICE', 2_000_000, 'Verified')],
+            [[
+                'Invoice_ID' => 'INV-MEDICAL',
+                'Invoice_Type' => 'STUDENT',
+                'Student_ID' => 'STU-1',
+                'Category' => 'Medical',
+                'Amount' => 500_000,
+                'Status' => 'Waiting Payment',
+                'Is_Active' => 'TRUE',
+            ]],
+        );
+
+        $this->assertSame(500_000.0, $data['kpi']['tagihan_master']);
+        $this->assertSame(2_000_000.0, $data['kpi']['sudah_dibayar']);
+        $this->assertSame(5_500_000.0, $data['kpi']['sisa_biaya_pendidikan']);
+    }
+
+    public function test_master_invoice_kpi_is_zero_without_own_active_invoice_and_excludes_other_student(): void
+    {
+        $data = $this->dashboardData([], [[
+            'Invoice_ID' => 'INV-OTHER-STUDENT',
+            'Invoice_Type' => 'STUDENT',
+            'Student_ID' => 'STU-OTHER',
+            'Category' => 'Medical',
+            'Amount' => 900_000,
+            'Status' => 'Waiting Payment',
+            'Is_Active' => 'TRUE',
+        ]]);
+
+        $this->assertSame(0.0, $data['kpi']['tagihan_master']);
+    }
+
     private function dashboardData(array $payments = [], array $invoices = [], ?iterable $students = null): array
     {
         $paymentRepository = new H864PaymentRepository($payments);

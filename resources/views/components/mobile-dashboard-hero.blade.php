@@ -144,7 +144,7 @@
         $summaryTone = ($kpiData['sisa_biaya_pendidikan'] ?? 0) > 0 ? 'border-rose-400' : 'border-emerald-400';
         $metrics = [
             ['label' => 'Kelas hari ini', 'value' => $kpiData['today_class'] ?? 0],
-            ['label' => 'Sudah dibayar', 'value' => $formatMoney($kpiData['sudah_dibayar'] ?? 0)],
+            ['label' => 'Tagihan dari Master', 'value' => $formatMoney($kpiData['tagihan_master'] ?? 0), 'nowrap' => true],
             ['label' => 'Pengajuan tertunda', 'value' => $kpiData['request_pending'] ?? 0],
         ];
     } elseif ($role === 'EMPLOYEE') {
@@ -170,14 +170,14 @@
     <div class="wms-mobile-summary {{ $summaryTone }}">
         <p class="text-xs font-bold text-sky-200">{{ $summaryTitle }}</p>
         <p class="mt-3 text-xs font-medium text-slate-300">{{ $summaryLabel }}</p>
-        <p class="mt-1 break-words text-2xl font-black leading-tight text-white">{{ $summaryValue }}</p>
+        <p class="mt-1 {{ $role === 'STUDENT' ? 'whitespace-nowrap text-xl min-[390px]:text-2xl' : 'break-words text-2xl' }} font-black leading-tight text-white">{{ $summaryValue }}</p>
 
         @if($metrics !== [])
-            <dl class="mt-4 grid grid-cols-1 gap-2 border-t border-white/15 pt-4 min-[360px]:grid-cols-3">
+            <dl class="mt-4 grid grid-cols-1 gap-2 border-t border-white/15 pt-4 {{ $role === 'STUDENT' ? 'min-[360px]:grid-cols-2' : 'min-[360px]:grid-cols-3' }}">
                 @foreach($metrics as $metric)
-                    <div class="min-w-0 rounded-lg bg-white/10 px-3 py-2.5">
+                    <div class="min-w-0 rounded-lg bg-white/10 px-3 py-2.5 {{ $role === 'STUDENT' && $loop->last ? 'min-[360px]:col-span-2' : '' }}">
                         <dt class="text-[11px] font-medium leading-snug text-slate-300">{{ $metric['label'] }}</dt>
-                        <dd class="mt-1 break-words text-sm font-extrabold leading-snug text-white">{{ $metric['value'] }}</dd>
+                        <dd class="mt-1 {{ !empty($metric['nowrap']) ? 'whitespace-nowrap' : 'break-words' }} text-sm font-extrabold leading-snug text-white">{{ $metric['value'] }}</dd>
                     </div>
                 @endforeach
             </dl>

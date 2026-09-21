@@ -199,6 +199,7 @@ class StudentDashboardService
             'sudah_dibayar'         => $educationPaid,
             'sisa_biaya_pendidikan' => $remainingEducationFee,
             'status_biaya_pendidikan' => $educationPaymentStatus,
+            'tagihan_master'          => (float) $totalOutstanding,
             'total_tagihan'         => $totalBilled,
             'tagihan_dibayar'       => $totalPaid,
             'sisa_tagihan'          => $sisaTagihan,
