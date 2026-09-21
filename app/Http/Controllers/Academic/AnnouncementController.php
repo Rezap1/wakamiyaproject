@@ -3,59 +3,70 @@
 namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreAnnouncementRequest;
+use App\Http\Requests\UpdateAnnouncementRequest;
 use App\Services\Academic\AnnouncementService;
 use App\Services\Core\ClassService;
-use App\Services\Core\ActivityLogService;
+use App\Services\Core\RoleService;
+use App\Support\ActorIdentity;
+use App\Traits\Exportable;
+use Illuminate\Http\Request;
 
 class AnnouncementController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
     protected function getExportConfig(Request $request)
     {
-        $announcements = $this->announcementService->getAll();
-        
+        $announcements = $this->managedAnnouncements();
+
         return [
             'moduleName' => 'Pengumuman Akademik',
             'data' => collect(array_values($announcements->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Judul', 'Target Penerima', 'Prioritas', 'Status', 'Dibuat Pada'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
                 return [
                     $row['Title'] ?? '-',
                     $this->announcementService->audienceLabel((array) $row),
                     $this->announcementService->priorityLabel($row['Priority'] ?? 'NORMAL'),
                     $this->announcementService->presentationStatus((array) $row),
-                    $row['Created_At'] ?? '-'
+                    $row['Created_At'] ?? '-',
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Pengumuman</td><td>: '.$announcements->count().'</td></tr>'
+            'summary' => '<tr><td>Total Pengumuman</td><td>: '.$announcements->count().'</td></tr>',
         ];
     }
 
     protected $announcementService;
+
     protected $classService;
 
-    public function __construct(AnnouncementService $announcementService, ?ClassService $classService = null)
+    protected $roleService;
+
+    public function __construct(AnnouncementService $announcementService, ?ClassService $classService = null, ?RoleService $roleService = null)
     {
         $this->announcementService = $announcementService;
         $this->classService = $classService;
+        $this->roleService = $roleService;
     }
 
     public function index(Request $request)
     {
-        $announcements = $this->announcementService->getAll()->map(function ($announcement) {
+        $announcements = $this->managedAnnouncements()->map(function ($announcement) {
             $announcement['Audience_Label'] = $this->announcementService->audienceLabel((array) $announcement);
             $announcement['Priority_Label'] = $this->announcementService->priorityLabel($announcement['Priority'] ?? 'NORMAL');
             $announcement['Status_Label'] = $this->announcementService->presentationStatus((array) $announcement);
             $announcement['Start_Label'] = $this->formatDate($this->announcementService->startAt((array) $announcement));
             $announcement['Expiry_Label'] = $this->formatDate($this->announcementService->expiresAt((array) $announcement));
+            $announcement['Can_Manage'] = $this->canManage((array) $announcement);
+
             return $announcement;
         });
+
         return view('academic.announcements.index', compact('announcements'));
     }
 
@@ -64,11 +75,12 @@ class AnnouncementController extends Controller
         return view('academic.announcements.create', ['classes' => $this->classes()]);
     }
 
-    public function store(\App\Http\Requests\StoreAnnouncementRequest $request)
+    public function store(StoreAnnouncementRequest $request)
     {
         try {
             $data = $request->validated();
             $this->announcementService->create($data);
+
             return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
@@ -78,27 +90,38 @@ class AnnouncementController extends Controller
     public function show($id)
     {
         $announcement = $this->announcementService->getById($id);
-        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
+        if (! $announcement) {
+            return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
+        }
+        $this->authorizeTeacherOwnership((array) $announcement);
         $announcement['Audience_Label'] = $this->announcementService->audienceLabel((array) $announcement);
         $announcement['Priority_Label'] = $this->announcementService->priorityLabel($announcement['Priority'] ?? 'NORMAL');
         $announcement['Status_Label'] = $this->announcementService->presentationStatus((array) $announcement);
         $announcement['Start_Label'] = $this->formatDate($this->announcementService->startAt((array) $announcement));
         $announcement['Expiry_Label'] = $this->formatDate($this->announcementService->expiresAt((array) $announcement));
+        $announcement['Can_Manage'] = $this->canManage((array) $announcement);
+
         return view('academic.announcements.show', compact('announcement'));
     }
 
     public function edit($id)
     {
         $announcement = $this->announcementService->getById($id);
-        if (!$announcement) return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
+        if (! $announcement) {
+            return redirect()->route('announcements.index')->withErrors(['error' => 'Pengumuman tidak ditemukan.']);
+        }
+        $this->authorizeTeacherOwnership((array) $announcement);
+
         return view('academic.announcements.edit', ['announcement' => $announcement, 'classes' => $this->classes()]);
     }
 
-    public function update(\App\Http\Requests\UpdateAnnouncementRequest $request, $id)
+    public function update(UpdateAnnouncementRequest $request, $id)
     {
+        $this->authorizeExistingForTeacher($id);
         try {
             $data = $request->validated();
             $this->announcementService->update($id, $data);
+
             return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
@@ -107,8 +130,10 @@ class AnnouncementController extends Controller
 
     public function destroy($id)
     {
+        $this->authorizeExistingForTeacher($id);
         try {
             $this->announcementService->delete($id);
+
             return redirect()->route('announcements.index')->with('success', 'Pengumuman berhasil dihapus.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
@@ -117,8 +142,10 @@ class AnnouncementController extends Controller
 
     public function deactivate($id)
     {
+        $this->authorizeExistingForTeacher($id);
         try {
             $this->announcementService->delete($id);
+
             return redirect()->route('announcements.index')->with('success', 'Pengumuman dinonaktifkan.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => $this->safeExceptionMessage($e)]);
@@ -128,14 +155,77 @@ class AnnouncementController extends Controller
     protected function classes()
     {
         try {
-            if ($this->classService) return collect($this->classService->getAllClasses())->filter(fn ($class) => strtoupper((string) ($class['Is_Active'] ?? 'TRUE')) !== 'FALSE')->values();
+            if ($this->classService) {
+                return collect($this->classService->getAllClasses())->filter(fn ($class) => strtoupper((string) ($class['Is_Active'] ?? 'TRUE')) !== 'FALSE')->values();
+            }
         } catch (\Throwable) {
         }
+
         return collect();
     }
 
     protected function formatDate($date): string
     {
-        return $date ? $date->locale('id')->translatedFormat('j F Y, H.i') . ' WIB' : '-';
+        return $date ? $date->locale('id')->translatedFormat('j F Y, H.i').' WIB' : '-';
+    }
+
+    protected function managedAnnouncements()
+    {
+        $announcements = $this->announcementService->getAll();
+        $role = $this->currentRole();
+        if (in_array($role, ['ADMINISTRATOR', 'ACADEMIC', 'MASTER'], true)) {
+            return $announcements;
+        }
+        abort_unless($role === 'TEACHER', 403, 'Anda tidak memiliki hak akses untuk mengelola pengumuman.');
+
+        $actorId = ActorIdentity::required();
+
+        return $announcements
+            ->filter(fn ($announcement) => hash_equals($actorId, trim((string) ($announcement['Created_By'] ?? ''))))
+            ->values();
+    }
+
+    protected function authorizeExistingForTeacher($id): void
+    {
+        $announcement = $this->announcementService->getById($id);
+        if (! $announcement) {
+            throw new \InvalidArgumentException('Pengumuman tidak ditemukan.');
+        }
+        $this->authorizeTeacherOwnership((array) $announcement);
+    }
+
+    protected function authorizeTeacherOwnership(array $announcement): void
+    {
+        abort_unless($this->canManage($announcement), 403, 'Guru hanya dapat mengelola pengumuman yang dibuatnya sendiri.');
+    }
+
+    protected function canManage(array $announcement): bool
+    {
+        $role = $this->currentRole();
+        if (in_array($role, ['ADMINISTRATOR', 'ACADEMIC', 'MASTER'], true)) {
+            return true;
+        }
+        if ($role !== 'TEACHER') {
+            return false;
+        }
+        $creator = trim((string) ($announcement['Created_By'] ?? ''));
+
+        return $creator !== '' && hash_equals(ActorIdentity::required(), $creator);
+    }
+
+    protected function currentRole(): string
+    {
+        $user = auth()->user();
+        $fallback = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
+        $roleId = trim((string) ($user->Role_ID ?? ''));
+        if ($roleId === '' || ! $this->roleService) {
+            return $fallback;
+        }
+
+        try {
+            return strtoupper(trim((string) ($this->roleService->getRoleById($roleId)['Role_Name'] ?? $fallback)));
+        } catch (\Throwable) {
+            return 'UNKNOWN';
+        }
     }
 }

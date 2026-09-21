@@ -2,14 +2,19 @@
 
 namespace App\Http\Requests;
 
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateAnnouncementRequest extends FormRequest
 {
     private const TARGET_ROLES = ['ALL', 'ALL_USERS', 'TEACHER', 'STUDENT', 'CLASS', 'ALL_STUDENTS'];
+
     private const AUDIENCES = ['ALL_STUDENTS', 'CLASS'];
+
     private const PRIORITIES = ['NORMAL', 'IMPORTANT', 'URGENT', 'Low', 'Normal', 'High', 'LOW', 'MEDIUM', 'HIGH'];
+
     private const STATUSES = ['DRAFT', 'PUBLISHED', 'ACTIVE', 'INACTIVE'];
 
     /**
@@ -28,12 +33,16 @@ class UpdateAnnouncementRequest extends FormRequest
     public function rules(): array
     {
         $afterStart = function (string $attribute, $value, \Closure $fail): void {
-            if (blank($value)) return;
+            if (blank($value)) {
+                return;
+            }
             try {
                 $startRaw = $this->input('Start_At') ?: $this->input('Publish_Date');
-                $start = blank($startRaw) ? now(config('app.timezone', 'Asia/Jakarta')) : \Carbon\CarbonImmutable::parse($startRaw, config('app.timezone', 'Asia/Jakarta'));
-                $expires = \Carbon\CarbonImmutable::parse($value, config('app.timezone', 'Asia/Jakarta'));
-                if ($expires->lessThanOrEqualTo($start)) $fail('Waktu berakhir harus setelah waktu mulai.');
+                $start = blank($startRaw) ? now(config('app.timezone', 'Asia/Jakarta')) : CarbonImmutable::parse($startRaw, config('app.timezone', 'Asia/Jakarta'));
+                $expires = CarbonImmutable::parse($value, config('app.timezone', 'Asia/Jakarta'));
+                if ($expires->lessThanOrEqualTo($start)) {
+                    $fail('Waktu berakhir harus setelah waktu mulai.');
+                }
             } catch (\Throwable) {
             }
         };
@@ -44,7 +53,7 @@ class UpdateAnnouncementRequest extends FormRequest
             'Message' => 'required_without:Content|string',
             'Target_Role' => ['nullable', 'string', Rule::in(self::TARGET_ROLES)],
             'Target_Audience' => ['nullable', 'string', Rule::in(array_merge(self::AUDIENCES, self::TARGET_ROLES))],
-            'Audience_Type' => ['nullable', 'string', Rule::in(self::AUDIENCES)],
+            'Audience_Type' => ['required_without_all:Target_Audience,Target_Role', 'nullable', 'string', Rule::in(self::AUDIENCES)],
             'Target_ID' => 'nullable|string|max:100',
             'Audience_ID' => 'nullable|string|max:100',
             'Class_ID' => 'nullable|string|max:100',
@@ -65,12 +74,17 @@ class UpdateAnnouncementRequest extends FormRequest
             $audience = strtoupper((string) ($this->input('Audience_Type') ?: $this->input('Target_Audience') ?: $this->input('Target_Role', 'ALL_STUDENTS')));
             if (in_array($audience, ['CLASS', 'KELAS'], true)) {
                 $classId = trim((string) ($this->input('Audience_ID') ?: $this->input('Class_ID') ?: $this->input('Target_ID')));
-                if ($classId === '') $validator->errors()->add('Audience_ID', 'Kelas wajib dipilih untuk target kelas tertentu.');
-                elseif (app()->bound(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)) {
+                if ($classId === '') {
+                    $validator->errors()->add('Audience_ID', 'Kelas wajib dipilih untuk target kelas tertentu.');
+                } elseif (app()->bound(ClassRepositoryInterface::class)) {
                     try {
-                        $class = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->findById($classId);
-                        if (!$class || strtoupper((string) ($class['Is_Active'] ?? 'TRUE')) === 'FALSE') $validator->errors()->add('Audience_ID', 'Kelas yang dipilih tidak tersedia.');
-                    } catch (\Throwable) { $validator->errors()->add('Audience_ID', 'Kelas yang dipilih tidak dapat diverifikasi.'); }
+                        $class = app(ClassRepositoryInterface::class)->findById($classId);
+                        if (! $class || strtoupper((string) ($class['Is_Active'] ?? 'TRUE')) === 'FALSE') {
+                            $validator->errors()->add('Audience_ID', 'Kelas yang dipilih tidak tersedia.');
+                        }
+                    } catch (\Throwable) {
+                        $validator->errors()->add('Audience_ID', 'Kelas yang dipilih tidak dapat diverifikasi.');
+                    }
                 }
             }
         });

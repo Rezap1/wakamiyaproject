@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Services\Academic\AnnouncementService;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\GenericUser;
 use Tests\TestCase;
 
 class AnnouncementServiceTest extends TestCase
@@ -52,7 +53,7 @@ class AnnouncementServiceTest extends TestCase
     {
         $now = CarbonImmutable::parse('2026-10-08 08:00:00', 'Asia/Jakarta');
         CarbonImmutable::setTestNow($now);
-        $repo = new InMemoryAnnouncementRepository();
+        $repo = new InMemoryAnnouncementRepository;
         $service = new AnnouncementService($repo);
 
         $service->create(['Title' => 'Ujian', 'Message' => 'Datang tepat waktu', 'Priority' => 'URGENT', 'Audience_Type' => 'ALL_STUDENTS', 'Expires_At' => '2026-10-09 09:00:00']);
@@ -63,7 +64,7 @@ class AnnouncementServiceTest extends TestCase
 
     public function test_forged_class_is_rejected(): void
     {
-        $service = new AnnouncementService(new InMemoryAnnouncementRepository(), new InMemoryClassRepository([]));
+        $service = new AnnouncementService(new InMemoryAnnouncementRepository, new InMemoryClassRepository([]));
         $this->expectException(\InvalidArgumentException::class);
         $service->create([
             'Title' => 'Rahasia Kelas', 'Message' => 'Pesan', 'Priority' => 'NORMAL',
@@ -74,7 +75,7 @@ class AnnouncementServiceTest extends TestCase
 
     public function test_expiry_must_be_after_start(): void
     {
-        $service = new AnnouncementService(new InMemoryAnnouncementRepository());
+        $service = new AnnouncementService(new InMemoryAnnouncementRepository);
         $this->expectException(\InvalidArgumentException::class);
         $service->create([
             'Title' => 'Jadwal', 'Message' => 'Pesan', 'Priority' => 'NORMAL',
@@ -104,6 +105,55 @@ class AnnouncementServiceTest extends TestCase
         $this->assertSame('CLASS-A', $service->getVisibleForStudent('CLASS-A', 'CLS-A', $now)['Announcement_ID']);
     }
 
+    public function test_authenticated_creator_cannot_be_forged_and_google_payload_is_canonical(): void
+    {
+        $this->actingAs(new GenericUser(['id' => 'USR-TEACHER-A', 'User_ID' => 'USR-TEACHER-A']));
+        $repo = new InMemoryAnnouncementRepository;
+        $service = new AnnouncementService($repo);
+
+        $service->create([
+            'Title' => 'Libur Kegiatan Belajar',
+            'Message' => 'Sekolah libur besok.',
+            'Audience_Type' => 'ALL_STUDENTS',
+            'Expires_At' => '2026-10-20 09:00:00',
+            'Created_By' => 'USR-MASTER-FORGED',
+        ]);
+
+        $row = $repo->rows[0];
+        $this->assertSame('USR-TEACHER-A', $row['Created_By']);
+        $this->assertSame('USR-TEACHER-A', $row['Updated_By']);
+        $this->assertSame('ALL_STUDENTS', $row['Audience_Type']);
+        $this->assertSame('ALL_STUDENTS', $row['Target_Role']);
+        $this->assertSame('', $row['Audience_ID']);
+        $this->assertSame('', $row['Target_ID']);
+        $this->assertSame($row['Message'], $row['Content']);
+        $this->assertSame($row['Start_At'], $row['Publish_Date']);
+        $this->assertSame($row['Expires_At'], $row['Expired_Date']);
+    }
+
+    public function test_update_preserves_creator_and_delete_audits_authenticated_actor(): void
+    {
+        $row = $this->row('OWN', '2026-10-01 00:00:00', '2026-10-20 00:00:00');
+        $row['Created_By'] = 'USR-TEACHER-A';
+        $repo = new InMemoryAnnouncementRepository([$row]);
+        $service = new AnnouncementService($repo);
+        $this->actingAs(new GenericUser(['id' => 'USR-TEACHER-A', 'User_ID' => 'USR-TEACHER-A']));
+
+        $service->update('OWN', [
+            'Title' => 'Diperbarui', 'Message' => 'Pesan baru', 'Priority' => 'IMPORTANT',
+            'Audience_Type' => 'ALL_STUDENTS', 'Status' => 'PUBLISHED',
+            'Start_At' => '2026-10-01 00:00:00', 'Expires_At' => '2026-10-21 00:00:00',
+            'Created_By' => 'USR-FORGED',
+        ]);
+        $this->assertSame('USR-TEACHER-A', $repo->rows[0]['Created_By']);
+        $this->assertSame('USR-TEACHER-A', $repo->rows[0]['Updated_By']);
+
+        $service->delete('OWN');
+        $this->assertSame('FALSE', $repo->rows[0]['Is_Active']);
+        $this->assertSame('INACTIVE', $repo->rows[0]['Status']);
+        $this->assertSame('USR-TEACHER-A', $repo->rows[0]['Updated_By']);
+    }
+
     private function row(string $id, string $start, string $expires, string $priority = 'NORMAL', string $audience = 'ALL_STUDENTS', string $classId = ''): array
     {
         return [
@@ -118,24 +168,89 @@ class AnnouncementServiceTest extends TestCase
 class InMemoryAnnouncementRepository implements AnnouncementRepositoryInterface
 {
     public array $rows;
-    public function __construct(array $rows = []) { $this->rows = $rows; }
-    public function fetchAll() { return collect($this->rows); }
-    public function findById(string $id) { return collect($this->rows)->firstWhere('Announcement_ID', $id); }
-    public function generateNewId(string $prefix, int $padding = 6): string { return $prefix . str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT); }
-    public function create(array $data) { $this->rows[] = $data; return $data; }
-    public function update(string $id, array $data) { foreach ($this->rows as &$row) if ($row['Announcement_ID'] === $id) $row = array_merge($row, $data); return true; }
-    public function softDelete(string $id) { return $this->update($id, ['Is_Active' => 'FALSE', 'Status' => 'INACTIVE']); }
+
+    public function __construct(array $rows = [])
+    {
+        $this->rows = $rows;
+    }
+
+    public function fetchAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function findById(string $id)
+    {
+        return collect($this->rows)->firstWhere('Announcement_ID', $id);
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[] = $data;
+
+        return $data;
+    }
+
+    public function update(string $id, array $data)
+    {
+        foreach ($this->rows as &$row) {
+            if ($row['Announcement_ID'] === $id) {
+                $row = array_merge($row, $data);
+            }
+        }
+
+        return true;
+    }
+
+    public function softDelete(string $id)
+    {
+        return $this->update($id, ['Is_Active' => 'FALSE', 'Status' => 'INACTIVE']);
+    }
 }
 
 class InMemoryClassRepository implements ClassRepositoryInterface
 {
     public function __construct(private array $rows) {}
-    public function fetchAll() { return collect($this->rows); }
-    public function findById(string $id) { return collect($this->rows)->firstWhere('Class_ID', $id); }
-    public function findByCode(string $code) { return collect($this->rows)->firstWhere('Class_Code', $code); }
-    public function generateNewId(string $prefix, int $padding = 6): string { return $prefix . str_pad('1', $padding, '0', STR_PAD_LEFT); }
-    public function create(array $data) { return $data; }
-    public function update(string $id, array $data) { return true; }
-    public function softDelete(string $id) { return true; }
+
+    public function fetchAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function findById(string $id)
+    {
+        return collect($this->rows)->firstWhere('Class_ID', $id);
+    }
+
+    public function findByCode(string $code)
+    {
+        return collect($this->rows)->firstWhere('Class_Code', $code);
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.str_pad('1', $padding, '0', STR_PAD_LEFT);
+    }
+
+    public function create(array $data)
+    {
+        return $data;
+    }
+
+    public function update(string $id, array $data)
+    {
+        return true;
+    }
+
+    public function softDelete(string $id)
+    {
+        return true;
+    }
+
     public function clearCache() {}
 }

@@ -26,7 +26,9 @@
             <div><dt class="font-semibold text-slate-500">Berakhir</dt><dd class="mt-1 text-slate-800">{{ $announcement['Expiry_Label'] ?? '-' }}</dd></div>
         </dl>
         <div class="mt-6 flex flex-wrap gap-3">
-            <x-button as="a" href="{{ route('announcements.edit', $announcement['Announcement_ID']) }}" variant="primary">Edit Pengumuman</x-button>
+            @if($announcement['Can_Manage'] ?? false)
+                <x-button as="a" href="{{ route('announcements.edit', $announcement['Announcement_ID']) }}" variant="primary">Edit Pengumuman</x-button>
+            @endif
             <x-button as="a" href="{{ route('announcements.index') }}" variant="secondary">Kembali</x-button>
         </div>
     </article>

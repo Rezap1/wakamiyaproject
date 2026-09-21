@@ -223,6 +223,7 @@
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.schedule') }}" active="{{ request()->routeIs('teacher.workspace.schedule') }}" icon="calendar">Jadwal Mengajar</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.classes') }}" active="{{ request()->routeIs('teacher.workspace.classes') || request()->routeIs('teacher.workspace.classes.*') }}" icon="view-boards">Kelas Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.students') }}" active="{{ request()->routeIs('teacher.workspace.students') }}" icon="user-group">Daftar Siswa</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('announcements.index') }}" active="{{ request()->routeIs('announcements.*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Kehadiran</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendances') }}" active="{{ request()->routeIs('teacher.workspace.attendances') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>

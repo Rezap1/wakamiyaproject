@@ -14,6 +14,7 @@ class MobileNavigationHardeningTest extends TestCase
 
         $this->assertStringContainsString(route('teacher.workspace.assignments'), $html);
         $this->assertStringContainsString(route('teacher.workspace.scores'), $html);
+        $this->assertStringContainsString(route('announcements.index'), $html);
         $this->assertStringNotContainsString(route('assignments.index'), $html);
     }
 
@@ -77,6 +78,7 @@ class MobileNavigationHardeningTest extends TestCase
             'teacher.workspace.assignments',
             'teacher.workspace.calendar',
             'teacher.workspace.reports',
+            'announcements.index',
         ] as $routeName) {
             $this->assertStringContainsString(route($routeName), $html);
         }

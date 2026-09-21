@@ -516,7 +516,6 @@ Route::middleware('auth')->group(function () {
         $academicControllers = [
             'batches' => \App\Http\Controllers\Academic\BatchController::class,
             'classes' => \App\Http\Controllers\Academic\ClassController::class,
-            'announcements' => \App\Http\Controllers\Academic\AnnouncementController::class,
             'assessments' => \App\Http\Controllers\Academic\AssessmentController::class,
             'attendances' => \App\Http\Controllers\Academic\AttendanceController::class,
             'schedules' => \App\Http\Controllers\Academic\ScheduleController::class,
@@ -535,15 +534,31 @@ Route::middleware('auth')->group(function () {
                 Route::get('/', [$controller, 'index'])->name('index');
                 Route::get('/create', [$controller, 'create'])->name('create');
                 Route::post('/', [$controller, 'store'])->name('store');
-                if ($prefix === 'announcements') {
-                    Route::post('/{id}/deactivate', [$controller, 'deactivate'])->name('deactivate');
-                }
                 Route::get('/{id}', [$controller, 'show'])->name('show');
                 Route::get('/{id}/edit', [$controller, 'edit'])->name('edit');
                 Route::put('/{id}', [$controller, 'update'])->name('update');
                 Route::delete('/{id}', [$controller, 'destroy'])->name('destroy');
             });
         }
+    });
+
+    // Shared announcement engine: existing Academic/Administrator/Master access,
+    // extended to Teacher without exposing any other academic management module.
+    Route::prefix('academic/announcements')->name('announcements.')->middleware('role:ACADEMIC,ADMINISTRATOR,TEACHER')->group(function () {
+        $controller = \App\Http\Controllers\Academic\AnnouncementController::class;
+        Route::get('/preview-pdf', [$controller, 'previewPdf'])->name('preview-pdf');
+        Route::get('/export-pdf', [$controller, 'exportPdf'])->name('export-pdf');
+        Route::get('/export-excel', [$controller, 'exportExcel'])->name('export-excel');
+        Route::get('/export-csv', [$controller, 'exportCsv'])->name('export-csv');
+        Route::get('/print', [$controller, 'print'])->name('print');
+        Route::get('/', [$controller, 'index'])->name('index');
+        Route::get('/create', [$controller, 'create'])->name('create');
+        Route::post('/', [$controller, 'store'])->name('store');
+        Route::post('/{id}/deactivate', [$controller, 'deactivate'])->name('deactivate');
+        Route::get('/{id}', [$controller, 'show'])->name('show');
+        Route::get('/{id}/edit', [$controller, 'edit'])->name('edit');
+        Route::put('/{id}', [$controller, 'update'])->name('update');
+        Route::delete('/{id}', [$controller, 'destroy'])->name('destroy');
     });
 
     // Assignments route that allows TEACHER access as well
@@ -720,5 +735,4 @@ Route::middleware('auth')->group(function () {
         ->name('attendance.scan.verify');
 
 });
-
 

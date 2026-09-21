@@ -19,7 +19,7 @@
             ['label' => 'Tugas', 'route' => 'teacher.workspace.assignments', 'icon' => 'document-duplicate', 'active' => request()->routeIs('teacher.workspace.assignments*')],
             ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
             ['label' => 'Nilai', 'route' => 'teacher.workspace.scores', 'icon' => 'academic-cap', 'active' => request()->routeIs('teacher.workspace.scores*')],
-            ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
+            ['label' => 'Pengumuman', 'route' => 'announcements.index', 'icon' => 'inbox', 'active' => request()->routeIs('announcements.*')],
         ];
     } elseif ($role === 'HR') {
         $items = [
