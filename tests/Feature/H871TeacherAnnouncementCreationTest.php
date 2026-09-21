@@ -4,9 +4,9 @@ namespace Tests\Feature;
 
 use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
 use App\Services\Academic\AnnouncementService;
 use App\Services\Core\ClassService;
-use App\Services\Core\RoleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\GenericUser;
 use Mockery;
@@ -62,6 +62,18 @@ class H871TeacherAnnouncementCreationTest extends TestCase
         $service = $this->app->make(AnnouncementService::class);
         $this->assertCount(2, $service->getActiveAnnouncements('STUDENT', 'CLS-A'));
         $this->assertCount(1, $service->getActiveAnnouncements('STUDENT', 'CLS-B'));
+    }
+
+    public function test_production_style_teacher_role_resolution_can_open_index_and_create(): void
+    {
+        $this->actingAsRole('TEACHER', 'USR-TEACHER-PRODUCTION');
+
+        $this->get(route('announcements.index'))
+            ->assertOk()
+            ->assertSee('Pusat Pengumuman');
+        $this->get(route('announcements.create'))
+            ->assertOk()
+            ->assertSee('Buat Pengumuman Baru');
     }
 
     public function test_teacher_can_create_all_students_and_forged_creator_is_ignored(): void
@@ -231,13 +243,11 @@ class H871TeacherAnnouncementCreationTest extends TestCase
     private function actingAsRole(string $role, string $userId): void
     {
         $roleId = $role === 'MASTER' ? 'MASTER' : 'ROLE-'.$role;
-        $roles = Mockery::mock(RoleService::class);
-        $roles->shouldReceive('getRoleById')->zeroOrMoreTimes()->with($roleId)->andReturn([
-            'Role_ID' => $roleId, 'Role_Name' => $role, 'Is_Active' => 'TRUE',
-        ]);
-        $this->app->instance(RoleService::class, $roles);
+        $this->app->instance(RoleRepositoryInterface::class, new H871RoleRepository([
+            ['Role_ID' => $roleId, 'Role_Name' => $role, 'Is_Active' => 'TRUE'],
+        ]));
         $this->actingAs(new GenericUser([
-            'id' => $userId, 'User_ID' => $userId, 'Role_ID' => $roleId, 'Role' => $role, 'Username' => $userId,
+            'id' => $userId, 'User_ID' => $userId, 'Role_ID' => $roleId, 'Username' => $userId,
         ]));
     }
 
@@ -364,4 +374,29 @@ class H871ClassRepository implements ClassRepositoryInterface
     }
 
     public function clearCache() {}
+}
+
+class H871RoleRepository implements RoleRepositoryInterface
+{
+    public function __construct(public array $rows) {}
+
+    public function fetchAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function findById(string $id)
+    {
+        return collect($this->rows)->firstWhere('Role_ID', $id);
+    }
+
+    public function create(array $data)
+    {
+        return $data;
+    }
+
+    public function update(string $id, array $data)
+    {
+        return true;
+    }
 }

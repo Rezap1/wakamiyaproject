@@ -47,11 +47,11 @@ class AnnouncementController extends Controller
 
     protected $roleService;
 
-    public function __construct(AnnouncementService $announcementService, ?ClassService $classService = null, ?RoleService $roleService = null)
+    public function __construct(AnnouncementService $announcementService, RoleService $roleService, ?ClassService $classService = null)
     {
         $this->announcementService = $announcementService;
-        $this->classService = $classService;
         $this->roleService = $roleService;
+        $this->classService = $classService;
     }
 
     public function index(Request $request)
@@ -218,7 +218,7 @@ class AnnouncementController extends Controller
         $user = auth()->user();
         $fallback = strtoupper(trim((string) ($user->Role ?? $user->Role_Name ?? '')));
         $roleId = trim((string) ($user->Role_ID ?? ''));
-        if ($roleId === '' || ! $this->roleService) {
+        if ($roleId === '') {
             return $fallback;
         }
 
