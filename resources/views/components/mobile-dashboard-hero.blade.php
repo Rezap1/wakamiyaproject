@@ -139,12 +139,12 @@
         ];
     } elseif ($role === 'STUDENT') {
         $summaryTitle = 'Ringkasan Siswa';
-        $summaryLabel = 'Sisa tagihan';
-        $summaryValue = $formatMoney($kpiData['sisa_tagihan'] ?? 0);
-        $summaryTone = ($kpiData['sisa_tagihan'] ?? 0) > 0 ? 'border-rose-400' : 'border-emerald-400';
+        $summaryLabel = 'Sisa Biaya Pendidikan';
+        $summaryValue = $formatMoney($kpiData['sisa_biaya_pendidikan'] ?? 0);
+        $summaryTone = ($kpiData['sisa_biaya_pendidikan'] ?? 0) > 0 ? 'border-rose-400' : 'border-emerald-400';
         $metrics = [
             ['label' => 'Kelas hari ini', 'value' => $kpiData['today_class'] ?? 0],
-            ['label' => 'Sudah dibayar', 'value' => $formatMoney($kpiData['tagihan_dibayar'] ?? 0)],
+            ['label' => 'Sudah dibayar', 'value' => $formatMoney($kpiData['sudah_dibayar'] ?? 0)],
             ['label' => 'Pengajuan tertunda', 'value' => $kpiData['request_pending'] ?? 0],
         ];
     } elseif ($role === 'EMPLOYEE') {

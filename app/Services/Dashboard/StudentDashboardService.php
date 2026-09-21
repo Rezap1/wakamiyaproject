@@ -123,14 +123,31 @@ class StudentDashboardService
         $totalOutstanding = $outstandingBills->sum('Remaining_Amount');
         $latestInvoice = $outstandingBills->sortByDesc('Created_At')->first();
 
-        // === Payment Progress ===
-        $educationFee = $this->invoiceService->getStudentTuitionFee($studentId, $student);
+        // === Canonical Education Payment Progress ===
+        // Reuse the same H8.64 state as Student Billing. Invoice totals are
+        // deliberately kept separate because education fee and verified
+        // Bayar Mandiri remain valid even when the student has no invoice.
+        $educationPaymentState = $this->invoiceService->getStudentEducationPaymentState(
+            $studentId,
+            $myInvoices,
+            $myPayments,
+            (array) $student,
+        );
+        $educationFee = (float) $educationPaymentState['tuition_fee'];
+        $educationPaid = (float) $educationPaymentState['verified_paid'];
+        $remainingEducationFee = (float) $educationPaymentState['remaining_verified'];
+        $educationPaymentStatus = match ($educationPaymentState['status']) {
+            'paid' => 'LUNAS',
+            'partial' => 'CICILAN',
+            'fee_unset' => 'BIAYA BELUM DITETAPKAN',
+            default => 'BELUM BAYAR',
+        };
         $invoiceRows = $myInvoices->filter(fn ($invoice) => in_array(strtolower(trim((string) ($invoice['Status'] ?? ''))), ['waiting payment', 'partial paid', 'paid', 'overdue'], true));
         $totalBilled = (float) $invoiceRows->sum('Amount');
         $totalPaid = (float) $invoiceRows->sum('Paid_Amount');
         $sisaTagihan = (float) $invoiceRows->sum('Remaining_Amount');
         $statusPembayaran = $invoiceRows->isEmpty() ? 'Belum ada tagihan' : ($sisaTagihan <= 0 ? 'LUNAS' : ($totalPaid > 0 ? 'DIBAYAR SEBAGIAN' : 'BELUM DIBAYAR'));
-        $paymentProgress = $totalBilled > 0 ? min(100, round(($totalPaid / $totalBilled) * 100)) : 0;
+        $paymentProgress = $educationFee > 0 ? min(100, round(($educationPaid / $educationFee) * 100)) : 0;
 
         $lastPayment = $myPayments->filter(fn ($payment) => \App\Support\Finance\PaymentStatus::verified($payment['Status'] ?? null))->sortByDesc('Payment_Date')->first();
         $nextDueDate = $outstandingBills->whereNotNull('Due_Date')->sortBy('Due_Date')->first();
@@ -179,6 +196,9 @@ class StudentDashboardService
         $kpi = [
             'today_class'           => $todayClassCount,
             'biaya_pendidikan'      => $educationFee,
+            'sudah_dibayar'         => $educationPaid,
+            'sisa_biaya_pendidikan' => $remainingEducationFee,
+            'status_biaya_pendidikan' => $educationPaymentStatus,
             'total_tagihan'         => $totalBilled,
             'tagihan_dibayar'       => $totalPaid,
             'sisa_tagihan'          => $sisaTagihan,

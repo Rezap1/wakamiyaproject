@@ -39,18 +39,38 @@
     @endif
 </section>
 
-<section class="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-5">
-    <h2 class="text-xs font-bold uppercase tracking-widest text-blue-800">Biaya Pendidikan</h2>
-    <p class="mt-1 text-2xl font-black text-slate-900">Rp {{ number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.') }}</p>
-    <p class="mt-2 text-sm text-slate-600">Informasi biaya resmi. Tagihan muncul setelah diterbitkan oleh bagian keuangan.</p>
+<section class="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm sm:p-5" aria-labelledby="education-payment-summary-heading">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h2 id="education-payment-summary-heading" class="text-xs font-bold uppercase tracking-widest text-blue-800">Ringkasan Biaya Pendidikan</h2>
+            <p class="mt-1 text-sm text-slate-600">Berdasarkan pembayaran Biaya Pendidikan yang sudah diverifikasi.</p>
+        </div>
+        <span class="inline-flex rounded-full px-3 py-1 text-xs font-black {{ ($kpi['status_biaya_pendidikan'] ?? '') === 'LUNAS' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
+            {{ $kpi['status_biaya_pendidikan'] ?? 'BELUM BAYAR' }}
+        </span>
+    </div>
+    <dl class="mt-4 grid grid-cols-1 gap-3 min-[360px]:grid-cols-3">
+        <div class="min-w-0 rounded-xl bg-white p-3 shadow-sm">
+            <dt class="text-[11px] font-bold text-slate-500">Biaya Pendidikan</dt>
+            <dd class="mt-1 break-words text-lg font-black text-slate-900">Rp {{ number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
+        </div>
+        <div class="min-w-0 rounded-xl bg-emerald-50 p-3">
+            <dt class="text-[11px] font-bold text-emerald-700">Sudah Dibayar</dt>
+            <dd class="mt-1 break-words text-lg font-black text-emerald-900">Rp {{ number_format($kpi['sudah_dibayar'] ?? 0, 0, ',', '.') }}</dd>
+        </div>
+        <div class="min-w-0 rounded-xl bg-amber-50 p-3">
+            <dt class="text-[11px] font-bold text-amber-700">Sisa Biaya Pendidikan</dt>
+            <dd class="mt-1 break-words text-lg font-black text-amber-900">Rp {{ number_format($kpi['sisa_biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
+        </div>
+    </dl>
 </section>
 
 @php
     $formattedKpi = [
         ['title' => "Kelas Hari Ini", 'value' => $kpi['today_class'] ?? 0, 'icon' => 'calendar', 'color' => 'indigo', 'link' => route('student.schedule')],
-        ['title' => 'Total Tagihan', 'value' => 'Rp '.number_format($kpi['total_tagihan'] ?? 0, 0, ',', '.'), 'icon' => 'document-text', 'color' => 'blue', 'link' => route('student.billing.index')],
-        ['title' => 'Tagihan Dibayar', 'value' => 'Rp '.number_format($kpi['tagihan_dibayar'] ?? 0, 0, ',', '.'), 'icon' => 'check-circle', 'color' => 'emerald', 'link' => route('student.billing.index')],
-        ['title' => 'Sisa Tagihan', 'value' => 'Rp '.number_format($kpi['sisa_tagihan'] ?? 0, 0, ',', '.') . ' (' . ($kpi['status_pembayaran'] ?? 'BELUM LUNAS') . ')', 'icon' => 'cash', 'color' => ($kpi['sisa_tagihan'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('student.billing.index')],
+        ['title' => 'Biaya Pendidikan', 'value' => 'Rp '.number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.'), 'icon' => 'document-text', 'color' => 'blue', 'link' => route('student.billing.index')],
+        ['title' => 'Sudah Dibayar', 'value' => 'Rp '.number_format($kpi['sudah_dibayar'] ?? 0, 0, ',', '.'), 'icon' => 'check-circle', 'color' => 'emerald', 'link' => route('student.billing.index')],
+        ['title' => 'Sisa Biaya Pendidikan', 'value' => 'Rp '.number_format($kpi['sisa_biaya_pendidikan'] ?? 0, 0, ',', '.') . ' (' . ($kpi['status_biaya_pendidikan'] ?? 'BELUM BAYAR') . ')', 'icon' => 'cash', 'color' => ($kpi['sisa_biaya_pendidikan'] ?? 0) > 0 ? 'rose' : 'emerald', 'link' => route('student.billing.index')],
         ['title' => 'Pengajuan Presensi', 'value' => ($kpi['request_pending'] ?? 0) . ' Pending / ' . ($kpi['request_approved'] ?? 0) . ' Setuju', 'icon' => 'document-text', 'color' => ($kpi['request_pending'] ?? 0) > 0 ? 'amber' : 'emerald', 'link' => route('student.attendance.requests.index')],
     ];
 
