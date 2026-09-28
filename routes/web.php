@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Academic\AttendanceReportController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Core\AuthController;
 use App\Http\Controllers\Core\DashboardController;
@@ -54,6 +55,11 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:TEACHER')->get('/dashboard/teacher', [\App\Http\Controllers\Core\TeacherDashboardController::class, 'index'])->name('dashboard.teacher');
     Route::middleware('role:STUDENT')->get('/dashboard/student', [\App\Http\Controllers\Core\StudentDashboardController::class, 'index'])->name('dashboard.student');
     Route::middleware('role:ADMINISTRATOR')->get('/dashboard/administrator', [\App\Http\Controllers\Core\DashboardController::class, 'index'])->name('dashboard.administrator');
+
+    Route::prefix('attendance/reports')->name('attendance.reports.')->middleware('role:TEACHER,ADMINISTRATOR')->group(function () {
+        Route::get('/', [AttendanceReportController::class, 'index'])->name('index');
+        Route::get('/pdf', [AttendanceReportController::class, 'pdf'])->name('pdf');
+    });
 
     // Developer Panel
     Route::middleware('role:ADMINISTRATOR')->get('/developer-panel', [DeveloperPanelController::class, 'index'])->name('developer-panel.index');

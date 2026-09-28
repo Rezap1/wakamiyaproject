@@ -30,6 +30,7 @@
             ['label' => 'Mata Pelajaran', 'route' => 'subjects.index', 'active_route' => 'subjects.*', 'icon' => 'library'],
             ['label' => 'Jadwal Kelas', 'route' => 'schedules.index', 'active_route' => 'schedules.*', 'icon' => 'calendar'],
             ['label' => 'Presensi Akademik', 'route' => 'attendances.index', 'active_route' => 'attendances.*', 'icon' => 'clock'],
+            ['label' => 'Laporan Absensi', 'route' => 'attendance.reports.index', 'active_route' => 'attendance.reports.*', 'icon' => 'chart-bar'],
             ['label' => 'Tinjau Pengajuan', 'route' => 'academic.attendance.requests.index', 'active_route' => 'academic.attendance.requests.*', 'icon' => 'clipboard-check'],
         ]],
         ['group' => 'FINANCE', 'items' => [
@@ -159,6 +160,7 @@
                     <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.*') }}" icon="clock">Monitoring Pegawai</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('attendance.reports.index') }}" active="{{ request()->routeIs('attendance.reports.*') }}" icon="chart-bar">Laporan Absensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Pembuat Dokumen</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.qr.index') }}" active="{{ request()->routeIs('attendance.qr.*') }}" icon="qrcode">QR Presensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
@@ -226,6 +228,7 @@
                     <x-sidebar.nav-link href="{{ route('announcements.index') }}" active="{{ request()->routeIs('announcements.*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Kehadiran</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendances') }}" active="{{ request()->routeIs('teacher.workspace.attendances') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('attendance.reports.index') }}" active="{{ request()->routeIs('attendance.reports.*') }}" icon="chart-bar">Laporan Absensi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Akademik</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.scores') }}" active="{{ request()->routeIs('teacher.workspace.scores*') }}" icon="chart-bar">Penilaian</x-sidebar.nav-link>
