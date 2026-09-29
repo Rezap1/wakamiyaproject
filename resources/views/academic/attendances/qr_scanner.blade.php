@@ -1,6 +1,15 @@
 @extends('layouts.app')
 @section('header', 'Pindai QR')
 @section('content')
+@php
+    $settingService = app(\App\Services\Core\SystemSettingService::class);
+    $attendanceStart = $settingService->get('WORK_START_TIME', null);
+    $attendanceEnd = $settingService->get('WORK_END_TIME', null);
+    $attendanceWindowLabel = preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $attendanceStart)
+        && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $attendanceEnd)
+        ? "{$attendanceStart}–{$attendanceEnd} WIB"
+        : 'Konfigurasi jam belum valid';
+@endphp
 
 <div class="max-w-md mx-auto space-y-4 pb-20 select-none" x-data="studentQrScannerEngine()">
 
@@ -49,6 +58,8 @@
                 <div>
                     <h4 class="text-xs font-black text-slate-900">Presensi Kelas Siswa</h4>
                     <p class="text-[11px] text-slate-500 font-medium">Pindai QR Code Kelas / Sensei di dalam kelas</p>
+                    <p class="text-[11px] text-sky-700 font-bold mt-1">Jam absensi: {{ $attendanceWindowLabel }}</p>
+                    <p class="text-[10px] text-slate-500 font-medium mt-1">Absensi di luar waktu tersebut tidak dapat dilakukan.</p>
                 </div>
             </div>
 
@@ -299,7 +310,6 @@
 </style>
 
 @php
-    $settingService = app(\App\Services\Core\SystemSettingService::class);
     $lpkLat = \App\Support\CoordinateNormalizer::parse($settingService->get('LPK_LATITUDE', null), -90, 90);
     $lpkLon = \App\Support\CoordinateNormalizer::parse($settingService->get('LPK_LONGITUDE', null), -180, 180);
     $maxRadius = $settingService->get('LPK_ALLOWED_RADIUS_METERS', null);
@@ -467,7 +477,7 @@
                             date: now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
                             time: (isCheckOut ? data.data.check_out_time : data.data.check_in_time) || now.toLocaleTimeString('id-ID'),
                             distance: (data.data.distance_meters || this.haversine(this.coords.lat, this.coords.lon, this.lpkLat, this.lpkLon)).toFixed(1).replace('.', ','),
-                            statusLabel: isCheckOut ? 'KELUAR' : (data.data.status === 'PRESENT' ? 'HADIR' : 'TERLAMBAT'),
+                            statusLabel: isCheckOut ? 'KELUAR' : 'HADIR',
                             message: data.message
                         };
                         this.viewState = 'SUCCESS';

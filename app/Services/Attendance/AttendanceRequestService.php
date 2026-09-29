@@ -3,31 +3,40 @@
 namespace App\Services\Attendance;
 
 use App\Helpers\AttendanceStatusHelper;
-use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use App\Services\Core\RoleService;
 use App\Support\Academic\TeacherScopeResolver;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Auth\Access\AuthorizationException;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class AttendanceRequestService
 {
     protected $requestRepo;
+
     protected $attendanceRepo;
+
     protected $activityLog;
+
     protected $studentRepo;
+
     protected $scheduleRepo;
+
     protected $notificationService;
+
     protected $teacherRepo;
+
     protected $classRepo;
+
     protected $teacherScopeResolver;
 
     public function __construct(
@@ -86,12 +95,12 @@ class AttendanceRequestService
     public function assertTeacherCanReviewRequest($requestId, $user): array
     {
         $request = $this->findById($requestId);
-        if (!$request) {
+        if (! $request) {
             throw new Exception('Pengajuan tidak ditemukan.');
         }
 
         $scope = $this->teacherScopeForUser($user);
-        if (!$this->requestAllowedForTeacherFromSnapshot($request, $scope)) {
+        if (! $this->requestAllowedForTeacherFromSnapshot($request, $scope)) {
             throw new AuthorizationException('Anda tidak memiliki akses untuk memproses pengajuan ini.');
         }
 
@@ -106,16 +115,16 @@ class AttendanceRequestService
             $student = collect($this->studentRepo->fetchAll())->firstWhere('User_ID', $user->User_ID);
             $studentId = trim((string) ($student['Student_ID'] ?? ''));
             $studentClassId = trim((string) ($student['Class_ID'] ?? ''));
-            if (!$student || $studentId === '' || $studentClassId === '' || $studentId !== ($data['Student_ID'] ?? '')) {
+            if (! $student || $studentId === '' || $studentClassId === '' || $studentId !== ($data['Student_ID'] ?? '')) {
                 throw new Exception('Student request tidak sesuai dengan akun yang sedang login.');
             }
             if ($target['Attendance_Type'] === 'CLASS_QR') {
                 $target['Class_ID'] = $studentClassId;
-            } elseif (!$this->scheduleRepo) {
+            } elseif (! $this->scheduleRepo) {
                 throw new Exception('Master schedule tidak tersedia.');
             } else {
                 $schedule = collect($this->scheduleRepo->fetchAll())->firstWhere('Schedule_ID', $target['Schedule_ID']);
-                if (!$schedule || trim((string) ($schedule['Class_ID'] ?? '')) !== $studentClassId) {
+                if (! $schedule || trim((string) ($schedule['Class_ID'] ?? '')) !== $studentClassId) {
                     throw new Exception('Jadwal tidak valid atau bukan milik kelas student.');
                 }
                 $target['Class_ID'] = $studentClassId;
@@ -123,14 +132,14 @@ class AttendanceRequestService
         }
 
         $attendanceScope = $target['Attendance_Type'] === 'CLASS_QR' ? $target['Class_ID'] : $target['Schedule_ID'];
-        $createLockKey = 'attendance_request_create_' . md5(implode('|', [
+        $createLockKey = 'attendance_request_create_'.md5(implode('|', [
             $data['Student_ID'] ?? '',
             $data['Attendance_Date'] ?? '',
             $target['Attendance_Type'],
             $attendanceScope,
         ]));
 
-        return Cache::lock($createLockKey, 15)->block(10, function () use ($data, $target, $attendanceScope, $user) {
+        return Cache::lock($createLockKey, 15)->block(10, function () use ($data, $target, $user) {
             $existing = $this->getStudentRequests($data['Student_ID'])->first(function ($item) use ($data, $target) {
                 if (($item['Student_ID'] ?? '') !== ($data['Student_ID'] ?? '')
                     || ($item['Attendance_Date'] ?? '') !== ($data['Attendance_Date'] ?? '')) {
@@ -155,7 +164,7 @@ class AttendanceRequestService
             }
 
             $requestType = strtoupper(trim((string) ($data['Request_Type'] ?? '')));
-            if (!in_array($requestType, ['SAKIT', 'IZIN'], true)) {
+            if (! in_array($requestType, ['SAKIT', 'IZIN'], true)) {
                 throw new Exception('Tipe pengajuan harus SAKIT atau IZIN.');
             }
 
@@ -193,7 +202,7 @@ class AttendanceRequestService
                         "Pengajuan {$insertData['Request_ID']} untuk tanggal {$insertData['Attendance_Date']} menunggu review guru.",
                         'ATTENDANCE',
                         'Normal',
-                        '/academic/attendance/requests/' . $insertData['Request_ID'],
+                        '/academic/attendance/requests/'.$insertData['Request_ID'],
                         $this->actorId($user)
                     );
                 } catch (\Throwable $notificationFailure) {
@@ -224,22 +233,23 @@ class AttendanceRequestService
     public function approveRequest($requestId, $statusToApply, $notes, $user)
     {
         $statusToApply = strtoupper(trim((string) $statusToApply));
-        if (!in_array($statusToApply, ['SAKIT', 'IZIN'], true)) {
+        if (! in_array($statusToApply, ['SAKIT', 'IZIN'], true)) {
             throw new Exception('Status approval harus berupa SAKIT atau IZIN.');
         }
 
-        return Cache::lock('attendance_request_status_' . md5((string) $requestId), 15)->block(10, function () use ($requestId, $statusToApply, $notes, $user) {
+        return Cache::lock('attendance_request_status_'.md5((string) $requestId), 15)->block(10, function () use ($requestId, $statusToApply, $notes, $user) {
             $request = $this->assertTeacherCanReviewRequest($requestId, $user);
             $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
             $target = $this->resolveRequestTarget($request);
             $existingAttendance = $this->resolveOfficialAttendance($request, $target);
 
             if ($currentStatus === 'APPROVED') {
-                if ($existingAttendance && !$this->attendanceStatusMatches($existingAttendance['Status'] ?? '', $statusToApply)) {
+                if ($existingAttendance && ! $this->attendanceStatusMatches($existingAttendance['Status'] ?? '', $statusToApply)) {
                     throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
                 }
 
                 $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+
                 return true;
             }
 
@@ -263,15 +273,19 @@ class AttendanceRequestService
 
             $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
 
-            $this->notifyStudentDecision($request, 'APPROVED', $statusToApply, (string) $notes, $user);
+            $this->runPostCommitSideEffect(
+                fn () => $this->notifyStudentDecision($request, 'APPROVED', $statusToApply, (string) $notes, $user),
+                'notification',
+                (string) $requestId
+            );
 
-            $this->activityLog->log(
+            $this->runPostCommitSideEffect(fn () => $this->activityLog->log(
                 'ATTENDANCE',
                 'ATTENDANCE_REQUEST_APPROVED',
-                'Teacher ' . $this->actorId($user) . " approved request {$requestId} as {$statusToApply}",
+                'Teacher '.$this->actorId($user)." approved request {$requestId} as {$statusToApply}",
                 null,
                 ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'APPROVED', 'Notes' => $notes]
-            );
+            ), 'activity_log', (string) $requestId);
 
             return true;
         });
@@ -283,7 +297,7 @@ class AttendanceRequestService
             throw new Exception('Alasan penolakan wajib diisi.');
         }
 
-        return Cache::lock('attendance_request_status_' . md5((string) $requestId), 15)->block(10, function () use ($requestId, $notes, $user) {
+        return Cache::lock('attendance_request_status_'.md5((string) $requestId), 15)->block(10, function () use ($requestId, $notes, $user) {
             $request = $this->assertTeacherCanReviewRequest($requestId, $user);
             $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
             $target = $this->resolveRequestTarget($request);
@@ -291,6 +305,7 @@ class AttendanceRequestService
 
             if ($currentStatus === 'REJECTED') {
                 $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+
                 return true;
             }
 
@@ -314,15 +329,19 @@ class AttendanceRequestService
 
             $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
 
-            $this->notifyStudentDecision($request, 'REJECTED', 'ALPA', (string) $notes, $user);
+            $this->runPostCommitSideEffect(
+                fn () => $this->notifyStudentDecision($request, 'REJECTED', 'ALPA', (string) $notes, $user),
+                'notification',
+                (string) $requestId
+            );
 
-            $this->activityLog->log(
+            $this->runPostCommitSideEffect(fn () => $this->activityLog->log(
                 'ATTENDANCE',
                 'ATTENDANCE_REQUEST_REJECTED',
-                'Teacher ' . $this->actorId($user) . " rejected request {$requestId}",
+                'Teacher '.$this->actorId($user)." rejected request {$requestId}",
                 null,
                 ['Request_ID' => $requestId, 'Student_ID' => $request['Student_ID'], 'New_Status' => 'REJECTED', 'Notes' => $notes]
-            );
+            ), 'activity_log', (string) $requestId);
 
             return true;
         });
@@ -347,7 +366,7 @@ class AttendanceRequestService
             $type = 'CLASS_QR';
         }
 
-        if (!in_array($type, ['CLASS_QR', 'SCHEDULE'], true)) {
+        if (! in_array($type, ['CLASS_QR', 'SCHEDULE'], true)) {
             throw new Exception('Tipe target attendance tidak valid.');
         }
 
@@ -355,6 +374,7 @@ class AttendanceRequestService
             if ($strict && $classId === '') {
                 throw new Exception('Kelas student wajib tersedia untuk request class-based.');
             }
+
             return ['Attendance_Type' => 'CLASS_QR', 'Class_ID' => $classId, 'Schedule_ID' => ''];
         }
 
@@ -368,13 +388,13 @@ class AttendanceRequestService
     private function resolveRequestTarget(array $request): array
     {
         $studentId = trim((string) ($request['Student_ID'] ?? ''));
-        if ($studentId === '' || !$this->studentRepo || !$this->scheduleRepo) {
+        if ($studentId === '' || ! $this->studentRepo || ! $this->scheduleRepo) {
             throw new Exception('Identitas student atau master schedule tidak tersedia.');
         }
 
         $student = collect($this->studentRepo->fetchAll())->firstWhere('Student_ID', $studentId);
         $studentClassId = trim((string) ($student['Class_ID'] ?? ''));
-        if (!$student || $studentClassId === '') {
+        if (! $student || $studentClassId === '') {
             throw new Exception('Student tidak memiliki mapping kelas yang valid.');
         }
 
@@ -386,15 +406,17 @@ class AttendanceRequestService
             }
             $target['Class_ID'] = $studentClassId;
             $target['Schedule_ID'] = '';
+
             return $target;
         }
 
         $schedule = collect($this->scheduleRepo->fetchAll())->firstWhere('Schedule_ID', $target['Schedule_ID']);
-        if (!$schedule || trim((string) ($schedule['Class_ID'] ?? '')) !== $studentClassId) {
+        if (! $schedule || trim((string) ($schedule['Class_ID'] ?? '')) !== $studentClassId) {
             throw new Exception('Jadwal tidak valid atau bukan milik kelas student.');
         }
 
         $target['Class_ID'] = $studentClassId;
+
         return $target;
     }
 
@@ -415,6 +437,7 @@ class AttendanceRequestService
                 throw new Exception('Data presensi resmi gagal diperbarui.');
             }
             $this->attendanceRepo->clearCache();
+
             return;
         }
 
@@ -436,6 +459,23 @@ class AttendanceRequestService
         $this->attendanceRepo->clearCache();
     }
 
+    private function runPostCommitSideEffect(callable $operation, string $stage, string $requestId): void
+    {
+        try {
+            $operation();
+        } catch (\Throwable $failure) {
+            try {
+                Log::error('Attendance request post-commit side effect failed', [
+                    'request_id' => $requestId,
+                    'stage' => $stage,
+                    'exception' => get_class($failure),
+                ]);
+            } catch (\Throwable) {
+                // Official attendance is already durable; preserve success.
+            }
+        }
+    }
+
     private function resolveOfficialAttendance(array $request, array $target): ?array
     {
         $attendanceId = trim((string) ($request['Attendance_ID'] ?? ''));
@@ -443,6 +483,7 @@ class AttendanceRequestService
             $selected = $this->attendanceRepo->findById($attendanceId);
             if ($selected) {
                 $this->assertAttendanceIdentity($selected, $request, $target);
+
                 return $selected;
             }
         }
@@ -495,25 +536,26 @@ class AttendanceRequestService
         $parts = [$request['Student_ID'] ?? '', $request['Attendance_Date'] ?? '', $scope, $target['Attendance_Type']];
         $safe = array_map(fn ($part) => preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $part), $parts);
         if ($target['Attendance_Type'] === 'SCHEDULE') {
-            return 'ATT-' . $safe[0] . '-' . preg_replace('/[^0-9]/', '', (string) ($request['Attendance_Date'] ?? '')) . '-' . $safe[2];
+            return 'ATT-'.$safe[0].'-'.preg_replace('/[^0-9]/', '', (string) ($request['Attendance_Date'] ?? '')).'-'.$safe[2];
         }
-        return 'ATT-' . implode('-', $safe);
+
+        return 'ATT-'.implode('-', $safe);
     }
 
     private function teacherScopeForUser($user): array
     {
-        if (!$this->isTeacherActor($user)) {
+        if (! $this->isTeacherActor($user)) {
             throw new AuthorizationException('Hanya guru yang dapat memproses pengajuan izin/sakit siswa.');
         }
 
-        if (!$this->teacherRepo || !$this->studentRepo || !$this->scheduleRepo || !$this->classRepo) {
+        if (! $this->teacherRepo || ! $this->studentRepo || ! $this->scheduleRepo || ! $this->classRepo) {
             throw new AuthorizationException('Master scope guru tidak tersedia.');
         }
 
         $userId = $this->actorId($user);
         $teacher = collect($this->teacherRepo->fetchAll())->firstWhere('User_ID', $userId);
         $teacherId = trim((string) ($teacher['Teacher_ID'] ?? ''));
-        if (!$teacher || $teacherId === '') {
+        if (! $teacher || $teacherId === '') {
             throw new AuthorizationException('Profil guru tidak ditemukan.');
         }
 
@@ -567,7 +609,7 @@ class AttendanceRequestService
     {
         $studentId = trim((string) ($request['Student_ID'] ?? ''));
         $student = $scope['students_by_id']->get($studentId);
-        if (!$student) {
+        if (! $student) {
             return false;
         }
 
@@ -591,11 +633,12 @@ class AttendanceRequestService
 
         if ($target['Attendance_Type'] === 'CLASS_QR') {
             $requestedClassId = trim((string) ($request['Class_ID'] ?? ''));
+
             return $requestedClassId === '' || $studentClassIds->contains($requestedClassId);
         }
 
         $schedule = $scope['schedules_by_id']->get($target['Schedule_ID'] ?? '');
-        if (!$schedule) {
+        if (! $schedule) {
             return false;
         }
 
@@ -612,7 +655,7 @@ class AttendanceRequestService
 
     private function roleNameForUser($user): string
     {
-        if (!$user) {
+        if (! $user) {
             return '';
         }
 
@@ -627,7 +670,7 @@ class AttendanceRequestService
         }
 
         try {
-            return strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)->getRoleById($roleId)['Role_Name'] ?? '')));
+            return strtoupper(trim((string) (app(RoleService::class)->getRoleById($roleId)['Role_Name'] ?? '')));
         } catch (\Throwable) {
             return '';
         }
@@ -679,7 +722,7 @@ class AttendanceRequestService
 
     private function notifyStudentDecision(array $request, string $decision, string $attendanceStatus, string $notes, $user): void
     {
-        if (!$this->notificationService || !$this->studentRepo) {
+        if (! $this->notificationService || ! $this->studentRepo) {
             return;
         }
 
@@ -696,7 +739,7 @@ class AttendanceRequestService
             ? "Pengajuan presensi tanggal {$date} disetujui sebagai {$statusLabel}."
             : "Pengajuan presensi tanggal {$date} ditolak. Status presensi menjadi {$statusLabel}.";
         if (trim($notes) !== '') {
-            $message .= ' Catatan: ' . trim($notes);
+            $message .= ' Catatan: '.trim($notes);
         }
 
         try {

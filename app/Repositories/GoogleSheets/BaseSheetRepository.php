@@ -2,13 +2,18 @@
 
 namespace App\Repositories\GoogleSheets;
 
-use Google_Client;
-use Google_Service_Sheets;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use App\Exceptions\AmbiguousSheetWriteException;
 use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Exceptions\FinancialIntegrityException;
+use App\Helpers\UserResolverHelper;
+use Google\Service\Sheets\ValueRange;
+use Google_Client;
+use Google_Service_Sheets;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\TransferException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 abstract class BaseSheetRepository
@@ -16,33 +21,42 @@ abstract class BaseSheetRepository
     private const WRITE_INPUT_OPTION = 'RAW';
 
     protected $client;
+
     protected $service;
+
     protected $spreadsheetId;
+
     protected $sheetName;
+
     protected $cacheKey;
+
     protected $primaryKey = 'id';
+
     protected $cacheTtl = 3600; // 1 hour default
+
     protected $inMemoryRows = null;
+
     protected $skipRowsWithoutPrimaryKey = true;
+
     protected $expectedHeaders = [];
 
     public function __construct()
     {
         $this->spreadsheetId = config('services.google.spreadsheet_id');
         $this->cacheTtl = config('cache.wms.master', 60); // Default to 60s
-        $this->client = new Google_Client();
+        $this->client = new Google_Client;
         $this->client->setApplicationName('Wakamiya Management System');
         $this->client->setScopes([Google_Service_Sheets::SPREADSHEETS]);
         $this->client->setAccessType('offline');
-        
+
         $credentialsPath = storage_path('app/google-credentials.json');
         if (file_exists($credentialsPath)) {
             $this->client->setAuthConfig($credentialsPath);
         } else {
-            Log::warning('Google Credentials file not found at: ' . $credentialsPath);
+            Log::warning('Google Credentials file not found at: '.$credentialsPath);
         }
 
-        $this->client->setHttpClient(new \GuzzleHttp\Client([
+        $this->client->setHttpClient(new Client([
             'connect_timeout' => 10,
             'timeout' => 30,
         ]));
@@ -61,14 +75,14 @@ abstract class BaseSheetRepository
         }
 
         $startTime = microtime(true);
-        $cacheKey = $this->cacheKey . '_all';
+        $cacheKey = $this->cacheKey.'_all';
         $isHit = Cache::has($cacheKey);
 
         try {
             if ($isHit) {
                 $data = Cache::get($cacheKey);
             } else {
-                $lockKey = $cacheKey . '_read_lock';
+                $lockKey = $cacheKey.'_read_lock';
                 $data = Cache::lock($lockKey, 45)->block(10, function () use ($cacheKey) {
                     if (Cache::has($cacheKey)) {
                         return Cache::get($cacheKey);
@@ -84,14 +98,14 @@ abstract class BaseSheetRepository
             $duration = round((microtime(true) - $startTime) * 1000, 2);
             Log::info("Google Sheets FetchAll on {$this->sheetName}", [
                 'duration_ms' => $duration,
-                'cache' => $isHit ? 'HIT' : 'MISS'
+                'cache' => $isHit ? 'HIT' : 'MISS',
             ]);
 
-            $this->inMemoryRows = $data instanceof \Illuminate\Support\Collection ? $data : collect($data);
+            $this->inMemoryRows = $data instanceof Collection ? $data : collect($data);
 
             return clone $this->inMemoryRows;
         } catch (\Exception $e) {
-            Log::error("Google API Error during fetchAll on {$this->sheetName}: " . $e->getMessage());
+            Log::error("Google API Error during fetchAll on {$this->sheetName}: ".$e->getMessage());
             throw $e;
         }
     }
@@ -110,6 +124,7 @@ abstract class BaseSheetRepository
 
         if (empty($values)) {
             $this->assertExpectedHeaders([]);
+
             return collect([]);
         }
 
@@ -132,7 +147,7 @@ abstract class BaseSheetRepository
                 continue;
             }
             if ($this->skipRowsWithoutPrimaryKey
-                && !empty($this->primaryKey)
+                && ! empty($this->primaryKey)
                 && trim((string) ($item[$this->primaryKey] ?? '')) === '') {
                 continue;
             }
@@ -156,12 +171,14 @@ abstract class BaseSheetRepository
 
         $headers = array_map(fn ($header) => trim((string) $header), $values[0] ?? []);
         $this->assertExpectedHeaders($headers);
+
         return $headers;
     }
 
     public function findByIdFresh($id)
     {
         $needle = strtolower(trim((string) $id));
+
         return $this->fetchAllFresh()->first(function ($row) use ($needle) {
             return strtolower(trim((string) ($row[$this->primaryKey] ?? ''))) === $needle;
         });
@@ -173,7 +190,7 @@ abstract class BaseSheetRepository
     public function clearCache()
     {
         $this->inMemoryRows = null;
-        Cache::forget($this->cacheKey . '_all');
+        Cache::forget($this->cacheKey.'_all');
 
         if (in_array($this->sheetName, [
             'MASTER_EMPLOYEE',
@@ -184,7 +201,7 @@ abstract class BaseSheetRepository
             'MASTER_CLASS',
             'MASTER_BATCH',
         ], true)) {
-            \App\Helpers\UserResolverHelper::clearCache();
+            UserResolverHelper::clearCache();
         }
     }
 
@@ -194,11 +211,11 @@ abstract class BaseSheetRepository
      */
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        $lockKey = $this->sheetName . '_write_lock';
-        $counterKey = 'id_counter_' . $this->sheetName . '_' . $prefix;
+        $lockKey = $this->sheetName.'_write_lock';
+        $counterKey = 'id_counter_'.$this->sheetName.'_'.$prefix;
 
         return Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $padding, $counterKey) {
-            if (!Cache::has($counterKey)) {
+            if (! Cache::has($counterKey)) {
                 $allData = $this->fetchAll();
                 $maxNumber = 0;
 
@@ -217,7 +234,8 @@ abstract class BaseSheetRepository
             }
 
             $nextNumber = Cache::increment($counterKey);
-            return $prefix . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
+
+            return $prefix.str_pad((string) $nextNumber, $padding, '0', STR_PAD_LEFT);
         });
     }
 
@@ -227,7 +245,7 @@ abstract class BaseSheetRepository
     public function append(array $data)
     {
         $startTime = microtime(true);
-        $lockKey = $this->sheetName . '_write_lock';
+        $lockKey = $this->sheetName.'_write_lock';
 
         try {
             return Cache::lock($lockKey, 120)->block(15, function () use ($data, $startTime) {
@@ -276,17 +294,17 @@ abstract class BaseSheetRepository
                     // row so the API receives values: [[cell, cell, ...]].
                     $rowValues = array_values($rowValues);
 
-                    $body = new \Google\Service\Sheets\ValueRange();
+                    $body = new ValueRange;
                     $body->setValues([array_values($rowValues)]);
 
                     $params = [
-                        'valueInputOption' => self::WRITE_INPUT_OPTION
+                        'valueInputOption' => self::WRITE_INPUT_OPTION,
                     ];
 
                     try {
                         return $this->service->spreadsheets_values->append($this->spreadsheetId, $this->sheetName, $body, $params);
                     } catch (Throwable $e) {
-                        if (!$this->isAmbiguousWriteException($e)) {
+                        if (! $this->isAmbiguousWriteException($e)) {
                             throw $e;
                         }
 
@@ -297,6 +315,7 @@ abstract class BaseSheetRepository
                                 'primary_key' => $primaryKeyValue,
                                 'exception' => get_class($e),
                             ]);
+
                             return true;
                         }
                         if ($verified === null) {
@@ -310,16 +329,30 @@ abstract class BaseSheetRepository
                         throw $e;
                     }
                 }, 'append');
-                
-                $this->clearCache();
-                
+
+                // The Sheets append has committed. Cache invalidation is
+                // best-effort and must not turn that durable write into an
+                // error response that encourages a duplicate retry.
+                try {
+                    $this->clearCache();
+                } catch (Throwable $cacheFailure) {
+                    Log::warning('Post-append cache invalidation failed', [
+                        'sheet' => $this->sheetName,
+                        'exception' => get_class($cacheFailure),
+                    ]);
+                }
+
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
-                Log::info("Google Sheets Append on {$this->sheetName}", ['duration_ms' => $duration]);
-                
+                try {
+                    Log::info("Google Sheets Append on {$this->sheetName}", ['duration_ms' => $duration]);
+                } catch (Throwable) {
+                    // Observability is non-authoritative after a committed write.
+                }
+
                 return $result;
             });
         } catch (\Exception $e) {
-            Log::error("Google API Error during append on {$this->sheetName}: " . $e->getMessage(), [
+            Log::error("Google API Error during append on {$this->sheetName}: ".$e->getMessage(), [
                 'sheet' => $this->sheetName,
                 'operation' => 'append',
                 'exception' => get_class($e),
@@ -344,6 +377,7 @@ abstract class BaseSheetRepository
                     return true;
                 }
             }
+
             return false;
         } catch (Throwable $e) {
             Log::warning('Google Sheets write verification failed', [
@@ -352,6 +386,7 @@ abstract class BaseSheetRepository
                 'exception' => get_class($e),
                 'http_status' => $this->httpStatus($e),
             ]);
+
             return null;
         }
     }
@@ -364,7 +399,7 @@ abstract class BaseSheetRepository
                 return $operation($attempt);
             } catch (Throwable $e) {
                 $last = $e;
-                if (!$this->isRetryableGoogleException($e) || $attempt >= $maxAttempts) {
+                if (! $this->isRetryableGoogleException($e) || $attempt >= $maxAttempts) {
                     throw $e;
                 }
 
@@ -387,6 +422,10 @@ abstract class BaseSheetRepository
 
     protected function isRetryableGoogleException(Throwable $e): bool
     {
+        if ($e instanceof AmbiguousSheetWriteException) {
+            return false;
+        }
+
         $status = $this->httpStatus($e);
         if (in_array($status, [429, 500, 502, 503, 504], true)) {
             return true;
@@ -394,10 +433,11 @@ abstract class BaseSheetRepository
         if ($status >= 400 && $status < 500) {
             return false;
         }
-        if ($e instanceof \GuzzleHttp\Exception\TransferException) {
+        if ($e instanceof TransferException) {
             return true;
         }
         $message = strtolower($e->getMessage());
+
         return str_contains($message, 'timed out')
             || str_contains($message, 'timeout')
             || str_contains($message, 'connection reset')
@@ -406,7 +446,7 @@ abstract class BaseSheetRepository
 
     protected function isAmbiguousWriteException(Throwable $e): bool
     {
-        if ($e instanceof \GuzzleHttp\Exception\TransferException) {
+        if ($e instanceof TransferException) {
             return true;
         }
         $status = $this->httpStatus($e);
@@ -414,6 +454,7 @@ abstract class BaseSheetRepository
             return true;
         }
         $message = strtolower($e->getMessage());
+
         return str_contains($message, 'timeout')
             || str_contains($message, 'timed out')
             || str_contains($message, 'connection reset');
@@ -428,6 +469,7 @@ abstract class BaseSheetRepository
         if (method_exists($e, 'getResponse') && $e->getResponse()) {
             return (int) $e->getResponse()->getStatusCode();
         }
+
         return 0;
     }
 
@@ -441,6 +483,7 @@ abstract class BaseSheetRepository
             return min(15000, max(100, (int) $retryAfter * 1000));
         }
         $base = min(4000, 250 * (2 ** ($attempt - 1)));
+
         return $base + random_int(0, max(1, (int) ($base * 0.25)));
     }
 
@@ -457,7 +500,7 @@ abstract class BaseSheetRepository
     {
         $data = $this->stripPrimaryKeyFromUpdateData($data);
         $startTime = microtime(true);
-        $lockKey = $this->sheetName . '_write_lock';
+        $lockKey = $this->sheetName.'_write_lock';
 
         try {
             return Cache::lock($lockKey, 120)->block(15, function () use ($id, $data, $startTime) {
@@ -465,12 +508,14 @@ abstract class BaseSheetRepository
                     // Fetch all current values without cache to find the row index
                     $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
                     $values = $response->getValues();
-                    
+
                     if (empty($values)) {
                         throw new \RuntimeException("Sheet '{$this->sheetName}' tidak memiliki header atau data.");
                     }
 
-                    $headers = array_map(function ($h) { return trim((string) $h); }, $values[0]);
+                    $headers = array_map(function ($h) {
+                        return trim((string) $h);
+                    }, $values[0]);
                     $this->assertExpectedHeaders($headers);
                     $this->assertDurableWriteSchema($headers);
                     $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
@@ -481,7 +526,7 @@ abstract class BaseSheetRepository
                             break;
                         }
                     }
-                    
+
                     if ($idIndex === false) {
                         throw new \Exception("Header '{$this->primaryKey}' not found in sheet.");
                     }
@@ -509,19 +554,19 @@ abstract class BaseSheetRepository
                     }
                     $rowValues = array_values($rowValues);
 
-                    $range = $this->sheetName . '!A' . $rowIndexToUpdate;
-                    
-                    $body = new \Google\Service\Sheets\ValueRange();
+                    $range = $this->sheetName.'!A'.$rowIndexToUpdate;
+
+                    $body = new ValueRange;
                     $body->setValues([array_values($rowValues)]);
 
                     $params = [
-                        'valueInputOption' => self::WRITE_INPUT_OPTION
+                        'valueInputOption' => self::WRITE_INPUT_OPTION,
                     ];
 
                     try {
                         $this->service->spreadsheets_values->update($this->spreadsheetId, $range, $body, $params);
                     } catch (Throwable $e) {
-                        if (!$this->isAmbiguousWriteException($e)) {
+                        if (! $this->isAmbiguousWriteException($e)) {
                             throw $e;
                         }
                         $verified = $this->findRowMatchesFresh($id, $data);
@@ -531,6 +576,7 @@ abstract class BaseSheetRepository
                                 'primary_key' => (string) $id,
                                 'exception' => get_class($e),
                             ]);
+
                             return true;
                         }
                         if ($verified === null) {
@@ -542,18 +588,19 @@ abstract class BaseSheetRepository
                         }
                         throw $e;
                     }
+
                     return true;
                 }, 'update');
-                
+
                 $this->clearCache();
-                
+
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
                 Log::info("Google Sheets Update on {$this->sheetName}", ['duration_ms' => $duration]);
-                
+
                 return $result;
             });
         } catch (\Exception $e) {
-            Log::error("Google API Error during update on {$this->sheetName}: " . $e->getMessage());
+            Log::error("Google API Error during update on {$this->sheetName}: ".$e->getMessage());
             throw $e;
         }
     }
@@ -562,7 +609,7 @@ abstract class BaseSheetRepository
     {
         try {
             $row = $this->findByIdFresh($id);
-            if (!$row) {
+            if (! $row) {
                 return false;
             }
             foreach ($expected as $key => $value) {
@@ -570,6 +617,7 @@ abstract class BaseSheetRepository
                     return false;
                 }
             }
+
             return true;
         } catch (Throwable $e) {
             Log::warning('Google Sheets update verification failed', [
@@ -578,6 +626,7 @@ abstract class BaseSheetRepository
                 'exception' => get_class($e),
                 'http_status' => $this->httpStatus($e),
             ]);
+
             return null;
         }
     }
@@ -605,7 +654,7 @@ abstract class BaseSheetRepository
     {
         return $this->update($id, [
             'Is_Active' => 'FALSE',
-            'Updated_At' => now()->toDateTimeString()
+            'Updated_At' => now()->toDateTimeString(),
         ]);
     }
 
@@ -623,19 +672,21 @@ abstract class BaseSheetRepository
     public function hardDelete($id)
     {
         $startTime = microtime(true);
-        $lockKey = $this->sheetName . '_write_lock';
+        $lockKey = $this->sheetName.'_write_lock';
 
         try {
             $result = Cache::lock($lockKey, 10)->block(5, function () use ($id, $startTime) {
                 $delResult = retry(3, function () use ($id) {
                     $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
                     $values = $response->getValues();
-                    
+
                     if (empty($values)) {
                         throw new \RuntimeException("Sheet '{$this->sheetName}' tidak memiliki header atau data.");
                     }
 
-                    $headers = array_map(function ($h) { return trim((string) $h); }, $values[0]);
+                    $headers = array_map(function ($h) {
+                        return trim((string) $h);
+                    }, $values[0]);
                     $this->assertExpectedHeaders($headers);
                     $primaryKeyClean = strtolower(trim((string) $this->primaryKey));
                     $idIndex = false;
@@ -645,7 +696,7 @@ abstract class BaseSheetRepository
                             break;
                         }
                     }
-                    
+
                     if ($idIndex === false) {
                         throw new \RuntimeException("Header primary key '{$this->primaryKey}' tidak ditemukan.");
                     }
@@ -684,31 +735,33 @@ abstract class BaseSheetRepository
                                 'sheetId' => $sheetId,
                                 'dimension' => 'ROWS',
                                 'startIndex' => $rowIndexToDelete,
-                                'endIndex' => $rowIndexToDelete + 1
-                            ]
-                        ]
+                                'endIndex' => $rowIndexToDelete + 1,
+                            ],
+                        ],
                     ]);
 
                     $batchUpdateRequest = new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest([
-                        'requests' => [$request]
+                        'requests' => [$request],
                     ]);
 
                     $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
+
                     return true;
-                }, 1000, fn ($e) => !$e instanceof \RuntimeException);
-                
+                }, 1000, fn ($e) => ! $e instanceof \RuntimeException);
+
                 $this->clearCache();
 
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
                 Log::info("Google Sheets Delete on {$this->sheetName}", ['duration_ms' => $duration]);
-                
+
                 return $delResult;
             });
 
             $this->clearCache();
+
             return $result;
         } catch (\Exception $e) {
-            Log::error("Google API Error during delete on {$this->sheetName}: " . $e->getMessage());
+            Log::error("Google API Error during delete on {$this->sheetName}: ".$e->getMessage());
             $this->clearCache();
             throw $e;
         }
@@ -721,14 +774,14 @@ abstract class BaseSheetRepository
     public function truncateData()
     {
         $startTime = microtime(true);
-        $lockKey = $this->sheetName . '_write_lock';
+        $lockKey = $this->sheetName.'_write_lock';
 
         try {
-            $result = Cache::lock($lockKey, 10)->block(5, function () use ($startTime) {
+            $result = Cache::lock($lockKey, 10)->block(5, function () {
                 return retry(3, function () {
                     $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName);
                     $values = $response->getValues();
-                    
+
                     if (empty($values) || count($values) <= 1) {
                         return true; // Already empty (only header or nothing)
                     }
@@ -752,25 +805,26 @@ abstract class BaseSheetRepository
                                 'sheetId' => $sheetId,
                                 'dimension' => 'ROWS',
                                 'startIndex' => 1,
-                                'endIndex' => count($values) // Delete exactly the number of data rows
-                            ]
-                        ]
+                                'endIndex' => count($values), // Delete exactly the number of data rows
+                            ],
+                        ],
                     ]);
 
                     $batchUpdateRequest = new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest([
-                        'requests' => [$request]
+                        'requests' => [$request],
                     ]);
 
                     $this->service->spreadsheets->batchUpdate($this->spreadsheetId, $batchUpdateRequest);
-                    
+
                     return true;
-                }, 1000, fn ($e) => !$e instanceof \RuntimeException);
+                }, 1000, fn ($e) => ! $e instanceof \RuntimeException);
             });
 
             $this->clearCache();
+
             return $result;
         } catch (\Exception $e) {
-            Log::error("Google API Error during truncateData on {$this->sheetName}: " . $e->getMessage());
+            Log::error("Google API Error during truncateData on {$this->sheetName}: ".$e->getMessage());
             $this->clearCache();
             throw $e;
         }
@@ -778,7 +832,7 @@ abstract class BaseSheetRepository
 
     protected function assertExpectedHeaders(array $headers): void
     {
-        if (!empty($this->expectedHeaders) && array_values($headers) !== array_values($this->expectedHeaders)) {
+        if (! empty($this->expectedHeaders) && array_values($headers) !== array_values($this->expectedHeaders)) {
             throw new \RuntimeException("Header sheet '{$this->sheetName}' tidak sesuai schema yang diharapkan.");
         }
     }
@@ -814,7 +868,7 @@ abstract class BaseSheetRepository
     protected function assertDurableWriteSchema(array $headers): void
     {
         $required = config("finance.schema.{$this->sheetName}", []);
-        if (!$required) {
+        if (! $required) {
             return;
         }
 
@@ -822,8 +876,8 @@ abstract class BaseSheetRepository
         if ($missing !== []) {
             throw new FinancialIntegrityException(
                 "Sheet {$this->sheetName} tidak memiliki kolom wajib: "
-                . implode(', ', $missing)
-                . '; penulisan dihentikan untuk mencegah kehilangan data.'
+                .implode(', ', $missing)
+                .'; penulisan dihentikan untuk mencegah kehilangan data.'
             );
         }
     }

@@ -1,15 +1,17 @@
 <?php
+
 namespace App\Services\Core;
 
-use App\Support\CoordinateNormalizer;
-
-use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
 use App\Interfaces\GoogleSheets\SystemParameterRepositoryInterface;
+use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
+use App\Support\CoordinateNormalizer;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 
 class SystemSettingService
 {
     protected $settingRepo;
+
     protected $paramRepo;
 
     public function __construct(SystemSettingRepositoryInterface $settingRepo, SystemParameterRepositoryInterface $paramRepo)
@@ -819,21 +821,22 @@ class SystemSettingService
         ];
     }
 
-    public function getSettings() {
-        return Cache::rememberForever('system_settings_all', function() {
+    public function getSettings()
+    {
+        return Cache::rememberForever('system_settings_all', function () {
             $fromRepo = collect($this->settingRepo->getAll());
             $defaults = collect($this->getDefaultSettings());
 
             $result = collect();
 
             foreach ($defaults as $defaultItem) {
-                $found = $fromRepo->first(function($item) use ($defaultItem) {
+                $found = $fromRepo->first(function ($item) use ($defaultItem) {
                     return ($item['Setting_ID'] ?? '') === $defaultItem['Setting_ID']
-                        || (!empty($item['Setting_Key']) && ($item['Setting_Key'] ?? '') === $defaultItem['Setting_Key']);
+                        || (! empty($item['Setting_Key']) && ($item['Setting_Key'] ?? '') === $defaultItem['Setting_Key']);
                 });
 
                 if ($found) {
-                    $filteredFound = array_filter($found, fn($val) => $val !== null);
+                    $filteredFound = array_filter($found, fn ($val) => $val !== null);
                     $merged = array_merge($defaultItem, $filteredFound);
                     $result->push($merged);
                 } else {
@@ -842,11 +845,11 @@ class SystemSettingService
             }
 
             foreach ($fromRepo as $repoItem) {
-                $alreadyAdded = $result->first(function($item) use ($repoItem) {
+                $alreadyAdded = $result->first(function ($item) use ($repoItem) {
                     return ($item['Setting_ID'] ?? '') === ($repoItem['Setting_ID'] ?? '')
-                        || (!empty($item['Setting_Key']) && ($item['Setting_Key'] ?? '') === ($repoItem['Setting_Key'] ?? ''));
+                        || (! empty($item['Setting_Key']) && ($item['Setting_Key'] ?? '') === ($repoItem['Setting_Key'] ?? ''));
                 });
-                if (!$alreadyAdded) {
+                if (! $alreadyAdded) {
                     $result->push($repoItem);
                 }
             }
@@ -855,31 +858,37 @@ class SystemSettingService
         });
     }
 
-    public function getParameters() {
-        return Cache::rememberForever('system_parameters_all', function() {
+    public function getParameters()
+    {
+        return Cache::rememberForever('system_parameters_all', function () {
             return $this->paramRepo->getAll();
         });
     }
 
-    public function get($key, $default = null) {
-        $setting = $this->getSettings()->first(function($item) use ($key) {
+    public function get($key, $default = null)
+    {
+        $setting = $this->getSettings()->first(function ($item) use ($key) {
             return ($item['Setting_Key'] ?? '') === $key || ($item['Setting_ID'] ?? '') === $key;
         });
         if ($setting && isset($setting['Setting_Value']) && $setting['Setting_Value'] !== '') {
             return $setting['Setting_Value'];
         }
+
         return $default;
     }
 
-    public function parameter($module, $key, $default = null) {
+    public function parameter($module, $key, $default = null)
+    {
         $param = $this->getParameters()->where('Module', $module)->firstWhere('Parameter_Key', $key);
         if ($param && isset($param['Parameter_Value']) && $param['Parameter_Value'] !== '') {
             return $param['Parameter_Value'];
         }
+
         return $default;
     }
 
-    public function category($category) {
+    public function category($category)
+    {
         return $this->getSettings()->where('Category', $category)->values();
     }
 
@@ -892,8 +901,9 @@ class SystemSettingService
 
         foreach ($settingsData as $id => $value) {
             $setting = $settings->firstWhere('Setting_ID', $id) ?: $settings->firstWhere('Setting_Key', $id);
-            if (!$setting) {
+            if (! $setting) {
                 $errors[] = "Pengaturan {$id} tidak dikenal.";
+
                 continue;
             }
 
@@ -906,24 +916,28 @@ class SystemSettingService
                 $normalizedBoolean = $this->normalizeBoolean($value);
                 if ($normalizedBoolean === null) {
                     $errors[] = "{$label} harus bernilai Aktif atau Nonaktif.";
+
                     continue;
                 }
                 $value = $normalizedBoolean;
             }
 
-            if ($type === 'number' && !is_numeric($value)) {
+            if ($type === 'number' && ! is_numeric($value)) {
                 $errors[] = "{$label} harus berupa angka.";
+
                 continue;
             }
 
-            if ($type === 'color' && !preg_match('/^#[0-9A-Fa-f]{6}$/', $value)) {
+            if ($type === 'color' && ! preg_match('/^#[0-9A-Fa-f]{6}$/', $value)) {
                 $errors[] = "{$label} harus memakai format warna HEX, contoh #38BDF8.";
+
                 continue;
             }
 
             $message = $this->validateSettingRule($key, $label, $value);
             if ($message !== null) {
                 $errors[] = $message;
+
                 continue;
             }
 
@@ -946,6 +960,31 @@ class SystemSettingService
         if (isset($submittedByKey['PASSING_GRADE_MINIMUM'], $submittedByKey['MAX_SCORE_SCALE'])
             && (float) $submittedByKey['PASSING_GRADE_MINIMUM'] > (float) $submittedByKey['MAX_SCORE_SCALE']) {
             $errors[] = 'Nilai KKM tidak boleh lebih besar dari skala maksimum penilaian.';
+        }
+
+        $attendanceKeys = ['WORK_START_TIME', 'WORK_END_TIME', 'LATE_TOLERANCE_MINUTES'];
+        if (array_intersect($attendanceKeys, array_keys($submittedByKey))) {
+            $effective = [];
+            foreach ($attendanceKeys as $attendanceKey) {
+                $stored = $settings->firstWhere('Setting_Key', $attendanceKey);
+                $effective[$attendanceKey] = $submittedByKey[$attendanceKey]
+                    ?? trim((string) ($stored['Setting_Value'] ?? ''));
+            }
+
+            $validStart = preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $effective['WORK_START_TIME']);
+            $validEnd = preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $effective['WORK_END_TIME']);
+            if ($validStart && $validEnd) {
+                [$startHour, $startMinute] = array_map('intval', explode(':', $effective['WORK_START_TIME']));
+                [$endHour, $endMinute] = array_map('intval', explode(':', $effective['WORK_END_TIME']));
+                $windowMinutes = (($endHour * 60) + $endMinute) - (($startHour * 60) + $startMinute);
+
+                if ($windowMinutes <= 0) {
+                    $errors[] = 'Jam selesai absensi harus setelah jam mulai pada hari yang sama.';
+                } elseif (preg_match('/^\d+$/', $effective['LATE_TOLERANCE_MINUTES'])
+                    && (int) $effective['LATE_TOLERANCE_MINUTES'] > $windowMinutes) {
+                    $errors[] = 'Toleransi keterlambatan tidak boleh melebihi rentang jam absensi.';
+                }
+            }
         }
 
         return [$prepared, $errors];
@@ -979,7 +1018,12 @@ class SystemSettingService
             return "{$label} harus lebih besar dari 0.";
         }
 
-        if (in_array($key, ['WORK_START_TIME', 'WORK_END_TIME'], true) && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $value)) {
+        if ($key === 'LATE_TOLERANCE_MINUTES'
+            && (! preg_match('/^\d+$/', $value) || (int) $value > 1440)) {
+            return "{$label} harus berupa menit bulat antara 0 dan 1440.";
+        }
+
+        if (in_array($key, ['WORK_START_TIME', 'WORK_END_TIME'], true) && ! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $value)) {
             return "{$label} harus memakai format HH:mm, contoh 08:00.";
         }
 
@@ -1006,7 +1050,7 @@ class SystemSettingService
             return "{$label} tidak boleh bernilai negatif.";
         }
 
-        if (str_contains($key, 'EMAIL') && (str_contains($key, 'ADDRESS') || str_contains($key, 'REPLY_TO')) && $value !== '' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+        if (str_contains($key, 'EMAIL') && (str_contains($key, 'ADDRESS') || str_contains($key, 'REPLY_TO')) && $value !== '' && ! filter_var($value, FILTER_VALIDATE_EMAIL)) {
             return "{$label} harus berupa alamat email yang valid.";
         }
 
@@ -1020,7 +1064,8 @@ class SystemSettingService
         return null;
     }
 
-    public function set($id, $value, $updaterEmail) {
+    public function set($id, $value, $updaterEmail)
+    {
         $all = $this->getSettings();
         $setting = $all->firstWhere('Setting_ID', $id) ?: $all->firstWhere('Setting_Key', $id);
 
@@ -1055,25 +1100,30 @@ class SystemSettingService
         }
 
         $this->reloadCache();
+
         return true;
     }
 
-    public function updateParameter($id, $value) {
+    public function updateParameter($id, $value)
+    {
         $param = $this->paramRepo->getById($id);
-        if($param) {
-            if (isset($param['Parameter_Value']) && (string)$param['Parameter_Value'] === (string)$value) {
+        if ($param) {
+            if (isset($param['Parameter_Value']) && (string) $param['Parameter_Value'] === (string) $value) {
                 return true;
             }
             $param['Parameter_Value'] = $value;
             $param['Updated_At'] = now()->toDateTimeString();
             $this->paramRepo->update($id, $param);
             $this->reloadCache();
+
             return true;
         }
+
         return false;
     }
 
-    public function clearCache() {
+    public function clearCache()
+    {
         Cache::forget('system_settings_all');
         Cache::forget('system_parameters_all');
         Cache::forget('system_company_profile_payload');
@@ -1082,16 +1132,19 @@ class SystemSettingService
         $this->paramRepo->clearCache();
     }
 
-    public function reloadCache() {
+    public function reloadCache()
+    {
         $this->clearCache();
         $this->getSettings();
         $this->getParameters();
     }
 
-    public function getInvoiceCategories() {
+    public function getInvoiceCategories()
+    {
         $categoryValue = $this->get('INVOICE_CATEGORIES', '');
-        if (!empty($categoryValue)) {
+        if (! empty($categoryValue)) {
             $categories = array_values(array_filter(array_map('trim', explode(',', $categoryValue))));
+
             return collect($categories)
                 ->map(function ($category) {
                     $normalized = strtolower($category);
@@ -1105,14 +1158,17 @@ class SystemSettingService
                 ->values()
                 ->all();
         }
+
         return ['Biaya Pendidikan', 'Medical', 'JFT', 'JLPT', 'Dormitory', 'Air Ticket', 'Administration', 'SSW', 'Equipment', 'Other'];
     }
 
-    public function getDefaultTuitionFee() {
+    public function getDefaultTuitionFee()
+    {
         $fee = $this->get('DEFAULT_TUITION_FEE', null);
         if (is_numeric($fee)) {
             return (float) $fee;
         }
+
         return 7500000;
     }
 
@@ -1125,72 +1181,72 @@ class SystemSettingService
     public function getCompanyProfile(): array
     {
         return Cache::rememberForever('system_company_profile_payload', function () {
-        $name = $this->get('COMPANY_NAME')
-            ?: ($this->get('SET_COMPANY_NAME')
-            ?: ($this->get('SET_GENERAL_APP_NAME')
-            ?: ($this->get('APP_NAME', 'WAKAMIYA MANAGEMENT SYSTEM'))));
+            $name = $this->get('COMPANY_NAME')
+                ?: ($this->get('SET_COMPANY_NAME')
+                ?: ($this->get('SET_GENERAL_APP_NAME')
+                ?: ($this->get('APP_NAME', 'WAKAMIYA MANAGEMENT SYSTEM'))));
 
-        $tagline = $this->get('COMPANY_TAGLINE')
-            ?: ($this->get('SET_COMPANY_TAGLINE')
-            ?: ($this->get('SET_GENERAL_TAGLINE')
-            ?: ($this->get('COMPANY_SLOGAN', 'Enterprise Human Resource Engine'))));
+            $tagline = $this->get('COMPANY_TAGLINE')
+                ?: ($this->get('SET_COMPANY_TAGLINE')
+                ?: ($this->get('SET_GENERAL_TAGLINE')
+                ?: ($this->get('COMPANY_SLOGAN', 'Enterprise Human Resource Engine'))));
 
-        $logo = $this->get('COMPANY_LOGO')
-            ?: ($this->get('SET_COMPANY_LOGO')
-            ?: ($this->get('BRAND_LOGO')
-            ?: ($this->get('SET_BRAND_LOGO')
-            ?: ($this->get('APP_LOGO', '')))));
+            $logo = $this->get('COMPANY_LOGO')
+                ?: ($this->get('SET_COMPANY_LOGO')
+                ?: ($this->get('BRAND_LOGO')
+                ?: ($this->get('SET_BRAND_LOGO')
+                ?: ($this->get('APP_LOGO', '')))));
 
-        if (empty($logo) || $logo === 'img/logo.png.jpeg') {
-            if (file_exists(storage_path('app/public/companies/logos/company_logo_1786935935.jpeg'))) {
-                $logo = 'storage/companies/logos/company_logo_1786935935.jpeg';
-            } elseif (file_exists(storage_path('app/public/companies/logos/logo_1786932667.jpeg'))) {
-                $logo = 'storage/companies/logos/logo_1786932667.jpeg';
+            if (empty($logo) || $logo === 'img/logo.png.jpeg') {
+                if (file_exists(storage_path('app/public/companies/logos/company_logo_1786935935.jpeg'))) {
+                    $logo = 'storage/companies/logos/company_logo_1786935935.jpeg';
+                } elseif (file_exists(storage_path('app/public/companies/logos/logo_1786932667.jpeg'))) {
+                    $logo = 'storage/companies/logos/logo_1786932667.jpeg';
+                }
             }
-        }
 
-        $logoUrl = asset('img/logo.png.jpeg');
-        if (!empty($logo)) {
-            if (str_starts_with($logo, 'http')) {
-                $logoUrl = $logo;
-            } elseif (file_exists(public_path($logo))) {
-                $logoUrl = asset($logo);
-            } elseif (file_exists(public_path('storage/' . ltrim($logo, '/')))) {
-                $logoUrl = asset('storage/' . ltrim($logo, '/'));
-            } elseif (file_exists(public_path(ltrim(str_replace('storage/', '', $logo), '/')))) {
-                $logoUrl = asset(ltrim(str_replace('storage/', '', $logo), '/'));
-            } elseif (file_exists(storage_path('app/public/' . ltrim(str_replace('storage/', '', $logo), '/')))) {
-                $logoUrl = asset('storage/' . ltrim(str_replace('storage/', '', $logo), '/'));
+            $logoUrl = asset('img/logo.png.jpeg');
+            if (! empty($logo)) {
+                if (str_starts_with($logo, 'http')) {
+                    $logoUrl = $logo;
+                } elseif (file_exists(public_path($logo))) {
+                    $logoUrl = asset($logo);
+                } elseif (file_exists(public_path('storage/'.ltrim($logo, '/')))) {
+                    $logoUrl = asset('storage/'.ltrim($logo, '/'));
+                } elseif (file_exists(public_path(ltrim(str_replace('storage/', '', $logo), '/')))) {
+                    $logoUrl = asset(ltrim(str_replace('storage/', '', $logo), '/'));
+                } elseif (file_exists(storage_path('app/public/'.ltrim(str_replace('storage/', '', $logo), '/')))) {
+                    $logoUrl = asset('storage/'.ltrim(str_replace('storage/', '', $logo), '/'));
+                }
             }
-        }
 
-        return [
-            'company' => [
-                'name'     => $name,
-                'tagline'  => $tagline,
-                'logo'     => $logo,
-                'logo_url' => $logoUrl,
-                'address'  => $this->get('COMPANY_ADDRESS', 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930'),
-                'phone'    => $this->get('COMPANY_PHONE', '(021) 8000-9999'),
-                'whatsapp' => $this->get('COMPANY_WA', ''),
-                'email'    => $this->get('COMPANY_EMAIL', 'hr@wakamiya.ac.id'),
-                'website'  => $this->get('COMPANY_WEB', 'https://wakamiya.ac.id'),
-                'npwp'     => $this->get('COMPANY_NPWP', ''),
-            ],
-            'bank' => [
-                'name'           => $this->get('COMPANY_BANK_NAME', 'BANK BCA'),
-                'account_number' => $this->get('COMPANY_BANK_ACCOUNT', '888-999-777'),
-                'account_holder' => $this->get('COMPANY_BANK_HOLDER', 'PT WAKAMIYA INDONESIA'),
-                'branch'         => $this->get('COMPANY_BANK_BRANCH', 'KCU Jakarta'),
-            ],
-            'document' => [
-                'signature_url' => $this->get('COMPANY_SIGNATURE_URL', ''),
-                'stamp_url'     => $this->get('COMPANY_STAMP_URL', ''),
-                'signer_name'   => $this->get('COMPANY_SIGNER_NAME', 'Dr. Reza Pekanbaru'),
-                'signer_title'  => $this->get('COMPANY_SIGNER_TITLE', 'General Director & Founder'),
-                'prefix'        => $this->get('DOCUMENT_PREFIX', $this->get('COMPANY_DOC_PREFIX', 'DOC/WMS/')),
-            ],
-        ];
+            return [
+                'company' => [
+                    'name' => $name,
+                    'tagline' => $tagline,
+                    'logo' => $logo,
+                    'logo_url' => $logoUrl,
+                    'address' => $this->get('COMPANY_ADDRESS', 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930'),
+                    'phone' => $this->get('COMPANY_PHONE', '(021) 8000-9999'),
+                    'whatsapp' => $this->get('COMPANY_WA', ''),
+                    'email' => $this->get('COMPANY_EMAIL', 'hr@wakamiya.ac.id'),
+                    'website' => $this->get('COMPANY_WEB', 'https://wakamiya.ac.id'),
+                    'npwp' => $this->get('COMPANY_NPWP', ''),
+                ],
+                'bank' => [
+                    'name' => $this->get('COMPANY_BANK_NAME', 'BANK BCA'),
+                    'account_number' => $this->get('COMPANY_BANK_ACCOUNT', '888-999-777'),
+                    'account_holder' => $this->get('COMPANY_BANK_HOLDER', 'PT WAKAMIYA INDONESIA'),
+                    'branch' => $this->get('COMPANY_BANK_BRANCH', 'KCU Jakarta'),
+                ],
+                'document' => [
+                    'signature_url' => $this->get('COMPANY_SIGNATURE_URL', ''),
+                    'stamp_url' => $this->get('COMPANY_STAMP_URL', ''),
+                    'signer_name' => $this->get('COMPANY_SIGNER_NAME', 'Dr. Reza Pekanbaru'),
+                    'signer_title' => $this->get('COMPANY_SIGNER_TITLE', 'General Director & Founder'),
+                    'prefix' => $this->get('DOCUMENT_PREFIX', $this->get('COMPANY_DOC_PREFIX', 'DOC/WMS/')),
+                ],
+            ];
         });
     }
 
@@ -1201,18 +1257,18 @@ class SystemSettingService
     {
         return Cache::rememberForever('system_theme_tokens_payload', function () {
             return [
-            'primary'           => $this->get('BRAND_PRIMARY_COLOR', '#38BDF8'),
-            'secondary'         => $this->get('BRAND_SECONDARY_COLOR', '#0F172A'),
-            'accent'            => $this->get('BRAND_ACCENT_COLOR', '#0EA5E9'),
-            'sidebar_bg'        => $this->get('BRAND_SIDEBAR_BG', '#111827'),
-            'sidebar_text'      => $this->get('BRAND_SIDEBAR_TEXT', '#94A3B8'),
-            'sidebar_active_bg' => $this->get('BRAND_SIDEBAR_ACTIVE_BG', '#1E293B'),
-            'sidebar_active'    => $this->get('BRAND_SIDEBAR_ACTIVE_TEXT', '#38BDF8'),
-            'topbar_bg'         => ($this->get('BRAND_TOPBAR_BG', '#FFFFFF') === '#111827') ? '#FFFFFF' : $this->get('BRAND_TOPBAR_BG', '#FFFFFF'),
-            'topbar_text'       => $this->get('BRAND_TOPBAR_TEXT', '#0F172A'),
-            'page_bg'           => $this->get('BRAND_PAGE_BG', '#E2E8F0'),
-            'card_bg'           => $this->get('BRAND_CARD_BG', '#FFFFFF'),
-            'theme_mode'        => $this->get('BRAND_THEME_MODE', 'dark'),
+                'primary' => $this->get('BRAND_PRIMARY_COLOR', '#38BDF8'),
+                'secondary' => $this->get('BRAND_SECONDARY_COLOR', '#0F172A'),
+                'accent' => $this->get('BRAND_ACCENT_COLOR', '#0EA5E9'),
+                'sidebar_bg' => $this->get('BRAND_SIDEBAR_BG', '#111827'),
+                'sidebar_text' => $this->get('BRAND_SIDEBAR_TEXT', '#94A3B8'),
+                'sidebar_active_bg' => $this->get('BRAND_SIDEBAR_ACTIVE_BG', '#1E293B'),
+                'sidebar_active' => $this->get('BRAND_SIDEBAR_ACTIVE_TEXT', '#38BDF8'),
+                'topbar_bg' => ($this->get('BRAND_TOPBAR_BG', '#FFFFFF') === '#111827') ? '#FFFFFF' : $this->get('BRAND_TOPBAR_BG', '#FFFFFF'),
+                'topbar_text' => $this->get('BRAND_TOPBAR_TEXT', '#0F172A'),
+                'page_bg' => $this->get('BRAND_PAGE_BG', '#E2E8F0'),
+                'card_bg' => $this->get('BRAND_CARD_BG', '#FFFFFF'),
+                'theme_mode' => $this->get('BRAND_THEME_MODE', 'dark'),
             ];
         });
     }
@@ -1239,14 +1295,14 @@ class SystemSettingService
         $credentials = null;
         if ($encryptedPayload) {
             try {
-                $decrypted = \Illuminate\Support\Facades\Crypt::decryptString($encryptedPayload);
+                $decrypted = Crypt::decryptString($encryptedPayload);
                 $credentials = json_decode($decrypted, true);
             } catch (\Throwable $e) {
                 $credentials = null;
             }
         }
 
-        $isHealthy = ($status === 'connected' && (!empty($credentials) || in_array($provider, ['google', 'microsoft', 'smtp'])));
+        $isHealthy = ($status === 'connected' && (! empty($credentials) || in_array($provider, ['google', 'microsoft', 'smtp'])));
 
         // Sanitize credentials payload so tokens & cleartext passwords are NEVER exposed to frontend/Blade views
         $sanitizedCredentials = null;
@@ -1263,7 +1319,7 @@ class SystemSettingService
             'from_name' => $fromName ?: 'WAKAMIYA MANAGEMENT SYSTEM',
             'reply_to' => $replyTo ?: $fromAddress,
             'is_healthy' => $isHealthy,
-            'has_credentials' => !empty($credentials),
+            'has_credentials' => ! empty($credentials),
             'credentials' => $sanitizedCredentials,
         ];
     }

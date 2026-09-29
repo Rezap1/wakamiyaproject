@@ -85,6 +85,19 @@ class SystemSettingServiceTest extends TestCase
         $this->assertSame('#ABCDEF', $prepared['SET_BRAND_PRIMARY']);
     }
 
+    public function test_prepare_settings_rejects_invalid_attendance_window_and_late_tolerance(): void
+    {
+        [, $errors] = $this->service->prepareSettingsForUpdate([
+            'SET_HR_WORK_START_TIME' => '08:30',
+            'SET_HR_WORK_END_TIME' => '07:20',
+            'SET_HR_LATE_TOLERANCE' => '-1',
+        ]);
+
+        $message = implode(' ', $errors);
+        $this->assertStringContainsString('Jam selesai absensi harus setelah jam mulai', $message);
+        $this->assertStringContainsString('Toleransi Keterlambatan', $message);
+    }
+
     protected function tearDown(): void
     {
         Mockery::close();

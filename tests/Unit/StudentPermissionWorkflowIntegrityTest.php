@@ -118,6 +118,20 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
         $this->assertSame('IZIN', $attendanceRepo->rows['ATT-A']['Status']);
     }
 
+    public function test_post_commit_notification_failure_does_not_reject_persisted_attendance(): void
+    {
+        $notifications = Mockery::mock(NotificationService::class);
+        $notifications->shouldReceive('NotifyUser')->once()->andThrow(new \RuntimeException('notification unavailable'));
+
+        [$service, $requestRepo, $attendanceRepo] = $this->newService([
+            $this->request(['Request_Type' => 'IZIN']),
+        ], [], $notifications);
+
+        $this->assertTrue($service->approveRequest('REQ-A', 'IZIN', 'Valid', $this->teacherUser('USR-TCH-A')));
+        $this->assertSame('APPROVED', $requestRepo->rows['REQ-A']['Status']);
+        $this->assertSame('IZIN', $attendanceRepo->rows['ATT-A']['Status']);
+    }
+
     public function test_scoped_teacher_rejects_request_to_alpa_and_notifies_student(): void
     {
         $notifications = Mockery::mock(NotificationService::class);
@@ -320,7 +334,9 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
 final class H838AttendanceRequestMemoryRepository implements AttendanceRequestRepositoryInterface
 {
     public array $rows = [];
+
     public array $updates = [];
+
     private int $counter = 1;
 
     public function __construct(array $rows = [])
@@ -348,17 +364,19 @@ final class H838AttendanceRequestMemoryRepository implements AttendanceRequestRe
     public function create(array $data)
     {
         $this->rows[$data['Request_ID']] = $data;
+
         return true;
     }
 
     public function update($id, array $data)
     {
-        if (!isset($this->rows[$id])) {
+        if (! isset($this->rows[$id])) {
             return false;
         }
 
         $this->updates[] = [$id, $data];
         $this->rows[$id] = array_merge($this->rows[$id], $data);
+
         return true;
     }
 
@@ -369,20 +387,22 @@ final class H838AttendanceRequestMemoryRepository implements AttendanceRequestRe
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-' . str_pad((string) $this->counter++, $padding, '0', STR_PAD_LEFT);
+        return $prefix.'-'.str_pad((string) $this->counter++, $padding, '0', STR_PAD_LEFT);
     }
 }
 
 final class H838AttendanceMemoryRepository implements AttendanceRepositoryInterface
 {
     public array $rows = [];
+
     public array $updates = [];
+
     public int $createCount = 0;
 
     public function __construct(array $rows = [])
     {
         foreach ($rows as $key => $row) {
-            $row['Attendance_ID'] = $row['Attendance_ID'] ?? (is_string($key) ? $key : 'ATT-' . $key);
+            $row['Attendance_ID'] = $row['Attendance_ID'] ?? (is_string($key) ? $key : 'ATT-'.$key);
             $this->rows[$row['Attendance_ID']] = $row;
         }
     }
@@ -399,30 +419,33 @@ final class H838AttendanceMemoryRepository implements AttendanceRepositoryInterf
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-' . str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT);
+        return $prefix.'-'.str_pad((string) (count($this->rows) + 1), $padding, '0', STR_PAD_LEFT);
     }
 
     public function create(array $data)
     {
         $this->createCount++;
         $this->rows[$data['Attendance_ID']] = $data;
+
         return true;
     }
 
     public function update(string $id, array $data)
     {
-        if (!isset($this->rows[$id])) {
+        if (! isset($this->rows[$id])) {
             return false;
         }
 
         $this->updates[] = [$id, $data];
         $this->rows[$id] = array_merge($this->rows[$id], $data);
+
         return true;
     }
 
     public function softDelete(string $id)
     {
         unset($this->rows[$id]);
+
         return true;
     }
 
@@ -434,9 +457,7 @@ final class H838AttendanceMemoryRepository implements AttendanceRepositoryInterf
 
 final class H838StudentMemoryRepository implements StudentRepositoryInterface
 {
-    public function __construct(private array $rows)
-    {
-    }
+    public function __construct(private array $rows) {}
 
     public function fetchAll()
     {
@@ -460,7 +481,7 @@ final class H838StudentMemoryRepository implements StudentRepositoryInterface
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-001';
+        return $prefix.'-001';
     }
 
     public function create(array $data)
@@ -486,9 +507,7 @@ final class H838StudentMemoryRepository implements StudentRepositoryInterface
 
 final class H838ScheduleMemoryRepository implements ScheduleRepositoryInterface
 {
-    public function __construct(private array $rows)
-    {
-    }
+    public function __construct(private array $rows) {}
 
     public function fetchAll()
     {
@@ -502,7 +521,7 @@ final class H838ScheduleMemoryRepository implements ScheduleRepositoryInterface
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-001';
+        return $prefix.'-001';
     }
 
     public function create(array $data)
@@ -528,9 +547,7 @@ final class H838ScheduleMemoryRepository implements ScheduleRepositoryInterface
 
 final class H838TeacherMemoryRepository implements TeacherRepositoryInterface
 {
-    public function __construct(private array $rows)
-    {
-    }
+    public function __construct(private array $rows) {}
 
     public function fetchAll()
     {
@@ -549,12 +566,12 @@ final class H838TeacherMemoryRepository implements TeacherRepositoryInterface
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-001';
+        return $prefix.'-001';
     }
 
     public function generateTeacherCode(string $prefix, string $year, int $padding = 3): string
     {
-        return $prefix . $year . '001';
+        return $prefix.$year.'001';
     }
 
     public function create(array $data)
@@ -575,9 +592,7 @@ final class H838TeacherMemoryRepository implements TeacherRepositoryInterface
 
 final class H838ClassMemoryRepository implements ClassRepositoryInterface
 {
-    public function __construct(private array $rows)
-    {
-    }
+    public function __construct(private array $rows) {}
 
     public function fetchAll()
     {
@@ -596,7 +611,7 @@ final class H838ClassMemoryRepository implements ClassRepositoryInterface
 
     public function generateNewId(string $prefix, int $padding = 6): string
     {
-        return $prefix . '-001';
+        return $prefix.'-001';
     }
 
     public function create(array $data)

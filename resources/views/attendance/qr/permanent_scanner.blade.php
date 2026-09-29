@@ -7,6 +7,12 @@
     $qrRadiusLabel = is_numeric($qrRadius)
         ? rtrim(rtrim(number_format((float) $qrRadius, 2, '.', ''), '0'), '.') . ' meter'
         : 'belum dikonfigurasi';
+    $attendanceStart = app(\App\Services\Core\SystemSettingService::class)->get('WORK_START_TIME', null);
+    $attendanceEnd = app(\App\Services\Core\SystemSettingService::class)->get('WORK_END_TIME', null);
+    $attendanceWindowLabel = preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $attendanceStart)
+        && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $attendanceEnd)
+        ? "{$attendanceStart}–{$attendanceEnd} WIB"
+        : 'Konfigurasi jam belum valid';
 @endphp
 
 <div class="max-w-md mx-auto space-y-4 pb-20 select-none" x-data="permanentScannerEngine()">
@@ -42,6 +48,10 @@
                 <p class="text-xs text-slate-500 font-medium max-w-xs mx-auto">
                     Mendeteksi lokasi Anda. Pastikan Anda berada di area LPK WAKAMIYA.
                 </p>
+                @if(($type ?? '') === 'STUDENT')
+                    <p class="text-xs text-sky-700 font-bold">Jam absensi: {{ $attendanceWindowLabel }}</p>
+                    <p class="text-[11px] text-slate-500 font-medium">Absensi siswa di luar waktu tersebut tidak dapat dilakukan.</p>
+                @endif
             </div>
             
             <button type="button" @click="requestLocation()" x-show="!isRequesting" class="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-extrabold text-xs rounded-2xl shadow-lg hover:shadow-sky-500/30 transition-shadow">

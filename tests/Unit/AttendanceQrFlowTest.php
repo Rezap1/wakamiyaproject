@@ -10,11 +10,11 @@ use App\Services\Academic\StudentQRAttendanceService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\PermanentQrService;
+use App\Services\Core\SystemSettingService;
 use App\Services\HR\QRAttendanceService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Auth\GenericUser;
-use App\Services\Core\SystemSettingService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Mockery;
@@ -225,7 +225,6 @@ class AttendanceQrFlowTest extends TestCase
                 ]]
             );
         $attendanceRepo->shouldReceive('create')->twice()->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->twice();
 
         $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
         $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn([
@@ -276,10 +275,10 @@ class AttendanceQrFlowTest extends TestCase
             ->twice()
             ->with(Mockery::on(function ($record) use (&$created) {
                 $created[] = $record;
+
                 return true;
             }))
             ->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->twice();
 
         $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
         $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn([
@@ -402,10 +401,10 @@ class AttendanceQrFlowTest extends TestCase
             ->once()
             ->with(Mockery::on(function ($record) use (&$created) {
                 $created = $record;
+
                 return true;
             }))
             ->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
         $enterpriseEvent->shouldReceive('dispatch')->once();
@@ -469,10 +468,10 @@ class AttendanceQrFlowTest extends TestCase
             ->times(3)
             ->with(Mockery::on(function ($record) use (&$created) {
                 $created[] = $record;
+
                 return true;
             }))
             ->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->times(3);
 
         $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
         $enterpriseEvent->shouldReceive('dispatch')->times(3);
@@ -523,10 +522,10 @@ class AttendanceQrFlowTest extends TestCase
             ->times(4)
             ->with(Mockery::on(function ($record) use (&$created) {
                 $created[] = $record;
+
                 return true;
             }))
             ->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->times(4);
 
         $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
         $enterpriseEvent->shouldReceive('dispatch')->times(4);
@@ -538,7 +537,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 20:10:00');
+        Carbon::setTestNow('2026-08-23 08:10:00');
         foreach ($students as $student) {
             $this->actingAs(new GenericUser([
                 'id' => $student['User_ID'],
@@ -582,7 +581,6 @@ class AttendanceQrFlowTest extends TestCase
             ]]
         );
         $attendanceRepo->shouldReceive('create')->once()->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
         $enterpriseEvent->shouldReceive('dispatch')->once();
@@ -594,7 +592,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 20:10:00');
+        Carbon::setTestNow('2026-08-23 08:10:00');
         $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
         $service->processStudentScan($this->permanentQrUrl('student', $identifier), -6.81234, 107.19451, 'Device A');
 
@@ -614,13 +612,13 @@ class AttendanceQrFlowTest extends TestCase
 
         $service = new StudentQRAttendanceService(
             $attendanceRepo,
-            Mockery::mock(StudentRepositoryInterface::class),
+            $this->studentRepositoryForQr(),
             $this->studentQrSettings(),
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 20:10:00');
-        $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('khusus untuk Presensi Pegawai');
@@ -661,7 +659,7 @@ class AttendanceQrFlowTest extends TestCase
         $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
     }
 
-    public function test_student_qr_late_minutes_are_calculated_from_start_time(): void
+    public function test_student_qr_inside_window_is_present_without_late_minutes(): void
     {
         Cache::flush();
         $this->putOpenStudentSession();
@@ -673,10 +671,10 @@ class AttendanceQrFlowTest extends TestCase
             ->once()
             ->with(Mockery::on(function ($record) use (&$created) {
                 $created = $record;
+
                 return true;
             }))
             ->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $enterpriseEvent = Mockery::mock(EnterpriseEventService::class);
         $enterpriseEvent->shouldReceive('dispatch')->once();
@@ -693,9 +691,9 @@ class AttendanceQrFlowTest extends TestCase
 
         $result = $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
 
-        $this->assertSame('LATE', $result['status']);
-        $this->assertSame(76, $result['late_minutes']);
-        $this->assertSame(76, $created['Late_Minutes']);
+        $this->assertSame('PRESENT', $result['status']);
+        $this->assertSame(0, $result['late_minutes']);
+        $this->assertSame(0, $created['Late_Minutes']);
     }
 
     public function test_student_qr_scan_outside_twenty_meter_geofence_is_denied(): void
@@ -709,12 +707,13 @@ class AttendanceQrFlowTest extends TestCase
 
         $service = new StudentQRAttendanceService(
             $attendanceRepo,
-            Mockery::mock(StudentRepositoryInterface::class),
+            $this->studentRepositoryForQr(),
             $this->studentQrSettings(),
             Mockery::mock(EnterpriseEventService::class)
         );
 
         Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('di luar area LPK');
@@ -740,7 +739,6 @@ class AttendanceQrFlowTest extends TestCase
             ]]
         );
         $attendanceRepo->shouldReceive('create')->twice()->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->twice();
 
         $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
         $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn($this->employeeRowsForQr());
@@ -781,7 +779,6 @@ class AttendanceQrFlowTest extends TestCase
             ]]
         );
         $attendanceRepo->shouldReceive('create')->once()->andReturn(true);
-        $attendanceRepo->shouldReceive('clearCache')->once();
 
         $employeeRepo = Mockery::mock(EmployeeRepositoryInterface::class);
         $employeeRepo->shouldReceive('fetchAll')->twice()->andReturn([$this->employeeRowsForQr()[0]]);
@@ -870,9 +867,8 @@ class AttendanceQrFlowTest extends TestCase
             'Title' => 'Presensi Siswa',
             'Type' => 'STUDENT',
             'Date' => '2026-08-23',
-            'Start_Time' => '07:00',
-            'End_Time' => '18:00',
-            'Grace_Period' => 30,
+            'Start_Time' => '06:00',
+            'End_Time' => '08:30',
             'Status' => 'ACTIVE',
             'Created_At' => '2026-08-23 07:00:00',
         ]);
@@ -882,7 +878,7 @@ class AttendanceQrFlowTest extends TestCase
     {
         $sessionId = 'STUDENT-QRS-2026-08-23';
         $expiresAt = Carbon::now()->addSeconds(25)->timestamp;
-        $nonce = 'STU-NONCE-' . Str::random(6);
+        $nonce = 'STU-NONCE-'.Str::random(6);
         $qrType = 'STUDENT';
         $signature = hash_hmac('sha256', "{$qrType}|{$sessionId}|{$expiresAt}|{$nonce}", (string) config('app.key'));
         Cache::put("qr_student_nonce_{$nonce}", $sessionId, 60);
@@ -923,6 +919,9 @@ class AttendanceQrFlowTest extends TestCase
                 'LPK_LATITUDE' => -6.81234,
                 'LPK_LONGITUDE' => 107.19451,
                 'LPK_ALLOWED_RADIUS_METERS' => 20,
+                'WORK_START_TIME' => '06:00',
+                'WORK_END_TIME' => '08:30',
+                'LATE_TOLERANCE_MINUTES' => 30,
                 default => $default,
             };
         });
