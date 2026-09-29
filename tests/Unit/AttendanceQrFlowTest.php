@@ -41,13 +41,19 @@ class AttendanceQrFlowTest extends TestCase
             'ACTIVE_UNTIL' => '2026-08-23 17:00:00',
         ];
 
-        Carbon::setTestNow('2026-08-23 07:59:00');
-        $this->assertSame('SCHEDULED', $service->getAvailabilityStatus($qr)['state']);
+        Carbon::setTestNow('2026-08-23 07:59:59');
+        $this->assertSame('UPCOMING', $service->getAvailabilityStatus($qr)['state']);
+
+        Carbon::setTestNow('2026-08-23 08:00:00');
+        $this->assertTrue($service->isQrCurrentlyUsable($qr));
 
         Carbon::setTestNow('2026-08-23 08:30:00');
         $this->assertTrue($service->isQrCurrentlyUsable($qr));
 
-        Carbon::setTestNow('2026-08-23 17:01:00');
+        Carbon::setTestNow('2026-08-23 17:00:00');
+        $this->assertTrue($service->isQrCurrentlyUsable($qr));
+
+        Carbon::setTestNow('2026-08-23 17:00:01');
         $this->assertSame('EXPIRED', $service->getAvailabilityStatus($qr)['state']);
     }
 

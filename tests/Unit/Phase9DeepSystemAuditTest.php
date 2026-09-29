@@ -2,21 +2,20 @@
 
 namespace Tests\Unit;
 
-use Tests\TestCase;
 use App\Helpers\ReportHelper;
-use App\Helpers\StoragePathHelper;
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\PermanentQrService;
 use Illuminate\Auth\GenericUser;
 use Mockery;
+use Tests\TestCase;
 
 class Phase9DeepSystemAuditTest extends TestCase
 {
     public function test_csv_sanitizer_prevents_formula_injection()
     {
         $dangerous = ['=SUM(A1:B10)', '+100', '-50', '@EVIL()', '100', '4.5', '2026'];
-        
+
         $sanitized = array_map([ReportHelper::class, 'sanitizeCsvCell'], $dangerous);
 
         $this->assertEquals("'=SUM(A1:B10)", $sanitized[0]);
@@ -54,11 +53,12 @@ class Phase9DeepSystemAuditTest extends TestCase
     {
         // When student profile mapping fails, system must fail closed (return empty or throw access exception)
         $userWithoutStudent = ['User_ID' => 'USR-999', 'Role' => 'STUDENT'];
-        
-        $fallbackCheck = function($userId) {
+
+        $fallbackCheck = function ($userId) {
             if ($userId !== 'USR-REAL-STUDENT') {
                 return null;
             }
+
             return ['Student_ID' => 'STU-100'];
         };
 
@@ -127,7 +127,7 @@ class Phase9DeepSystemAuditTest extends TestCase
     public function test_storage_path_helper_prevents_directory_traversal()
     {
         $traversalInput = '../../etc/passwd';
-        
+
         $sanitized = basename($traversalInput);
         $this->assertEquals('passwd', $sanitized);
         $this->assertFalse(str_contains($sanitized, '..'));
@@ -146,8 +146,8 @@ class Phase9DeepSystemAuditTest extends TestCase
         $testQrData = [
             'QR_TYPE' => 'STUDENT',
             'LABEL' => 'Test QR Hapus',
-            'ACTIVE_FROM' => null,
-            'ACTIVE_UNTIL' => null
+            'ACTIVE_FROM' => '2026-01-01 00:00:00',
+            'ACTIVE_UNTIL' => '2027-12-31 23:59:59',
         ];
 
         $repo->shouldReceive('generateNewId')->once()->with('QR', 5)->andReturn('QR00001');
@@ -216,13 +216,15 @@ class Phase9DeepSystemAuditTest extends TestCase
             'QR_TYPE' => 'EMPLOYEE',
             'IDENTIFIER' => 'WMS-ATT-EMP-LIFECYCLE',
             'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM' => '2026-01-01 00:00:00',
+            'ACTIVE_UNTIL' => '2027-12-31 23:59:59',
             'DEACTIVATED_AT' => '',
         ];
         $inactiveQr = array_merge($activeQr, ['STATUS' => 'INACTIVE', 'DEACTIVATED_AT' => now()->toDateTimeString()]);
 
         $repo->shouldReceive('findById')->once()->with('QR00001')->andReturn($activeQr);
         $repo->shouldReceive('update')->once()->with('QR00001', Mockery::on(
-            fn ($row) => ($row['STATUS'] ?? '') === 'INACTIVE' && !empty($row['DEACTIVATED_AT'])
+            fn ($row) => ($row['STATUS'] ?? '') === 'INACTIVE' && ! empty($row['DEACTIVATED_AT'])
         ))->andReturn(true);
         $repo->shouldReceive('clearCache')->once();
 
@@ -251,6 +253,8 @@ class Phase9DeepSystemAuditTest extends TestCase
             'QR_TYPE' => 'STUDENT',
             'IDENTIFIER' => 'WMS-ATT-STU-FAILED',
             'STATUS' => 'INACTIVE',
+            'ACTIVE_FROM' => '2026-01-01 00:00:00',
+            'ACTIVE_UNTIL' => '2027-12-31 23:59:59',
         ]);
         $repo->shouldReceive('update')->once()->andReturn(false);
         $repo->shouldNotReceive('clearCache');

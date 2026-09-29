@@ -3,12 +3,17 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
-use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 class PermanentQrService
 {
+    public const TIMEZONE = 'Asia/Jakarta';
+
     protected $qrRepository;
+
     protected $activityLog;
 
     public function __construct(
@@ -27,9 +32,10 @@ class PermanentQrService
     public function getQrById($id)
     {
         $qr = $this->qrRepository->findById($id);
-        if (!$qr) {
+        if (! $qr) {
             $qr = $this->qrRepository->findByIdentifier($id);
         }
+
         return $qr;
     }
 
@@ -47,12 +53,12 @@ class PermanentQrService
         $activeUntil = $this->normalizeDateTime($data['ACTIVE_UNTIL'] ?? null);
 
         $this->assertValidSchedule($activeFrom, $activeUntil);
-        
+
         // Generate unpredictable identifier
         $randomPart = strtoupper(Str::random(8));
         $prefix = $type === 'STUDENT' ? 'STU' : 'EMP';
         $identifier = "WMS-ATT-{$prefix}-{$randomPart}";
-        
+
         // Ensure uniqueness
         while ($this->getQrByIdentifier($identifier)) {
             $randomPart = strtoupper(Str::random(8));
@@ -67,21 +73,21 @@ class PermanentQrService
             'STATUS' => 'ACTIVE',
             'ACTIVE_FROM' => $activeFrom,
             'ACTIVE_UNTIL' => $activeUntil,
-            'CREATED_AT' => now()->toDateTimeString(),
+            'CREATED_AT' => $this->serverNow()->toDateTimeString(),
             'CREATED_BY' => $actorUserId,
-            'UPDATED_AT' => now()->toDateTimeString(),
+            'UPDATED_AT' => $this->serverNow()->toDateTimeString(),
             'UPDATED_BY' => $actorUserId,
-            'DEACTIVATED_AT' => ''
+            'DEACTIVATED_AT' => '',
         ];
         $result = $this->qrRepository->create($mappedData);
-        if (!$result) {
-            throw new \Exception("Gagal menyimpan data ke Google Sheets. Pastikan Worksheet MASTER_PERMANENT_QR tersedia.");
+        if (! $result) {
+            throw new \Exception('Gagal menyimpan data ke Google Sheets. Pastikan Worksheet MASTER_PERMANENT_QR tersedia.');
         }
-        
+
         $this->qrRepository->clearCache();
-        \Illuminate\Support\Facades\Cache::forget('permanent_qr_sheet_all');
-        \Illuminate\Support\Facades\Cache::forget('hr_dashboard');
-        
+        Cache::forget('permanent_qr_sheet_all');
+        Cache::forget('hr_dashboard');
+
         $this->activityLog->log(
             'ATTENDANCE_QR',
             'CREATE',
@@ -97,57 +103,63 @@ class PermanentQrService
     {
         $actorUserId = $this->authenticatedActorId();
         $qr = $this->getQrById($id);
-        if (!$qr) {
-            throw new \Exception("QR Presensi tidak ditemukan.");
+        if (! $qr) {
+            throw new \Exception('QR Presensi tidak ditemukan.');
         }
 
-        $activeFrom = $this->normalizeDateTime($data['ACTIVE_FROM'] ?? null);
-        $activeUntil = $this->normalizeDateTime($data['ACTIVE_UNTIL'] ?? null);
+        $activeFrom = $this->normalizeDateTime($data['ACTIVE_FROM'] ?? ($qr['ACTIVE_FROM'] ?? null));
+        $activeUntil = $this->normalizeDateTime($data['ACTIVE_UNTIL'] ?? ($qr['ACTIVE_UNTIL'] ?? null));
         $this->assertValidSchedule($activeFrom, $activeUntil);
 
         $status = strtoupper(trim((string) ($data['STATUS'] ?? ($qr['STATUS'] ?? 'ACTIVE'))));
-        if (!in_array($status, ['ACTIVE', 'INACTIVE'], true)) {
-            throw new \Exception("Status QR Presensi tidak valid.");
+        if (! in_array($status, ['ACTIVE', 'INACTIVE'], true)) {
+            throw new \Exception('Status QR Presensi tidak valid.');
         }
 
         $update = [
             'STATUS' => $status,
             'ACTIVE_FROM' => $activeFrom,
             'ACTIVE_UNTIL' => $activeUntil,
-            'UPDATED_AT' => now()->toDateTimeString(),
+            'UPDATED_AT' => $this->serverNow()->toDateTimeString(),
             'UPDATED_BY' => $actorUserId,
             'DEACTIVATED_AT' => $status === 'INACTIVE'
-                ? (($qr['DEACTIVATED_AT'] ?? '') ?: now()->toDateTimeString())
+                ? (($qr['DEACTIVATED_AT'] ?? '') ?: $this->serverNow()->toDateTimeString())
                 : '',
         ];
 
         $targetId = $qr['QR_ID'] ?? $id;
         $result = $this->qrRepository->update($targetId, $update);
-        if (!$result) {
+        if (! $result) {
             throw new \RuntimeException('Gagal memperbarui status atau jadwal QR Presensi pada penyimpanan.');
         }
 
         $this->qrRepository->clearCache();
-        \Illuminate\Support\Facades\Cache::forget('permanent_qr_sheet_all');
-        \Illuminate\Support\Facades\Cache::forget('qr_sessions_list');
-        if (!empty($qr['IDENTIFIER'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_code_{$qr['IDENTIFIER']}");
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['IDENTIFIER']}");
+        Cache::forget('permanent_qr_sheet_all');
+        Cache::forget('qr_sessions_list');
+        if (! empty($qr['IDENTIFIER'])) {
+            Cache::forget("qr_code_{$qr['IDENTIFIER']}");
+            Cache::forget("qr_session_{$qr['IDENTIFIER']}");
         }
-        if (!empty($qr['QR_ID'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['QR_ID']}");
+        if (! empty($qr['QR_ID'])) {
+            Cache::forget("qr_session_{$qr['QR_ID']}");
         }
-        \Illuminate\Support\Facades\Cache::forget('hr_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('academic_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('dashboard_admin');
+        Cache::forget('hr_dashboard');
+        Cache::forget('academic_dashboard');
+        Cache::forget('dashboard_admin');
 
-        $this->activityLog->log(
-            'ATTENDANCE_QR',
-            'UPDATE_AVAILABILITY',
-            "Mengubah jadwal aktif QR Presensi: " . ($qr['IDENTIFIER'] ?? $id),
-            ['QR_ID' => $id, 'IDENTIFIER' => $qr['IDENTIFIER'] ?? ''],
-            $update
-        );
+        try {
+            $this->activityLog->log(
+                'ATTENDANCE_QR',
+                'UPDATE_AVAILABILITY',
+                'Mengubah jadwal aktif QR Presensi: '.($qr['IDENTIFIER'] ?? $id),
+                ['QR_ID' => $id, 'IDENTIFIER' => $qr['IDENTIFIER'] ?? ''],
+                $update
+            );
+        } catch (\Throwable $logFailure) {
+            // The lifecycle update is already durable; audit failure must not
+            // turn it into a false rejection or trigger an unsafe retry.
+            report($logFailure);
+        }
 
         return array_merge($qr, $update);
     }
@@ -156,37 +168,37 @@ class PermanentQrService
     {
         $actorUserId = $this->authenticatedActorId();
         $qr = $this->getQrById($id);
-        if (!$qr) {
-            throw new \Exception("QR Presensi tidak ditemukan.");
+        if (! $qr) {
+            throw new \Exception('QR Presensi tidak ditemukan.');
         }
 
         $targetId = $qr['QR_ID'] ?? $id;
         $res = $this->qrRepository->deactivate($targetId, $actorUserId);
-        if (!$res && !empty($qr['IDENTIFIER'])) {
+        if (! $res && ! empty($qr['IDENTIFIER'])) {
             $res = $this->qrRepository->deactivate($qr['IDENTIFIER'], $actorUserId);
         }
-        if (!$res) {
+        if (! $res) {
             throw new \RuntimeException('Gagal menonaktifkan QR Presensi pada penyimpanan.');
         }
 
         $this->qrRepository->clearCache();
-        \Illuminate\Support\Facades\Cache::forget('permanent_qr_sheet_all');
-        \Illuminate\Support\Facades\Cache::forget('qr_sessions_list');
-        if (!empty($qr['IDENTIFIER'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_code_{$qr['IDENTIFIER']}");
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['IDENTIFIER']}");
+        Cache::forget('permanent_qr_sheet_all');
+        Cache::forget('qr_sessions_list');
+        if (! empty($qr['IDENTIFIER'])) {
+            Cache::forget("qr_code_{$qr['IDENTIFIER']}");
+            Cache::forget("qr_session_{$qr['IDENTIFIER']}");
         }
-        if (!empty($qr['QR_ID'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['QR_ID']}");
+        if (! empty($qr['QR_ID'])) {
+            Cache::forget("qr_session_{$qr['QR_ID']}");
         }
-        \Illuminate\Support\Facades\Cache::forget('hr_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('academic_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('dashboard_admin');
+        Cache::forget('hr_dashboard');
+        Cache::forget('academic_dashboard');
+        Cache::forget('dashboard_admin');
 
         $this->activityLog->log(
             'ATTENDANCE_QR',
             'DEACTIVATE',
-            "Menonaktifkan QR Presensi Permanen: " . ($qr['IDENTIFIER'] ?? $id),
+            'Menonaktifkan QR Presensi Permanen: '.($qr['IDENTIFIER'] ?? $id),
             ['QR_ID' => $id, 'IDENTIFIER' => $qr['IDENTIFIER'] ?? '']
         );
 
@@ -197,37 +209,37 @@ class PermanentQrService
     {
         $this->authenticatedActorId();
         $qr = $this->getQrById($id);
-        if (!$qr) {
-            throw new \Exception("QR Presensi tidak ditemukan.");
+        if (! $qr) {
+            throw new \Exception('QR Presensi tidak ditemukan.');
         }
 
         $targetId = $qr['QR_ID'] ?? $id;
         $res = $this->qrRepository->delete($targetId);
-        if (!$res && !empty($qr['IDENTIFIER'])) {
+        if (! $res && ! empty($qr['IDENTIFIER'])) {
             $res = $this->qrRepository->delete($qr['IDENTIFIER']);
         }
-        if (!$res) {
+        if (! $res) {
             throw new \RuntimeException('Gagal menghapus QR Presensi pada penyimpanan.');
         }
 
         $this->qrRepository->clearCache();
-        \Illuminate\Support\Facades\Cache::forget('permanent_qr_sheet_all');
-        \Illuminate\Support\Facades\Cache::forget('qr_sessions_list');
-        if (!empty($qr['IDENTIFIER'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_code_{$qr['IDENTIFIER']}");
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['IDENTIFIER']}");
+        Cache::forget('permanent_qr_sheet_all');
+        Cache::forget('qr_sessions_list');
+        if (! empty($qr['IDENTIFIER'])) {
+            Cache::forget("qr_code_{$qr['IDENTIFIER']}");
+            Cache::forget("qr_session_{$qr['IDENTIFIER']}");
         }
-        if (!empty($qr['QR_ID'])) {
-            \Illuminate\Support\Facades\Cache::forget("qr_session_{$qr['QR_ID']}");
+        if (! empty($qr['QR_ID'])) {
+            Cache::forget("qr_session_{$qr['QR_ID']}");
         }
-        \Illuminate\Support\Facades\Cache::forget('hr_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('academic_dashboard');
-        \Illuminate\Support\Facades\Cache::forget('dashboard_admin');
+        Cache::forget('hr_dashboard');
+        Cache::forget('academic_dashboard');
+        Cache::forget('dashboard_admin');
 
         $this->activityLog->log(
             'ATTENDANCE_QR',
             'DELETE',
-            "Menghapus QR Presensi Permanen secara permanen: " . ($qr['IDENTIFIER'] ?? $id),
+            'Menghapus QR Presensi Permanen secara permanen: '.($qr['IDENTIFIER'] ?? $id),
             ['QR_ID' => $id, 'IDENTIFIER' => $qr['IDENTIFIER'] ?? '']
         );
 
@@ -242,7 +254,7 @@ class PermanentQrService
         $baseUrl = rtrim((string) config('app.url', 'http://127.0.0.1:8000'), '/');
         $type = strtolower($qr['QR_TYPE']);
         $identifier = $qr['IDENTIFIER'];
-        
+
         return "{$baseUrl}/attendance/scan/{$type}/{$identifier}";
     }
 
@@ -253,15 +265,28 @@ class PermanentQrService
             return ['usable' => false, 'state' => 'INACTIVE', 'message' => 'QR Presensi ini sedang nonaktif.'];
         }
 
-        $now = now();
-        $activeFrom = $this->parseDateTime($qr['ACTIVE_FROM'] ?? null);
-        $activeUntil = $this->parseDateTime($qr['ACTIVE_UNTIL'] ?? null);
+        try {
+            $activeFrom = $this->parseRequiredDateTime($qr['ACTIVE_FROM'] ?? null);
+            $activeUntil = $this->parseRequiredDateTime($qr['ACTIVE_UNTIL'] ?? null);
+            $this->assertValidSchedule(
+                $activeFrom->format('Y-m-d H:i:s'),
+                $activeUntil->format('Y-m-d H:i:s')
+            );
+        } catch (InvalidArgumentException) {
+            return [
+                'usable' => false,
+                'state' => 'INVALID',
+                'message' => 'Masa berlaku QR Presensi belum dikonfigurasi dengan valid.',
+            ];
+        }
+
+        $now = $this->serverNow();
 
         if ($activeFrom && $now->lt($activeFrom)) {
             return [
                 'usable' => false,
-                'state' => 'SCHEDULED',
-                'message' => 'QR Presensi belum aktif. Mulai aktif pada ' . $activeFrom->format('d M Y H:i') . ' WIB.',
+                'state' => 'UPCOMING',
+                'message' => 'QR Presensi belum berlaku. Mulai berlaku pada '.$activeFrom->format('d M Y H:i').' WIB.',
             ];
         }
 
@@ -269,7 +294,7 @@ class PermanentQrService
             return [
                 'usable' => false,
                 'state' => 'EXPIRED',
-                'message' => 'QR Presensi sudah melewati jadwal aktif pada ' . $activeUntil->format('d M Y H:i') . ' WIB.',
+                'message' => 'QR Presensi sudah berakhir pada '.$activeUntil->format('d M Y H:i').' WIB.',
             ];
         }
 
@@ -281,35 +306,44 @@ class PermanentQrService
         return $this->getAvailabilityStatus($qr)['usable'] === true;
     }
 
-    private function normalizeDateTime($value): string
+    private function normalizeDateTime(mixed $value): string
     {
-        $value = trim((string) ($value ?? ''));
-        if ($value === '') {
-            return '';
-        }
-
-        return Carbon::parse($value)->format('Y-m-d H:i:s');
+        return $this->parseRequiredDateTime($value)->format('Y-m-d H:i:s');
     }
 
-    private function parseDateTime($value): ?Carbon
+    private function parseRequiredDateTime(mixed $value): CarbonImmutable
     {
         $value = trim((string) ($value ?? ''));
         if ($value === '') {
-            return null;
+            throw new InvalidArgumentException('Tanggal dan waktu masa berlaku QR wajib diisi.');
         }
 
-        return Carbon::parse($value);
+        try {
+            $dateTime = CarbonImmutable::createFromFormat('!Y-m-d H:i:s', $value, self::TIMEZONE);
+        } catch (\Throwable $exception) {
+            throw new InvalidArgumentException('Tanggal atau waktu masa berlaku QR tidak valid.', 0, $exception);
+        }
+
+        if (! $dateTime || $dateTime->format('Y-m-d H:i:s') !== $value) {
+            throw new InvalidArgumentException('Tanggal atau waktu masa berlaku QR tidak valid.');
+        }
+
+        return $dateTime;
     }
 
     private function assertValidSchedule(string $activeFrom, string $activeUntil): void
     {
-        if ($activeFrom === '' || $activeUntil === '') {
-            return;
-        }
+        $from = $this->parseRequiredDateTime($activeFrom);
+        $until = $this->parseRequiredDateTime($activeUntil);
 
-        if (Carbon::parse($activeUntil)->lte(Carbon::parse($activeFrom))) {
-            throw new \Exception("Jadwal nonaktif QR harus setelah jadwal aktif.");
+        if ($until->lessThanOrEqualTo($from)) {
+            throw new InvalidArgumentException('Waktu berakhir QR harus setelah waktu mulai berlaku.');
         }
+    }
+
+    private function serverNow(): CarbonImmutable
+    {
+        return CarbonImmutable::now(self::TIMEZONE);
     }
 
     private function authenticatedActorId(): string

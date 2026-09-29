@@ -9,6 +9,7 @@ use App\Services\Academic\StudentQRAttendanceService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\PermanentQrService;
 use App\Services\Core\RoleService;
+use App\Services\Core\SystemSettingService;
 use App\Services\HR\QRAttendanceService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -23,16 +24,20 @@ class PermanentQrController extends Controller
 
     protected $activityLog;
 
+    protected $settingService;
+
     public function __construct(
         PermanentQrService $qrService,
         StudentQRAttendanceService $studentQrService,
         QRAttendanceService $hrQrService,
-        ActivityLogService $activityLog
+        ActivityLogService $activityLog,
+        SystemSettingService $settingService
     ) {
         $this->qrService = $qrService;
         $this->studentQrService = $studentQrService;
         $this->hrQrService = $hrQrService;
         $this->activityLog = $activityLog;
+        $this->settingService = $settingService;
     }
 
     // ==========================================
@@ -48,7 +53,13 @@ class PermanentQrController extends Controller
             })
             ->values();
 
-        return view('attendance.qr.index', compact('qrCodes'));
+        $studentWindow = [
+            'start' => $this->settingService->get('WORK_START_TIME'),
+            'end' => $this->settingService->get('WORK_END_TIME'),
+            'timezone' => 'Asia/Jakarta',
+        ];
+
+        return view('attendance.qr.index', compact('qrCodes', 'studentWindow'));
     }
 
     public function store(Request $request)
@@ -56,9 +67,13 @@ class PermanentQrController extends Controller
         $data = $request->validate([
             'QR_TYPE' => 'required|in:STUDENT,EMPLOYEE',
             'LABEL' => 'required|string|max:100',
-            'ACTIVE_FROM' => 'nullable|date',
-            'ACTIVE_UNTIL' => 'nullable|date|after:ACTIVE_FROM',
+            'ACTIVE_FROM_DATE' => 'required|date_format:Y-m-d',
+            'ACTIVE_FROM_TIME' => 'required|date_format:H:i',
+            'ACTIVE_UNTIL_DATE' => 'required|date_format:Y-m-d',
+            'ACTIVE_UNTIL_TIME' => 'required|date_format:H:i',
         ]);
+
+        $data = $this->mapLifecycleInputs($data);
 
         $this->assertCanManageQrType($data['QR_TYPE']);
 
@@ -158,13 +173,17 @@ class PermanentQrController extends Controller
         }
     }
 
-    public function updateAvailability(Request $request, $id)
+    public function update(Request $request, $id)
     {
         $data = $request->validate([
             'STATUS' => 'required|in:ACTIVE,INACTIVE',
-            'ACTIVE_FROM' => 'nullable|date',
-            'ACTIVE_UNTIL' => 'nullable|date|after:ACTIVE_FROM',
+            'ACTIVE_FROM_DATE' => 'required|date_format:Y-m-d',
+            'ACTIVE_FROM_TIME' => 'required|date_format:H:i',
+            'ACTIVE_UNTIL_DATE' => 'required|date_format:Y-m-d',
+            'ACTIVE_UNTIL_TIME' => 'required|date_format:H:i',
         ]);
+
+        $data = $this->mapLifecycleInputs($data);
 
         $qr = $this->qrService->getQrById($id);
         if (! $qr) {
@@ -182,6 +201,39 @@ class PermanentQrController extends Controller
                 $this->safeExceptionMessage($e, 'Jadwal aktif QR Presensi tidak dapat diperbarui.')
             );
         }
+    }
+
+    public function updateStudentAttendanceSettings(Request $request)
+    {
+        $data = $request->validate([
+            'WORK_START_TIME' => ['required', 'date_format:H:i'],
+            'WORK_END_TIME' => ['required', 'date_format:H:i'],
+        ]);
+
+        [$prepared, $errors] = $this->settingService->prepareSettingsForUpdate($data);
+        if ($errors !== []) {
+            return redirect()->back()->withErrors(['attendance_settings' => implode(' ', $errors)])->withInput();
+        }
+
+        $actor = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
+        if ($actor === '') {
+            abort(403, 'Identitas pengguna tidak valid.');
+        }
+
+        try {
+            $this->settingService->set('WORK_START_TIME', $prepared['WORK_START_TIME'], $actor);
+            $this->settingService->set('WORK_END_TIME', $prepared['WORK_END_TIME'], $actor);
+            $this->settingService->reloadCache();
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()->back()->withErrors([
+                'attendance_settings' => 'Pengaturan jam absensi siswa tidak dapat disimpan.',
+            ])->withInput();
+        }
+
+        return redirect()->route('attendance.qr.index')
+            ->with('success', 'Pengaturan jam absensi siswa berhasil diperbarui.');
     }
 
     public function destroy($id)
@@ -338,19 +390,8 @@ class PermanentQrController extends Controller
     {
         $type = strtoupper(trim($qrType));
 
-        if ($roleAlias === 'ADMINISTRATOR') {
-            return in_array($type, ['STUDENT', 'EMPLOYEE'], true);
-        }
-
-        if ($roleAlias === 'ACADEMIC') {
-            return $type === 'STUDENT';
-        }
-
-        if ($roleAlias === 'HR') {
-            return $type === 'EMPLOYEE';
-        }
-
-        return false;
+        return $roleAlias === 'ADMINISTRATOR'
+            && in_array($type, ['STUDENT', 'EMPLOYEE'], true);
     }
 
     private function currentRoleAlias(): string
@@ -375,5 +416,20 @@ class PermanentQrController extends Controller
         }
 
         return '';
+    }
+
+    private function mapLifecycleInputs(array $data): array
+    {
+        $data['ACTIVE_FROM'] = $data['ACTIVE_FROM_DATE'].' '.$data['ACTIVE_FROM_TIME'].':00';
+        $data['ACTIVE_UNTIL'] = $data['ACTIVE_UNTIL_DATE'].' '.$data['ACTIVE_UNTIL_TIME'].':00';
+
+        unset(
+            $data['ACTIVE_FROM_DATE'],
+            $data['ACTIVE_FROM_TIME'],
+            $data['ACTIVE_UNTIL_DATE'],
+            $data['ACTIVE_UNTIL_TIME']
+        );
+
+        return $data;
     }
 }

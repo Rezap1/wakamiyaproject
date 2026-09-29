@@ -723,13 +723,14 @@ Route::middleware('auth')->group(function () {
     });
 
     // Permanent Attendance QR Management
-    Route::prefix('attendance/qr')->name('attendance.qr.')->middleware('role:ADMINISTRATOR,HR,ACADEMIC,MASTER')->group(function () {
+    Route::prefix('attendance/qr')->name('attendance.qr.')->middleware('role:ADMINISTRATOR,MASTER')->group(function () {
         Route::get('/', [\App\Http\Controllers\Core\PermanentQrController::class, 'index'])->name('index');
         Route::post('/', [\App\Http\Controllers\Core\PermanentQrController::class, 'store'])->name('store');
+        Route::post('/student-settings', [\App\Http\Controllers\Core\PermanentQrController::class, 'updateStudentAttendanceSettings'])->name('student-settings.update');
         Route::get('/{id}/preview', [\App\Http\Controllers\Core\PermanentQrController::class, 'preview'])->name('preview');
         Route::get('/{id}/print', [\App\Http\Controllers\Core\PermanentQrController::class, 'printView'])->name('print');
         Route::get('/{id}/pdf', [\App\Http\Controllers\Core\PermanentQrController::class, 'downloadPdf'])->name('pdf');
-        Route::post('/{id}/availability', [\App\Http\Controllers\Core\PermanentQrController::class, 'updateAvailability'])->name('availability');
+        Route::patch('/{id}', [\App\Http\Controllers\Core\PermanentQrController::class, 'update'])->name('update');
         Route::post('/{id}/deactivate', [\App\Http\Controllers\Core\PermanentQrController::class, 'deactivate'])->name('deactivate');
         Route::delete('/{id}', [\App\Http\Controllers\Core\PermanentQrController::class, 'destroy'])->name('destroy');
     });
