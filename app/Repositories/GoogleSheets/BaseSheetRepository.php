@@ -768,6 +768,113 @@ abstract class BaseSheetRepository
     }
 
     /**
+     * Physically delete a verified set of primary keys in one safe batch.
+     * Rows are deleted bottom-to-top so earlier indexes never shift.
+     */
+    public function hardDeleteMany(array $ids): int
+    {
+        $needles = collect($ids)
+            ->map(fn ($id) => strtolower(trim((string) $id)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($needles->isEmpty()) {
+            return 0;
+        }
+
+        $lockKey = $this->sheetName.'_write_lock';
+
+        try {
+            $deleted = Cache::lock($lockKey, 120)->block(15, function () use ($needles) {
+                return $this->executeWithGoogleRetry(function () use ($needles) {
+                    // Re-resolve all indexes on every retry. If a previous
+                    // ambiguous request committed, the retry becomes a no-op.
+                    $values = $this->service->spreadsheets_values
+                        ->get($this->spreadsheetId, $this->sheetName)
+                        ->getValues();
+                    if (empty($values)) {
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak memiliki header atau data.");
+                    }
+
+                    $headers = array_map(fn ($header) => trim((string) $header), $values[0]);
+                    $this->assertExpectedHeaders($headers);
+                    $idIndex = collect($headers)->search(
+                        fn ($header) => strcasecmp($header, $this->primaryKey) === 0
+                    );
+                    if ($idIndex === false) {
+                        throw new \RuntimeException("Header primary key '{$this->primaryKey}' tidak ditemukan.");
+                    }
+
+                    $matches = [];
+                    foreach (array_slice($values, 1, null, true) as $rowIndex => $row) {
+                        $id = strtolower(trim((string) ($row[$idIndex] ?? '')));
+                        if ($id !== '' && $needles->contains($id)) {
+                            $matches[$id][] = $rowIndex;
+                        }
+                    }
+
+                    $rowIndexes = [];
+                    foreach ($matches as $id => $indexes) {
+                        if (count($indexes) !== 1) {
+                            Log::warning('Google Sheets batch delete skipped ambiguous primary key', [
+                                'sheet' => $this->sheetName,
+                                'primary_key' => $id,
+                                'matches' => count($indexes),
+                            ]);
+
+                            continue;
+                        }
+                        $rowIndexes[] = $indexes[0];
+                    }
+                    rsort($rowIndexes, SORT_NUMERIC);
+                    if ($rowIndexes === []) {
+                        return 0;
+                    }
+
+                    $spreadsheet = $this->service->spreadsheets->get($this->spreadsheetId);
+                    $sheetId = null;
+                    foreach ($spreadsheet->getSheets() as $sheet) {
+                        if ($sheet->getProperties()->getTitle() === $this->sheetName) {
+                            $sheetId = $sheet->getProperties()->getSheetId();
+                            break;
+                        }
+                    }
+                    if ($sheetId === null) {
+                        throw new \RuntimeException("Sheet '{$this->sheetName}' tidak ditemukan pada spreadsheet.");
+                    }
+
+                    $requests = array_map(fn ($rowIndex) => new \Google_Service_Sheets_Request([
+                        'deleteDimension' => [
+                            'range' => [
+                                'sheetId' => $sheetId,
+                                'dimension' => 'ROWS',
+                                'startIndex' => $rowIndex,
+                                'endIndex' => $rowIndex + 1,
+                            ],
+                        ],
+                    ]), $rowIndexes);
+
+                    $this->service->spreadsheets->batchUpdate(
+                        $this->spreadsheetId,
+                        new \Google_Service_Sheets_BatchUpdateSpreadsheetRequest(['requests' => $requests])
+                    );
+
+                    return count($rowIndexes);
+                }, 'hardDeleteMany');
+            });
+
+            $this->clearCache();
+
+            return $deleted;
+        } catch (Throwable $e) {
+            $this->clearCache();
+            Log::error('Google API Error during batch delete on '.$this->sheetName.': '.$e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * Truncate all data rows from the sheet (keeps header).
      * Added specifically for QA Zero-State Reset to avoid API rate limits.
      */

@@ -349,10 +349,11 @@ class InvoiceController extends Controller
 
             $eventDispatched = true;
 
-            // Dispatch Enterprise Event
+            // Keep the internal audit/cache event without dispatching the
+            // legacy second student-facing "TAGIHAN DIKIRIMKAN" notification.
             try {
                 $enterpriseEvent = app(EnterpriseEventService::class);
-                $enterpriseEvent->dispatch(
+                $enterpriseEvent->dispatchAudit(
                     'FINANCE',
                     'NOTIFY',
                     'INVOICE',

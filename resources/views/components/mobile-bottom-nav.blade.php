@@ -8,7 +8,6 @@
         $items = [
             ['label' => 'Dashboard', 'route' => 'dashboard.student', 'icon' => 'home', 'active' => request()->routeIs('dashboard.student')],
             ['label' => 'Jadwal', 'route' => 'student.schedule', 'icon' => 'calendar', 'active' => request()->routeIs('student.schedule')],
-            ['label' => 'Scan QR Siswa', 'route' => 'attendances.student.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('attendances.student.*')],
             ['label' => 'Riwayat Absensi', 'route' => 'attendances.my-history', 'icon' => 'clock', 'active' => request()->routeIs('attendances.my-history')],
             ['label' => 'Nilai', 'route' => 'student.progress', 'icon' => 'academic-cap', 'active' => request()->routeIs('student.progress')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
@@ -90,7 +89,7 @@
 @endphp
 
 <!-- WMS MOBILE BOTTOM NAV BAR (Glassmorphism & Fixed Bottom) -->
-<nav aria-label="Navigasi utama mobile" class="mobile-bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] px-2 pt-2 flex items-center justify-around select-none" style="padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));">
+<nav aria-label="Navigasi utama mobile" data-mobile-role="{{ $role }}" class="mobile-bottom-nav {{ $role === 'STUDENT' ? 'lg:hidden' : 'md:hidden' }} fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] px-2 pt-2 flex items-center justify-around select-none" style="padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));">
     @foreach($items as $item)
         @php
             $url = Route::has($item['route']) ? route($item['route']) : '#';

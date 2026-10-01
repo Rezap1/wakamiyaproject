@@ -20,6 +20,7 @@
             --color-card-bg: {{ $themeTokens['card_bg'] ?? '#FFFFFF' }};
         }
         body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
         
         /* Dark Scrollbar for Sidebar */
         .dark-scrollbar::-webkit-scrollbar {
@@ -42,7 +43,7 @@
         localStorage.setItem('color-theme', 'light');
     </script>
 </head>
-<body style="background-color: var(--color-page-bg, #E2E8F0);" class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+<body style="background-color: var(--color-page-bg, #E2E8F0);" class="{{ strtoupper(trim($userRole ?? '')) === 'STUDENT' ? 'wms-student-shell' : '' }} text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
 
     <div class="wms-shell flex min-h-screen lg:h-screen lg:overflow-hidden">
         

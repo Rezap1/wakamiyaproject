@@ -47,12 +47,12 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         $this->assertStringNotContainsString("'Tagihan dari Master'", $kpi);
     }
 
-    public function test_money_values_are_non_wrapping_and_mobile_summary_stacks_until_tablet(): void
+    public function test_education_money_values_wrap_safely_and_mobile_summary_stacks_until_tablet(): void
     {
         $dashboard = $this->studentDashboardSource();
         $mobileHero = file_get_contents(resource_path('views/components/mobile-dashboard-hero.blade.php'));
 
-        $this->assertSame(3, substr_count($dashboard, 'whitespace-nowrap text-lg font-black'));
+        $this->assertSame(3, substr_count($dashboard, 'break-words text-base font-black text-'));
         $this->assertStringContainsString('grid grid-cols-1 gap-3 sm:grid-cols-3', $dashboard);
         $this->assertStringContainsString("'whitespace-nowrap text-xl min-[390px]:text-2xl'", $mobileHero);
         $this->assertStringContainsString("'min-[360px]:grid-cols-2'", $mobileHero);
@@ -97,7 +97,7 @@ class H868StudentDashboardKpiMobileContractTest extends TestCase
         $css = file_get_contents(resource_path('css/app.css'));
         $layout = file_get_contents(resource_path('views/layouts/app.blade.php'));
 
-        $this->assertStringContainsString('padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));', $css);
+        $this->assertStringContainsString('padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));', $css);
         $this->assertStringContainsString('min-height: calc(4rem + env(safe-area-inset-bottom, 0px));', $css);
         $this->assertStringContainsString('<x-mobile-bottom-nav', $layout);
     }

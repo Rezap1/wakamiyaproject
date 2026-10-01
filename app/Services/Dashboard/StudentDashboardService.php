@@ -52,8 +52,8 @@ class StudentDashboardService
         ActivityLogService $activityLogService,
         NotificationService $notificationService,
         AttendanceRequestService $attendanceRequestService,
-        ?AnnouncementService $announcementService = null,
-        ?StudentBillingNotificationService $billingNotificationService = null
+        StudentBillingNotificationService $billingNotificationService,
+        ?AnnouncementService $announcementService = null
     ) {
         $this->scoreService = $scoreService;
         $this->scheduleService = $scheduleService;
@@ -64,8 +64,8 @@ class StudentDashboardService
         $this->activityLogService = $activityLogService;
         $this->notificationService = $notificationService;
         $this->attendanceRequestService = $attendanceRequestService;
-        $this->announcementService = $announcementService;
         $this->billingNotificationService = $billingNotificationService;
+        $this->announcementService = $announcementService;
     }
 
     public function getDashboardData()
@@ -312,13 +312,11 @@ class StudentDashboardService
             try {
                 $notificationSummary = $this->notificationService->summarizeForUser($userId, 'STUDENT', 100);
                 $unreadNotifications = $notificationSummary['unreadCount'] ?? 0;
-                if ($this->billingNotificationService) {
-                    $billingPopup = $this->billingNotificationService->popupFromSnapshots(
-                        $notificationSummary['recent'] ?? collect(),
-                        $myInvoices,
-                        (array) $student,
-                    );
-                }
+                $billingPopup = $this->billingNotificationService->popupFromSnapshots(
+                    $notificationSummary['recent'] ?? collect(),
+                    $myInvoices,
+                    (array) $student,
+                );
             } catch (\Exception $e) {
                 $unreadNotifications = 0;
             }

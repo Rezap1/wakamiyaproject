@@ -117,6 +117,57 @@ class StudentBillingNotificationService
         return $this->presentContext($notification, $invoice, (array) $student);
     }
 
+    /**
+     * Enrich one notification page with one student read and one invoice read.
+     * The returned map is keyed by Notification_ID to keep Blade lookup O(1).
+     */
+    public function contextsForNotifications(iterable $notifications): array
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return [];
+        }
+
+        $role = strtoupper(trim((string) ($user->Role ?? '')));
+        if ($role !== '' && ! str_contains($role, 'STUDENT')) {
+            return [];
+        }
+
+        $student = collect($this->studentRepository->fetchAll())
+            ->firstWhere('User_ID', $user->User_ID ?? auth()->id());
+        if (! $student || empty($student['Student_ID'])) {
+            return [];
+        }
+
+        $invoiceMap = collect($this->invoiceService->getAll())
+            ->keyBy(fn ($invoice) => trim((string) ($invoice['Invoice_ID'] ?? '')));
+        $contexts = [];
+
+        foreach ($notifications as $notification) {
+            $notification = (array) $notification;
+            $invoiceId = $this->invoiceIdFromNotification($notification);
+            $notificationId = trim((string) ($notification['Notification_ID'] ?? ''));
+            if ($invoiceId === null || $notificationId === '') {
+                continue;
+            }
+
+            $invoice = $invoiceMap->get($invoiceId);
+            if (! $invoice) {
+                $contexts[$notificationId] = $this->unavailableContext($notification, $invoiceId);
+
+                continue;
+            }
+            $invoice = (array) $invoice;
+            if (trim((string) ($invoice['Student_ID'] ?? '')) !== trim((string) $student['Student_ID'])) {
+                continue;
+            }
+
+            $contexts[$notificationId] = $this->presentContext($notification, $invoice, (array) $student);
+        }
+
+        return $contexts;
+    }
+
     public function popupFromSnapshots(iterable $notifications, iterable $invoices, array $student): array
     {
         $invoiceMap = collect($invoices)->keyBy(fn ($invoice) => trim((string) ($invoice['Invoice_ID'] ?? '')));
@@ -153,6 +204,11 @@ class StudentBillingNotificationService
         $title = trim((string) ($notification['Title'] ?? ''));
         $link = trim((string) ($notification['Link'] ?? $notification['Action_URL'] ?? ''));
         if ($title === '' || ! str_starts_with(strtolower($title), 'tagihan ') || $link === '') {
+            return null;
+        }
+
+        parse_str((string) parse_url($link, PHP_URL_QUERY), $query);
+        if (($query['notification_type'] ?? null) !== self::TYPE) {
             return null;
         }
 
@@ -212,10 +268,12 @@ class StudentBillingNotificationService
     {
         $cutoff = now('Asia/Jakarta')->subMinutes(self::DUPLICATE_COOLDOWN_MINUTES);
 
-        return $this->notificationService->getAllFresh()->contains(function ($row) use ($payload, $cutoff) {
+        $invoiceId = $this->invoiceIdFromNotification($payload);
+
+        return $this->notificationService->getAllFresh()->contains(function ($row) use ($payload, $cutoff, $invoiceId) {
             if (trim((string) ($row['User_ID'] ?? '')) !== $payload['User_ID']
-                || trim((string) ($row['Title'] ?? '')) !== $payload['Title']
-                || trim((string) ($row['Link'] ?? '')) !== $payload['Link']) {
+                || $invoiceId === null
+                || $this->invoiceIdFromNotification((array) $row) !== $invoiceId) {
                 return false;
             }
 

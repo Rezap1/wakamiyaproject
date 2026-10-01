@@ -2,16 +2,15 @@
 
 namespace App\Services\Core;
 
-use App\Services\Core\ActivityLogService;
-use App\Services\Core\NotificationService;
-use App\Services\Core\DashboardCacheService;
-use Illuminate\Support\Facades\Log;
 use App\Support\ActorIdentity;
+use Illuminate\Support\Facades\Log;
 
 class EnterpriseEventService
 {
     protected $activityLogService;
+
     protected $notificationService;
+
     protected $dashboardCacheService;
 
     public function __construct(
@@ -25,14 +24,11 @@ class EnterpriseEventService
     }
 
     /**
-     * @param string $module
-     * @param string $action
-     * @param string $referenceType
-     * @param string $referenceId
-     * @param string|null $actorUserId
-     * @param array $affectedRoles
-     * @param array $affectedUsers
-     * @param array $metadata
+     * @param  string  $module
+     * @param  string  $action
+     * @param  string  $referenceType
+     * @param  string  $referenceId
+     * @param  string|null  $actorUserId
      * @return bool
      */
     public function dispatch(
@@ -48,14 +44,7 @@ class EnterpriseEventService
         $actorUserId = ActorIdentity::resolve($actorUserId);
 
         // 1. Record Activity Log
-        $title = "{$referenceType} {$action}";
-        $description = json_encode($metadata);
-
-        try {
-            $this->activityLogService->logAction($actorUserId, $action, $module, $description, null, null, null, null, $referenceType, $referenceId);
-        } catch (\Exception $e) {
-            Log::error("Failed to log activity: " . $e->getMessage());
-        }
+        $this->recordActivity($module, $action, $referenceType, $referenceId, $actorUserId, $metadata);
 
         // 2. Create Notification
         $indonesianTypes = [
@@ -66,7 +55,7 @@ class EnterpriseEventService
             'CLASS' => 'Kelas',
             'PROGRAM' => 'Program',
             'AUTH' => 'Otentikasi',
-            'TEACHER' => 'Pengajar'
+            'TEACHER' => 'Pengajar',
         ];
         $indonesianActions = [
             'CREATE' => 'dibuat',
@@ -77,21 +66,21 @@ class EnterpriseEventService
             'LOGIN' => 'melakukan login',
             'FAILED_LOGIN' => 'gagal login',
             'CANCEL' => 'dibatalkan',
-            'PUBLISH' => 'dipublikasikan'
+            'PUBLISH' => 'dipublikasikan',
         ];
 
         $typeId = $indonesianTypes[strtoupper($referenceType)] ?? $referenceType;
         $actionId = $indonesianActions[strtoupper($action)] ?? strtolower($action);
-        
+
         $title = strtoupper("{$typeId} {$actionId}");
         $message = "Sistem telah mencatat bahwa {$typeId} dengan referensi ({$referenceId}) telah {$actionId} oleh {$actorUserId}.";
-        
+
         // Notify Roles
         foreach ($affectedRoles as $role) {
             try {
                 $this->notificationService->NotifyRole($role, $title, $message, $module, 'Normal', '/', $actorUserId);
             } catch (\Exception $e) {
-                Log::error("Failed to notify role {$role}: " . $e->getMessage());
+                Log::error("Failed to notify role {$role}: ".$e->getMessage());
             }
         }
 
@@ -100,7 +89,7 @@ class EnterpriseEventService
             try {
                 $this->notificationService->NotifyUser($userId, $title, $message, $module, 'Normal', '/', $actorUserId);
             } catch (\Exception $e) {
-                Log::error("Failed to notify user {$userId}: " . $e->getMessage());
+                Log::error("Failed to notify user {$userId}: ".$e->getMessage());
             }
         }
 
@@ -109,6 +98,47 @@ class EnterpriseEventService
 
         // 4. Return Result
         return true;
+    }
+
+    /**
+     * Record an internal event and invalidate its dashboard projections without
+     * creating a user-facing MASTER_NOTIFICATION row.
+     */
+    public function dispatchAudit(
+        $module,
+        $action,
+        $referenceType,
+        $referenceId,
+        $actorUserId = null,
+        array $affectedRoles = [],
+        array $affectedUsers = [],
+        array $metadata = []
+    ): bool {
+        $actorUserId = ActorIdentity::resolve($actorUserId);
+        $this->recordActivity($module, $action, $referenceType, $referenceId, $actorUserId, $metadata);
+        $this->invalidateCachesForModule($module, $affectedRoles, $affectedUsers);
+
+        return true;
+    }
+
+    private function recordActivity($module, $action, $referenceType, $referenceId, $actorUserId, array $metadata): void
+    {
+        try {
+            $this->activityLogService->logAction(
+                $actorUserId,
+                $action,
+                $module,
+                json_encode($metadata),
+                null,
+                null,
+                null,
+                null,
+                $referenceType,
+                $referenceId
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to log activity: '.$e->getMessage());
+        }
     }
 
     protected function invalidateCachesForModule($module, $affectedRoles, $affectedUsers)
@@ -131,14 +161,14 @@ class EnterpriseEventService
             case 'SCHEDULE':
                 $this->dashboardCacheService->clearAcademic();
                 break;
-                
+
             case 'EMPLOYEE':
             case 'DEPARTMENT':
             case 'PAYROLL':
             case 'HR':
                 $this->dashboardCacheService->clearHR();
                 break;
-                
+
             case 'FINANCE':
             case 'FINANCE_TRANSACTION':
             case 'INVOICE':

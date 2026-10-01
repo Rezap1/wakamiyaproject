@@ -74,8 +74,14 @@ class NotificationController extends Controller
             });
 
         $notifications = CollectionHelper::paginate($notifications, 15)->withQueryString();
+        try {
+            $billingContexts = ($this->billingNotificationService
+                ?? app(StudentBillingNotificationService::class))->contextsForNotifications($notifications->items());
+        } catch (\Throwable) {
+            $billingContexts = [];
+        }
 
-        return view('notifications.index', compact('notifications'));
+        return view('notifications.index', compact('notifications', 'billingContexts'));
     }
 
     public function show($id)

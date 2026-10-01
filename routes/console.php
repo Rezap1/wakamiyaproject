@@ -8,4 +8,9 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 use Illuminate\Support\Facades\Schedule;
+
 Schedule::command('invoice:reminders')->dailyAt('08:00');
+Schedule::command('notifications:prune')
+    ->dailyAt('02:15')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();

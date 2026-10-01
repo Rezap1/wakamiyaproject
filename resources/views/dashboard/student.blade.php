@@ -15,7 +15,7 @@
                 if (this.saving) return;
                 this.saving = true;
                 try {
-                    await fetch('{{ route('notifications.markRead', $popup['notification']['Notification_ID']) }}', {
+                    const response = await fetch('{{ route('notifications.markRead', $popup['notification']['Notification_ID']) }}', {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': '{{ csrf_token() }}',
@@ -23,8 +23,11 @@
                             'X-Requested-With': 'XMLHttpRequest'
                         }
                     });
-                } finally {
+                    if (!response.ok) throw new Error('acknowledgement_failed');
                     this.open = false;
+                } catch (error) {
+                    this.$refs.ackError.classList.remove('hidden');
+                } finally {
                     this.saving = false;
                 }
             }
@@ -52,16 +55,18 @@
 
             <div class="space-y-5 p-5 sm:p-6">
                 <p class="break-words text-sm text-slate-700">Halo, <strong>{{ $popup['student_name'] }}</strong></p>
-                <p class="text-sm leading-6 text-slate-600">Anda memiliki tagihan {{ $popup['purpose'] }}.</p>
-
-                <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div class="min-w-0 rounded-2xl bg-slate-50 p-4">
-                        <dt class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total</dt>
-                        <dd class="mt-1 break-words text-xl font-black text-slate-900">Rp{{ number_format($popup['total'], 0, ',', '.') }}</dd>
-                    </div>
-                    <div class="min-w-0 rounded-2xl bg-amber-50 p-4">
+                <dl class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2 min-w-0 rounded-2xl bg-amber-50 p-4">
                         <dt class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Sisa Pembayaran</dt>
-                        <dd class="mt-1 break-words text-xl font-black text-amber-900">Rp{{ number_format($popup['remaining'], 0, ',', '.') }}</dd>
+                        <dd class="mt-1 break-words text-2xl font-black text-amber-900">Rp{{ number_format($popup['remaining'], 0, ',', '.') }}</dd>
+                    </div>
+                    <div class="min-w-0 rounded-2xl bg-slate-50 p-3">
+                        <dt class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total Tagihan</dt>
+                        <dd class="mt-1 break-words text-sm font-black text-slate-900">Rp{{ number_format($popup['total'], 0, ',', '.') }}</dd>
+                    </div>
+                    <div class="min-w-0 rounded-2xl bg-emerald-50 p-3">
+                        <dt class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Sudah Dibayar</dt>
+                        <dd class="mt-1 break-words text-sm font-black text-emerald-900">Rp{{ number_format($popup['paid'], 0, ',', '.') }}</dd>
                     </div>
                 </dl>
 
@@ -73,6 +78,8 @@
                 </div>
 
                 <p class="text-sm leading-6 text-slate-600">{{ $popup['instruction'] }}</p>
+                <p class="wms-break-anywhere font-mono text-xs font-bold text-slate-500">{{ $popup['invoice_id'] }}</p>
+                <p x-ref="ackError" class="hidden rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">Belum dapat menyimpan pilihan. Silakan coba lagi.</p>
 
                 @if(($billingPopup['other_count'] ?? 0) > 0)
                     <a href="{{ route('notifications.index') }}" class="block rounded-xl bg-sky-50 px-4 py-3 text-center text-xs font-bold text-sky-700 hover:bg-sky-100">
@@ -81,17 +88,22 @@
                 @endif
 
                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button x-ref="laterButton" type="button" @click="acknowledge()" :disabled="saving" class="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">Nanti</button>
                     <form action="{{ route('notifications.read', $popup['notification']['Notification_ID']) }}" method="POST">
                         @csrf
                         <button type="submit" class="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">Bayar Sekarang</button>
                     </form>
-                    <button x-ref="laterButton" type="button" @click="acknowledge()" :disabled="saving" class="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">Nanti</button>
                 </div>
                 <a href="{{ route('notifications.show', $popup['notification']['Notification_ID']) }}" class="block text-center text-xs font-bold text-slate-500 hover:text-slate-800 hover:underline">Lihat Detail</a>
             </div>
         </section>
     </div>
 @endif
+
+<!-- Greeting first on mobile; shared dashboard data remains unchanged. -->
+<div class="mb-5 block md:hidden">
+    <x-mobile-dashboard-hero user-role="STUDENT" :kpi-data="$kpi ?? []" />
+</div>
 
 <!-- Pengumuman aktif: sumber data yang sama untuk desktop dan mobile -->
 <section aria-labelledby="student-announcements-heading" class="mb-6 rounded-2xl border border-amber-200 bg-white p-4 shadow-sm sm:p-6">
@@ -141,15 +153,15 @@
     <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div class="min-w-0 rounded-xl bg-white p-3 shadow-sm">
             <dt class="text-[11px] font-bold text-slate-500">Biaya Pendidikan</dt>
-            <dd class="mt-1 whitespace-nowrap text-lg font-black text-slate-900">Rp {{ number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
+            <dd class="mt-1 break-words text-base font-black text-slate-900 sm:text-lg">Rp {{ number_format($kpi['biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
         </div>
         <div class="min-w-0 rounded-xl bg-emerald-50 p-3">
             <dt class="text-[11px] font-bold text-emerald-700">Sudah Dibayar</dt>
-            <dd class="mt-1 whitespace-nowrap text-lg font-black text-emerald-900">Rp {{ number_format($kpi['sudah_dibayar'] ?? 0, 0, ',', '.') }}</dd>
+            <dd class="mt-1 break-words text-base font-black text-emerald-900 sm:text-lg">Rp {{ number_format($kpi['sudah_dibayar'] ?? 0, 0, ',', '.') }}</dd>
         </div>
         <div class="min-w-0 rounded-xl bg-amber-50 p-3">
             <dt class="text-[11px] font-bold text-amber-700">Sisa Biaya Pendidikan</dt>
-            <dd class="mt-1 whitespace-nowrap text-lg font-black text-amber-900">Rp {{ number_format($kpi['sisa_biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
+            <dd class="mt-1 break-words text-base font-black text-amber-900 sm:text-lg">Rp {{ number_format($kpi['sisa_biaya_pendidikan'] ?? 0, 0, ',', '.') }}</dd>
         </div>
     </dl>
 </section>
@@ -168,11 +180,6 @@
         ['title' => 'Tugas Saya', 'url' => route('student.portal.assignments'), 'icon' => 'clipboard-list', 'color' => 'indigo'],
     ];
 @endphp
-
-<!-- MOBILE HERO (VISIBLE ON MOBILE ONLY) -->
-<div class="block md:hidden">
-    <x-mobile-dashboard-hero user-role="STUDENT" :kpi-data="$kpi ?? []" />
-</div>
 
 <!-- MAIN UNIFIED DASHBOARD VIEW (HIDDEN ON MOBILE, VISIBLE ON DESKTOP) -->
 <div class="hidden md:block w-full">

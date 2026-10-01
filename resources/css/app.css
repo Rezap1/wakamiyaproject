@@ -200,11 +200,23 @@ body {
   .main-content {
     overflow: visible;
   }
+
+  .wms-student-shell .wms-page-content {
+    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wms-student-shell .mobile-bottom-nav {
+    min-height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (max-width: 767px) {
   .wms-page-content {
     padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wms-student-shell .wms-page-content {
+    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-bottom-nav {

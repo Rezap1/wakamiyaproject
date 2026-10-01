@@ -17,15 +17,71 @@
             @forelse($notifications as $notif)
                 @php
                     $isRead = ($notif['Is_Read'] ?? 'FALSE') === 'TRUE';
-                    $isBilling = str_starts_with(strtolower(trim((string) ($notif['Title'] ?? ''))), 'tagihan ')
-                        && preg_match('#/student/billing/[^/?]+(?:\?.*)?$#', (string) ($notif['Link'] ?? ''));
+                    $billingContext = $billingContexts[$notif['Notification_ID'] ?? ''] ?? null;
+                    $isBilling = $billingContext !== null;
                     $bgClass = $isRead ? 'bg-white' : 'bg-blue-50/50';
                     $priority = $notif['Priority'] ?? 'Normal';
                     $priorityBadge = 'bg-slate-100 text-slate-500';
                     if($priority == 'High') $priorityBadge = 'bg-amber-100 text-amber-700';
                     if($priority == 'Critical') $priorityBadge = 'bg-rose-100 text-rose-700';
                 @endphp
-                <div class="{{ $bgClass }} p-6 hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center gap-4">
+                <article class="{{ $bgClass }} p-4 transition-colors hover:bg-slate-50 sm:p-6">
+                    @if($isBilling)
+                        <div class="flex min-w-0 flex-wrap items-center gap-2">
+                            @if(!$isRead)
+                                <span class="h-2 w-2 rounded-full bg-emerald-600" aria-label="Belum dibaca"></span>
+                            @endif
+                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-700">Tagihan</span>
+                            <time class="ml-auto text-xs font-semibold text-slate-400">{{ $billingContext['created_at'] }}</time>
+                        </div>
+
+                        <div class="mt-4 grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                            <div class="min-w-0">
+                                <h2 class="break-words text-lg font-black leading-tight text-slate-900">{{ $billingContext['title'] }}</h2>
+                                <p class="wms-break-anywhere mt-1 font-mono text-xs font-bold text-slate-500">{{ $billingContext['invoice_id'] }}</p>
+
+                                @if(($billingContext['status'] ?? '') === 'unavailable')
+                                    <p class="mt-4 text-sm font-bold text-slate-600">Tagihan tidak lagi tersedia.</p>
+                                @elseif(($billingContext['status'] ?? '') === 'paid')
+                                    <p class="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800">Tagihan telah lunas.</p>
+                                @elseif(in_array(($billingContext['status'] ?? ''), ['cancelled', 'void'], true))
+                                    <p class="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-700">Tagihan dibatalkan.</p>
+                                @else
+                                    <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div class="min-w-0 rounded-xl bg-amber-50 px-4 py-3">
+                                            <dt class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Sisa Pembayaran</dt>
+                                            <dd class="mt-1 break-words text-xl font-black text-amber-900">Rp{{ number_format($billingContext['remaining'], 0, ',', '.') }}</dd>
+                                        </div>
+                                        <div class="min-w-0 rounded-xl bg-slate-50 px-4 py-3">
+                                            <dt class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Jatuh Tempo</dt>
+                                            <dd class="mt-1 break-words text-sm font-black text-slate-800">{{ $billingContext['due_date'] }}</dd>
+                                            @if($billingContext['overdue'])
+                                                <dd class="mt-1 text-xs font-bold text-rose-700">Telah melewati jatuh tempo</dd>
+                                            @endif
+                                        </div>
+                                    </dl>
+                                @endif
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 md:w-36 md:grid-cols-1">
+                                @if($billingContext['actionable'])
+                                    <form action="{{ route('notifications.read', $notif['Notification_ID']) }}" method="POST">
+                                        @csrf
+                                        <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-center text-xs font-black text-white hover:bg-emerald-700">Lihat Tagihan</button>
+                                    </form>
+                                @else
+                                    <a href="{{ route('notifications.show', $notif['Notification_ID']) }}" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-black text-slate-700 hover:bg-slate-200">Lihat Detail</a>
+                                @endif
+                                @if(!$isRead)
+                                    <form action="{{ route('notifications.markRead', $notif['Notification_ID']) }}" method="POST">
+                                        @csrf
+                                        <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-xs font-bold text-slate-600 hover:bg-slate-100">Tandai Dibaca</button>
+                                    </form>
+                                @endif
+                            </div>
+                        </div>
+                    @else
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center">
                     <div class="flex-grow">
                         <div class="flex items-center gap-2 mb-2">
                             @if(!$isRead)
@@ -47,7 +103,9 @@
                         </form>
                         @endif
                     </div>
-                </div>
+                    </div>
+                    @endif
+                </article>
             @empty
                 <div class="p-12 text-center">
                     <svg class="w-12 h-12 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>

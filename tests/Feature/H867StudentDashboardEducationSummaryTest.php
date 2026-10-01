@@ -20,6 +20,7 @@ use App\Services\Core\SystemSettingService;
 use App\Services\Dashboard\StudentDashboardService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
+use App\Services\Finance\StudentBillingNotificationService;
 use Illuminate\Auth\GenericUser;
 use Mockery;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -213,6 +214,7 @@ class H867StudentDashboardEducationSummaryTest extends TestCase
         $attendanceRequests->shouldReceive('getStudentRequests')->zeroOrMoreTimes()->andReturn(collect());
         $notifications = Mockery::mock(NotificationService::class);
         $notifications->shouldReceive('UnreadCount')->zeroOrMoreTimes()->andReturn(0);
+        $billingNotifications = Mockery::mock(StudentBillingNotificationService::class);
         $activityLogs = Mockery::mock(ActivityLogService::class);
         $activityLogs->shouldReceive('getAllLogs')->zeroOrMoreTimes()->andReturn(collect());
 
@@ -226,6 +228,7 @@ class H867StudentDashboardEducationSummaryTest extends TestCase
             $activityLogs,
             $notifications,
             $attendanceRequests,
+            $billingNotifications,
             $announcementService,
         );
 

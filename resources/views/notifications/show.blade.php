@@ -9,7 +9,7 @@
             <header class="bg-gradient-to-br from-emerald-50 via-white to-sky-50 px-5 py-6 sm:px-8">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div class="min-w-0">
-                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">{{ $billingContext['type'] }}</p>
+                        <span class="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-700">Tagihan</span>
                         <h1 class="mt-2 break-words text-xl font-black uppercase leading-tight text-slate-900 sm:text-2xl">{{ $billingContext['title'] }}</h1>
                     </div>
                     <time class="shrink-0 text-xs font-semibold text-slate-500">{{ $billingContext['created_at'] }}</time>

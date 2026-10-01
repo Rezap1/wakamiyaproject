@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
@@ -22,12 +23,18 @@ class NotificationGoogleSheetRepository extends BaseSheetRepository implements N
                 $result[] = $n;
             }
         }
+
         return collect($result)->sortByDesc('Created_At')->values()->all();
     }
 
     public function getAll()
     {
         return $this->fetchAll();
+    }
+
+    public function getAllFresh()
+    {
+        return $this->fetchAllFresh();
     }
 
     public function getById($id)
