@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Quiz\QuizScopeService;
 use App\Services\Quiz\QuizService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class TeacherQuizController extends Controller
@@ -72,9 +73,26 @@ class TeacherQuizController extends Controller
     {
         $teacher = $this->scope->teacherForUser($request->user());
         $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
-        $this->quizzes->deleteDraft($quiz, $teacher['Teacher_ID'], $classIds);
+        try {
+            $this->quizzes->deleteQuiz(
+                $quiz,
+                $teacher['Teacher_ID'],
+                $classIds,
+                (string) $request->user()->User_ID,
+                $request->ip(),
+                $request->userAgent(),
+            );
+        } catch (\RuntimeException $exception) {
+            Log::error('Quiz permanent deletion failed verification.', [
+                'quiz_id' => $quiz,
+                'teacher_id' => $teacher['Teacher_ID'],
+                'exception' => $exception,
+            ]);
 
-        return redirect()->route('teacher.quizzes.index')->with('success', 'Draft kuis dihapus.');
+            return back()->with('error', 'Kuis belum dapat dihapus sepenuhnya. Tidak ada tahap berikutnya yang dijalankan; silakan coba lagi.');
+        }
+
+        return redirect()->route('teacher.quizzes.index')->with('success', 'Kuis berhasil dihapus. Soal, hasil siswa, dan poin leaderboard terkait juga telah dihapus.');
     }
 
     public function results(Request $request)

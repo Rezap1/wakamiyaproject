@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
+use App\Services\Core\ActivityLogService;
 use App\Services\Quiz\QuizCleanupService;
 use App\Services\Quiz\QuizPeriodService;
 use App\Services\Quiz\QuizService;
@@ -27,6 +28,8 @@ class H877QuizDomainTest extends TestCase
 
     private QuizService $service;
 
+    private ActivityLogService $activityLog;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -38,7 +41,8 @@ class H877QuizDomainTest extends TestCase
         $this->attempts = new MemoryAttemptRepository;
         $this->results = new MemoryResultRepository;
         $this->periods = new QuizPeriodService;
-        $this->service = new QuizService($this->quizzes, $this->questions, $this->attempts, $this->results, $this->periods);
+        $this->activityLog = \Mockery::spy(ActivityLogService::class);
+        $this->service = new QuizService($this->quizzes, $this->questions, $this->attempts, $this->results, $this->periods, $this->activityLog);
     }
 
     protected function tearDown(): void
@@ -75,7 +79,7 @@ class H877QuizDomainTest extends TestCase
         $this->service->start('Q1', $student);
     }
 
-    public function test_server_scoring_is_normalized_submission_is_idempotent_and_key_never_enters_player(): void
+    public function test_server_scoring_keeps_raw_points_and_compatibility_normalization_without_exposing_key(): void
     {
         $this->seedQuiz('Q1', points: [10, 15, 20, 5]);
         $payload = $this->service->start('Q1', $this->student());
@@ -90,6 +94,59 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(60.0, (float) $result['Normalized_Score']);
         $this->assertSame($result['Result_ID'], $again['Result_ID']);
         $this->assertCount(1, $this->results->rows);
+    }
+
+    public function test_one_question_and_multi_question_scores_are_exact_raw_points(): void
+    {
+        $this->seedQuiz('ONE-CORRECT', points: [15]);
+        $correct = $this->service->start('ONE-CORRECT', $this->student());
+        $correctResult = $this->service->submit($correct['attempt']['Attempt_ID'], $this->student(), [$correct['questions'][0]['Question_ID'] => 'A']);
+        $this->assertSame(15.0, (float) $correctResult['Raw_Score']);
+        $this->assertSame(15.0, (float) $correctResult['Maximum_Score']);
+
+        $this->seedQuiz('ONE-WRONG', points: [15]);
+        $wrong = $this->service->start('ONE-WRONG', $this->student());
+        $wrongResult = $this->service->submit($wrong['attempt']['Attempt_ID'], $this->student(), [$wrong['questions'][0]['Question_ID'] => 'B']);
+        $this->assertSame(0.0, (float) $wrongResult['Raw_Score']);
+        $this->assertSame(15.0, (float) $wrongResult['Maximum_Score']);
+
+        $multiStudent = ['Student_ID' => 'S2', 'Full_Name' => 'Budi', 'Class_ID' => 'C1'];
+        $this->seedQuiz('MULTI', points: [15, 20, 25]);
+        $multi = $this->service->start('MULTI', $multiStudent);
+        $multiResult = $this->service->submit($multi['attempt']['Attempt_ID'], $multiStudent, [
+            $multi['questions'][0]['Question_ID'] => 'A',
+            $multi['questions'][1]['Question_ID'] => 'B',
+            $multi['questions'][2]['Question_ID'] => 'A',
+        ]);
+        $this->assertSame(40.0, (float) $multiResult['Raw_Score']);
+        $this->assertSame(60.0, (float) $multiResult['Maximum_Score']);
+        $this->assertSame(66.6667, (float) $multiResult['Normalized_Score']);
+    }
+
+    public function test_student_result_renders_one_question_raw_points_as_primary_score(): void
+    {
+        $base = [
+            'Quiz_Title' => 'Kanji Dasar',
+            'Maximum_Score' => 15,
+            'Normalized_Score' => 100,
+        ];
+        $viewData = [
+            'questions' => collect(),
+            'entries' => collect(),
+            'period' => ['label' => '1–14 Oktober 2026'],
+            'currentStudentId' => 'S1',
+            'userRole' => 'STUDENT',
+        ];
+
+        $correct = view('quiz.student.result', ['result' => $base + ['Raw_Score' => 15]] + $viewData)->render();
+        $wrong = view('quiz.student.result', ['result' => $base + ['Raw_Score' => 0]] + $viewData)->render();
+
+        $this->assertStringContainsString('15 Poin', $correct);
+        $this->assertStringContainsString('15 dari 15 poin', $correct);
+        $this->assertStringContainsString('0 Poin', $wrong);
+        $this->assertStringContainsString('0 dari 15 poin', $wrong);
+        $this->assertStringNotContainsString('>100<', $correct);
+        $this->assertStringNotContainsString('>100<', $wrong);
     }
 
     public function test_quiz_attempt_and_result_idor_fail_closed(): void
@@ -167,22 +224,138 @@ class H877QuizDomainTest extends TestCase
         $this->service->review($result['Result_ID'], $this->student());
     }
 
-    public function test_leaderboard_uses_normalized_results_class_period_and_competition_ties(): void
+    public function test_leaderboard_uses_raw_points_class_period_and_competition_ties(): void
     {
         $this->results->rows = [
-            $this->resultRow('R1', 'S1', 'Aiko', 'C1', 40, 50, 80, '2026-10-02 10:00:00'),
-            $this->resultRow('R2', 'S1', 'Aiko', 'C1', 160, 200, 80, '2026-10-03 10:00:00'),
-            $this->resultRow('R3', 'S2', 'Budi', 'C1', 160, 200, 160, '2026-10-04 10:00:00'),
-            $this->resultRow('R4', 'S3', 'Cici', 'C1', 90, 100, 90, '2026-10-04 10:00:00'),
+            $this->resultRow('R1', 'S1', 'Aiko', 'C1', 15, 20, 75, '2026-10-02 10:00:00'),
+            $this->resultRow('R2', 'S1', 'Aiko', 'C1', 40, 100, 40, '2026-10-03 10:00:00'),
+            $this->resultRow('R3', 'S2', 'Budi', 'C1', 40, 50, 80, '2026-10-04 10:00:00'),
+            $this->resultRow('R4', 'S3', 'Cici', 'C1', 40, 200, 20, '2026-10-04 10:00:00'),
+            $this->resultRow('R7', 'S5', 'Dedi', 'C1', 10, 10, 100, '2026-10-04 10:00:00'),
             $this->resultRow('R5', 'S4', 'Luar', 'C2', 100, 100, 100, '2026-10-04 10:00:00'),
             $this->resultRow('R6', 'S1', 'Aiko', 'C1', 100, 100, 100, '2026-10-15 00:00:00'),
         ];
         $board = $this->service->leaderboard('C1', CarbonImmutable::parse('2026-10-10', 'Asia/Jakarta'));
-        $this->assertSame([1, 1, 3], $board['entries']->pluck('Rank')->all());
-        $this->assertSame([160.0, 160.0, 90.0], $board['entries']->pluck('Points')->all());
+        $this->assertSame([1, 2, 2, 4], $board['entries']->pluck('Rank')->all());
+        $this->assertSame([55.0, 40.0, 40.0, 10.0], $board['entries']->pluck('Points')->all());
         $this->assertNotContains('S4', $board['entries']->pluck('Student_ID')->all());
         $next = $this->service->leaderboard('C1', CarbonImmutable::parse('2026-10-15', 'Asia/Jakarta'));
         $this->assertSame(100.0, $next['entries'][0]['Points']);
+    }
+
+    public function test_dashboard_uses_bulk_metadata_only_and_shared_raw_point_ranking(): void
+    {
+        $this->quizzes->rows = [
+            ['Quiz_ID' => 'ACTIVE', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Kuis Aktif', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'UPCOMING', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Kuis Besok', 'Start_At' => '2026-10-10 07:00:00', 'End_At' => '2026-10-10 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'EXPIRED', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Kuis Lama', 'Start_At' => '2026-10-08 07:00:00', 'End_At' => '2026-10-08 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'DONE', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Sudah Selesai', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'FOREIGN', 'Teacher_ID' => 'T1', 'Class_ID' => 'C2', 'Title' => 'Kelas Lain', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'],
+        ];
+        $this->attempts->rows[] = ['Attempt_ID' => 'A-ACTIVE', 'Quiz_ID' => 'ACTIVE', 'Student_ID' => 'S1'];
+        $this->results->rows = [
+            ['Quiz_ID' => 'DONE'] + $this->resultRow('R1', 'S1', 'Aiko', 'C1', 10, 10, 100, '2026-10-09 07:30:00'),
+            $this->resultRow('R2', 'S2', 'Budi', 'C1', 30, 100, 30, '2026-10-08 07:30:00'),
+            $this->resultRow('R3', 'S3', 'Cici', 'C1', 20, 20, 100, '2026-10-08 07:30:00'),
+            $this->resultRow('R4', 'S4', 'Dedi', 'C1', 15, 100, 15, '2026-10-08 07:30:00'),
+        ];
+
+        $payload = $this->service->studentDashboard($this->student());
+
+        $this->assertSame(['ACTIVE'], $payload['available']->pluck('Quiz_ID')->all());
+        $this->assertSame('A-ACTIVE', $payload['available'][0]['Attempt_ID']);
+        $this->assertSame(['UPCOMING'], $payload['upcoming']->pluck('Quiz_ID')->all());
+        $this->assertSame([30.0, 20.0, 15.0], $payload['leaderboard']['top']->pluck('Points')->all());
+        $this->assertSame(4, $payload['leaderboard']['current']['Rank']);
+        $this->assertSame(10.0, $payload['leaderboard']['current']['Points']);
+        $this->assertSame(0, $this->questions->fetchAllCalls + $this->questions->fetchAllFreshCalls);
+        $this->assertSame(1, $this->quizzes->fetchAllCalls);
+        $this->assertSame(1, $this->attempts->fetchAllCalls);
+        $this->assertSame(1, $this->results->fetchAllCalls);
+        $this->assertStringNotContainsString('Correct_Option', json_encode($payload, JSON_THROW_ON_ERROR));
+    }
+
+    public function test_completed_quiz_delete_cascades_exact_graph_and_updates_leaderboard(): void
+    {
+        $this->seedQuiz('Q1', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [5, 5, 5]);
+        $this->seedQuiz('Q2', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [40]);
+        $this->attempts->rows = [
+            ['Attempt_ID' => 'A1', 'Quiz_ID' => 'Q1', 'Student_ID' => 'S1'],
+            ['Attempt_ID' => 'A2', 'Quiz_ID' => 'Q1', 'Student_ID' => 'S2'],
+            ['Attempt_ID' => 'A3', 'Quiz_ID' => 'Q2', 'Student_ID' => 'S1'],
+        ];
+        $this->results->rows = [
+            ['Quiz_ID' => 'Q1', 'Attempt_ID' => 'A1'] + $this->resultRow('R1', 'S1', 'Aiko', 'C1', 15, 15, 100, '2026-10-08 08:30:00'),
+            ['Quiz_ID' => 'Q1', 'Attempt_ID' => 'A2'] + $this->resultRow('R2', 'S2', 'Budi', 'C1', 5, 15, 33.3333, '2026-10-08 08:30:00'),
+            ['Quiz_ID' => 'Q2', 'Attempt_ID' => 'A3'] + $this->resultRow('R3', 'S1', 'Aiko', 'C1', 40, 40, 100, '2026-10-08 08:30:00'),
+        ];
+        $this->assertSame(55.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
+
+        $deleted = $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
+
+        $this->assertSame(['quiz' => 1, 'questions' => 3, 'attempts' => 2, 'results' => 2], $deleted['deleted']);
+        $this->assertFalse(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertFalse(collect($this->questions->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertFalse(collect($this->attempts->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertFalse(collect($this->results->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q2'));
+        $this->assertSame(40.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
+        $this->activityLog->shouldHaveReceived('logAction')->once()->withArgs(function (...$arguments) {
+            $serialized = json_encode($arguments, JSON_THROW_ON_ERROR);
+
+            return $arguments[1] === 'DELETE'
+                && $arguments[2] === 'QUIZ'
+                && $arguments[5] === ['Title' => 'Kuis Q1', 'Class_ID' => 'C1']
+                && ! str_contains($serialized, 'Correct_Option')
+                && ! str_contains($serialized, 'Raw_Score')
+                && ! str_contains($serialized, 'Student_Name');
+        });
+
+        try {
+            $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
+            $this->fail('Deleting an already deleted quiz must return not found.');
+        } catch (HttpException $exception) {
+            $this->assertSame(404, $exception->getStatusCode());
+        }
+        $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q2'));
+    }
+
+    public function test_quiz_delete_revalidates_owner_and_class_under_lock(): void
+    {
+        $this->seedQuiz('Q1', points: [10]);
+        foreach ([['T2', ['C1']], ['T1', ['C2']]] as [$teacherId, $classes]) {
+            try {
+                $this->service->deleteQuiz('Q1', $teacherId, $classes, 'U1');
+                $this->fail('Unauthorized quiz deletion must be forbidden.');
+            } catch (HttpException $exception) {
+                $this->assertSame(403, $exception->getStatusCode());
+            }
+            $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
+        }
+    }
+
+    public function test_failed_child_verification_stops_before_attempt_question_and_parent_delete(): void
+    {
+        $quizzes = new MemoryQuizRepository;
+        $questions = new MemoryQuestionRepository;
+        $attempts = new MemoryAttemptRepository;
+        $results = new FailingDeleteResultRepository;
+        $quizzes->rows[] = ['Quiz_ID' => 'Q1', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Protected'];
+        $questions->rows[] = ['Question_ID' => 'QQ1', 'Quiz_ID' => 'Q1'];
+        $attempts->rows[] = ['Attempt_ID' => 'QA1', 'Quiz_ID' => 'Q1'];
+        $results->rows[] = ['Result_ID' => 'QR1', 'Quiz_ID' => 'Q1'];
+        $activityLog = \Mockery::mock(ActivityLogService::class);
+        $activityLog->shouldReceive('logAction')->never();
+        $service = new QuizService($quizzes, $questions, $attempts, $results, $this->periods, $activityLog);
+
+        try {
+            $service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
+            $this->fail('A failed child verification must stop deletion.');
+        } catch (\RuntimeException) {
+            $this->assertTrue(collect($quizzes->rows)->contains('Quiz_ID', 'Q1'));
+            $this->assertTrue(collect($questions->rows)->contains('Quiz_ID', 'Q1'));
+            $this->assertTrue(collect($attempts->rows)->contains('Quiz_ID', 'Q1'));
+        }
     }
 
     public function test_closed_period_cleanup_removes_content_and_attempt_but_preserves_result_and_is_idempotent(): void
@@ -278,11 +451,11 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(['SC'], $overview['groups'][0]['not_completed']->pluck('Student_ID')->all());
         $this->assertSame(1, $overview['groups'][0]['completed_count']);
         $this->assertSame(1, $overview['groups'][0]['not_completed_count']);
-        $this->assertSame(80.0, $overview['groups'][0]['average']);
+        $this->assertSame(8.0, $overview['groups'][0]['average']);
 
         $classB = $this->service->leaderboard('C2', CarbonImmutable::parse('2026-10-10', 'Asia/Jakarta'));
         $this->assertSame(['SB'], $classB['entries']->pluck('Student_ID')->all());
-        $this->assertSame(90.0, $classB['entries'][0]['Points']);
+        $this->assertSame(9.0, $classB['entries'][0]['Points']);
     }
 
     public function test_teacher_result_detail_rejects_result_from_unauthorized_class(): void
@@ -345,15 +518,23 @@ abstract class MemoryRows
 {
     public array $rows = [];
 
+    public int $fetchAllCalls = 0;
+
+    public int $fetchAllFreshCalls = 0;
+
     protected string $key;
 
     public function fetchAll()
     {
+        $this->fetchAllCalls++;
+
         return collect($this->rows);
     }
 
     public function fetchAllFresh()
     {
+        $this->fetchAllFreshCalls++;
+
         return collect($this->rows);
     }
 
@@ -412,4 +593,11 @@ class MemoryAttemptRepository extends MemoryRows implements QuizAttemptRepositor
 class MemoryResultRepository extends MemoryRows implements QuizResultRepositoryInterface
 {
     protected string $key = 'Result_ID';
+}
+class FailingDeleteResultRepository extends MemoryResultRepository
+{
+    public function hardDeleteMany(array $ids): int
+    {
+        return 0;
+    }
 }

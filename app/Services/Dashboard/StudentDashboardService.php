@@ -14,6 +14,7 @@ use App\Services\Core\StudentService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
 use App\Services\Finance\StudentBillingNotificationService;
+use App\Services\Quiz\QuizService;
 use App\Support\Finance\PaymentStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -42,6 +43,8 @@ class StudentDashboardService
 
     protected $billingNotificationService;
 
+    protected $quizService;
+
     public function __construct(
         ScoreService $scoreService,
         ScheduleService $scheduleService,
@@ -53,6 +56,7 @@ class StudentDashboardService
         NotificationService $notificationService,
         AttendanceRequestService $attendanceRequestService,
         StudentBillingNotificationService $billingNotificationService,
+        QuizService $quizService,
         ?AnnouncementService $announcementService = null
     ) {
         $this->scoreService = $scoreService;
@@ -66,6 +70,7 @@ class StudentDashboardService
         $this->attendanceRequestService = $attendanceRequestService;
         $this->billingNotificationService = $billingNotificationService;
         $this->announcementService = $announcementService;
+        $this->quizService = $quizService;
     }
 
     public function getDashboardData()
@@ -86,6 +91,8 @@ class StudentDashboardService
 
         $studentId = $student['Student_ID'];
         $studentClassId = $student['Class_ID'] ?? null;
+
+        $quizDashboard = $this->quizService->studentDashboard((array) $student);
 
         // Announcements are resolved once using the authoritative student
         // class. The service applies server-side WIB boundaries and targeting.
@@ -327,7 +334,7 @@ class StudentDashboardService
             'totalOutstanding', 'latestInvoice', 'outstandingBills',
             'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
             'attendancePercentage', 'certificateStatus',
-            'reminders', 'recentActivities', 'unreadNotifications', 'announcements', 'billingPopup'
+            'reminders', 'recentActivities', 'unreadNotifications', 'announcements', 'billingPopup', 'quizDashboard'
         );
     }
 

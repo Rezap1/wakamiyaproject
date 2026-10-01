@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
+use App\Services\Core\ActivityLogService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -18,6 +19,7 @@ class QuizService
         private QuizAttemptRepositoryInterface $attempts,
         private QuizResultRepositoryInterface $results,
         private QuizPeriodService $periods,
+        private ActivityLogService $activityLog,
     ) {}
 
     public function create(array $data, array $teacher, string $userId): string
@@ -109,16 +111,54 @@ class QuizService
         return $quiz;
     }
 
-    public function deleteDraft(string $quizId, string $teacherId, ?array $allowedClassIds = null): void
-    {
-        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $teacherId, $allowedClassIds) {
+    public function deleteQuiz(
+        string $quizId,
+        string $teacherId,
+        array $allowedClassIds,
+        string $userId,
+        ?string $ipAddress = null,
+        ?string $userAgent = null,
+    ): array {
+        return Cache::lock('quiz_delete_'.hash('sha256', $quizId), 45)->block(15, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent) {
             $quiz = $this->requireQuizFresh($quizId);
             $this->assertTeacherOwns($quiz, $teacherId);
             $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
-            abort_unless(strtoupper((string) ($quiz['Status'] ?? '')) === 'DRAFT' && $this->isEditable($quiz), 409, 'Hanya draft tanpa attempt yang dapat dihapus.');
+
+            $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
+            $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
             $questionIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
-            $this->questions->hardDeleteMany($questionIds);
+
+            $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
+            $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
+            $this->deleteChildrenAndVerify($this->questions, $questionIds, $quizId, 'soal kuis');
             $this->quizzes->hardDeleteMany([$quizId]);
+            if ($this->quizzes->findByIdFresh($quizId)) {
+                throw new \RuntimeException("Kuis {$quizId} belum terhapus sepenuhnya.");
+            }
+
+            $deleted = [
+                'quiz' => 1,
+                'questions' => count($questionIds),
+                'attempts' => count($attemptIds),
+                'results' => count($resultIds),
+            ];
+            $this->activityLog->logAction(
+                $userId,
+                'DELETE',
+                'QUIZ',
+                'Kuis dihapus permanen beserta data turunannya.',
+                $ipAddress,
+                [
+                    'Title' => trim((string) ($quiz['Title'] ?? '')),
+                    'Class_ID' => trim((string) ($quiz['Class_ID'] ?? '')),
+                ],
+                null,
+                $userAgent,
+                'QUIZ',
+                $quizId,
+            );
+
+            return ['quiz' => $quiz, 'deleted' => $deleted];
         });
     }
 
@@ -165,7 +205,7 @@ class QuizService
                 'participant_count' => max($roster->count(), $completedIds->count()),
                 'completed_count' => $completedIds->count(),
                 'not_completed_count' => $notCompleted->count(),
-                'average' => $rows->isEmpty() ? null : round((float) $rows->avg(fn ($row) => (float) ($row['Normalized_Score'] ?? 0)), 2),
+                'average' => $rows->isEmpty() ? null : round((float) $rows->avg(fn ($row) => (float) ($row['Raw_Score'] ?? 0)), 2),
                 'results' => $rows,
                 'not_completed' => $notCompleted,
                 'start_at' => $quiz['Start_At'] ?? '',
@@ -208,6 +248,8 @@ class QuizService
                 $quiz['Question_Count'] = (int) $counts->get($quiz['Quiz_ID'], 0);
                 $quiz['Attempt_ID'] = $attempt['Attempt_ID'] ?? null;
                 $quiz['Result_ID'] = $result['Result_ID'] ?? null;
+                $quiz['Raw_Score'] = $result['Raw_Score'] ?? null;
+                $quiz['Maximum_Score'] = $result['Maximum_Score'] ?? null;
                 $quiz['Normalized_Score'] = $result['Normalized_Score'] ?? null;
                 $quiz['Review_Available'] = $result ? $this->reviewAvailable((array) $result, $now) : false;
 
@@ -353,7 +395,53 @@ class QuizService
     public function leaderboard(string $classId, ?CarbonImmutable $at = null): array
     {
         $period = $this->periods->periodFor($at);
-        $groups = collect($this->results->fetchAll())
+
+        return [
+            'period' => $period,
+            'entries' => $this->leaderboardFromResults(collect($this->results->fetchAll()), $classId, $period),
+        ];
+    }
+
+    public function studentDashboard(array $student): array
+    {
+        $now = $this->periods->now();
+        $studentId = trim((string) ($student['Student_ID'] ?? ''));
+        $classId = trim((string) ($student['Class_ID'] ?? ''));
+        $results = collect($this->results->fetchAll());
+        $studentResults = $results->where('Student_ID', $studentId)->keyBy('Quiz_ID');
+        $studentAttempts = collect($this->attempts->fetchAll())->where('Student_ID', $studentId)->keyBy('Quiz_ID');
+        $quizzes = collect($this->quizzes->fetchAll())
+            ->filter(fn ($quiz) => trim((string) ($quiz['Class_ID'] ?? '')) === $classId
+                && strtoupper(trim((string) ($quiz['Status'] ?? ''))) === 'PUBLISHED')
+            ->map(function ($quiz) use ($now, $studentResults, $studentAttempts) {
+                $quiz = (array) $quiz;
+                $quiz['Lifecycle'] = $this->lifecycle($quiz, $now);
+                $quiz['Result_ID'] = data_get($studentResults->get($quiz['Quiz_ID']), 'Result_ID');
+                $quiz['Attempt_ID'] = data_get($studentAttempts->get($quiz['Quiz_ID']), 'Attempt_ID');
+
+                return $quiz;
+            })
+            ->filter(fn ($quiz) => empty($quiz['Result_ID']))
+            ->values();
+        $period = $this->periods->periodFor($now);
+        $entries = $this->leaderboardFromResults($results, $classId, $period);
+        $current = $entries->firstWhere('Student_ID', $studentId);
+
+        return [
+            'student_id' => $studentId,
+            'available' => $quizzes->where('Lifecycle', 'ACTIVE')->sortBy('End_At')->take(3)->values(),
+            'upcoming' => $quizzes->where('Lifecycle', 'SCHEDULED')->sortBy('Start_At')->take(3)->values(),
+            'leaderboard' => [
+                'period' => $period,
+                'top' => $entries->take(3)->values(),
+                'current' => $current && (int) $current['Rank'] > 3 ? $current : null,
+            ],
+        ];
+    }
+
+    private function leaderboardFromResults($results, string $classId, array $period)
+    {
+        $groups = collect($results)
             ->where('Class_ID', $classId)
             ->filter(fn ($row) => ! empty($row['Completed_At']) && $this->periods->contains($period, $row['Completed_At']))
             ->groupBy('Student_ID')->map(function ($rows) {
@@ -362,7 +450,7 @@ class QuizService
                 return [
                     'Student_ID' => $first['Student_ID'],
                     'Student_Name' => $first['Student_Name'] ?: 'Siswa',
-                    'Points' => round((float) $rows->sum(fn ($row) => (float) ($row['Normalized_Score'] ?? 0)), 4),
+                    'Points' => round((float) $rows->sum(fn ($row) => (float) ($row['Raw_Score'] ?? 0)), 4),
                     'Quiz_Count' => $rows->pluck('Quiz_ID')->filter()->unique()->count(),
                 ];
             })->sort(function ($a, $b) {
@@ -382,7 +470,7 @@ class QuizService
             return $row;
         });
 
-        return ['period' => $period, 'entries' => $ranked];
+        return $ranked;
     }
 
     public function lifecycle(array $quiz, ?CarbonImmutable $now = null): string
@@ -455,6 +543,18 @@ class QuizService
                     throw new \RuntimeException("Soal kuis {$quizId} gagal diverifikasi setelah penyimpanan.");
                 }
             }
+        }
+    }
+
+    private function deleteChildrenAndVerify(object $repository, array $ids, string $quizId, string $label): void
+    {
+        if ($ids !== []) {
+            $repository->hardDeleteMany($ids);
+        }
+        if (collect($repository->fetchAllFresh())->contains(
+            fn ($row) => trim((string) ($row['Quiz_ID'] ?? '')) === trim($quizId)
+        )) {
+            throw new \RuntimeException(ucfirst($label)." {$quizId} belum terhapus sepenuhnya.");
         }
     }
 

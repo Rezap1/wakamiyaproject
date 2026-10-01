@@ -50,7 +50,7 @@
                     <div class="rounded-xl bg-slate-50 px-3 py-2"><p class="text-[11px] font-bold text-slate-500">Peserta</p><strong>{{ $group['participant_count'] }}</strong></div>
                     <div class="rounded-xl bg-emerald-50 px-3 py-2"><p class="text-[11px] font-bold text-emerald-700">Selesai</p><strong>{{ $group['completed_count'] }}</strong></div>
                     <div class="rounded-xl bg-amber-50 px-3 py-2"><p class="text-[11px] font-bold text-amber-700">Belum</p><strong>{{ $group['not_completed_count'] }}</strong></div>
-                    <div class="rounded-xl bg-sky-50 px-3 py-2"><p class="text-[11px] font-bold text-sky-700">Rata-rata</p><strong>{{ $group['average'] === null ? '—' : $group['average'] }}</strong></div>
+                    <div class="rounded-xl bg-sky-50 px-3 py-2"><p class="text-[11px] font-bold text-sky-700">Rata-rata Poin</p><strong>{{ $group['average'] === null ? '—' : (float) $group['average'].' poin' }}</strong></div>
                 </div>
             </div>
 
@@ -62,7 +62,7 @@
                                 <h4 class="break-words font-black text-slate-900">{{ $result['Student_Name'] ?? 'Siswa' }}</h4>
                                 @if(!empty($result['Student_Number']))<p class="text-xs text-slate-500">{{ $result['Student_Number'] }}</p>@endif
                             </div>
-                            <span class="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xl font-black text-emerald-800">{{ $result['Normalized_Score'] }}</span>
+                            <span class="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xl font-black text-emerald-800">{{ (float) $result['Raw_Score'] }} / {{ (float) $result['Maximum_Score'] }} poin</span>
                         </div>
                         <p class="mt-3 text-xs text-slate-500">Selesai {{ $result['Completed_At'] ?? '-' }} WIB</p>
                         <a href="{{ route('teacher.quizzes.result', $result['Result_ID']) }}" class="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 text-sm font-bold text-slate-800">Lihat Detail</a>

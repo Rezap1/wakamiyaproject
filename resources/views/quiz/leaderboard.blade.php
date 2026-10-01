@@ -37,10 +37,15 @@
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg font-black {{ $rankStyle }}">{{ $entry['Rank'] }}</span>
                     <div class="min-w-0">
                         <h3 class="break-words font-black text-slate-900">{{ $entry['Student_Name'] }}</h3>
-                        <p class="text-xs text-slate-500">{{ $entry['Quiz_Count'] ?? 0 }} kuis@if($currentStudentId && $entry['Student_ID'] === $currentStudentId) &middot; Posisi Anda@endif</p>
+                        <p class="text-xs text-slate-500">
+                            {{ $entry['Quiz_Count'] ?? 0 }} kuis
+                            @if($currentStudentId && $entry['Student_ID'] === $currentStudentId)
+                                &middot; Posisi Anda
+                            @endif
+                        </p>
                     </div>
                 </div>
-                <strong class="shrink-0 text-xl text-slate-900 sm:text-2xl">{{ $entry['Points'] }}</strong>
+                <strong class="shrink-0 text-xl text-slate-900 sm:text-2xl">{{ (float) $entry['Points'] }} poin</strong>
             </article>
         @empty
             <p class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">Belum ada hasil pada periode ini.</p>

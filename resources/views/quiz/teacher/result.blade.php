@@ -7,8 +7,7 @@
         <p class="text-xs font-black uppercase tracking-widest text-sky-700">{{ $result['Quiz_Title'] ?? 'Kuis' }}</p>
         <h2 class="mt-2 break-words text-2xl font-black text-slate-900">{{ $result['Student_Name'] ?? 'Siswa' }}</h2>
         <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div class="rounded-xl bg-emerald-50 p-4"><p class="text-xs font-bold text-emerald-700">Nilai Normalisasi</p><strong class="mt-1 block text-3xl text-emerald-900">{{ $result['Normalized_Score'] }}</strong></div>
-            <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Poin</p><strong class="mt-1 block text-xl text-slate-900">{{ $result['Raw_Score'] }} / {{ $result['Maximum_Score'] }}</strong></div>
+            <div class="rounded-xl bg-emerald-50 p-4 sm:col-span-2"><p class="text-xs font-bold text-emerald-700">Poin Kuis</p><strong class="mt-1 block break-words text-3xl text-emerald-900">{{ (float) $result['Raw_Score'] }} / {{ (float) $result['Maximum_Score'] }} poin</strong></div>
             <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Status</p><strong class="mt-1 block text-lg text-slate-900">Selesai</strong></div>
         </div>
         <dl class="mt-6 grid gap-4 text-sm sm:grid-cols-2">

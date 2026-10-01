@@ -13,4 +13,6 @@ interface QuizResultRepositoryInterface
     public function findByIdFresh($id);
 
     public function create(array $data);
+
+    public function hardDeleteMany(array $ids): int;
 }

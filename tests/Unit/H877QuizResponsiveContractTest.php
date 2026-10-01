@@ -55,4 +55,44 @@ class H877QuizResponsiveContractTest extends TestCase
         $this->assertStringContainsString("route('attendances.student.scanner')", $fab);
         $this->assertStringContainsString('env(safe-area-inset-bottom', $nav);
     }
+
+    public function test_raw_point_dashboard_delete_and_blade_render_contracts(): void
+    {
+        $studentResult = file_get_contents(resource_path('views/quiz/student/result.blade.php'));
+        $studentIndex = file_get_contents(resource_path('views/quiz/student/index.blade.php'));
+        $teacherShow = file_get_contents(resource_path('views/quiz/teacher/show.blade.php'));
+        $teacherResults = file_get_contents(resource_path('views/quiz/teacher/results.blade.php'));
+        $teacherResult = file_get_contents(resource_path('views/quiz/teacher/result.blade.php'));
+        $dashboard = file_get_contents(resource_path('views/dashboard/student.blade.php'));
+
+        $this->assertStringContainsString('$result[\'Raw_Score\']', $studentResult);
+        $this->assertStringNotContainsString('$result[\'Normalized_Score\']', $studentResult);
+        $this->assertStringContainsString('$quiz[\'Raw_Score\']', $studentIndex);
+        $this->assertStringNotContainsString('$quiz[\'Normalized_Score\']', $studentIndex);
+        $this->assertStringContainsString('Hapus kuis ini?', $teacherShow);
+        $this->assertStringContainsString('hasil/nilai siswa, dan poin leaderboard', $teacherShow);
+        $this->assertStringContainsString('Hapus Permanen', $teacherShow);
+        $this->assertStringContainsString('env(safe-area-inset-bottom', $teacherShow);
+        $this->assertStringNotContainsString('Normalized_Score', $teacherShow.$teacherResults.$teacherResult);
+        $this->assertStringContainsString('student-quiz-dashboard-heading', $dashboard);
+        $this->assertStringContainsString('Tersedia Sekarang', $dashboard);
+        $this->assertStringContainsString('Leaderboard Kelas', $dashboard);
+
+        $html = view('quiz.leaderboard', [
+            'entries' => collect([['Rank' => 1, 'Student_ID' => 'S1', 'Student_Name' => 'Aiko', 'Quiz_Count' => 2, 'Points' => 55]]),
+            'period' => ['label' => '1–14 Oktober 2026'],
+            'currentStudentId' => 'S1',
+            'backRoute' => '/dashboard',
+            'classId' => 'C1',
+            'className' => 'Kelas Sakura',
+            'classOptions' => collect(),
+            'userRole' => 'STUDENT',
+        ])->render();
+        $this->assertStringContainsString('2 kuis', $html);
+        $this->assertStringContainsString('Posisi Anda', $html);
+        $this->assertStringContainsString('55 poin', $html);
+        $this->assertStringNotContainsString('@if', $html);
+        $this->assertStringNotContainsString('@endif', $html);
+        $this->assertStringNotContainsString('$currentStudentId', $html);
+    }
 }
