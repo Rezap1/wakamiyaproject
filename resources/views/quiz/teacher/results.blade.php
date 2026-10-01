@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('header', 'Hasil Kuis')
+@section('content')
+<div class="space-y-5 pb-24"><form class="flex gap-2"><select name="class" class="min-h-11 rounded-xl border-slate-300"><option value="">Semua kelas</option>@foreach($classes as $class)<option value="{{ $class['Class_ID'] }}" @selected($selectedClass===$class['Class_ID'])>{{ $class['Class_Name'] ?? $class['Class_ID'] }}</option>@endforeach</select><button class="rounded-xl bg-slate-900 px-4 font-bold text-white">Terapkan</button></form><div class="overflow-x-auto rounded-2xl bg-white p-3 shadow-sm"><table class="min-w-full text-sm"><thead><tr class="text-left"><th class="p-3">Kuis</th><th class="p-3">Siswa</th><th class="p-3">Kelas</th><th class="p-3">Skor</th><th class="p-3">Selesai</th></tr></thead><tbody>@foreach($results as $r)<tr class="border-t"><td class="p-3 font-bold">{{ $r['Quiz_Title'] }}</td><td class="p-3">{{ $r['Student_Name'] }}</td><td class="p-3">{{ $r['Class_ID'] }}</td><td class="p-3">{{ $r['Raw_Score'] }}/{{ $r['Maximum_Score'] }} ({{ $r['Normalized_Score'] }})</td><td class="p-3">{{ $r['Completed_At'] }}</td></tr>@endforeach</tbody></table></div></div>
+@endsection

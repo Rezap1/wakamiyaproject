@@ -158,6 +158,10 @@ class AppServiceProvider extends ServiceProvider
         
         $this->app->singleton(PermanentQrRepositoryInterface::class, PermanentQrRepository::class);
         $this->app->singleton(AssessmentConfigRepositoryInterface::class, AssessmentConfigRepository::class);
+        $this->app->bind(\App\Interfaces\GoogleSheets\QuizRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizRepository::class);
+        $this->app->bind(\App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizQuestionRepository::class);
+        $this->app->bind(\App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizAttemptRepository::class);
+        $this->app->bind(\App\Interfaces\GoogleSheets\QuizResultRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizResultRepository::class);
         $this->app->singleton(\App\Services\Core\EnterpriseAutomationService::class, function ($app) { return new \App\Services\Core\EnterpriseAutomationService(); });
     }
 

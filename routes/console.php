@@ -14,3 +14,7 @@ Schedule::command('notifications:prune')
     ->dailyAt('02:15')
     ->timezone('Asia/Jakarta')
     ->withoutOverlapping();
+Schedule::command('quiz:cleanup')
+    ->dailyAt('02:45')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();

@@ -741,5 +741,26 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:20,1')
         ->name('attendance.scan.verify');
 
+    Route::prefix('teacher/quizzes')->name('teacher.quizzes.')->middleware('role:TEACHER')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'store'])->name('store');
+        Route::get('/results', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'results'])->name('results');
+        Route::get('/leaderboard/{class}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'leaderboard'])->name('leaderboard');
+        Route::get('/{quiz}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'show'])->name('show');
+        Route::get('/{quiz}/edit', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'edit'])->name('edit');
+        Route::put('/{quiz}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'update'])->name('update');
+        Route::delete('/{quiz}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::prefix('student/quizzes')->name('student.quizzes.')->middleware('role:STUDENT')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'index'])->name('index');
+        Route::get('/leaderboard', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'leaderboard'])->name('leaderboard');
+        Route::post('/{quiz}/start', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'start'])->middleware('throttle:20,1')->name('start');
+        Route::get('/attempts/{attempt}', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'play'])->name('play');
+        Route::post('/attempts/{attempt}/submit', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'submit'])->middleware('throttle:10,1')->name('submit');
+        Route::get('/results/{result}', [\App\Http\Controllers\Quiz\StudentQuizController::class, 'result'])->name('result');
+    });
+
 });
 

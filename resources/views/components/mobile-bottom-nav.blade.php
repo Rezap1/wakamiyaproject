@@ -10,13 +10,13 @@
             ['label' => 'Jadwal', 'route' => 'student.schedule', 'icon' => 'calendar', 'active' => request()->routeIs('student.schedule')],
             ['label' => 'Riwayat Absensi', 'route' => 'attendances.my-history', 'icon' => 'clock', 'active' => request()->routeIs('attendances.my-history')],
             ['label' => 'Nilai', 'route' => 'student.progress', 'icon' => 'academic-cap', 'active' => request()->routeIs('student.progress')],
-            ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
+            ['label' => 'Kuis', 'route' => 'student.quizzes.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('student.quizzes.*')],
         ];
     } elseif ($role === 'TEACHER') {
         $items = [
             ['label' => 'Dashboard', 'route' => 'dashboard.teacher', 'icon' => 'home', 'active' => request()->routeIs('dashboard.teacher')],
             ['label' => 'Tugas', 'route' => 'teacher.workspace.assignments', 'icon' => 'document-duplicate', 'active' => request()->routeIs('teacher.workspace.assignments*')],
-            ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
+            ['label' => 'Kuis', 'route' => 'teacher.quizzes.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('teacher.quizzes.*')],
             ['label' => 'Nilai', 'route' => 'teacher.workspace.scores', 'icon' => 'academic-cap', 'active' => request()->routeIs('teacher.workspace.scores*')],
             ['label' => 'Pengumuman', 'route' => 'announcements.index', 'icon' => 'inbox', 'active' => request()->routeIs('announcements.*')],
         ];

@@ -233,6 +233,7 @@
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Akademik</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.scores') }}" active="{{ request()->routeIs('teacher.workspace.scores*') }}" icon="chart-bar">Penilaian</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.assignments') }}" active="{{ request()->routeIs('teacher.workspace.assignments*') }}" icon="clipboard-list">Tugas Harian</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.quizzes.index') }}" active="{{ request()->routeIs('teacher.quizzes.*') }}" icon="academic-cap">Kuis</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.calendar') }}" active="{{ request()->routeIs('teacher.workspace.calendar') }}" icon="calendar">Kalender Akademik</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.reports') }}" active="{{ request()->routeIs('teacher.workspace.reports') }}" icon="chart-bar">Laporan Pengajaran</x-sidebar.nav-link>
                 @elseif($userRole === 'STUDENT')
@@ -244,6 +245,7 @@
                     <x-sidebar.nav-link href="{{ route('student.calendar') }}" active="{{ request()->routeIs('student.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.subjects') }}" active="{{ request()->routeIs('student.subjects') }}" icon="book-open">Materi Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.assignments') }}" active="{{ request()->routeIs('student.portal.assignments*') }}" icon="document-text">Tugas</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.quizzes.index') }}" active="{{ request()->routeIs('student.quizzes.*') }}" icon="academic-cap">Kuis</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.progress') }}" active="{{ request()->routeIs('student.progress') }}" icon="clipboard-check">Nilai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.materials') }}" active="{{ request()->routeIs('student.portal.materials*') }}" icon="book-open">Materi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.billing.index') }}" active="{{ request()->routeIs('student.billing.*') }}" icon="cash">Tagihan Saya</x-sidebar.nav-link>
