@@ -3,8 +3,8 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\Finance\InvoiceController;
-use App\Services\Core\NotificationService;
 use App\Services\Finance\InvoiceService;
+use App\Services\Finance\StudentBillingNotificationService;
 use Illuminate\Http\Request;
 use Mockery;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -49,18 +49,16 @@ class InvoiceControllerWorkflowTest extends TestCase
     public function test_invoice_notification_does_not_fallback_to_all_without_student_target(): void
     {
         $invoiceService = Mockery::mock(InvoiceService::class);
-        $invoiceService->shouldReceive('getById')->once()->with('INV-COMPANY-001')->andReturn([
-            'Invoice_ID' => 'INV-COMPANY-001',
-            'Invoice_Type' => 'COMPANY',
-            'Company_ID' => 'CMP-001',
-            'Amount' => 1000000,
-        ]);
+        $invoiceService->shouldNotReceive('getById');
 
-        $notificationService = Mockery::mock(NotificationService::class);
-        $notificationService->shouldNotReceive('CreateNotification');
-        $this->app->instance(NotificationService::class, $notificationService);
+        $billingNotificationService = Mockery::mock(StudentBillingNotificationService::class);
+        $billingNotificationService->shouldReceive('sendReminder')->once()->with('INV-COMPANY-001')
+            ->andThrow(new \DomainException(
+                'Pengingat pembayaran hanya dapat dikirim untuk invoice siswa yang memiliki Student_ID.',
+                StudentBillingNotificationService::ERROR_NOT_STUDENT_INVOICE,
+            ));
 
-        $controller = new InvoiceController($invoiceService);
+        $controller = new InvoiceController($invoiceService, $billingNotificationService);
         $request = Request::create('/finance/invoices/INV-COMPANY-001/notify', 'POST', [
             'message' => 'Harap bayar invoice.',
         ]);
@@ -77,4 +75,3 @@ class InvoiceControllerWorkflowTest extends TestCase
         parent::tearDown();
     }
 }
-

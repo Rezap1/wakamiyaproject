@@ -9,7 +9,6 @@
     category: '',
     amount: '',
     dueDate: '',
-    message: '',
     
     openModal(id, student, cat, amt, due) {
         this.selectedInvoice = id;
@@ -17,7 +16,6 @@
         this.category = cat;
         this.amount = amt;
         this.dueDate = due;
-        this.message = `Peringatan Tagihan: Anda memiliki tagihan ${cat} sebesar Rp ${amt} yang belum dibayar (Jatuh Tempo: ${due}). Mohon segera hubungi bagian Keuangan.`;
         this.openNotify = true;
     }
 }">
@@ -194,7 +192,7 @@
                         @endif
 
                         @if(in_array($status, ['Waiting Payment', 'Partial Paid', 'OVERDUE']))
-                            <button @click="openModal('{{ $item['Invoice_ID'] }}', '{{ addslashes($item['student_name'] ?? '') }}', '{{ addslashes($item['Category'] ?? '') }}', '{{ number_format($remaining, 0, ',', '.') }}', '{{ !empty($item['Due_Date']) ? \App\Helpers\DateHelper::format($item['Due_Date'], 'd M Y') : '-' }}')"
+                            <button @click="openModal('{{ $item['Invoice_ID'] }}', '{{ addslashes($item['student_name'] ?? '') }}', '{{ addslashes($item['Category'] ?? '') }}', '{{ number_format($remaining, 0, ',', '.') }}', '{{ !empty($item['Due_Date']) ? \App\Helpers\DateHelper::format($item['Due_Date'], 'j F Y') : '-' }}')"
                                     class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold text-xs shadow-xs transition-colors" title="Kirim Notifikasi">
                                 Notifikasi
                             </button>
@@ -227,19 +225,23 @@
 <!-- MODAL NOTIFIKASI REMINDER -->
 <div x-show="openNotify" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm" x-cloak>
     <div class="mx-4 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl space-y-4 sm:p-6">
-        <h3 class="text-lg font-black text-slate-800 border-b pb-2">Kirim Peringatan Penagihan</h3>
-        <p class="text-xs text-slate-600">Kirimkan notifikasi pengingat pembayaran tagihan kepada siswa: <strong x-text="studentName"></strong>.</p>
+        <h3 class="text-lg font-black text-slate-800 border-b pb-2">Kirim Notifikasi Tagihan</h3>
+        <p class="text-sm text-slate-700">Kirim pengingat pembayaran kepada <strong x-text="studentName"></strong>?</p>
         
         <form x-bind:action="'/finance/invoices/' + selectedInvoice + '/notify'" method="POST" class="space-y-4">
             @csrf
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Pesan Notifikasi</label>
-                <textarea name="message" x-model="message" rows="4" class="w-full text-xs rounded-xl border-slate-200 focus:ring-2 focus:ring-amber-500"></textarea>
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+                <dl class="space-y-2">
+                    <div class="flex items-start justify-between gap-4"><dt class="text-amber-800">Invoice</dt><dd class="break-all text-right font-bold text-amber-950" x-text="selectedInvoice"></dd></div>
+                    <div class="flex items-start justify-between gap-4"><dt class="text-amber-800">Keperluan</dt><dd class="break-words text-right font-bold text-amber-950" x-text="category"></dd></div>
+                    <div class="flex items-start justify-between gap-4"><dt class="text-amber-800">Sisa pembayaran</dt><dd class="break-words text-right font-black text-amber-950">Rp<span x-text="amount"></span></dd></div>
+                    <div class="flex items-start justify-between gap-4"><dt class="text-amber-800">Jatuh tempo</dt><dd class="break-words text-right font-bold text-amber-950" x-text="dueDate"></dd></div>
+                </dl>
             </div>
             
             <div class="grid grid-cols-1 gap-2 pt-2 sm:flex sm:justify-end">
                 <button type="button" @click="openNotify = false" class="min-h-11 px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Batal</button>
-                <button type="submit" class="min-h-11 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md">Kirim Pengingat</button>
+                <button type="submit" class="min-h-11 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md">Kirim Notifikasi</button>
             </div>
         </form>
     </div>

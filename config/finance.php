@@ -38,7 +38,7 @@ return [
         ],
         'MASTER_NOTIFICATION' => [
             'Notification_ID', 'User_ID', 'Title', 'Message',
-            'Reference_Type', 'Reference_ID', 'Created_At', 'Updated_At',
+            'Is_Read', 'Link', 'Created_At', 'Updated_At',
         ],
     ],
 ];

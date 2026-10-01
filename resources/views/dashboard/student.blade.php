@@ -4,6 +4,95 @@
 
 @section('content')
 
+@if(!empty($billingPopup['current']))
+    @php
+        $popup = $billingPopup['current'];
+    @endphp
+    <div x-data="{
+            open: true,
+            saving: false,
+            async acknowledge() {
+                if (this.saving) return;
+                this.saving = true;
+                try {
+                    await fetch('{{ route('notifications.markRead', $popup['notification']['Notification_ID']) }}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                } finally {
+                    this.open = false;
+                    this.saving = false;
+                }
+            }
+        }"
+        x-show="open"
+        x-cloak
+        @keydown.escape.window="acknowledge()"
+        class="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/55 p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="billing-popup-title">
+        <section x-show="open" x-transition x-init="$nextTick(() => $refs.laterButton.focus())" class="max-h-[calc(100dvh-7rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-3rem)]">
+            <div class="border-b border-slate-100 bg-gradient-to-br from-emerald-50 to-sky-50 p-5 sm:p-6">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-sm" aria-hidden="true">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 14l2 2 4-4m5-3.5A11 11 0 0112 3a11 11 0 01-8 5.5V12c0 5 3.4 8 8 9 4.6-1 8-4 8-9V8.5z"/></svg>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Notifikasi Tagihan</p>
+                        <h2 id="billing-popup-title" class="mt-1 break-words text-lg font-black leading-tight text-slate-900">{{ $popup['title'] }}</h2>
+                    </div>
+                    <button type="button" @click="acknowledge()" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-white/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label="Tutup notifikasi">&times;</button>
+                </div>
+            </div>
+
+            <div class="space-y-5 p-5 sm:p-6">
+                <p class="break-words text-sm text-slate-700">Halo, <strong>{{ $popup['student_name'] }}</strong></p>
+                <p class="text-sm leading-6 text-slate-600">Anda memiliki tagihan {{ $popup['purpose'] }}.</p>
+
+                <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="min-w-0 rounded-2xl bg-slate-50 p-4">
+                        <dt class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total</dt>
+                        <dd class="mt-1 break-words text-xl font-black text-slate-900">Rp{{ number_format($popup['total'], 0, ',', '.') }}</dd>
+                    </div>
+                    <div class="min-w-0 rounded-2xl bg-amber-50 p-4">
+                        <dt class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Sisa Pembayaran</dt>
+                        <dd class="mt-1 break-words text-xl font-black text-amber-900">Rp{{ number_format($popup['remaining'], 0, ',', '.') }}</dd>
+                    </div>
+                </dl>
+
+                <div class="rounded-2xl border {{ $popup['overdue'] ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-700' }} p-4 text-sm">
+                    <p><span class="font-bold">Jatuh Tempo:</span> {{ $popup['due_date'] }}</p>
+                    @if($popup['overdue'])
+                        <p class="mt-1 font-bold">Tagihan telah melewati jatuh tempo.</p>
+                    @endif
+                </div>
+
+                <p class="text-sm leading-6 text-slate-600">{{ $popup['instruction'] }}</p>
+
+                @if(($billingPopup['other_count'] ?? 0) > 0)
+                    <a href="{{ route('notifications.index') }}" class="block rounded-xl bg-sky-50 px-4 py-3 text-center text-xs font-bold text-sky-700 hover:bg-sky-100">
+                        Anda memiliki {{ $billingPopup['other_count'] }} notifikasi tagihan lainnya — Lihat Notifikasi
+                    </a>
+                @endif
+
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <form action="{{ route('notifications.read', $popup['notification']['Notification_ID']) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">Bayar Sekarang</button>
+                    </form>
+                    <button x-ref="laterButton" type="button" @click="acknowledge()" :disabled="saving" class="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">Nanti</button>
+                </div>
+                <a href="{{ route('notifications.show', $popup['notification']['Notification_ID']) }}" class="block text-center text-xs font-bold text-slate-500 hover:text-slate-800 hover:underline">Lihat Detail</a>
+            </div>
+        </section>
+    </div>
+@endif
+
 <!-- Pengumuman aktif: sumber data yang sama untuk desktop dan mobile -->
 <section aria-labelledby="student-announcements-heading" class="mb-6 rounded-2xl border border-amber-200 bg-white p-4 shadow-sm sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">

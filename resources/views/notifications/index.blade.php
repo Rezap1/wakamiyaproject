@@ -17,6 +17,8 @@
             @forelse($notifications as $notif)
                 @php
                     $isRead = ($notif['Is_Read'] ?? 'FALSE') === 'TRUE';
+                    $isBilling = str_starts_with(strtolower(trim((string) ($notif['Title'] ?? ''))), 'tagihan ')
+                        && preg_match('#/student/billing/[^/?]+(?:\?.*)?$#', (string) ($notif['Link'] ?? ''));
                     $bgClass = $isRead ? 'bg-white' : 'bg-blue-50/50';
                     $priority = $notif['Priority'] ?? 'Normal';
                     $priorityBadge = 'bg-slate-100 text-slate-500';
@@ -30,11 +32,11 @@
                                 <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
                             @endif
                             <span class="text-xs font-bold {{ $priorityBadge }} px-2 py-0.5 rounded">{{ $priority }}</span>
-                            <span class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{{ $notif['Notification_Type'] ?? 'System' }}</span>
-                            <span class="text-xs text-slate-400 ml-auto md:ml-2">{{ \Carbon\Carbon::parse($notif['Created_At'] ?? now())->diffForHumans() }}</span>
+                            <span class="text-xs font-bold {{ $isBilling ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' }} px-2 py-0.5 rounded">{{ $isBilling ? 'Tagihan' : ($notif['Notification_Type'] ?? 'Sistem') }}</span>
+                            <span class="text-xs text-slate-400 ml-auto md:ml-2">{{ \App\Helpers\DateHelper::format($notif['Created_At'] ?? null, 'j F Y • H:i') }} WIB</span>
                         </div>
                         <h4 class="font-bold text-slate-800 {{ $isRead ? '' : 'text-blue-900' }}">{{ $notif['Title'] ?? 'Notifikasi' }}</h4>
-                        <p class="text-sm text-slate-500 mt-1 line-clamp-1">{{ $notif['Message'] ?? '' }}</p>
+                        <p class="mt-1 line-clamp-2 whitespace-pre-line break-words text-sm text-slate-500">{{ $notif['Message'] ?? '' }}</p>
                     </div>
                     <div class="flex flex-row md:flex-col gap-2 shrink-0 md:w-32">
                         <a href="{{ route('notifications.show', $notif['Notification_ID']) }}" class="w-full text-center px-4 py-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">Detail</a>

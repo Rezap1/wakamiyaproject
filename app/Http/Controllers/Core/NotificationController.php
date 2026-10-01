@@ -1,23 +1,28 @@
 <?php
+
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\CollectionHelper;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Services\Core\NotificationService;
+use App\Services\Finance\StudentBillingNotificationService;
+use App\Traits\Exportable;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class NotificationController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-        protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
 
         $user = Auth::user();
         $notifications = $this->notificationService->getAll()
-            ->filter(function($n) use ($user) {
+            ->filter(function ($n) use ($user) {
                 return $this->notificationService->isForUser($n, $user) &&
                        strtolower(trim($n['Status'] ?? '')) !== 'archived';
             })->sortByDesc('Created_At');
@@ -27,67 +32,70 @@ class NotificationController extends Controller
             'data' => collect(array_values($notifications->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Tanggal', 'Judul', 'Pesan', 'Status'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
 
                 return [
-                    isset($row['Created_At']) ? \Carbon\Carbon::parse($row['Created_At'])->format('d M Y H:i:s') : '-',
+                    isset($row['Created_At']) ? Carbon::parse($row['Created_At'])->format('d M Y H:i:s') : '-',
                     $row['Title'] ?? '-',
                     $row['Message'] ?? '-',
-                    $row['Status'] ?? '-'
+                    $row['Status'] ?? '-',
                 ];
-                    },
+            },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data</td><td>: '.$notifications->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data</td><td>: '.$notifications->count().'</td></tr>',
         ];
     }
 
     protected $notificationService;
 
-    public function __construct(NotificationService $notificationService)
-    {
+    protected $billingNotificationService;
+
+    public function __construct(
+        NotificationService $notificationService,
+        ?StudentBillingNotificationService $billingNotificationService = null
+    ) {
         $this->notificationService = $notificationService;
+        $this->billingNotificationService = $billingNotificationService;
     }
 
     public function index(Request $request)
     {
         $user = Auth::user();
         $notifications = $this->notificationService->getAll()
-            ->filter(function($n) use ($user) {
+            ->filter(function ($n) use ($user) {
                 return $this->notificationService->isForUser($n, $user) &&
                        strtolower(trim($n['Status'] ?? '')) !== 'archived';
-            })->sortByDesc(function($n) {
+            })->sortByDesc(function ($n) {
                 try {
-                    return \Carbon\Carbon::parse($n['Created_At'] ?? null)->timestamp;
+                    return Carbon::parse($n['Created_At'] ?? null)->timestamp;
                 } catch (\Exception $e) {
                     return 0;
                 }
             });
 
-        $notifications = \App\Helpers\CollectionHelper::paginate($notifications, 15)->withQueryString();
+        $notifications = CollectionHelper::paginate($notifications, 15)->withQueryString();
 
         return view('notifications.index', compact('notifications'));
     }
 
     public function show($id)
     {
-        $notification = $this->notificationService->visibleToCurrentUser($id);
-        if (!$notification) abort(404, 'Notifikasi tidak ditemukan.');
+        $notification = $this->ownedNotificationOrFail($id);
+        $billingContext = ($this->billingNotificationService
+            ?? app(StudentBillingNotificationService::class))->contextForNotification($notification);
 
-        return view('notifications.show', compact('notification'));
+        return view('notifications.show', compact('notification', 'billingContext'));
     }
 
     public function readAndRedirect($id)
     {
-        $notification = $this->notificationService->visibleToCurrentUser($id);
-        if (!$notification) {
-            return redirect()->route('notifications.index');
-        }
+        $notification = $this->ownedNotificationOrFail($id);
 
         if (strtoupper(trim($notification['Is_Read'] ?? 'FALSE')) !== 'TRUE') {
             $this->notificationService->MarkAsRead($id);
         }
 
-        $actionUrl = $notification['Action_URL'] ?? $notification['Url'] ?? null;
+        $actionUrl = $notification['Link'] ?? $notification['Action_URL'] ?? $notification['Url'] ?? null;
         $safeActionUrl = $this->safeActionUrl($actionUrl);
         if ($safeActionUrl) {
             return redirect($safeActionUrl);
@@ -96,33 +104,43 @@ class NotificationController extends Controller
         return redirect()->route('notifications.show', $id);
     }
 
-    public function markRead($id)
+    public function markRead(Request $request, $id)
     {
-        if (!$this->notificationService->MarkAsRead($id)) {
-            abort(404, 'Notifikasi tidak ditemukan.');
+        $this->ownedNotificationOrFail($id);
+        if (! $this->notificationService->MarkAsRead($id)) {
+            abort(403, 'Anda tidak berhak mengubah notifikasi ini.');
         }
+        if ($request->expectsJson()) {
+            return response()->json(['status' => 'read']);
+        }
+
         return back()->with('success', 'Notifikasi berhasil ditandai telah dibaca.');
     }
 
     public function markAllRead()
     {
         $this->notificationService->MarkAllRead();
+
         return back()->with('success', 'Semua notifikasi berhasil ditandai telah dibaca.');
     }
 
     public function archive($id)
     {
-        if (!$this->notificationService->ArchiveNotification($id)) {
-            abort(404, 'Notifikasi tidak ditemukan.');
+        $this->ownedNotificationOrFail($id);
+        if (! $this->notificationService->ArchiveNotification($id)) {
+            abort(403, 'Anda tidak berhak mengubah notifikasi ini.');
         }
+
         return redirect()->route('notifications.index')->with('success', 'Notifikasi berhasil diarsipkan.');
     }
 
     public function destroy($id)
     {
-        if (!$this->notificationService->DeleteNotification($id)) {
-            abort(404, 'Notifikasi tidak ditemukan.');
+        $this->ownedNotificationOrFail($id);
+        if (! $this->notificationService->DeleteNotification($id)) {
+            abort(403, 'Anda tidak berhak mengubah notifikasi ini.');
         }
+
         return redirect()->route('notifications.index')->with('success', 'Notifikasi berhasil dihapus.');
     }
 
@@ -145,5 +163,18 @@ class NotificationController extends Controller
         }
 
         return null;
+    }
+
+    private function ownedNotificationOrFail(string $id): array
+    {
+        $notification = $this->notificationService->getById($id);
+        if (! $notification) {
+            abort(404, 'Notifikasi tidak ditemukan.');
+        }
+        if (! $this->notificationService->isForUser($notification, Auth::user())) {
+            abort(403, 'Anda tidak berhak mengakses notifikasi ini.');
+        }
+
+        return $notification;
     }
 }

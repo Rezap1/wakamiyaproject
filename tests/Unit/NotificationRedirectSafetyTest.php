@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Http\Controllers\Core\NotificationController;
 use App\Services\Core\NotificationService;
+use App\Services\Finance\StudentBillingNotificationService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Route;
 use Mockery;
@@ -23,14 +24,18 @@ class NotificationRedirectSafetyTest extends TestCase
     public function test_notification_show_does_not_mutate_read_state(): void
     {
         $notificationService = Mockery::mock(NotificationService::class);
-        $notificationService->shouldReceive('visibleToCurrentUser')->once()->with('NOTIF-UNREAD')->andReturn([
+        $notification = [
             'Notification_ID' => 'NOTIF-UNREAD',
             'Is_Read' => 'FALSE',
             'Title' => 'Belum Dibaca',
-        ]);
+        ];
+        $notificationService->shouldReceive('getById')->once()->with('NOTIF-UNREAD')->andReturn($notification);
+        $notificationService->shouldReceive('isForUser')->once()->with($notification, null)->andReturn(true);
         $notificationService->shouldNotReceive('MarkAsRead');
+        $billingService = Mockery::mock(StudentBillingNotificationService::class);
+        $billingService->shouldReceive('contextForNotification')->once()->with($notification)->andReturn(null);
 
-        $view = (new NotificationController($notificationService))->show('NOTIF-UNREAD');
+        $view = (new NotificationController($notificationService, $billingService))->show('NOTIF-UNREAD');
 
         $this->assertSame('notifications.show', $view->name());
     }
@@ -40,11 +45,13 @@ class NotificationRedirectSafetyTest extends TestCase
         Config::set('app.url', 'https://wms.example.test');
 
         $notificationService = Mockery::mock(NotificationService::class);
-        $notificationService->shouldReceive('visibleToCurrentUser')->once()->with('NOTIF-EXT')->andReturn([
+        $notification = [
             'Notification_ID' => 'NOTIF-EXT',
             'Is_Read' => 'TRUE',
             'Action_URL' => 'https://evil.example/phish',
-        ]);
+        ];
+        $notificationService->shouldReceive('getById')->once()->with('NOTIF-EXT')->andReturn($notification);
+        $notificationService->shouldReceive('isForUser')->once()->with($notification, null)->andReturn(true);
 
         $response = (new NotificationController($notificationService))->readAndRedirect('NOTIF-EXT');
 
@@ -54,11 +61,13 @@ class NotificationRedirectSafetyTest extends TestCase
     public function test_notification_internal_action_url_can_redirect(): void
     {
         $notificationService = Mockery::mock(NotificationService::class);
-        $notificationService->shouldReceive('visibleToCurrentUser')->once()->with('NOTIF-INT')->andReturn([
+        $notification = [
             'Notification_ID' => 'NOTIF-INT',
             'Is_Read' => 'TRUE',
             'Action_URL' => '/dashboard',
-        ]);
+        ];
+        $notificationService->shouldReceive('getById')->once()->with('NOTIF-INT')->andReturn($notification);
+        $notificationService->shouldReceive('isForUser')->once()->with($notification, null)->andReturn(true);
 
         $response = (new NotificationController($notificationService))->readAndRedirect('NOTIF-INT');
 

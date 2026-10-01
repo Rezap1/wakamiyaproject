@@ -231,6 +231,10 @@ class InvoiceService
             return 'Cancelled';
         }
 
+        if (strcasecmp($currentStatus, 'Void') === 0) {
+            return 'Void';
+        }
+
         if (strcasecmp($currentStatus, 'Draft') === 0) {
             return 'Draft';
         }

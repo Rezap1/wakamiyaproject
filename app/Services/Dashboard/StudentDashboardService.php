@@ -1,31 +1,46 @@
 <?php
+
 namespace App\Services\Dashboard;
 
-use App\Services\Academic\ScoreService;
-use App\Services\Academic\ScheduleService;
+use App\Services\Academic\AnnouncementService;
 use App\Services\Academic\AttendanceService as AcademicAttendanceService;
+use App\Services\Academic\ScheduleService;
+use App\Services\Academic\ScoreService;
+use App\Services\Attendance\AttendanceRequestService;
+use App\Services\Core\ActivityLogService;
+use App\Services\Core\AssignmentService;
+use App\Services\Core\NotificationService;
+use App\Services\Core\StudentService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PaymentService;
-use App\Services\Core\StudentService;
-use App\Services\Core\ActivityLogService;
-use App\Services\Core\NotificationService;
-use App\Services\Attendance\AttendanceRequestService;
-use App\Services\Academic\AnnouncementService;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Finance\StudentBillingNotificationService;
+use App\Support\Finance\PaymentStatus;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class StudentDashboardService
 {
     protected $scoreService;
+
     protected $scheduleService;
+
     protected $attendanceService;
+
     protected $invoiceService;
+
     protected $paymentService;
+
     protected $studentService;
+
     protected $activityLogService;
+
     protected $notificationService;
+
     protected $attendanceRequestService;
+
     protected $announcementService;
+
+    protected $billingNotificationService;
 
     public function __construct(
         ScoreService $scoreService,
@@ -37,7 +52,8 @@ class StudentDashboardService
         ActivityLogService $activityLogService,
         NotificationService $notificationService,
         AttendanceRequestService $attendanceRequestService,
-        ?AnnouncementService $announcementService = null
+        ?AnnouncementService $announcementService = null,
+        ?StudentBillingNotificationService $billingNotificationService = null
     ) {
         $this->scoreService = $scoreService;
         $this->scheduleService = $scheduleService;
@@ -49,12 +65,13 @@ class StudentDashboardService
         $this->notificationService = $notificationService;
         $this->attendanceRequestService = $attendanceRequestService;
         $this->announcementService = $announcementService;
+        $this->billingNotificationService = $billingNotificationService;
     }
 
     public function getDashboardData()
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             abort(403, 'Profil siswa tidak ditemukan.');
         }
 
@@ -63,7 +80,7 @@ class StudentDashboardService
         // === Resolve Student ID (fetch once) ===
         $allStudents = collect($this->studentService->getAllStudents());
         $student = $allStudents->firstWhere('User_ID', $userId);
-        if (!$student || empty($student['Student_ID'])) {
+        if (! $student || empty($student['Student_ID'])) {
             abort(403, 'Profil siswa tidak ditemukan.');
         }
 
@@ -81,6 +98,7 @@ class StudentDashboardService
                 $announcement['Audience_Label'] = $announcementService->audienceLabel($announcement);
                 $announcement['Start_At_Label'] = $this->formatAnnouncementDate($announcementService->startAt($announcement));
                 $announcement['Expires_At_Label'] = $this->formatAnnouncementDate($announcementService->expiresAt($announcement));
+
                 return $announcement;
             })->values();
         } catch (\Throwable) {
@@ -108,12 +126,14 @@ class StudentDashboardService
             ? $allSchedules->where('Class_ID', $studentClassId)
             : collect([]);
         $todayClasses = $mySchedules->filter(function ($s) use ($todayIndo) {
-            $day = strtolower($s['Day'] ?? $s['Day_Of_Week'] ?? ''); return $day === strtolower($todayIndo) || $day === strtolower(date('l'));
+            $day = strtolower($s['Day'] ?? $s['Day_Of_Week'] ?? '');
+
+            return $day === strtolower($todayIndo) || $day === strtolower(date('l'));
         })->map(function ($s) {
             return [
-                'time'    => ($s['Start_Time'] ?? '') . ' - ' . ($s['End_Time'] ?? ''),
+                'time' => ($s['Start_Time'] ?? '').' - '.($s['End_Time'] ?? ''),
                 'subject' => $s['Subject_ID'] ?? 'Subject',
-                'room'    => $s['Room'] ?? 'Room',
+                'room' => $s['Room'] ?? 'Room',
             ];
         })->values()->toArray();
         $todayClassCount = count($todayClasses);
@@ -149,7 +169,7 @@ class StudentDashboardService
         $statusPembayaran = $invoiceRows->isEmpty() ? 'Belum ada tagihan' : ($sisaTagihan <= 0 ? 'LUNAS' : ($totalPaid > 0 ? 'DIBAYAR SEBAGIAN' : 'BELUM DIBAYAR'));
         $paymentProgress = $educationFee > 0 ? min(100, round(($educationPaid / $educationFee) * 100)) : 0;
 
-        $lastPayment = $myPayments->filter(fn ($payment) => \App\Support\Finance\PaymentStatus::verified($payment['Status'] ?? null))->sortByDesc('Payment_Date')->first();
+        $lastPayment = $myPayments->filter(fn ($payment) => PaymentStatus::verified($payment['Status'] ?? null))->sortByDesc('Payment_Date')->first();
         $nextDueDate = $outstandingBills->whereNotNull('Due_Date')->sortBy('Due_Date')->first();
         $paymentHistory = $myPayments->sortByDesc('Created_At')->take(5)->values();
 
@@ -157,12 +177,15 @@ class StudentDashboardService
         $latestScore = $myScores->sortByDesc('Created_At')->first();
         $avgScore = $myScores->count() > 0 ? round($myScores->avg(function ($s) {
             $val = $s['Score'] ?? $s['Score_Value'] ?? 0;
+
             return is_numeric($val) ? (float) $val : 0;
         }), 1) : 0;
 
         // === Attendance Percentage ===
         $totalMyAttendance = $myAttendances->count();
-        $presentCount = $myAttendances->filter(function($a) { return in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'LATE', 'HADIR', 'TERLAMBAT']); })->count();
+        $presentCount = $myAttendances->filter(function ($a) {
+            return in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'LATE', 'HADIR', 'TERLAMBAT']);
+        })->count();
         $attendancePercentage = $totalMyAttendance > 0 ? round(($presentCount / $totalMyAttendance) * 100) : 0;
 
         // === Certificate Status ===
@@ -179,10 +202,10 @@ class StudentDashboardService
 
         $internals = $myScores->map(function ($s) {
             return [
-                'name'   => $s['Assessment_ID'] ?? $s['Assignment_ID'] ?? 'Task',
+                'name' => $s['Assessment_ID'] ?? $s['Assignment_ID'] ?? 'Task',
                 'status' => $s['Status'] ?? 'Completed',
-                'score'  => $s['Score'] ?? $s['Score_Value'] ?? 0,
-                'color'  => ($s['Status'] ?? '') == 'PASS' ? 'emerald' : 'red',
+                'score' => $s['Score'] ?? $s['Score_Value'] ?? 0,
+                'color' => ($s['Status'] ?? '') == 'PASS' ? 'emerald' : 'red',
             ];
         })->take(4)->toArray();
 
@@ -194,23 +217,23 @@ class StudentDashboardService
 
         // === KPI ===
         $kpi = [
-            'today_class'           => $todayClassCount,
-            'biaya_pendidikan'      => $educationFee,
-            'sudah_dibayar'         => $educationPaid,
+            'today_class' => $todayClassCount,
+            'biaya_pendidikan' => $educationFee,
+            'sudah_dibayar' => $educationPaid,
             'sisa_biaya_pendidikan' => $remainingEducationFee,
             'status_biaya_pendidikan' => $educationPaymentStatus,
-            'tagihan_master'          => (float) $totalOutstanding,
-            'total_tagihan'         => $totalBilled,
-            'tagihan_dibayar'       => $totalPaid,
-            'sisa_tagihan'          => $sisaTagihan,
-            'status_pembayaran'     => $statusPembayaran,
-            'outstanding_bills'     => $totalOutstanding,
-            'latest_score'          => $latestScore['Score'] ?? $latestScore['Score_Value'] ?? 0,
-            'attendance_percentage' => $attendancePercentage . '%',
-            'certificate_status'    => $certificateStatus,
-            'request_pending'       => $requestPendingCount,
-            'request_approved'      => $requestApprovedCount,
-            'request_rejected'      => $requestRejectedCount,
+            'tagihan_master' => (float) $totalOutstanding,
+            'total_tagihan' => $totalBilled,
+            'tagihan_dibayar' => $totalPaid,
+            'sisa_tagihan' => $sisaTagihan,
+            'status_pembayaran' => $statusPembayaran,
+            'outstanding_bills' => $totalOutstanding,
+            'latest_score' => $latestScore['Score'] ?? $latestScore['Score_Value'] ?? 0,
+            'attendance_percentage' => $attendancePercentage.'%',
+            'certificate_status' => $certificateStatus,
+            'request_pending' => $requestPendingCount,
+            'request_approved' => $requestApprovedCount,
+            'request_rejected' => $requestRejectedCount,
         ];
 
         // === Reminders (data riil) ===
@@ -218,47 +241,48 @@ class StudentDashboardService
 
         if ($totalOutstanding > 0) {
             $reminders[] = [
-                'title'       => 'Tagihan Belum Lunas',
-                'description' => 'Terdapat tagihan sebesar Rp ' . number_format($totalOutstanding, 0, ',', '.') . ' yang belum dilunasi.',
-                'action_url'  => route('student.billing.index'),
+                'title' => 'Tagihan Belum Lunas',
+                'description' => 'Terdapat tagihan sebesar Rp '.number_format($totalOutstanding, 0, ',', '.').' yang belum dilunasi.',
+                'action_url' => route('student.billing.index'),
             ];
         }
 
         foreach ($todayClasses as $cls) {
             $reminders[] = [
-                'title'       => 'Jadwal Hari Ini: ' . ($cls['subject'] ?? 'Tidak Diketahui'),
-                'description' => ($cls['time'] ?? '') . ' di ' . ($cls['room'] ?? ''),
-                'action_url'  => route('student.schedule'),
+                'title' => 'Jadwal Hari Ini: '.($cls['subject'] ?? 'Tidak Diketahui'),
+                'description' => ($cls['time'] ?? '').' di '.($cls['room'] ?? ''),
+                'action_url' => route('student.schedule'),
             ];
         }
 
         if ($nextDueDate) {
             $reminders[] = [
-                'title'       => 'Tagihan Segera Jatuh Tempo',
-                'description' => 'Tagihan jatuh tempo: ' . ($nextDueDate['Due_Date'] ?? '—'),
-                'action_url'  => route('student.billing.index'),
+                'title' => 'Tagihan Segera Jatuh Tempo',
+                'description' => 'Tagihan jatuh tempo: '.($nextDueDate['Due_Date'] ?? '—'),
+                'action_url' => route('student.billing.index'),
             ];
         }
 
         // === Assignments ===
         $pendingAssignmentsCount = 0;
         try {
-            $assignmentService = app(\App\Services\Core\AssignmentService::class);
+            $assignmentService = app(AssignmentService::class);
             $allAssignments = collect($assignmentService->getAll());
 
-            $publishedAssignments = $allAssignments->filter(function($item) use ($studentClassId) {
-                $status = strtoupper(!empty($item['Status']) ? $item['Status'] : 'PUBLISHED');
+            $publishedAssignments = $allAssignments->filter(function ($item) use ($studentClassId) {
+                $status = strtoupper(! empty($item['Status']) ? $item['Status'] : 'PUBLISHED');
+
                 return ($item['Class_ID'] ?? '') == $studentClassId && $status === 'PUBLISHED';
             });
 
             $myAssignments = $publishedAssignments->sortBy('Deadline')->take(5);
             $pendingAssignmentsCount = $publishedAssignments->count();
 
-            foreach($myAssignments as $assignment) {
+            foreach ($myAssignments as $assignment) {
                 $reminders[] = [
-                    'title'       => 'Tugas: ' . ($assignment['Title'] ?? 'Untitled'),
-                    'description' => 'Tenggat Waktu: ' . ($assignment['Deadline'] ?? '-'),
-                    'action_url'  => route('student.portal.assignments'),
+                    'title' => 'Tugas: '.($assignment['Title'] ?? 'Untitled'),
+                    'description' => 'Tenggat Waktu: '.($assignment['Deadline'] ?? '-'),
+                    'action_url' => route('student.portal.assignments'),
                 ];
             }
         } catch (\Exception $e) {
@@ -283,26 +307,35 @@ class StudentDashboardService
 
         // === Notification Count ===
         $unreadNotifications = 0;
+        $billingPopup = ['current' => null, 'other_count' => 0];
         if ($userId) {
             try {
-                $unreadNotifications = $this->notificationService->UnreadCount($userId, 'STUDENT');
+                $notificationSummary = $this->notificationService->summarizeForUser($userId, 'STUDENT', 100);
+                $unreadNotifications = $notificationSummary['unreadCount'] ?? 0;
+                if ($this->billingNotificationService) {
+                    $billingPopup = $this->billingNotificationService->popupFromSnapshots(
+                        $notificationSummary['recent'] ?? collect(),
+                        $myInvoices,
+                        (array) $student,
+                    );
+                }
             } catch (\Exception $e) {
                 $unreadNotifications = 0;
             }
         }
 
-            return compact(
-                'kpi', 'todayClasses', 'myScores', 'langProgress', 'internals',
-                'totalOutstanding', 'latestInvoice', 'outstandingBills',
-                'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
-                'attendancePercentage', 'certificateStatus',
-                'reminders', 'recentActivities', 'unreadNotifications', 'announcements'
-            );
+        return compact(
+            'kpi', 'todayClasses', 'myScores', 'langProgress', 'internals',
+            'totalOutstanding', 'latestInvoice', 'outstandingBills',
+            'paymentProgress', 'lastPayment', 'nextDueDate', 'paymentHistory',
+            'attendancePercentage', 'certificateStatus',
+            'reminders', 'recentActivities', 'unreadNotifications', 'announcements', 'billingPopup'
+        );
     }
 
     private function formatAnnouncementDate($date): string
     {
-        return $date ? $date->locale('id')->translatedFormat('j F Y, H.i') . ' WIB' : '-';
+        return $date ? $date->locale('id')->translatedFormat('j F Y, H.i').' WIB' : '-';
     }
 
     private function getTodayIndo()
@@ -311,6 +344,7 @@ class StudentDashboardService
             'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu',
             'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu',
         ];
+
         return $dayMap[date('l')] ?? date('l');
     }
 
@@ -319,11 +353,14 @@ class StudentDashboardService
         try {
             $allowedModules = ['SYSTEM', 'STUDENT', 'FINANCE', 'INVOICE', 'PAYMENT', 'ACADEMIC', 'SCHEDULE', 'SCORE', 'ATTENDANCE', 'PROGRAM', 'CLASS'];
             $logs = collect($this->activityLogService->getAllLogs());
+
             return $logs->filter(function ($log) use ($userId, $relatedIds, $allowedModules) {
                 $isAllowedModule = in_array(strtoupper($log['Module'] ?? ''), $allowedModules);
-                if (!$isAllowedModule) return false;
+                if (! $isAllowedModule) {
+                    return false;
+                }
 
-                return ($log['User_ID'] ?? '') === $userId 
+                return ($log['User_ID'] ?? '') === $userId
                     || ($log['Reference_ID'] ?? '') === $userId
                     || in_array($log['Reference_ID'] ?? '', $relatedIds);
             })->sortByDesc('Created_At')->take(5)->map(function ($log) {
@@ -337,13 +374,14 @@ class StudentDashboardService
                     } else {
                         $action = str_replace('_', ' ', $log['Action'] ?? '');
                         $refId = $log['Reference_ID'] ?? '';
-                        $desc = "Aktivitas " . ucwords(strtolower($action)) . ($refId ? " pada {$refId}" : '');
+                        $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
                     }
                 }
+
                 return [
-                    'title'       => $log['Action'] ?? 'Aktivitas',
-                    'description' => ($log['Module'] ?? '') . ' — ' . $desc,
-                    'time'        => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
+                    'title' => $log['Action'] ?? 'Aktivitas',
+                    'description' => ($log['Module'] ?? '').' — '.$desc,
+                    'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
                 ];
             })->values()->toArray();
         } catch (\Exception $e) {

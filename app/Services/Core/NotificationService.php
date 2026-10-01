@@ -1,14 +1,19 @@
 <?php
+
 namespace App\Services\Core;
 
-use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
-use Illuminate\Support\Facades\Cache;
-use App\Support\ActorIdentity;
 use App\Exceptions\FinancialIntegrityException;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Support\ActorIdentity;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class NotificationService
 {
     private const CACHE_TTL_SECONDS = 30;
+
     private const CACHE_VERSION_KEY = 'notification_user_cache_version';
 
     protected $repo;
@@ -25,9 +30,16 @@ class NotificationService
         });
     }
 
+    public function getAllFresh()
+    {
+        return method_exists($this->repo, 'getAllFresh')
+            ? $this->repo->getAllFresh()
+            : $this->repo->getAll();
+    }
+
     public function getById($id)
     {
-        return $this->rememberRequestLookup('notification_by_id_' . md5((string) $id), function () use ($id) {
+        return $this->rememberRequestLookup('notification_by_id_'.md5((string) $id), function () use ($id) {
             return $this->repo->getById($id);
         });
     }
@@ -46,7 +58,7 @@ class NotificationService
             $missing = array_values(array_diff(['Reference_Type', 'Reference_ID'], $headers));
             if ($missing !== []) {
                 throw new FinancialIntegrityException(
-                    'Notification schema tidak mendukung durable reminder identity: ' . implode(', ', $missing)
+                    'Notification schema tidak mendukung durable reminder identity: '.implode(', ', $missing)
                 );
             }
         }
@@ -56,11 +68,12 @@ class NotificationService
         // Do not claim durable deduplication when the production schema
         // cannot expose the identity columns required for it.
         if (collect($rows)->isNotEmpty()
-            && !collect($rows)->contains(fn ($row) => array_key_exists('Reference_Type', (array) $row)
+            && ! collect($rows)->contains(fn ($row) => array_key_exists('Reference_Type', (array) $row)
                 || array_key_exists('Reference_ID', (array) $row))) {
             throw new FinancialIntegrityException('Notification schema tidak mendukung durable reminder identity.');
         }
         $title = "Reminder Tagihan (H-{$daysToDue})";
+
         return collect($rows)->contains(function ($row) use ($invoiceId, $title, $date) {
             if (strcasecmp((string) ($row['Reference_Type'] ?? ''), 'Invoice') !== 0
                 || trim((string) ($row['Reference_ID'] ?? '')) !== $invoiceId) {
@@ -70,6 +83,7 @@ class NotificationService
                 return false;
             }
             $created = (string) ($row['Created_At'] ?? '');
+
             return $created !== '' && str_starts_with($created, $date);
         });
     }
@@ -79,7 +93,7 @@ class NotificationService
         // The production sheet calls this column Link; older callers used
         // Action_URL. Preserve the URL in the persisted equivalent instead
         // of silently dropping it.
-        if (!array_key_exists('Link', $data) && array_key_exists('Action_URL', $data)) {
+        if (! array_key_exists('Link', $data) && array_key_exists('Action_URL', $data)) {
             $data['Link'] = $data['Action_URL'];
         }
         $data['Created_By'] = ActorIdentity::resolve($data['Created_By'] ?? null);
@@ -90,6 +104,7 @@ class NotificationService
 
         $res = $this->repo->create($data);
         $this->repo->clearCache();
+        $this->clearRequestLookup();
         $this->clearUserCache();
 
         // Hooks for external
@@ -150,7 +165,9 @@ class NotificationService
     public function isForUser($notification, $user = null): bool
     {
         $user = $user ?? auth()->user();
-        if (!$user) return false;
+        if (! $user) {
+            return false;
+        }
 
         $targetUserId = strtolower(trim($notification['User_ID'] ?? ''));
         $targetEmail = strtolower(trim($notification['Recipient_Email'] ?? $notification['Email'] ?? ''));
@@ -162,7 +179,7 @@ class NotificationService
 
         $userRoleName = strtoupper(trim((string) ($user->Role ?? session('role') ?? '')));
         if ($userRoleName === '') {
-            $roleData = app(\App\Services\Core\RoleService::class)->getRoleById($user->Role_ID ?? '');
+            $roleData = app(RoleService::class)->getRoleById($user->Role_ID ?? '');
             $userRoleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
         }
 
@@ -171,25 +188,31 @@ class NotificationService
             ->filter()
             ->values()
             ->all();
-        if (!empty($targetRoles) && in_array($userRoleName, $targetRoles, true)) {
+        if (! empty($targetRoles) && in_array($userRoleName, $targetRoles, true)) {
             return true;
         }
 
         // Resolve Student_ID dynamically if not set
-        if (!isset($user->resolved_student_id) && $user) {
-            $students = \Illuminate\Support\Facades\Cache::remember('all_students_lookup_map', 300, function () {
-                try { return collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll()); }
-                catch (\Exception $e) { return collect(); }
+        if (! isset($user->resolved_student_id) && $user) {
+            $students = Cache::remember('all_students_lookup_map', 300, function () {
+                try {
+                    return collect(app(StudentRepositoryInterface::class)->fetchAll());
+                } catch (\Exception $e) {
+                    return collect();
+                }
             });
             $std = $students->firstWhere('User_ID', $user->User_ID);
             $user->resolved_student_id = $std['Student_ID'] ?? '';
         }
 
         // Resolve Employee_ID dynamically if not set
-        if (!isset($user->resolved_employee_id) && $user) {
-            $employees = \Illuminate\Support\Facades\Cache::remember('all_employees_lookup_map', 300, function () {
-                try { return collect(app(\App\Interfaces\GoogleSheets\EmployeeRepositoryInterface::class)->fetchAll()); }
-                catch (\Exception $e) { return collect(); }
+        if (! isset($user->resolved_employee_id) && $user) {
+            $employees = Cache::remember('all_employees_lookup_map', 300, function () {
+                try {
+                    return collect(app(EmployeeRepositoryInterface::class)->fetchAll());
+                } catch (\Exception $e) {
+                    return collect();
+                }
             });
             $emp = $employees->firstWhere('User_ID', $user->User_ID);
             $user->resolved_employee_id = $emp['Employee_ID'] ?? '';
@@ -202,8 +225,8 @@ class NotificationService
             strtolower(trim($user->Student_ID ?? $user->resolved_student_id ?? '')),
         ]);
 
-        if ((!empty($targetUserId) && in_array($targetUserId, $userIdentifiers, true))
-            || (!empty($targetEmail) && in_array($targetEmail, $userIdentifiers, true))) {
+        if ((! empty($targetUserId) && in_array($targetUserId, $userIdentifiers, true))
+            || (! empty($targetEmail) && in_array($targetEmail, $userIdentifiers, true))) {
             return true;
         }
 
@@ -213,11 +236,11 @@ class NotificationService
     public function visibleToCurrentUser($id): ?array
     {
         $notif = $this->getById($id);
-        if (!$notif) {
+        if (! $notif) {
             return null;
         }
 
-        if (!$this->isForUser($notif, auth()->user())) {
+        if (! $this->isForUser($notif, auth()->user())) {
             return null;
         }
 
@@ -227,14 +250,15 @@ class NotificationService
     public function MarkAsRead($id)
     {
         $notif = $this->visibleToCurrentUser($id);
-        if($notif) {
+        if ($notif) {
             $this->repo->update($id, [
                 'Is_Read' => 'TRUE',
-                'Read_At' => now()->toDateTimeString(),
-                'Status' => 'Read'
+                'Updated_At' => now('Asia/Jakarta')->toDateTimeString(),
             ]);
             $this->repo->clearCache();
+            $this->clearRequestLookup();
             $this->clearUserCache();
+
             return true;
         }
 
@@ -244,28 +268,29 @@ class NotificationService
     public function MarkAllRead($userId = null)
     {
         $user = auth()->user();
-        $notifications = $this->getAll()->filter(function($n) use ($user) {
+        $notifications = $this->getAll()->filter(function ($n) use ($user) {
             return $this->isForUser($n, $user) && strtoupper(trim($n['Is_Read'] ?? '')) !== 'TRUE';
         });
 
         foreach ($notifications as $notif) {
             $this->repo->update($notif['Notification_ID'], [
                 'Is_Read' => 'TRUE',
-                'Read_At' => now()->toDateTimeString(),
-                'Status' => 'Read'
+                'Updated_At' => now('Asia/Jakarta')->toDateTimeString(),
             ]);
         }
         $this->repo->clearCache();
+        $this->clearRequestLookup();
         $this->clearUserCache();
     }
 
     public function ArchiveNotification($id)
     {
         $notif = $this->visibleToCurrentUser($id);
-        if($notif) {
+        if ($notif) {
             $this->repo->update($id, ['Status' => 'Archived']);
             $this->repo->clearCache();
             $this->clearUserCache();
+
             return true;
         }
 
@@ -284,7 +309,7 @@ class NotificationService
 
         return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($user) {
             return $this->getAll()
-                ->filter(function($n) use ($user) {
+                ->filter(function ($n) use ($user) {
                     return $this->isForUser($n, $user) &&
                            strtoupper(trim($n['Is_Read'] ?? '')) !== 'TRUE' &&
                            strtolower(trim($n['Status'] ?? '')) !== 'archived';
@@ -299,12 +324,12 @@ class NotificationService
 
         return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($user, $limit) {
             return $this->getAll()
-                ->filter(function($n) use ($user) {
+                ->filter(function ($n) use ($user) {
                     return $this->isForUser($n, $user) &&
                            strtolower(trim($n['Status'] ?? '')) !== 'archived';
-                })->sortByDesc(function($n) {
+                })->sortByDesc(function ($n) {
                     try {
-                        return \Carbon\Carbon::parse($n['Created_At'] ?? null)->timestamp;
+                        return Carbon::parse($n['Created_At'] ?? null)->timestamp;
                     } catch (\Exception $e) {
                         return 0;
                     }
@@ -315,8 +340,9 @@ class NotificationService
     public function CriticalNotification($userId = null, $role = null)
     {
         $user = auth()->user();
+
         return $this->getAll()
-            ->filter(function($n) use ($user) {
+            ->filter(function ($n) use ($user) {
                 return $this->isForUser($n, $user) &&
                        strcasecmp($n['Priority'] ?? '', 'Critical') === 0 &&
                        strtoupper(trim($n['Is_Read'] ?? '')) !== 'TRUE';
@@ -346,7 +372,7 @@ class NotificationService
         $recent = $visible
             ->sortByDesc(function ($n) {
                 try {
-                    return \Carbon\Carbon::parse($n['Created_At'] ?? null)->timestamp;
+                    return Carbon::parse($n['Created_At'] ?? null)->timestamp;
                 } catch (\Throwable) {
                     return 0;
                 }
@@ -382,13 +408,22 @@ class NotificationService
         Cache::forever(self::CACHE_VERSION_KEY, $this->notificationCacheVersion() + 1);
     }
 
+    private function clearRequestLookup(): void
+    {
+        try {
+            request()->attributes->remove('notification_all');
+        } catch (\Throwable) {
+            // There is no request scope in console jobs.
+        }
+    }
+
     private function userNotificationCacheKey(string $type, $user, $userId = null, $role = null, array $extra = []): string
     {
         $userKey = $userId ?: ($user ? ($user->User_ID ?? $user->email ?? $user->Email ?? 'anonymous') : 'anonymous');
         $roleKey = $role ?: ($user->Role ?? session('role') ?? 'any');
         $version = $this->notificationCacheVersion();
 
-        return 'notification_' . $type . '_' . md5(json_encode([
+        return 'notification_'.$type.'_'.md5(json_encode([
             'version' => $version,
             'user' => $userKey,
             'role' => $roleKey,
@@ -425,9 +460,28 @@ class NotificationService
     }
 
     // External Hooks Preparation
-    private function HookEmail($data) { return true; }
-    private function HookWhatsApp($data) { return true; }
-    private function HookPush($data) { return true; }
-    private function HookTelegram($data) { return true; }
-    private function HookFirebase($data) { return true; }
+    private function HookEmail($data)
+    {
+        return true;
+    }
+
+    private function HookWhatsApp($data)
+    {
+        return true;
+    }
+
+    private function HookPush($data)
+    {
+        return true;
+    }
+
+    private function HookTelegram($data)
+    {
+        return true;
+    }
+
+    private function HookFirebase($data)
+    {
+        return true;
+    }
 }

@@ -2,72 +2,88 @@
 
 namespace App\Http\Controllers\Finance;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\Finance\InvoiceService;
-use App\Http\Requests\StoreInvoiceRequest;
-use App\Http\Requests\UpdateInvoiceRequest;
+use App\Exceptions\AmbiguousSheetWriteException;
+use App\Helpers\CollectionHelper;
 use App\Helpers\ReportHelper;
 use App\Helpers\UserResolverHelper;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreInvoiceRequest;
+use App\Http\Requests\UpdateInvoiceRequest;
+use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\SystemSettingService;
-use App\Exceptions\AmbiguousSheetWriteException;
-use Illuminate\Contracts\Cache\LockTimeoutException;
-use Illuminate\Support\Facades\Log;
+use App\Services\Finance\InvoiceService;
+use App\Services\Finance\PaymentService;
+use App\Services\Finance\StudentBillingNotificationService;
+use App\Support\ActorIdentity;
 use App\Support\Reporting\HumanReadableResolver;
+use App\Traits\Exportable;
+use Carbon\Carbon;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-    protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
         $invoices = $this->invoiceService->getAll();
-        
+
         $search = $request->input('search');
-        if (!empty($search)) {
-            $invoices = \App\Helpers\CollectionHelper::search($invoices, $search, ['Invoice_ID', 'Category', 'Student_ID']);
+        if (! empty($search)) {
+            $invoices = CollectionHelper::search($invoices, $search, ['Invoice_ID', 'Category', 'Student_ID']);
         }
 
-        $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())
+        $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())
             ->keyBy('Student_ID');
-        $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())
+        $companiesById = collect(app(CompanyRepositoryInterface::class)->fetchAll())
             ->keyBy('Company_ID');
-        
+
         return [
             'moduleName' => 'Invoice Tagihan (Invoices)',
             'data' => collect(array_values($invoices->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['No. Invoice', 'Tipe', 'Pihak Tagihan (Nama)', 'Kategori', 'Jumlah Total', 'Sisa Tagihan', 'Jatuh Tempo', 'Status'],
-            'mapRow' => function($row) use ($studentsById, $companiesById) {
+            'mapRow' => function ($row) use ($studentsById, $companiesById) {
                 return [
                     $row['Invoice_ID'] ?? '-',
                     $row['Invoice_Type'] ?? 'STUDENT',
                     HumanReadableResolver::studentOrCompanyPayer($row, $studentsById, $companiesById),
                     $row['Category'] ?? '-',
-                    'Rp ' . number_format((float)($row['Amount'] ?? 0), 0, ',', '.'),
-                    'Rp ' . number_format((float)($row['Remaining_Amount'] ?? 0), 0, ',', '.'),
-                    isset($row['Due_Date']) ? \Carbon\Carbon::parse($row['Due_Date'])->format('d M Y') : '-',
-                    $row['Status'] ?? 'Draft'
+                    'Rp '.number_format((float) ($row['Amount'] ?? 0), 0, ',', '.'),
+                    'Rp '.number_format((float) ($row['Remaining_Amount'] ?? 0), 0, ',', '.'),
+                    isset($row['Due_Date']) ? Carbon::parse($row['Due_Date'])->format('d M Y') : '-',
+                    $row['Status'] ?? 'Draft',
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data Tagihan</td><td>: '.$invoices->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data Tagihan</td><td>: '.$invoices->count().'</td></tr>',
         ];
     }
 
     protected $invoiceService;
 
-    public function __construct(InvoiceService $invoiceService)
-    {
+    protected $billingNotificationService;
+
+    public function __construct(
+        InvoiceService $invoiceService,
+        ?StudentBillingNotificationService $billingNotificationService = null
+    ) {
         $this->invoiceService = $invoiceService;
+        $this->billingNotificationService = $billingNotificationService;
     }
 
     public function index(Request $request)
     {
         $invoices = $this->invoiceService->getAll();
-        
+
         $type = $request->input('type');
         if ($type) {
             $invoices = $invoices->where('Invoice_Type', $type);
@@ -75,15 +91,16 @@ class InvoiceController extends Controller
 
         $statusFilter = $request->input('status');
         if ($statusFilter) {
-            $invoices = $invoices->filter(function($item) use ($statusFilter) {
+            $invoices = $invoices->filter(function ($item) use ($statusFilter) {
                 return strcasecmp($item['Status'] ?? '', $statusFilter) === 0;
             });
         }
 
         $search = $request->input('search');
         if ($search) {
-            $invoices = $invoices->filter(function($item) use ($search) {
+            $invoices = $invoices->filter(function ($item) use ($search) {
                 $stdName = UserResolverHelper::getName($item['Student_ID'] ?? '');
+
                 return stripos($item['Invoice_ID'] ?? '', $search) !== false ||
                        stripos($item['Category'] ?? '', $search) !== false ||
                        stripos($item['Student_ID'] ?? '', $search) !== false ||
@@ -91,13 +108,14 @@ class InvoiceController extends Controller
             });
         }
 
-        $invoices = $invoices->map(function($inv) {
+        $invoices = $invoices->map(function ($inv) {
             $stdDetail = UserResolverHelper::getStudentDetail($inv['Student_ID'] ?? '');
             $inv['student_name'] = $stdDetail['name'];
             $inv['class_name'] = $stdDetail['class_name'];
             $inv['batch_name'] = $stdDetail['batch_name'];
             $inv['student_formatted'] = $stdDetail['formatted'];
             $inv['Created_By_Name'] = UserResolverHelper::getName($inv['Created_By'] ?? '');
+
             return $inv;
         });
 
@@ -115,29 +133,31 @@ class InvoiceController extends Controller
             })
             ->sortBy(function ($group) {
                 $order = array_search($group['id'], ['OVERDUE', 'Waiting Payment', 'Partial Paid', 'Draft', 'Paid', 'Cancelled'], true);
+
                 return $order === false ? 99 : $order;
             })
             ->values();
-        
-        $invoices = \App\Helpers\CollectionHelper::paginate($invoices, 10)->withQueryString();
+
+        $invoices = CollectionHelper::paginate($invoices, 10)->withQueryString();
 
         return view('finance.invoices.index', compact('invoices', 'invoiceGroups', 'type', 'statusFilter', 'search'));
     }
 
     public function create()
     {
-        $students = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll();
-        $companies = app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll();
-        $classes = app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll();
-        $batches = app(\App\Interfaces\GoogleSheets\BatchRepositoryInterface::class)->fetchAll();
+        $students = app(StudentRepositoryInterface::class)->fetchAll();
+        $companies = app(CompanyRepositoryInterface::class)->fetchAll();
+        $classes = app(ClassRepositoryInterface::class)->fetchAll();
+        $batches = app(BatchRepositoryInterface::class)->fetchAll();
 
         $classesMap = collect($classes)->keyBy('Class_ID');
         $batchesMap = collect($batches)->keyBy('Batch_ID');
-        $students = collect($students)->map(function($s) use ($classesMap, $batchesMap) {
+        $students = collect($students)->map(function ($s) use ($classesMap, $batchesMap) {
             $cId = $s['Class_ID'] ?? '';
             $bId = $s['Batch_ID'] ?? '';
             $s['class_name'] = isset($classesMap[$cId]) ? ($classesMap[$cId]['Class_Name'] ?? $classesMap[$cId]['Class_Code'] ?? '-') : '-';
             $s['batch_name'] = isset($batchesMap[$bId]) ? ($batchesMap[$bId]['Batch_Name'] ?? $batchesMap[$bId]['Batch_Code'] ?? '-') : '-';
+
             return $s;
         });
 
@@ -161,6 +181,7 @@ class InvoiceController extends Controller
     {
         try {
             $invoice = $this->invoiceService->create($request->validated());
+
             return redirect()->route('invoices.show', $invoice['Invoice_ID'])->with('success', 'Invoice tagihan berhasil dibuat sebagai Draft.');
         } catch (AmbiguousSheetWriteException $e) {
             Log::warning('Invoice create persistence ambiguous', [
@@ -168,12 +189,14 @@ class InvoiceController extends Controller
                 'idempotency_key' => $request->input('Idempotency_Key') ? hash('sha256', $request->input('Idempotency_Key')) : null,
                 'exception' => get_class($e),
             ]);
+
             return back()->with('error', 'Status penyimpanan invoice belum dapat dikonfirmasi. Silakan cek daftar invoice sebelum mencoba kembali.')->withInput();
         } catch (LockTimeoutException $e) {
             Log::warning('Invoice create lock timeout', [
                 'request_id' => $request->header('X-Request-ID'),
                 'exception' => get_class($e),
             ]);
+
             return back()->with('error', 'Permintaan invoice sedang diproses oleh transaksi lain. Silakan tunggu lalu kirim ulang dengan token yang sama.')->withInput();
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
@@ -183,7 +206,7 @@ class InvoiceController extends Controller
     public function show($id)
     {
         $invoice = $this->invoiceService->getById($id);
-        if (!$invoice) {
+        if (! $invoice) {
             return redirect()->route('invoices.index')->with('error', 'Invoice tidak ditemukan.');
         }
 
@@ -194,11 +217,12 @@ class InvoiceController extends Controller
         $invoice['student_formatted'] = $stdDetail['formatted'];
         $invoice['Created_By_Name'] = UserResolverHelper::getName($invoice['Created_By'] ?? '');
 
-        $payments = app(\App\Services\Finance\PaymentService::class)->getAll()
+        $payments = app(PaymentService::class)->getAll()
             ->where('Invoice_ID', $id)
-            ->map(function($pay) {
+            ->map(function ($pay) {
                 $pay['student_name'] = UserResolverHelper::getName($pay['Student_ID'] ?? '');
                 $pay['Created_By_Name'] = UserResolverHelper::getName($pay['Created_By'] ?? '');
+
                 return $pay;
             })
             ->values();
@@ -209,11 +233,12 @@ class InvoiceController extends Controller
     public function edit($id)
     {
         $invoice = $this->invoiceService->getById($id);
-        if (!$invoice) {
+        if (! $invoice) {
             return redirect()->route('invoices.index')->with('error', 'Invoice tidak ditemukan.');
         }
-        $students = app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll();
-        $companies = app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll();
+        $students = app(StudentRepositoryInterface::class)->fetchAll();
+        $companies = app(CompanyRepositoryInterface::class)->fetchAll();
+
         return view('finance.invoices.edit', compact('invoice', 'students', 'companies'));
     }
 
@@ -221,6 +246,7 @@ class InvoiceController extends Controller
     {
         try {
             $this->invoiceService->update($id, $request->validated());
+
             return redirect()->route('invoices.show', $id)->with('success', 'Invoice tagihan berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e))->withInput();
@@ -231,6 +257,7 @@ class InvoiceController extends Controller
     {
         try {
             $this->invoiceService->delete($id);
+
             return redirect()->route('invoices.index')->with('success', 'Invoice tagihan dibatalkan/dihapus.');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -241,13 +268,13 @@ class InvoiceController extends Controller
     {
         try {
             $docData = $this->invoiceService->getInvoiceDocumentData($id);
-            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
-            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
             $docData['invoice']['student_name'] = HumanReadableResolver::studentOrCompanyPayer($docData['invoice'], $studentsById, $companiesById);
-            
+
             return ReportHelper::export(
                 'pdf',
-                'Invoice_' . $id,
+                'Invoice_'.$id,
                 collect([$docData['invoice']]),
                 $docData,
                 'pdf.official_invoice',
@@ -269,9 +296,10 @@ class InvoiceController extends Controller
     {
         try {
             $docData = $this->invoiceService->getInvoiceDocumentData($id, true);
-            $studentsById = collect(app(\App\Interfaces\GoogleSheets\StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
-            $companiesById = collect(app(\App\Interfaces\GoogleSheets\CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
+            $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())->keyBy('Student_ID');
+            $companiesById = collect(app(CompanyRepositoryInterface::class)->fetchAll())->keyBy('Company_ID');
             $docData['invoice']['student_name'] = HumanReadableResolver::studentOrCompanyPayer($docData['invoice'], $studentsById, $companiesById);
+
             return view('finance.invoices.verify_invoice_public', ['data' => $docData]);
         } catch (\Exception $e) {
             abort(404, $this->safeExceptionMessage($e, 'Invoice tidak ditemukan atau tidak tersedia.'));
@@ -282,6 +310,7 @@ class InvoiceController extends Controller
     {
         try {
             $this->invoiceService->publish($id);
+
             return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil diterbitkan (Status: Waiting Payment).');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -292,6 +321,7 @@ class InvoiceController extends Controller
     {
         try {
             $this->invoiceService->cancel($id);
+
             return redirect()->route('invoices.show', $id)->with('success', 'Invoice berhasil dibatalkan (Status: Cancelled).');
         } catch (\Exception $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
@@ -301,71 +331,63 @@ class InvoiceController extends Controller
     public function notify(Request $request, $id)
     {
         try {
-            $invoice = $this->invoiceService->getById($id);
-            if (!$invoice) {
-                return back()->with('error', 'Invoice tidak ditemukan.');
-            }
-
-            $message = $request->input('message', 'Pengingat pembayaran tagihan WMS.');
+            // Browser text is deliberately ignored. All student, balance,
+            // status, due-date and copy fields are resolved canonically.
+            $service = $this->billingNotificationService
+                ?? app(StudentBillingNotificationService::class);
+            $result = $service->sendReminder((string) $id);
+            $invoice = $result['invoice'];
             $studentId = $invoice['Student_ID'] ?? null;
-            if (($invoice['Invoice_Type'] ?? 'STUDENT') !== 'STUDENT' || empty($studentId)) {
-                return back()->with('error', 'Pengingat pembayaran hanya dapat dikirim untuk invoice siswa yang memiliki Student_ID.');
+            $message = $result['notification']['Message'];
+
+            if ($result['duplicate']) {
+                return redirect()->route('invoices.index')->with(
+                    'warning',
+                    "Pengingat untuk invoice #{$id} baru saja dikirim. Duplikat dalam 2 menit tidak dibuat."
+                );
             }
 
-            $notificationDelivered = true;
             $eventDispatched = true;
-
-            // Create notification record using Service to ensure cache clearing
-            try {
-                $notifService = app(\App\Services\Core\NotificationService::class);
-                $notifService->CreateNotification([
-                    'Notification_ID' => uniqid('NTF_'),
-                    'User_ID'         => $studentId,
-                    'Title'           => 'Pengingat Pembayaran Tagihan',
-                    'Message'         => $message,
-                    'Notification_Type'=> 'BILLING_REMINDER',
-                    'Priority'        => 'High',
-                    'Is_Read'         => 'FALSE',
-                    'Created_At'      => now()->toDateTimeString()
-                ]);
-            } catch (\Throwable $e) {
-                $notificationDelivered = false;
-                \Illuminate\Support\Facades\Log::warning('Invoice notification delivery failed', [
-                    'invoice_id' => $id,
-                    'student_id' => $studentId,
-                    'exception' => get_class($e),
-                ]);
-            }
 
             // Dispatch Enterprise Event
             try {
-                $enterpriseEvent = app(\App\Services\Core\EnterpriseEventService::class);
+                $enterpriseEvent = app(EnterpriseEventService::class);
                 $enterpriseEvent->dispatch(
                     'FINANCE',
                     'NOTIFY',
                     'INVOICE',
                     $id,
-                    \App\Support\ActorIdentity::required(),
+                    ActorIdentity::required(),
                     ['STUDENT', 'FINANCE'],
                     array_filter([$studentId]),
                     ['Message' => $message, 'Amount' => $invoice['Amount'] ?? 0]
                 );
             } catch (\Throwable $e) {
                 $eventDispatched = false;
-                \Illuminate\Support\Facades\Log::warning('Invoice notification event dispatch failed', [
+                Log::warning('Invoice notification event dispatch failed', [
                     'invoice_id' => $id,
                     'student_id' => $studentId,
                     'exception' => get_class($e),
                 ]);
             }
 
-            $message = ($notificationDelivered && $eventDispatched)
+            $message = $eventDispatched
                 ? "Pengingat penagihan untuk invoice #{$id} berhasil dikirim."
-                : "Operasi invoice #{$id} berhasil, tetapi pengiriman pengingat tertunda/gagal dan dapat dicoba kembali.";
-            return redirect()->route('invoices.index')->with($notificationDelivered && $eventDispatched ? 'success' : 'warning', $message);
+                : "Notifikasi invoice #{$id} tersimpan, tetapi pencatatan event tertunda/gagal.";
+
+            return redirect()->route('invoices.index')->with($eventDispatched ? 'success' : 'warning', $message);
+        } catch (\DomainException $e) {
+            $feedback = match ($e->getCode()) {
+                StudentBillingNotificationService::ERROR_NOT_STUDENT_INVOICE => 'Pengingat pembayaran hanya dapat dikirim untuk invoice siswa yang memiliki Student_ID.',
+                StudentBillingNotificationService::ERROR_PAID => 'Tagihan siswa sudah lunas dan tidak memerlukan notifikasi pembayaran.',
+                StudentBillingNotificationService::ERROR_INACTIVE => 'Tagihan yang dibatalkan, void, atau masih draft tidak dapat menerima notifikasi pembayaran.',
+                StudentBillingNotificationService::ERROR_UNSUPPORTED_STATUS => 'Status tagihan tidak mendukung notifikasi pembayaran.',
+                default => 'Notifikasi pembayaran tidak dapat dikirim.',
+            };
+
+            return back()->with('error', $feedback);
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal mengirim pengingat: ' . $this->safeExceptionMessage($e)]);
+            return back()->withErrors(['error' => 'Gagal mengirim pengingat: '.$this->safeExceptionMessage($e)]);
         }
     }
 }
-

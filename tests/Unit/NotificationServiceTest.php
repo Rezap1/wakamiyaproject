@@ -2,10 +2,10 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\FinancialIntegrityException;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
 use App\Models\User;
 use App\Services\Core\NotificationService;
-use App\Exceptions\FinancialIntegrityException;
 use Mockery;
 use Tests\TestCase;
 
@@ -13,7 +13,7 @@ class NotificationServiceTest extends TestCase
 {
     public function test_user_cannot_mark_another_users_notification_as_read(): void
     {
-        $user = new User();
+        $user = new User;
         $user->User_ID = 'USR001';
         $user->Email = 'user@example.test';
         $user->Role = 'STUDENT';
@@ -39,7 +39,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_user_can_mark_own_notification_as_read(): void
     {
-        $user = new User();
+        $user = new User;
         $user->User_ID = 'USR001';
         $user->Email = 'user@example.test';
         $user->Role = 'STUDENT';
@@ -57,8 +57,9 @@ class NotificationServiceTest extends TestCase
         ]);
         $repo->shouldReceive('update')->once()->with('N1', Mockery::on(function ($payload) {
             return ($payload['Is_Read'] ?? '') === 'TRUE'
-                && ($payload['Status'] ?? '') === 'Read'
-                && !empty($payload['Read_At']);
+                && ! empty($payload['Updated_At'])
+                && ! array_key_exists('Status', $payload)
+                && ! array_key_exists('Read_At', $payload);
         }))->andReturn(true);
         $repo->shouldReceive('clearCache')->once();
 
@@ -69,7 +70,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_guest_target_notification_is_not_visible_to_authenticated_user(): void
     {
-        $user = new User();
+        $user = new User;
         $user->User_ID = 'USR001';
         $user->Email = 'user@example.test';
         $user->Role = 'STUDENT';
@@ -89,7 +90,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_all_target_notification_remains_visible_to_authenticated_user(): void
     {
-        $user = new User();
+        $user = new User;
         $user->User_ID = 'USR001';
         $user->Email = 'user@example.test';
         $user->Role = 'STUDENT';
