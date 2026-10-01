@@ -11,6 +11,7 @@
         'unpaid' => 'bg-rose-100 text-rose-700 ring-rose-200',
         'partial' => 'bg-amber-100 text-amber-800 ring-amber-200',
         'paid' => 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+        'non_collectible' => 'bg-slate-100 text-slate-800 ring-slate-300',
     ];
 @endphp
 
@@ -30,6 +31,7 @@
                 <div><dt class="text-xs font-bold uppercase text-slate-400">Kelas</dt><dd class="mt-1 font-semibold text-slate-800">{{ $student['class_name'] }}</dd></div>
                 <div><dt class="text-xs font-bold uppercase text-slate-400">Program</dt><dd class="mt-1 font-semibold text-slate-800">{{ $student['program_name'] }}</dd></div>
                 <div><dt class="text-xs font-bold uppercase text-slate-400">Batch</dt><dd class="mt-1 font-semibold text-slate-800">{{ $student['batch_name'] }}</dd></div>
+                <div><dt class="text-xs font-bold uppercase text-slate-400">Lifecycle</dt><dd class="mt-1 font-semibold text-slate-800">{{ $student['lifecycle_label'] }}</dd></div>
             </dl>
         </div>
 
@@ -41,9 +43,12 @@
             <dl class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-xl bg-slate-50 p-4"><dt class="text-xs font-bold text-slate-500">Biaya Pendidikan</dt><dd class="mt-2 break-words text-lg font-black text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
                 <div class="rounded-xl bg-emerald-50 p-4"><dt class="text-xs font-bold text-emerald-700">Total Sudah Dibayar</dt><dd class="mt-2 break-words text-lg font-black text-emerald-800">{{ $rupiah($student['paid']) }}</dd></div>
-                <div class="rounded-xl bg-rose-50 p-4"><dt class="text-xs font-bold text-rose-700">Sisa</dt><dd class="mt-2 break-words text-lg font-black text-rose-800">{{ $rupiah($student['remaining']) }}</dd></div>
+                <div class="rounded-xl bg-rose-50 p-4"><dt class="text-xs font-bold text-rose-700">Tagihan Aktif</dt><dd class="mt-2 break-words text-lg font-black text-rose-800">{{ $rupiah($student['remaining']) }}</dd></div>
                 <div class="rounded-xl bg-sky-50 p-4"><dt class="text-xs font-bold text-sky-700">Jumlah Pembayaran Terverifikasi</dt><dd class="mt-2 break-words text-lg font-black text-sky-800">{{ $student['verified_payment_count'] }} kali</dd></div>
             </dl>
+            @if(!$student['collectible'])
+                <p class="mt-4 rounded-xl border border-slate-300 bg-slate-100 p-3 text-sm font-semibold text-slate-800">Saldo historis belum dibayar {{ $rupiah($student['historical_remaining']) }} dipertahankan untuk audit, tetapi tidak lagi ditagih.</p>
+            @endif
             @if($student['excess'] > 0)
                 <p class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
             @endif

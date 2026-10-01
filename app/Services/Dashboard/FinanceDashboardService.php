@@ -74,11 +74,17 @@ class FinanceDashboardService
         $cashBalance = $totalRevenue - $totalExpense;
 
         // === Outstanding Invoice ===
-        $relevantInvoices = $invoices->whereNotIn('Status', ['Draft', 'Cancelled']);
+        // Exited Student education invoices remain historical evidence but no
+        // longer represent active collection work. Non-student finance is
+        // deliberately unaffected.
+        $activeCollectionInvoices = $invoices->filter(
+            fn ($invoice) => ($invoice['Is_Education_Collectible'] ?? true) !== false
+        );
+        $relevantInvoices = $activeCollectionInvoices->whereNotIn('Status', ['Draft', 'Cancelled']);
         $totalInvoice = $relevantInvoices->count();
         // OVERDUE is a dynamic invoice status, but remains an outstanding
         // receivable and must be included in both the amount and overdue KPI.
-        $unpaidInvoices = $invoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
+        $unpaidInvoices = $activeCollectionInvoices->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
         $outstandingCents = $unpaidInvoices->sum(fn ($invoice) => Money::cents(
             $invoice['Remaining_Amount'] ?? $invoice['Amount'] ?? 0,
             'Sisa invoice'

@@ -18,6 +18,7 @@ use App\Support\ActorIdentity;
 use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Finance\StudentEducationCollectibility;
 use App\Support\Reporting\HumanReadableResolver;
 use Carbon\Carbon;
 use Exception;
@@ -41,18 +42,22 @@ class InvoiceService
 
     protected $paymentRepository;
 
+    protected StudentEducationCollectibility $studentCollectibility;
+
     public function __construct(
         InvoiceRepositoryInterface $repository,
         EnterpriseEventService $enterpriseEvent,
         StudentRepositoryInterface $studentRepository,
         CompanyRepositoryInterface $companyRepository,
-        PaymentRepositoryInterface $paymentRepository
+        PaymentRepositoryInterface $paymentRepository,
+        ?StudentEducationCollectibility $studentCollectibility = null
     ) {
         $this->repository = $repository;
         $this->enterpriseEvent = $enterpriseEvent;
         $this->studentRepository = $studentRepository;
         $this->companyRepository = $companyRepository;
         $this->paymentRepository = $paymentRepository;
+        $this->studentCollectibility = $studentCollectibility ?? new StudentEducationCollectibility;
     }
 
     public function getVerifiedPaymentTotal(string $invoiceId, ?iterable $paymentSnapshot = null): float
@@ -139,9 +144,14 @@ class InvoiceService
             throw new FinancialIntegrityException('Student_ID wajib tersedia untuk menghitung kapasitas pembayaran pendidikan.');
         }
 
+        $student = $studentSnapshot ?? $this->studentRepository->findById($studentId);
+        if (! $student) {
+            throw new FinancialIntegrityException("Student {$studentId} tidak ditemukan untuk menghitung kapasitas pembayaran pendidikan.");
+        }
+        $collectible = $this->studentCollectibility->isCollectible((array) $student);
         $tuitionFee = $tuitionFeeSnapshot ?? $this->getStudentTuitionFee(
             $studentId,
-            $studentSnapshot,
+            (array) $student,
             $programSnapshot,
             $batchSnapshot,
         );
@@ -183,8 +193,10 @@ class InvoiceService
             ));
         $pendingReserved = (float) ($pendingReservedCents / (10 ** Money::SCALE));
         $pendingSelfServiceReserved = (float) ($pendingSelfServiceCents / (10 ** Money::SCALE));
-        $remainingVerified = max(0.0, round($tuitionFee - $verifiedPaid, Money::SCALE));
-        $remainingPayable = max(0.0, round($remainingVerified - $pendingReserved, Money::SCALE));
+        $historicalRemaining = max(0.0, round($tuitionFee - $verifiedPaid, Money::SCALE));
+        $historicalPayable = max(0.0, round($historicalRemaining - $pendingReserved, Money::SCALE));
+        $remainingVerified = $collectible ? $historicalRemaining : 0.0;
+        $remainingPayable = $collectible ? $historicalPayable : 0.0;
 
         return [
             'tuition_fee' => $tuitionFee,
@@ -193,6 +205,11 @@ class InvoiceService
             'pending_self_service_reserved' => $pendingSelfServiceReserved,
             'remaining_verified' => $remainingVerified,
             'remaining_payable' => $remainingPayable,
+            'historical_remaining' => $historicalRemaining,
+            'historical_payable' => $historicalPayable,
+            'collectible' => $collectible,
+            'lifecycle_label' => $this->studentCollectibility->lifecycleLabel((array) $student),
+            'collection_status' => $collectible ? 'ACTIVE' : 'NON_COLLECTIBLE',
             'status' => $tuitionFee <= 0
                 ? 'fee_unset'
                 : ($verifiedPaid <= 0 ? 'unpaid' : ($verifiedPaid >= $tuitionFee ? 'paid' : 'partial')),
@@ -337,6 +354,46 @@ class InvoiceService
     }
 
     /**
+     * Convert the historical invoice balance into the active collectible
+     * balance without mutating the stored invoice or its payment history.
+     */
+    public function applyEducationCollectibility(array $invoice, ?array $student): array
+    {
+        $historicalRemaining = Money::value(
+            $invoice['Remaining_Amount'] ?? $invoice['Amount'] ?? 0,
+            'Historical invoice remaining'
+        );
+        $invoice['Historical_Remaining_Amount'] = $historicalRemaining;
+        $invoice['Active_Receivable_Amount'] = $historicalRemaining;
+        $invoice['Is_Education_Collectible'] = true;
+        $invoice['Collection_Status'] = 'ACTIVE';
+        $invoice['Collection_Status_Label'] = 'Aktif Ditagih';
+
+        $studentEducationInvoice = strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT'))) === 'STUDENT'
+            && $this->isEducationInvoice($invoice);
+        if (! $studentEducationInvoice) {
+            return $invoice;
+        }
+
+        $collectible = $student !== null && $this->studentCollectibility->isCollectible($student);
+        $invoice['Is_Education_Collectible'] = $collectible;
+        $invoice['Student_Lifecycle_Label'] = $student !== null
+            ? $this->studentCollectibility->lifecycleLabel($student)
+            : 'Student Tidak Ditemukan';
+
+        if (! $collectible) {
+            $invoice['Active_Receivable_Amount'] = 0.0;
+            $invoice['Remaining_Amount'] = 0.0;
+            $invoice['Is_Overdue'] = false;
+            $invoice['Collection_Status'] = 'NON_COLLECTIBLE';
+            $invoice['Collection_Status_Label'] = 'Tidak Ditagih';
+            $invoice['Display_Status'] = 'Tidak Ditagih';
+        }
+
+        return $invoice;
+    }
+
+    /**
      * Canonical invoice calculation shared by create, display and reporting.
      * Returns normalised items and all component totals.
      */
@@ -474,7 +531,12 @@ class InvoiceService
         ?iterable $programSnapshot = null,
         ?iterable $batchSnapshot = null
     ): array {
-        $tuitionFee = $this->getStudentTuitionFee($studentId, $studentSnapshot, $programSnapshot, $batchSnapshot);
+        $student = $studentSnapshot ?? $this->studentRepository->findById($studentId);
+        if (! $student) {
+            throw new FinancialIntegrityException("Student {$studentId} tidak ditemukan untuk menghitung ringkasan pembayaran pendidikan.");
+        }
+        $collectible = $this->studentCollectibility->isCollectible((array) $student);
+        $tuitionFee = $this->getStudentTuitionFee($studentId, (array) $student, $programSnapshot, $batchSnapshot);
         $invoiceRows = $invoiceSnapshot !== null
             ? collect($invoiceSnapshot)
             : collect(method_exists($this->repository, 'getAllFresh')
@@ -512,7 +574,7 @@ class InvoiceService
             $studentId,
             $invoiceRows,
             $paymentRows,
-            $studentSnapshot,
+            (array) $student,
             $programSnapshot,
             $batchSnapshot,
             null,
@@ -524,6 +586,8 @@ class InvoiceService
         ));
         $billed = (float) ($billedCents / 100);
         $paid = (float) ($paidCents / 100);
+        $historicalRemainingToBill = max(0.0, $tuitionFee - $billed);
+        $historicalRemainingToPay = (float) ($remainingCents / 100);
 
         return [
             'tuition_fee' => $tuitionFee,
@@ -534,8 +598,12 @@ class InvoiceService
             'pending_reserved' => $paymentState['pending_reserved'],
             'pending_self_service_reserved' => $paymentState['pending_self_service_reserved'],
             'remaining_payable' => $paymentState['remaining_payable'],
-            'remaining_to_bill' => max(0.0, $tuitionFee - $billed),
-            'remaining_to_pay' => (float) ($remainingCents / 100),
+            'remaining_to_bill' => $collectible ? $historicalRemainingToBill : 0.0,
+            'remaining_to_pay' => $collectible ? $historicalRemainingToPay : 0.0,
+            'historical_remaining_to_bill' => $historicalRemainingToBill,
+            'historical_remaining_to_pay' => $historicalRemainingToPay,
+            'collectible' => $collectible,
+            'lifecycle_label' => $this->studentCollectibility->lifecycleLabel((array) $student),
             'progress' => $billed > 0 ? min(100, round(($paid / $billed) * 100)) : 0,
         ];
     }
@@ -562,6 +630,8 @@ class InvoiceService
             || ! $this->isEducationInvoice($data)) {
             return;
         }
+
+        $this->assertEducationStudentCollectible($data);
 
         $newAmount = Money::value($data['Amount'] ?? 0, 'Invoice Amount');
         $summary = $this->getStudentEducationBillingSummary($data['Student_ID'], $excludeInvoiceId);
@@ -604,7 +674,13 @@ class InvoiceService
         if ($type === 'STUDENT') {
             $id = trim((string) ($data['Student_ID'] ?? ''));
             $student = $id !== '' ? $this->studentRepository->findById($id) : null;
-            if (! $student || strtoupper(trim((string) ($student['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            if (! $student) {
+                throw new FinancialIntegrityException("Student {$id} tidak ditemukan atau tidak aktif.");
+            }
+            if ($this->isEducationInvoice($data) && ! $this->studentCollectibility->isCollectible((array) $student)) {
+                throw new FinancialIntegrityException("Student {$id} berstatus non-operational dan tidak dapat menerima tagihan Biaya Pendidikan baru.");
+            }
+            if (strtoupper(trim((string) ($student['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
                 throw new FinancialIntegrityException("Student {$id} tidak ditemukan atau tidak aktif.");
             }
         } elseif ($type === 'COMPANY') {
@@ -616,16 +692,41 @@ class InvoiceService
         }
     }
 
+    private function assertEducationStudentCollectible(array $invoice): void
+    {
+        if (strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT'))) !== 'STUDENT'
+            || ! $this->isEducationInvoice($invoice)) {
+            return;
+        }
+
+        $studentId = trim((string) ($invoice['Student_ID'] ?? ''));
+        $student = $studentId !== '' ? $this->studentRepository->findById($studentId) : null;
+        if (! $student || ! $this->studentCollectibility->isCollectible((array) $student)) {
+            throw new FinancialIntegrityException(
+                "Student {$studentId} berstatus non-operational; penagihan Biaya Pendidikan baru tidak diizinkan."
+            );
+        }
+    }
+
     public function getAll()
     {
         $invoices = collect($this->repository->getAll())->where('Is_Active', '!=', 'FALSE')->values();
         $user = auth()->user();
+        $studentRole = $user && strtoupper(trim((string) ($user->Role ?? ''))) === 'STUDENT';
+        $needsStudentSnapshot = $studentRole || $invoices->contains(
+            fn ($invoice) => strtoupper(trim((string) ($invoice['Invoice_Type'] ?? 'STUDENT'))) === 'STUDENT'
+                && $this->isEducationInvoice((array) $invoice)
+        );
+        $students = $needsStudentSnapshot
+            ? collect($this->studentRepository->fetchAll())
+            : collect();
+        $studentsById = $students->keyBy(fn ($student) => trim((string) ($student['Student_ID'] ?? '')));
 
         // Role values originate from legacy sheets and are not guaranteed to be
         // upper-case. Keep the student data boundary fail-closed regardless of
         // presentation casing.
-        if ($user && strtoupper(trim((string) ($user->Role ?? ''))) === 'STUDENT') {
-            $student = collect($this->studentRepository->fetchAll())->firstWhere('User_ID', $user->User_ID);
+        if ($studentRole) {
+            $student = $students->firstWhere('User_ID', $user->User_ID);
             if ($student) {
                 $invoices = $invoices->where('Student_ID', $student['Student_ID'])->values();
             } else {
@@ -639,8 +740,12 @@ class InvoiceService
             $invoices->pluck('Invoice_ID')->filter()->values()->all()
         );
 
-        return $invoices->map(function ($inv) use ($verifiedPaymentTotalsByInvoice, $paymentSnapshot) {
-            return $this->formatInvoiceRecord($inv, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
+        return $invoices->map(function ($inv) use ($verifiedPaymentTotalsByInvoice, $paymentSnapshot, $studentsById) {
+            $formatted = $this->formatInvoiceRecord($inv, $verifiedPaymentTotalsByInvoice, $paymentSnapshot);
+            $studentId = trim((string) ($inv['Student_ID'] ?? ''));
+            $student = $studentId !== '' ? $studentsById->get($studentId) : null;
+
+            return $this->applyEducationCollectibility($formatted, $student ? (array) $student : null);
         });
     }
 
@@ -648,7 +753,11 @@ class InvoiceService
     {
         $invoice = $this->repository->getById($id);
         if ($invoice) {
-            return $this->formatInvoiceRecord($invoice);
+            $formatted = $this->formatInvoiceRecord($invoice);
+            $studentId = trim((string) ($invoice['Student_ID'] ?? ''));
+            $student = $studentId !== '' ? $this->studentRepository->findById($studentId) : null;
+
+            return $this->applyEducationCollectibility($formatted, $student ? (array) $student : null);
         }
 
         return null;
@@ -1052,6 +1161,8 @@ class InvoiceService
         if (strcasecmp($currentStatus, 'Draft') !== 0) {
             throw new Exception('Hanya invoice berstatus Draft yang dapat diterbitkan.');
         }
+
+        $this->assertEducationStudentCollectible((array) $invoice);
 
         $data = [
             'Status' => 'Waiting Payment',

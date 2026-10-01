@@ -19,6 +19,7 @@ use App\Support\ActorIdentity;
 use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Finance\StudentEducationCollectibility;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -45,6 +46,8 @@ class PaymentService
 
     protected $transactionService;
 
+    protected StudentEducationCollectibility $studentCollectibility;
+
     public function __construct(
         PaymentRepositoryInterface $paymentRepository,
         InvoiceRepositoryInterface $invoiceRepository,
@@ -53,7 +56,8 @@ class PaymentService
         AccountRepositoryInterface $accountRepository,
         TransactionRepositoryInterface $transactionRepository,
         EnterpriseEventService $enterpriseEvent,
-        ?TransactionService $transactionService = null
+        ?TransactionService $transactionService = null,
+        ?StudentEducationCollectibility $studentCollectibility = null
     ) {
         $this->paymentRepository = $paymentRepository;
         $this->invoiceRepository = $invoiceRepository;
@@ -63,6 +67,7 @@ class PaymentService
         $this->transactionRepository = $transactionRepository;
         $this->enterpriseEvent = $enterpriseEvent;
         $this->transactionService = $transactionService;
+        $this->studentCollectibility = $studentCollectibility ?? new StudentEducationCollectibility;
     }
 
     public function getAll()
@@ -295,6 +300,7 @@ class PaymentService
             if (! $student || empty($student['Student_ID'])) {
                 throw new AuthorizationException('Identitas siswa tidak dapat dipastikan.');
             }
+            $this->assertEducationStudentCollectible((array) $student, (string) $student['Student_ID']);
             foreach (['Payment_ID', 'Transaction_ID', 'Receipt_Number', 'Reference_Type', 'Reference_ID', 'Account_ID', 'Invoice_ID'] as $forbidden) {
                 if (array_key_exists($forbidden, $data) && trim((string) ($data[$forbidden] ?? '')) !== '') {
                     throw new FinancialIntegrityException("Field {$forbidden} tidak boleh ditentukan oleh siswa.");
@@ -351,6 +357,7 @@ class PaymentService
                     throw new AuthorizationException('Identitas siswa pembayaran mandiri berubah atau tidak dapat dipastikan.');
                 }
                 $data['Student_ID'] = trim((string) $student['Student_ID']);
+                $this->assertEducationStudentCollectible((array) $student, (string) $data['Student_ID']);
             }
             // For a student-linked payment, establish ownership before any
             // payment collection read.  This preserves the IDOR boundary even
@@ -399,6 +406,9 @@ class PaymentService
                     $allPayments,
                     (array) $student,
                 );
+                if (! $educationState['collectible']) {
+                    throw new FinancialIntegrityException('Siswa non-operational tidak dapat membuat Bayar Mandiri baru.');
+                }
                 if ((float) $educationState['tuition_fee'] <= 0) {
                     throw new FinancialIntegrityException('Biaya Pendidikan canonical belum ditetapkan. Pembayaran mandiri tidak dapat dibuat.');
                 }
@@ -419,6 +429,9 @@ class PaymentService
                     null,
                     $allPayments,
                 );
+                if (! $educationState['collectible']) {
+                    throw new FinancialIntegrityException('Siswa non-operational tidak dapat membuat pembayaran Biaya Pendidikan baru.');
+                }
                 if (Money::cents($amountPaid) > Money::cents($educationState['remaining_payable'])) {
                     throw new FinancialIntegrityException(
                         'Nominal pembayaran melebihi sisa Biaya Pendidikan sebesar Rp'
@@ -696,11 +709,14 @@ class PaymentService
                             $paymentId,
                         );
                         $paymentAmount ??= Money::value($payment['Amount_Paid'] ?? 0, 'Nominal pembayaran', false);
+                        $verificationCapacity = ($educationState['collectible'] ?? true)
+                            ? $educationState['remaining_verified']
+                            : ($educationState['historical_remaining'] ?? $educationState['remaining_verified']);
                         if ((float) $educationState['tuition_fee'] <= 0
-                            || Money::cents($paymentAmount) > Money::cents($educationState['remaining_verified'])) {
+                            || Money::cents($paymentAmount) > Money::cents($verificationCapacity)) {
                             throw new FinancialIntegrityException(
                                 "Verifikasi Payment #{$paymentId} ditolak karena melebihi sisa Biaya Pendidikan Rp"
-                                .number_format((float) $educationState['remaining_verified'], 0, ',', '.').'.'
+                                .number_format((float) $verificationCapacity, 0, ',', '.').'.'
                             );
                         }
                     }
@@ -816,6 +832,9 @@ class PaymentService
 
     public function replaceSelfServiceProof(string $paymentId, string $proofPath): array
     {
+        // A Need Revision row predates any later lifecycle change. Proof repair
+        // remains available so Finance can establish whether funds were truly
+        // received; it does not create a new liability or payment row.
         $actorId = ActorIdentity::required();
         $user = auth()->user();
         if (! $user || $this->authenticatedRoleName($user) !== 'STUDENT') {
@@ -1393,6 +1412,14 @@ class PaymentService
             return false;
         }
 
+        $students = method_exists($this->studentRepository, 'fetchAllFresh')
+            ? $this->studentRepository->fetchAllFresh()
+            : $this->studentRepository->fetchAll();
+        $student = collect($students)->firstWhere('Student_ID', $studentId);
+        if (! $student || ! $this->studentCollectibility->isCollectible((array) $student)) {
+            return false;
+        }
+
         $invoices = method_exists($this->invoiceRepository, 'getAllFresh')
             ? $this->invoiceRepository->getAllFresh()
             : $this->invoiceRepository->getAll();
@@ -1407,6 +1434,15 @@ class PaymentService
                 && ! in_array($status, ['draft', 'cancelled', 'paid'], true)
                 && $invoiceService->isEducationInvoice((array) $invoice);
         });
+    }
+
+    private function assertEducationStudentCollectible(array $student, string $studentId): void
+    {
+        if (! $this->studentCollectibility->isCollectible($student)) {
+            throw new FinancialIntegrityException(
+                "Student {$studentId} berstatus non-operational dan tidak dapat melakukan pembayaran Biaya Pendidikan baru."
+            );
+        }
     }
 
     private function reconcileInvoiceStatus(string $invoiceId): void

@@ -13,6 +13,7 @@ use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Support\Finance\AcceptedPaymentCalculator;
 use App\Support\Finance\Money;
 use App\Support\Finance\PaymentStatus;
+use App\Support\Finance\StudentEducationCollectibility;
 use App\Support\Presentation\IndonesianPresentation;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -24,7 +25,10 @@ class EducationPaymentMonitoringService
         'unpaid' => 'Belum Bayar',
         'partial' => 'Cicilan',
         'paid' => 'Lunas',
+        'non_collectible' => 'Tidak Ditagih',
     ];
+
+    private StudentEducationCollectibility $studentCollectibility;
 
     public function __construct(
         private StudentRepositoryInterface $studentRepository,
@@ -34,7 +38,10 @@ class EducationPaymentMonitoringService
         private InvoiceRepositoryInterface $invoiceRepository,
         private PaymentRepositoryInterface $paymentRepository,
         private InvoiceService $invoiceService,
-    ) {}
+        ?StudentEducationCollectibility $studentCollectibility = null,
+    ) {
+        $this->studentCollectibility = $studentCollectibility ?? new StudentEducationCollectibility;
+    }
 
     /** Build a filtered, read-only projection from one snapshot of each SSOT. */
     public function build(array $filters = []): array
@@ -147,7 +154,7 @@ class EducationPaymentMonitoringService
         $batchesById = $snapshots['batches']->keyBy('Batch_ID');
 
         $operationalStudents = $snapshots['students']
-            ->filter(fn ($student) => $includeHistorical || SheetValue::isOperationalStudent((array) $student))
+            ->filter(fn ($student) => $includeHistorical || $this->studentCollectibility->isCollectible((array) $student))
             ->filter(function ($student) use ($activeClasses, $includeHistorical) {
                 $studentId = trim((string) ($student['Student_ID'] ?? ''));
                 $classId = trim((string) ($student['Class_ID'] ?? ''));
@@ -191,8 +198,10 @@ class EducationPaymentMonitoringService
                 $snapshots['batches'],
             );
             $paid = (float) ($educationSnapshot['totals_by_student'][$studentId] ?? 0.0);
-            $remaining = max(0.0, round($educationFee - $paid, Money::SCALE));
-            $status = $this->summaryStatus($educationFee, $paid);
+            $historicalRemaining = max(0.0, round($educationFee - $paid, Money::SCALE));
+            $collectible = $this->studentCollectibility->isCollectible((array) $student);
+            $remaining = $collectible ? $historicalRemaining : 0.0;
+            $status = $collectible ? $this->summaryStatus($educationFee, $paid) : 'non_collectible';
 
             return [
                 'student_id' => $studentId,
@@ -205,7 +214,10 @@ class EducationPaymentMonitoringService
                 'education_fee' => (float) $educationFee,
                 'paid' => $paid,
                 'remaining' => $remaining,
+                'historical_remaining' => $historicalRemaining,
                 'excess' => max(0.0, round($paid - $educationFee, Money::SCALE)),
+                'collectible' => $collectible,
+                'lifecycle_label' => $this->studentCollectibility->lifecycleLabel((array) $student),
                 'status' => $status,
                 'status_label' => self::STATUS_LABELS[$status],
             ];

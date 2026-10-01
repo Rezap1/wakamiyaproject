@@ -46,7 +46,9 @@
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-w-0">
         <div class="p-4 sm:p-6 border-b border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="font-bold text-slate-800">Daftar Tagihan Saya</h3>
-            @if(($educationPaymentState['status'] ?? null) === 'paid')
+            @if(($educationPaymentState['collectible'] ?? false) !== true)
+                <span class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-800 sm:w-auto">Penagihan Tidak Aktif</span>
+            @elseif(($educationPaymentState['status'] ?? null) === 'paid')
                 <span class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800 sm:w-auto">Biaya Pendidikan Lunas</span>
             @elseif((float)($educationPaymentState['remaining_payable'] ?? 0) <= 0)
                 <span class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800 sm:w-auto">Pembayaran sedang diproses</span>
@@ -57,7 +59,7 @@
         <div class="space-y-3 p-4 md:hidden" data-mobile-billing-cards>
             @forelse($myInvoices as $item)
                 @php
-                    $status = $item['Status'] ?? 'Draft';
+                    $status = $item['Display_Status'] ?? ($item['Status'] ?? 'Draft');
                     $remaining = (float)($item['Remaining_Amount'] ?? ($item['Amount'] ?? 0));
                     $paid = (float)($item['Paid_Amount'] ?? 0);
                     $amount = (float)($item['Amount'] ?? 0);
@@ -131,7 +133,7 @@
                 <tbody class="divide-y divide-slate-50">
                     @forelse($myInvoices as $item)
                         @php
-                            $status = $item['Status'] ?? 'Draft';
+                            $status = $item['Display_Status'] ?? ($item['Status'] ?? 'Draft');
                             $remaining = (float)($item['Remaining_Amount'] ?? ($item['Amount'] ?? 0));
                         @endphp
                         <tr class="hover:bg-slate-50 transition-colors {{ $status === 'OVERDUE' ? 'bg-rose-50/50' : '' }}">

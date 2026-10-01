@@ -210,6 +210,12 @@ class FinanceReportService
             }
 
             $inv = $invoiceService->formatInvoiceRecord($inv, null, $payments);
+            $studentId = trim((string) ($inv['Student_ID'] ?? ''));
+            $student = $studentId !== '' ? $students->get($studentId) : null;
+            $inv = $invoiceService->applyEducationCollectibility(
+                $inv,
+                $student ? (array) $student : null,
+            );
             $sisa = (float) $inv['Remaining_Amount'];
             $dynamicStatus = $inv['Status'];
 

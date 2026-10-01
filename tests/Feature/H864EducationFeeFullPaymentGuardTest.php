@@ -335,6 +335,161 @@ class H864EducationFeeFullPaymentGuardTest extends TestCase
         }
     }
 
+    public function test_exited_student_preserves_verified_history_but_has_zero_active_receivable(): void
+    {
+        $this->invoices->rows[] = [
+            'Invoice_ID' => 'INV-EXIT-HISTORY', 'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU-1',
+            'Category' => 'Biaya Pendidikan', 'Amount' => 7_500_000,
+            'Status' => 'Partial Paid', 'Is_Active' => 'TRUE',
+        ];
+        $this->payments->rows[] = $this->payment(
+            'PAY-EXIT-HISTORY',
+            3_000_000,
+            'Verified',
+            'INV-EXIT-HISTORY',
+            'STUDENT',
+        );
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+
+        $state = $this->state();
+        $invoice = $this->invoiceService->getAll()->firstWhere('Invoice_ID', 'INV-EXIT-HISTORY');
+
+        $this->assertFalse($state['collectible']);
+        $this->assertSame(3_000_000.0, $state['verified_paid']);
+        $this->assertSame(4_500_000.0, $state['historical_remaining']);
+        $this->assertSame(0.0, $state['remaining_verified']);
+        $this->assertSame(0.0, $state['remaining_payable']);
+        $this->assertSame(4_500_000.0, $invoice['Historical_Remaining_Amount']);
+        $this->assertSame(0.0, $invoice['Remaining_Amount']);
+        $this->assertSame('Tidak Ditagih', $invoice['Display_Status']);
+        $this->assertCount(1, $this->invoices->rows);
+        $this->assertCount(1, $this->payments->rows);
+    }
+
+    public function test_exited_student_without_payment_has_zero_active_receivable_and_no_fake_income(): void
+    {
+        $this->invoices->rows[] = [
+            'Invoice_ID' => 'INV-EXIT-UNPAID', 'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU-1',
+            'Category' => 'Biaya Pendidikan', 'Amount' => 7_500_000,
+            'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ];
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+
+        $state = $this->state();
+        $invoice = $this->invoiceService->getAll()->firstWhere('Invoice_ID', 'INV-EXIT-UNPAID');
+
+        $this->assertSame(7_500_000.0, $state['historical_remaining']);
+        $this->assertSame(0.0, $state['remaining_verified']);
+        $this->assertSame(7_500_000.0, $invoice['Historical_Remaining_Amount']);
+        $this->assertSame(0.0, $invoice['Active_Receivable_Amount']);
+        $this->assertSame([], $this->payments->rows);
+        $this->assertSame([], $this->transactions->rows);
+    }
+
+    public function test_fully_paid_then_exit_preserves_payment_without_refund_or_reversal(): void
+    {
+        $this->payments->rows[] = $this->payment('PAY-FULL-THEN-EXIT', 7_500_000, 'Verified');
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+
+        $state = $this->state();
+
+        $this->assertFalse($state['collectible']);
+        $this->assertSame(7_500_000.0, $state['verified_paid']);
+        $this->assertSame(0.0, $state['historical_remaining']);
+        $this->assertSame(0.0, $state['remaining_verified']);
+        $this->assertCount(1, $this->payments->rows);
+        $this->assertSame('Verified', $this->payments->rows[0]['Status']);
+        $this->assertSame([], $this->transactions->rows);
+    }
+
+    public function test_exited_student_cannot_create_new_self_service_or_invoice_education_payment(): void
+    {
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+
+        try {
+            $this->submitSelfService(100_000, '10000000-0000-4000-8000-000000000021');
+            $this->fail('Exited Student must not create Bayar Mandiri.');
+        } catch (FinancialIntegrityException $exception) {
+            $this->assertStringContainsString('non-operational', $exception->getMessage());
+        }
+
+        $this->invoices->rows[] = [
+            'Invoice_ID' => 'INV-EXIT-BLOCK', 'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU-1',
+            'Category' => 'Biaya Pendidikan', 'Amount' => 7_500_000,
+            'Status' => 'Waiting Payment', 'Is_Active' => 'TRUE',
+        ];
+        $this->asFinance();
+        try {
+            $this->paymentService->submitPayment([
+                'Invoice_ID' => 'INV-EXIT-BLOCK',
+                'Student_ID' => 'STU-1',
+                'Amount_Paid' => 100_000,
+                'Idempotency_Key' => '10000000-0000-4000-8000-000000000022',
+            ]);
+            $this->fail('Exited Student invoice payment must be rejected.');
+        } catch (FinancialIntegrityException $exception) {
+            $this->assertStringContainsString('non-operational', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->payments->rows);
+        $this->assertSame([], $this->transactions->rows);
+    }
+
+    public function test_pending_payment_can_be_verified_after_exit_and_preserves_realized_income(): void
+    {
+        $pending = $this->submitSelfService(3_000_000, '10000000-0000-4000-8000-000000000023');
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+        $this->asFinance();
+
+        $transactionService = Mockery::mock(\App\Services\Finance\TransactionService::class);
+        $transactionService->shouldReceive('create')->once()->andReturnUsing(function (array $data) {
+            $this->transactions->create($data);
+
+            return $data;
+        });
+        $service = new PaymentService(
+            $this->payments,
+            $this->invoices,
+            $this->students,
+            new H864CompanyRepository,
+            new H864AccountRepository,
+            $this->transactions,
+            Mockery::mock(EnterpriseEventService::class)->shouldIgnoreMissing(),
+            $transactionService,
+        );
+
+        $service->verifyPayment($pending['Payment_ID'], 'ignored', 'Verified');
+
+        $this->assertSame('Verified', $this->payments->getById($pending['Payment_ID'])['Status']);
+        $this->assertCount(1, $this->payments->rows);
+        $this->assertCount(1, $this->transactions->rows);
+        $this->assertSame('Income', $this->transactions->rows[0]['Type']);
+        $this->assertSame(3_000_000.0, $this->transactions->rows[0]['Amount']);
+        $this->assertSame($pending['Payment_ID'], $this->transactions->rows[0]['Reference_ID']);
+    }
+
+    public function test_need_revision_proof_correction_remains_available_after_exit_without_new_payment(): void
+    {
+        $this->payments->rows[] = $this->payment('PAY-EXIT-REVISION', 500_000, 'Need Revision');
+        $this->students->rows[0]['Enrollment_Status'] = 'Drop Out';
+        $this->students->rows[0]['Is_Active'] = 'FALSE';
+
+        $result = $this->paymentService->replaceSelfServiceProof(
+            'PAY-EXIT-REVISION',
+            'payments/replacement.pdf',
+        );
+
+        $this->assertSame('Waiting Verification', $result['payment']['Status']);
+        $this->assertSame('payments/replacement.pdf', $result['payment']['Proof_File']);
+        $this->assertCount(1, $this->payments->rows);
+        $this->assertSame([], $this->transactions->rows);
+    }
+
     private function state(): array
     {
         return $this->invoiceService->getStudentEducationPaymentState('STU-1');
@@ -516,7 +671,7 @@ class H864InvoiceRepository implements InvoiceRepositoryInterface
 
 class H864StudentRepository implements StudentRepositoryInterface
 {
-    private array $rows = [[
+    public array $rows = [[
         'Student_ID' => 'STU-1', 'User_ID' => 'USR-STU-1', 'Full_Name' => 'Siswa H8.64',
         'Program_ID' => '', 'Batch_ID' => '', 'Is_Active' => 'TRUE',
     ]];

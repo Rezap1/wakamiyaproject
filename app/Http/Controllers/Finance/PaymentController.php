@@ -148,7 +148,8 @@ class PaymentController extends Controller
             $invoice = app(InvoiceService::class)->getById($invoiceId);
         }
         $invoices = app(InvoiceService::class)->getAll()
-            ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE']);
+            ->whereIn('Status', ['Waiting Payment', 'Partial Paid', 'OVERDUE'])
+            ->filter(fn ($candidate) => (float) ($candidate['Remaining_Amount'] ?? 0) > 0);
 
         return view('finance.payments.create', compact('invoices', 'invoice'));
     }

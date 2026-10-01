@@ -92,7 +92,8 @@ class InvoiceController extends Controller
         $statusFilter = $request->input('status');
         if ($statusFilter) {
             $invoices = $invoices->filter(function ($item) use ($statusFilter) {
-                return strcasecmp($item['Status'] ?? '', $statusFilter) === 0;
+                return strcasecmp($item['Status'] ?? '', $statusFilter) === 0
+                    || strcasecmp($item['Display_Status'] ?? '', $statusFilter) === 0;
             });
         }
 
@@ -120,7 +121,7 @@ class InvoiceController extends Controller
         });
 
         $invoiceGroups = $invoices
-            ->groupBy(fn ($invoice) => trim((string) ($invoice['Status'] ?? 'Draft')) ?: 'Draft')
+            ->groupBy(fn ($invoice) => trim((string) ($invoice['Display_Status'] ?? $invoice['Status'] ?? 'Draft')) ?: 'Draft')
             ->map(function ($group, $status) {
                 return [
                     'id' => $status,
@@ -132,7 +133,7 @@ class InvoiceController extends Controller
                 ];
             })
             ->sortBy(function ($group) {
-                $order = array_search($group['id'], ['OVERDUE', 'Waiting Payment', 'Partial Paid', 'Draft', 'Paid', 'Cancelled'], true);
+                $order = array_search($group['id'], ['OVERDUE', 'Waiting Payment', 'Partial Paid', 'Draft', 'Paid', 'Tidak Ditagih', 'Cancelled'], true);
 
                 return $order === false ? 99 : $order;
             })

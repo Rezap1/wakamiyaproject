@@ -251,6 +251,47 @@ class H862MasterEducationPaymentMonitoringTest extends TestCase
         $this->assertSame(['STU-1'], $this->rows($status)->pluck('student_id')->all());
     }
 
+    public function test_exited_student_is_excluded_from_active_collection_but_retained_in_history(): void
+    {
+        $active = $this->student('STU-ACTIVE', 'Siswa Aktif', 'CLS-A');
+        $exited = array_merge($this->student('STU-EXIT', 'Siswa Drop Out', 'CLS-A'), [
+            'Enrollment_Status' => 'Drop Out',
+            'Is_Active' => 'FALSE',
+        ]);
+        $service = $this->service(
+            students: [$active, $exited],
+            classes: [$this->classRow('CLS-A', 'Kelas A')],
+            payments: [
+                $this->payment('PAY-ACTIVE', '', 'STU-ACTIVE', 2_000_000, 'Verified'),
+                $this->payment('PAY-EXIT', '', 'STU-EXIT', 3_000_000, 'Verified'),
+            ],
+            defaultFee: 7_500_000,
+        );
+
+        $activeCollection = $service->build();
+        $this->assertSame(['STU-ACTIVE'], $this->rows($activeCollection)->pluck('student_id')->all());
+        $this->assertSame(5_500_000.0, $activeCollection['kpi']['remaining']);
+        $this->assertSame(2_000_000.0, $activeCollection['kpi']['paid']);
+
+        $detail = $this->service(
+            students: [$active, $exited],
+            classes: [$this->classRow('CLS-A', 'Kelas A')],
+            payments: [
+                $this->payment('PAY-ACTIVE', '', 'STU-ACTIVE', 2_000_000, 'Verified'),
+                $this->payment('PAY-EXIT', '', 'STU-EXIT', 3_000_000, 'Verified'),
+            ],
+            defaultFee: 7_500_000,
+        )->detail('STU-EXIT');
+        $this->assertNotNull($detail);
+        $this->assertFalse($detail['student']['collectible']);
+        $this->assertSame('Drop Out', $detail['student']['lifecycle_label']);
+        $this->assertSame(3_000_000.0, $detail['student']['paid']);
+        $this->assertSame(4_500_000.0, $detail['student']['historical_remaining']);
+        $this->assertSame(0.0, $detail['student']['remaining']);
+        $this->assertSame('Tidak Ditagih', $detail['student']['status_label']);
+        $this->assertSame(['PAY-EXIT'], $detail['history']->pluck('payment_id')->all());
+    }
+
     public function test_master_and_administrator_can_open_index_and_detail_with_responsive_ui(): void
     {
         foreach (['MASTER', 'ADMINISTRATOR'] as $role) {

@@ -4,8 +4,10 @@
 @php
     $rupiah = fn ($amount) => 'Rp' . number_format((float) $amount, 0, ',', '.');
     $educationPaymentState = $educationPaymentState ?? [];
+    $isCollectible = ($educationPaymentState['collectible'] ?? false) === true;
     $isPaid = ($educationPaymentState['status'] ?? null) === 'paid';
-    $canSubmit = !$isPaid
+    $canSubmit = $isCollectible
+        && !$isPaid
         && (float)($educationPaymentState['tuition_fee'] ?? 0) > 0
         && (float)($educationPaymentState['remaining_payable'] ?? 0) > 0;
 @endphp
@@ -25,7 +27,9 @@
         </dl>
     </section>
 
-    @if($isPaid)
+    @if(!$isCollectible)
+        <section class="rounded-2xl border border-slate-300 bg-slate-100 p-5 text-slate-900"><h2 class="font-black">Penagihan pendidikan tidak aktif.</h2><p class="mt-1 text-sm">Status siswa: {{ $educationPaymentState['lifecycle_label'] ?? 'Nonaktif' }}. Pembayaran baru tidak dapat dibuat; riwayat pembayaran tetap tersimpan.</p></section>
+    @elseif($isPaid)
         <section class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><h2 class="font-black">Biaya Pendidikan Anda sudah lunas.</h2><p class="mt-1 text-sm">Bayar Mandiri tidak tersedia karena sisa Biaya Pendidikan Anda Rp0.</p></section>
     @elseif((float)($educationPaymentState['tuition_fee'] ?? 0) <= 0)
         <section class="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-900"><h2 class="font-black">Biaya Pendidikan belum ditetapkan.</h2><p class="mt-1 text-sm">Hubungi Administrator sebelum mengirim pembayaran.</p></section>

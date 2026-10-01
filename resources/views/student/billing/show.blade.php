@@ -3,10 +3,11 @@
 @section('content')
 
 @php
-    $status = $invoice['Status'] ?? 'Draft';
+    $status = $invoice['Display_Status'] ?? ($invoice['Status'] ?? 'Draft');
     $amount = (float)($invoice['Amount'] ?? 0);
     $remaining = (float)($invoice['Remaining_Amount'] ?? $amount);
     $paid = (float)($invoice['Paid_Amount'] ?? 0);
+    $isCollectible = ($invoice['Is_Education_Collectible'] ?? true) !== false;
 @endphp
 
 <div class="min-w-0 max-w-full space-y-6">
@@ -52,13 +53,13 @@
                         <p class="text-lg font-bold text-emerald-600 mt-0.5">Rp {{ number_format($paid, 0, ',', '.') }}</p>
                     </div>
                     <div>
-                        <p class="text-[11px] font-bold text-slate-400 uppercase">Sisa Tagihan</p>
+                        <p class="text-[11px] font-bold text-slate-400 uppercase">{{ $isCollectible ? 'Sisa Tagihan Aktif' : 'Tagihan Aktif' }}</p>
                         <p class="text-lg font-bold text-rose-600 mt-0.5">Rp {{ number_format($remaining, 0, ',', '.') }}</p>
                     </div>
                 </div>
             </div>
             
-            @if(in_array($status, ['Waiting Payment', 'Partial Paid', 'OVERDUE']))
+            @if($isCollectible && in_array($status, ['Waiting Payment', 'Partial Paid', 'OVERDUE']))
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <h3 class="font-bold text-slate-800 text-base border-b pb-2">Unggah Bukti Pembayaran</h3>
                     <form action="{{ route('student.billing.pay', $invoice['Invoice_ID']) }}" method="POST" enctype="multipart/form-data">

@@ -394,6 +394,61 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertSame(100.0, (float) $dashboard['kpi']['revenue_this_month']);
     }
 
+    public function test_dashboard_counts_only_active_student_receivable_and_keeps_historical_income(): void
+    {
+        $invoiceService = Mockery::mock(InvoiceService::class);
+        $invoiceService->shouldReceive('getAll')->once()->andReturn(collect([
+            [
+                'Invoice_ID' => 'INV-A', 'Status' => 'Partial Paid',
+                'Remaining_Amount' => 5_500_000, 'Is_Education_Collectible' => true,
+                'Due_Date' => now()->addDay()->toDateString(),
+            ],
+            [
+                'Invoice_ID' => 'INV-B', 'Status' => 'Partial Paid',
+                'Remaining_Amount' => 0, 'Historical_Remaining_Amount' => 4_500_000,
+                'Is_Education_Collectible' => false,
+                'Due_Date' => now()->subDay()->toDateString(),
+            ],
+            [
+                'Invoice_ID' => 'INV-C', 'Status' => 'Waiting Payment',
+                'Remaining_Amount' => 0, 'Historical_Remaining_Amount' => 7_500_000,
+                'Is_Education_Collectible' => false,
+                'Due_Date' => now()->subDay()->toDateString(),
+            ],
+        ]));
+        $paymentService = Mockery::mock(PaymentService::class);
+        $paymentService->shouldReceive('getAll')->once()->andReturn(collect());
+        $transactionService = Mockery::mock(TransactionService::class);
+        $transactionService->shouldReceive('getAll')->once()->andReturn(collect([
+            [
+                'Transaction_ID' => 'TRX-A', 'Transaction_Date' => now()->toDateString(),
+                'Type' => 'Income', 'Amount' => 2_000_000, 'Category' => 'Biaya Pendidikan',
+            ],
+            [
+                'Transaction_ID' => 'TRX-B', 'Transaction_Date' => now()->toDateString(),
+                'Type' => 'Income', 'Amount' => 3_000_000, 'Category' => 'Biaya Pendidikan',
+            ],
+        ]));
+        $activities = Mockery::mock(ActivityLogService::class);
+        $activities->shouldReceive('getAllLogs')->once()->andReturn(collect());
+        $notifications = Mockery::mock(NotificationService::class);
+        $notifications->shouldReceive('UnreadCount')->zeroOrMoreTimes()->andReturn(0);
+
+        $dashboard = (new FinanceDashboardService(
+            $invoiceService,
+            $paymentService,
+            $transactionService,
+            Mockery::mock(FinanceReportService::class),
+            $activities,
+            $notifications,
+        ))->getDashboardData();
+
+        $this->assertSame(5_500_000.0, (float) $dashboard['kpi']['outstanding_amount']);
+        $this->assertSame(5_000_000.0, (float) $dashboard['kpi']['revenue_this_month']);
+        $this->assertSame(5_000_000.0, (float) $dashboard['kpi']['cash_balance']);
+        $this->assertSame(0, $dashboard['kpi']['overdue_invoices']);
+    }
+
     public function test_ambiguous_update_is_verified_without_blind_duplicate_retry(): void
     {
         $resource = new IntegrityUpdateResource;

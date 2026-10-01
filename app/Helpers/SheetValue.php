@@ -25,6 +25,7 @@ class SheetValue
             'ARCHIVED',
             'CANCELLED',
             'DROPPED',
+            'DROP OUT',
         ];
 
         if (array_key_exists('Is_Active', $row)) {

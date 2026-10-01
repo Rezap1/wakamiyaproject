@@ -103,7 +103,7 @@
 
         @foreach($invoices as $item)
             @php
-                $status = $item['Status'] ?? 'Draft';
+                $status = $item['Display_Status'] ?? ($item['Status'] ?? 'Draft');
                 $amount = (float)($item['Grand_Total'] ?? $item['Amount'] ?? 0);
                 $remaining = (float)($item['Remaining_Amount'] ?? $amount);
             @endphp

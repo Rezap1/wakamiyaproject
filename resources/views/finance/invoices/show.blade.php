@@ -14,6 +14,8 @@
     };
     $amount = (float)($invoice['Grand_Total'] ?? $invoice['Amount'] ?? 0);
     $remaining = (float)($invoice['Remaining_Amount'] ?? $amount);
+    $historicalRemaining = (float)($invoice['Historical_Remaining_Amount'] ?? $remaining);
+    $isCollectible = ($invoice['Is_Education_Collectible'] ?? true) !== false;
     $paid = (float)($invoice['Paid_Amount'] ?? 0);
     $lineItems = $invoice['Parsed_Line_Items'] ?? [];
     $studentName = $invoice['student_name'] ?? \App\Helpers\UserResolverHelper::getName($invoice['Student_ID'] ?? '');
@@ -90,8 +92,11 @@
                     </div>
 
                     <div class="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
-                        <p class="text-xs font-bold text-rose-800 uppercase tracking-wider">Sisa Piutang (Belum Lunas)</p>
+                        <p class="text-xs font-bold text-rose-800 uppercase tracking-wider">{{ $isCollectible ? 'Sisa Piutang Aktif' : 'Tagihan Aktif — Tidak Ditagih' }}</p>
                         <p class="text-2xl font-black text-rose-700 mt-1">Rp {{ number_format($remaining, 0, ',', '.') }}</p>
+                        @if(!$isCollectible)
+                            <p class="mt-2 text-xs font-semibold text-slate-600">Saldo historis: Rp {{ number_format($historicalRemaining, 0, ',', '.') }}. Riwayat invoice dan pembayaran tetap dipertahankan.</p>
+                        @endif
                     </div>
                 </div>
 
