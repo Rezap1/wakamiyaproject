@@ -2,6 +2,7 @@
 
 namespace App\Services\Quiz;
 
+use App\Helpers\SheetValue;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
@@ -46,6 +47,16 @@ class QuizScopeService
 
         return collect($this->classes->fetchAll())
             ->filter(fn ($row) => $classIds->contains(trim((string) ($row['Class_ID'] ?? ''))) && $this->active((array) $row))
+            ->sortBy(fn ($row) => mb_strtolower(trim((string) ($row['Class_Name'] ?? $row['Class_ID'] ?? ''))))
+            ->values();
+    }
+
+    public function studentsForClass(string $classId)
+    {
+        return collect($this->students->fetchAll())
+            ->filter(fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($classId))
+            ->filter(fn ($row) => SheetValue::isOperationalStudent((array) $row))
+            ->sortBy(fn ($row) => mb_strtolower(trim((string) ($row['Full_Name'] ?? $row['Student_Name'] ?? $row['Student_ID'] ?? ''))))
             ->values();
     }
 

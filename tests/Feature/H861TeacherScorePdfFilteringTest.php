@@ -97,7 +97,7 @@ class H861TeacherScorePdfFilteringTest extends TestCase
         $scoreService->shouldReceive('isScoreInTeacherScope')->zeroOrMoreTimes()->andReturnUsing(
             function (array $score, string $teacherId, array $resolvedScope): bool {
                 $studentId = trim((string) ($score['Student_ID'] ?? ''));
-                if (!in_array($studentId, $resolvedScope['student_ids'] ?? [], true)) {
+                if (! in_array($studentId, $resolvedScope['student_ids'] ?? [], true)) {
                     return false;
                 }
 
@@ -175,6 +175,41 @@ class H861TeacherScorePdfFilteringTest extends TestCase
             ->assertSee('Kelas Sakura')
             ->assertDontSee('Siswa Asing')
             ->assertDontSee('Kelas Asing');
+    }
+
+    public function test_penilaian_switches_authorized_classes_without_cross_class_score_rows(): void
+    {
+        $this->get(route('teacher.workspace.scores', ['class' => 'CLS-A']))
+            ->assertOk()
+            ->assertSee('Kelas Sakura')
+            ->assertSee('SCR-A-NOW')
+            ->assertDontSee('SCR-B-NOW');
+
+        $this->get(route('teacher.workspace.scores', ['class' => 'CLS-B']))
+            ->assertOk()
+            ->assertSee('Kelas Fuji')
+            ->assertSee('SCR-B-NOW')
+            ->assertDontSee('SCR-A-NOW');
+    }
+
+    public function test_penilaian_rejects_forged_class_and_preserves_category_semantics(): void
+    {
+        $this->get(route('teacher.workspace.scores', ['class' => 'CLS-C']))->assertForbidden();
+        $this->get(route('teacher.workspace.scores', ['class' => 'FORGED']))->assertForbidden();
+
+        $this->get(route('teacher.workspace.scores', ['class' => 'CLS-A', 'category' => 'ujian_bab']))
+            ->assertOk()
+            ->assertSee('Ujian Bab')
+            ->assertSee('90')
+            ->assertSee('Lihat Detail')
+            ->assertSee('Edit')
+            ->assertDontSee('SCR-A-OLD');
+
+        $this->get(route('teacher.workspace.scores', ['class' => 'CLS-A', 'category' => 'assessment']))
+            ->assertOk()
+            ->assertSee('Kemampuan Bahasa')
+            ->assertSee('SCR-A-OLD')
+            ->assertDontSee('SCR-A-NOW');
     }
 
     public function test_student_pdf_is_filtered_across_dates_and_has_safe_human_filename(): void

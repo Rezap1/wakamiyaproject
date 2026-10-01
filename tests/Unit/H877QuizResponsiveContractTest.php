@@ -13,6 +13,9 @@ class H877QuizResponsiveContractTest extends TestCase
         $player = file_get_contents(resource_path('views/quiz/student/player.blade.php'));
         $index = file_get_contents(resource_path('views/quiz/student/index.blade.php'));
         $leaderboard = file_get_contents(resource_path('views/quiz/leaderboard.blade.php'));
+        $teacherForm = file_get_contents(resource_path('views/quiz/teacher/form.blade.php'));
+        $teacherResults = file_get_contents(resource_path('views/quiz/teacher/results.blade.php'));
+        $teacherScores = file_get_contents(resource_path('views/academic/teacher/scores.blade.php'));
         $layout = file_get_contents(resource_path('views/layouts/app.blade.php'));
 
         $this->assertContains($width, [375, 390, 430]);
@@ -22,7 +25,15 @@ class H877QuizResponsiveContractTest extends TestCase
         $this->assertStringContainsString('min-h-14', $player);
         $this->assertStringContainsString('sticky', $player);
         $this->assertStringContainsString('pb-28', $index);
-        $this->assertStringContainsString('max-w-3xl', $leaderboard);
+        $this->assertStringContainsString('max-w-4xl', $leaderboard);
+        $this->assertStringContainsString('min-w-0', $leaderboard);
+        $this->assertStringContainsString('grid-cols-[2.75rem_minmax(0,1fr)]', $teacherForm);
+        $this->assertStringContainsString('data-option-input', $teacherForm);
+        $this->assertStringContainsString('min-h-12', $teacherResults);
+        $this->assertStringContainsString('pb-28', $teacherResults);
+        $this->assertStringContainsString('grid-cols-2', $teacherScores);
+        $this->assertStringContainsString('min-h-11', $teacherScores);
+        $this->assertStringContainsString('pb-28', $teacherScores);
     }
 
     public static function mobileWidths(): array

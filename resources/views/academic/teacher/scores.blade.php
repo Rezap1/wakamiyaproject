@@ -5,12 +5,52 @@
 @php
     $assessmentConfigMap = collect($assessmentConfigs ?? []);
 @endphp
-<div class="space-y-6">
+<div class="min-w-0 space-y-6 pb-28 md:pb-10">
     <x-page-header
         title="Penilaian"
         description="Manajemen nilai siswa pada kelas yang Anda ajar."
         :breadcrumbs="['Dashboard' => route('dashboard.teacher'), 'Penilaian' => '#']"
     />
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <form method="GET" action="{{ route('teacher.workspace.scores') }}" class="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,.8fr)_auto] lg:items-end">
+            <label class="min-w-0 text-sm font-black text-slate-700">Kelas
+                <select name="class" class="mt-2 min-h-12 w-full min-w-0 rounded-xl border-slate-300">
+                    @foreach($reportClasses ?? [] as $class)
+                        <option value="{{ $class['Class_ID'] }}" @selected(($selectedClass ?? '') === $class['Class_ID'])>{{ $class['Class_Name'] }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="min-w-0 text-sm font-black text-slate-700">Mata Pelajaran
+                <select name="subject" class="mt-2 min-h-12 w-full min-w-0 rounded-xl border-slate-300">
+                    <option value="">Semua Mata Pelajaran</option>
+                    @foreach($subjectOptions ?? [] as $subject)
+                        <option value="{{ $subject['Subject_ID'] }}" @selected(($selectedSubject ?? '') === $subject['Subject_ID'])>{{ $subject['Subject_Name'] }}</option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="min-w-0 text-sm font-black text-slate-700">Kategori
+                <select name="category" class="mt-2 min-h-12 w-full min-w-0 rounded-xl border-slate-300">
+                    <option value="all" @selected(($selectedCategory ?? 'all') === 'all')>Semua</option>
+                    <option value="assessment" @selected(($selectedCategory ?? '') === 'assessment')>Assessment</option>
+                    <option value="ujian_bab" @selected(($selectedCategory ?? '') === 'ujian_bab')>Ujian Bab</option>
+                </select>
+            </label>
+            <button class="min-h-12 rounded-xl bg-slate-900 px-5 font-black text-white">Tampilkan</button>
+        </form>
+
+        <div class="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-black text-slate-900">{{ $selectedClassName ?? 'Kelas' }}</h2>
+                <p class="text-sm text-slate-500">{{ $selectedSubjectName ?? 'Semua Mata Pelajaran' }}</p>
+            </div>
+            <dl class="grid grid-cols-3 gap-2 text-center">
+                <div class="rounded-xl bg-slate-50 px-3 py-2"><dt class="text-[11px] font-bold text-slate-500">Siswa</dt><dd class="font-black">{{ $summary['students'] ?? 0 }}</dd></div>
+                <div class="rounded-xl bg-emerald-50 px-3 py-2"><dt class="text-[11px] font-bold text-emerald-700">Dinilai</dt><dd class="font-black text-emerald-900">{{ $summary['assessed'] ?? 0 }}</dd></div>
+                <div class="rounded-xl bg-amber-50 px-3 py-2"><dt class="text-[11px] font-bold text-amber-700">Belum</dt><dd class="font-black text-amber-900">{{ $summary['unassessed'] ?? 0 }}</dd></div>
+            </dl>
+        </div>
+    </section>
 
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="p-5 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -92,8 +132,18 @@
             </div>
         </div>
 
-        <div class="md:hidden divide-y divide-slate-100">
-            @forelse($scores as $score)
+        <div class="grid gap-4 bg-slate-50 p-4 md:hidden">
+            @forelse(($scoreGroups ?? collect(['Penilaian|' => $scores])) as $groupKey => $groupScores)
+                @php
+                    [$groupLabel, $groupDate] = array_pad(explode('|', (string) $groupKey, 2), 2, '');
+                @endphp
+                <div class="col-span-full flex min-w-0 items-end justify-between gap-3 pt-2 first:pt-0">
+                    <h3 class="break-words text-sm font-black text-slate-800">{{ $groupLabel }}</h3>
+                    @if($groupDate !== '')
+                        <span class="shrink-0 text-xs font-semibold text-slate-500">{{ \App\Helpers\DateHelper::format($groupDate, 'd M Y') }}</span>
+                    @endif
+                </div>
+                @foreach($groupScores as $score)
                 @php
                     $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
                     $config = $assessmentConfigMap->get($category);
@@ -117,34 +167,35 @@
                         }
                     }
                 @endphp
-                <div class="p-4 bg-white space-y-3" x-data="{ open: false }">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-sm font-extrabold text-slate-900">{{ $score['Student_Name'] ?? 'Unknown Student' }}</p>
-                            <p class="text-xs font-semibold text-blue-600 mt-0.5">{{ $categoryLabel }} &bull; {{ date('d M Y', strtotime($score['Created_At'] ?? now())) }}</p>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            @if($isNumeric)
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-lg font-bold bg-slate-100 text-slate-700">{{ $scoreValue }}</span>
-                                @if($notes !== '')
-                                    <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">Catatan</button>
-                                @endif
-                            @elseif($hasAspectDetails)
-                                <button @click="open = !open" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">Lihat Detail</button>
-                            @endif
-                            <a href="{{ route('teacher.workspace.scores.edit', $score['Score_ID']) }}" class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-200">Edit</a>
-                        </div>
+                <article class="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" x-data="{ open: false }">
+                    <div class="min-w-0">
+                        <p class="break-words text-base font-black text-slate-900">{{ $score['Student_Name'] ?? 'Data siswa tidak ditemukan' }}</p>
+                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $score['Subject_Name'] ?? 'Mata pelajaran' }} &bull; {{ \App\Helpers\DateHelper::format($score['Display_Date'] ?? $score['Created_At'] ?? now(), 'd M Y') }}</p>
                     </div>
-                    @if($isNumeric && $notes !== '')
+                    <div class="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-3">
+                        <span class="text-sm font-black text-slate-700">{{ $categoryLabel }}</span>
+                        @if($isNumeric)
+                            <span class="shrink-0 text-2xl font-black text-sky-800">{{ $scoreValue }}</span>
+                        @else
+                            <span class="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Dinilai</span>
+                        @endif
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" @click="open = !open" class="min-h-11 rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-black text-sky-800"><span x-show="!open">Lihat Detail</span><span x-show="open">Tutup Detail</span></button>
+                        <a href="{{ route('teacher.workspace.scores.edit', $score['Score_ID']) }}" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-sm font-black text-slate-800">Edit</a>
+                    </div>
+                    @if($isNumeric)
                         <div x-show="open" class="pt-3 border-t border-slate-100 text-sm space-y-2">
                             <div class="flex justify-between">
                                 <span class="text-slate-500">Nilai</span>
                                 <span class="font-semibold text-slate-800">{{ $scoreValue }}</span>
                             </div>
-                            <div class="mt-2 pt-2 border-t border-slate-50">
-                                <p class="text-xs text-slate-400">Catatan:</p>
-                                <p class="text-slate-700 italic">{{ $notes }}</p>
-                            </div>
+                            @if($notes !== '')
+                                <div class="mt-2 pt-2 border-t border-slate-50">
+                                    <p class="text-xs text-slate-400">Catatan:</p>
+                                    <p class="break-words text-slate-700 italic">{{ $notes }}</p>
+                                </div>
+                            @endif
                         </div>
                     @elseif($hasAspectDetails)
                         <div x-show="open" class="pt-3 border-t border-slate-100 text-sm space-y-2">
@@ -167,10 +218,11 @@
                             @endif
                         </div>
                     @endif
-                </div>
+                </article>
+                @endforeach
             @empty
                 <div class="p-8">
-                    <x-empty-state icon="chart-bar" title="Belum ada data penilaian." message="" />
+                    <x-empty-state icon="chart-bar" title="Belum ada penilaian untuk kelas ini." message="Ubah filter kelas atau mata pelajaran untuk melihat data lain." />
                 </div>
             @endforelse
         </div>

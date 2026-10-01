@@ -15,8 +15,11 @@ class TeacherQuizController extends Controller
     public function index(Request $request)
     {
         $teacher = $this->scope->teacherForUser($request->user());
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
 
-        return view('quiz.teacher.index', ['groups' => $this->quizzes->teacherIndex($teacher['Teacher_ID'])]);
+        return view('quiz.teacher.index', [
+            'groups' => $this->quizzes->teacherIndex($teacher['Teacher_ID'], $classes->pluck('Class_ID')->all()),
+        ]);
     }
 
     public function create(Request $request)
@@ -39,25 +42,28 @@ class TeacherQuizController extends Controller
     public function show(Request $request, string $quiz)
     {
         $teacher = $this->scope->teacherForUser($request->user());
+        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
 
-        return view('quiz.teacher.show', ['quiz' => $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'])]);
+        return view('quiz.teacher.show', ['quiz' => $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'], $classIds)]);
     }
 
     public function edit(Request $request, string $quiz)
     {
         $teacher = $this->scope->teacherForUser($request->user());
-        $row = $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID']);
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $row = $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'], $classes->pluck('Class_ID')->all());
         abort_unless($row['Editable'], 409, 'Kuis tidak lagi dapat diedit.');
 
-        return view('quiz.teacher.form', ['quiz' => $row, 'questions' => $row['questions'], 'classes' => $this->scope->classesForTeacher($teacher['Teacher_ID'])]);
+        return view('quiz.teacher.form', ['quiz' => $row, 'questions' => $row['questions'], 'classes' => $classes]);
     }
 
     public function update(Request $request, string $quiz)
     {
         $teacher = $this->scope->teacherForUser($request->user());
+        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
         $data = $this->validated($request);
-        $this->scope->assertTeacherClass($teacher['Teacher_ID'], $data['Class_ID']);
-        $this->quizzes->update($quiz, $data, $teacher, (string) $request->user()->User_ID);
+        abort_unless(in_array($data['Class_ID'], $classIds, true), 403, 'Kelas berada di luar jadwal mengajar Anda.');
+        $this->quizzes->update($quiz, $data, $teacher, (string) $request->user()->User_ID, $classIds);
 
         return redirect()->route('teacher.quizzes.show', $quiz)->with('success', 'Kuis berhasil diperbarui.');
     }
@@ -65,7 +71,8 @@ class TeacherQuizController extends Controller
     public function destroy(Request $request, string $quiz)
     {
         $teacher = $this->scope->teacherForUser($request->user());
-        $this->quizzes->deleteDraft($quiz, $teacher['Teacher_ID']);
+        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
+        $this->quizzes->deleteDraft($quiz, $teacher['Teacher_ID'], $classIds);
 
         return redirect()->route('teacher.quizzes.index')->with('success', 'Draft kuis dihapus.');
     }
@@ -73,24 +80,55 @@ class TeacherQuizController extends Controller
     public function results(Request $request)
     {
         $teacher = $this->scope->teacherForUser($request->user());
-        $classId = trim((string) $request->query('class'));
-        if ($classId !== '') {
-            $this->scope->assertTeacherClass($teacher['Teacher_ID'], $classId);
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $requestedClass = trim((string) $request->query('class'));
+        if ($requestedClass !== '' && ! $classes->contains(
+            fn ($class) => trim((string) ($class['Class_ID'] ?? '')) === $requestedClass
+        )) {
+            abort(403, 'Kelas berada di luar jadwal mengajar Anda.');
         }
+        $selectedClass = $requestedClass !== ''
+            ? $requestedClass
+            : trim((string) ($classes->first()['Class_ID'] ?? ''));
+        $roster = $selectedClass !== '' ? $this->scope->studentsForClass($selectedClass) : collect();
+        $overview = $selectedClass !== ''
+            ? $this->quizzes->teacherResults($teacher['Teacher_ID'], $selectedClass, $roster)
+            : ['groups' => collect(), 'result_count' => 0, 'student_count' => 0];
 
         return view('quiz.teacher.results', [
-            'results' => $this->quizzes->teacherResults($teacher['Teacher_ID'], $classId ?: null),
-            'classes' => $this->scope->classesForTeacher($teacher['Teacher_ID']),
-            'selectedClass' => $classId,
+            'overview' => $overview,
+            'classes' => $classes,
+            'selectedClass' => $selectedClass,
+            'selectedClassRow' => $classes->firstWhere('Class_ID', $selectedClass),
         ]);
     }
 
     public function leaderboard(Request $request, string $class)
     {
         $teacher = $this->scope->teacherForUser($request->user());
-        $this->scope->assertTeacherClass($teacher['Teacher_ID'], $class);
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $selectedClass = $classes->first(
+            fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($class)
+        );
+        abort_unless($selectedClass, 403, 'Kelas berada di luar jadwal mengajar Anda.');
 
-        return view('quiz.leaderboard', $this->quizzes->leaderboard($class) + ['currentStudentId' => null, 'backRoute' => route('teacher.quizzes.index')]);
+        return view('quiz.leaderboard', $this->quizzes->leaderboard($class) + [
+            'currentStudentId' => null,
+            'backRoute' => route('teacher.quizzes.results', ['class' => $class]),
+            'classId' => $class,
+            'className' => $selectedClass['Class_Name'] ?? $class,
+            'classOptions' => $classes,
+        ]);
+    }
+
+    public function result(Request $request, string $result)
+    {
+        $teacher = $this->scope->teacherForUser($request->user());
+        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
+
+        return view('quiz.teacher.result', [
+            'result' => $this->quizzes->teacherResult($result, $teacher['Teacher_ID'], $classIds),
+        ]);
     }
 
     private function validated(Request $request): array
@@ -103,13 +141,26 @@ class TeacherQuizController extends Controller
             'Duration_Minutes' => ['required', 'integer', 'min:1', 'max:'.config('quiz.max_duration_minutes', 480)],
             'intent' => ['required', 'in:draft,publish'],
             'questions' => ['array'],
-            'questions.*.Question_Text' => ['required', 'string', 'max:2000'],
-            'questions.*.Option_A' => ['required', 'string', 'max:1000'],
-            'questions.*.Option_B' => ['required', 'string', 'max:1000'],
-            'questions.*.Option_C' => ['required', 'string', 'max:1000'],
-            'questions.*.Option_D' => ['required', 'string', 'max:1000'],
-            'questions.*.Correct_Option' => ['required', 'in:A,B,C,D'],
-            'questions.*.Point' => ['required', 'numeric', 'gt:0', 'max:10000'],
+            'questions.*.Question_Text' => ['required_if:intent,publish', 'nullable', 'string', 'max:2000'],
+            'questions.*.Option_A' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
+            'questions.*.Option_B' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
+            'questions.*.Option_C' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
+            'questions.*.Option_D' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
+            'questions.*.Correct_Option' => ['required_if:intent,publish', 'nullable', 'in:A,B,C,D'],
+            'questions.*.Point' => ['required_if:intent,publish', 'nullable', 'numeric', 'gt:0', 'max:10000'],
+        ], [
+            'questions.required_if' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
+            'questions.min' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
+            'questions.*.Question_Text.required_if' => 'Pertanyaan wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Option_A.required_if' => 'Pilihan A wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Option_B.required_if' => 'Pilihan B wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Option_C.required_if' => 'Pilihan C wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Option_D.required_if' => 'Pilihan D wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Correct_Option.required_if' => 'Jawaban benar wajib dipilih sebelum kuis diterbitkan.',
+            'questions.*.Correct_Option.in' => 'Jawaban benar harus A, B, C, atau D.',
+            'questions.*.Point.required_if' => 'Poin wajib diisi sebelum kuis diterbitkan.',
+            'questions.*.Point.numeric' => 'Poin harus berupa angka.',
+            'questions.*.Point.gt' => 'Poin harus lebih besar dari 0.',
         ]);
         $validator->after(function ($validator) use ($request) {
             if ($request->input('intent') === 'publish' && count((array) $request->input('questions', [])) === 0) {
@@ -117,7 +168,15 @@ class TeacherQuizController extends Controller
             }
         });
         $data = $validator->validate();
-        $data['questions'] = array_values($data['questions'] ?? []);
+        $data['questions'] = collect(array_values($data['questions'] ?? []))->map(fn ($question) => [
+            'Question_Text' => trim((string) ($question['Question_Text'] ?? '')),
+            'Option_A' => trim((string) ($question['Option_A'] ?? '')),
+            'Option_B' => trim((string) ($question['Option_B'] ?? '')),
+            'Option_C' => trim((string) ($question['Option_C'] ?? '')),
+            'Option_D' => trim((string) ($question['Option_D'] ?? '')),
+            'Correct_Option' => strtoupper(trim((string) ($question['Correct_Option'] ?? 'A'))),
+            'Point' => (float) ($question['Point'] ?? 10),
+        ])->all();
 
         return $data;
     }

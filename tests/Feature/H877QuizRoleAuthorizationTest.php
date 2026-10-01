@@ -3,18 +3,30 @@
 namespace Tests\Feature;
 
 use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
+use App\Services\Quiz\QuizScopeService;
+use App\Services\Quiz\QuizService;
 use Illuminate\Auth\GenericUser;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class H877QuizRoleAuthorizationTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
+    }
+
     #[DataProvider('nonTeacherRoles')]
     public function test_non_teachers_cannot_access_teacher_quiz_crud(string $role): void
     {
         $this->actingAsRole($role);
         $this->get(route('teacher.quizzes.index'))->assertForbidden();
         $this->post(route('teacher.quizzes.store'), [])->assertForbidden();
+        $this->get(route('teacher.quizzes.results'))->assertForbidden();
+        $this->get(route('teacher.quizzes.result', 'FORGED'))->assertForbidden();
+        $this->get(route('teacher.quizzes.leaderboard', 'FORGED'))->assertForbidden();
         $this->put(route('teacher.quizzes.update', 'FORGED'), [])->assertForbidden();
         $this->delete(route('teacher.quizzes.destroy', 'FORGED'))->assertForbidden();
     }
@@ -37,6 +49,23 @@ class H877QuizRoleAuthorizationTest extends TestCase
     public static function nonStudentRoles(): array
     {
         return [['TEACHER'], ['HR'], ['FINANCE'], ['MARKETING'], ['ACADEMIC'], ['DIRECTOR']];
+    }
+
+    public function test_teacher_results_reject_forged_class_before_result_reads(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('classesForTeacher')->once()->with('T1')->andReturn(collect([
+            ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+            ['Class_ID' => 'C2', 'Class_Name' => 'Kelas B'],
+        ]));
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldNotReceive('teacherResults');
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->get(route('teacher.quizzes.results', ['class' => 'C3']))->assertForbidden();
     }
 
     private function actingAsRole(string $role): void

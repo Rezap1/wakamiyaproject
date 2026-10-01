@@ -746,6 +746,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/create', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'store'])->name('store');
         Route::get('/results', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'results'])->name('results');
+        Route::get('/results/{result}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'result'])->name('result');
         Route::get('/leaderboard/{class}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'leaderboard'])->name('leaderboard');
         Route::get('/{quiz}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'show'])->name('show');
         Route::get('/{quiz}/edit', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'edit'])->name('edit');

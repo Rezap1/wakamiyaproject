@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('header', $quiz ? 'Edit Kuis' : 'Buat Kuis')
 @section('content')
-@php $seed = old('questions', $questions->map(fn($q) => (array)$q)->values()->all()); @endphp
+@php $seed = old('questions', collect($questions)->map(fn($q) => (array)$q)->values()->all()); @endphp
 <form method="POST" action="{{ $quiz ? route('teacher.quizzes.update', $quiz['Quiz_ID']) : route('teacher.quizzes.store') }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed))">
     @csrf @if($quiz) @method('PUT') @endif
     @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ $errors->first() }}</div>@endif
@@ -14,15 +14,80 @@
             <label class="text-sm font-bold">Selesai<input type="datetime-local" name="End_At" value="{{ old('End_At', isset($quiz['End_At']) ? str_replace(' ', 'T', substr($quiz['End_At'], 0, 16)) : '') }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>
         </div>
     </section>
-    <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><div class="flex items-center justify-between"><div><h2 class="text-xl font-black">Soal A–D</h2><p class="text-sm text-slate-500">Skor maksimum: <strong x-text="maximum"></strong></p></div><button type="button" @click="add" class="rounded-xl bg-sky-50 px-4 py-2 font-bold text-sky-700">+ Soal</button></div>
-        <div class="mt-5 space-y-5"><template x-for="(q, i) in questions" :key="q.key"><fieldset class="rounded-2xl border border-slate-200 p-4"><legend class="px-2 font-black" x-text="`Soal ${i+1}`"></legend>
-            <textarea :name="`questions[${i}][Question_Text]`" x-model="q.Question_Text" required rows="3" class="w-full rounded-xl border-slate-300" placeholder="Tulis pertanyaan"></textarea>
-            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"><template x-for="letter in ['A','B','C','D']"><label class="text-sm font-bold" x-text="letter"><input :name="`questions[${i}][Option_${letter}]`" x-model="q[`Option_${letter}`]" required class="mt-1 min-h-11 w-full rounded-xl border-slate-300"></label></template></div>
-            <div class="mt-3 grid grid-cols-2 gap-3"><label class="text-sm font-bold">Jawaban benar<select :name="`questions[${i}][Correct_Option]`" x-model="q.Correct_Option" class="mt-1 min-h-11 w-full rounded-xl border-slate-300"><option>A</option><option>B</option><option>C</option><option>D</option></select></label><label class="text-sm font-bold">Poin<input type="number" min="0.01" step="0.01" :name="`questions[${i}][Point]`" x-model.number="q.Point" required class="mt-1 min-h-11 w-full rounded-xl border-slate-300"></label></div>
-            <button type="button" @click="remove(i)" class="mt-3 text-sm font-bold text-rose-600">Hapus soal</button>
-        </fieldset></template></div>
+    <section class="min-w-0 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 class="text-xl font-black">Soal A–D</h2><p class="text-sm text-slate-500">Skor maksimum: <strong x-text="maximum"></strong></p></div>
+            <button type="button" @click="add" class="min-h-11 rounded-xl bg-sky-50 px-4 py-2 font-bold text-sky-700">+ Soal</button>
+        </div>
+        <div class="mt-5 space-y-5">
+            <template x-for="(q, i) in questions" :key="q.key">
+                <fieldset class="min-w-0 rounded-2xl border border-slate-200 p-4 sm:p-5" data-question-card>
+                    <legend class="px-2 text-lg font-black" x-text="`Soal ${i + 1}`"></legend>
+                    <label class="block text-sm font-bold text-slate-700">
+                        Pertanyaan
+                        <textarea :name="`questions[${i}][Question_Text]`" x-model="q.Question_Text" rows="3" class="mt-2 w-full rounded-xl border-slate-300" placeholder="Tulis pertanyaan..."></textarea>
+                    </label>
+                    <div class="mt-5">
+                        <p class="text-sm font-black text-slate-800">Pilihan Jawaban</p>
+                        <div class="mt-3 space-y-3">
+                            <template x-for="letter in ['A', 'B', 'C', 'D']" :key="`${q.key}-${letter}`">
+                                <label class="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3">
+                                    <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-100 font-black text-sky-800" x-text="letter"></span>
+                                    <span class="sr-only" x-text="`Pilihan ${letter}`"></span>
+                                    <input :name="`questions[${i}][Option_${letter}]`" x-model="q[`Option_${letter}`]" :placeholder="`Masukkan pilihan ${letter}...`" class="min-h-11 min-w-0 w-full rounded-xl border-slate-300" data-option-input>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="text-sm font-bold text-slate-700">Jawaban Benar
+                            <select :name="`questions[${i}][Correct_Option]`" x-model="q.Correct_Option" class="mt-2 min-h-11 w-full rounded-xl border-slate-300"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+                        </label>
+                        <label class="text-sm font-bold text-slate-700">Poin
+                            <input type="number" min="0.01" step="0.01" :name="`questions[${i}][Point]`" x-model.number="q.Point" class="mt-2 min-h-11 w-full rounded-xl border-slate-300">
+                        </label>
+                    </div>
+                    <button type="button" @click="remove(i)" :disabled="questions.length === 1" class="mt-5 min-h-11 rounded-xl border border-rose-200 px-4 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">Hapus Soal</button>
+                </fieldset>
+            </template>
+        </div>
     </section>
     <div class="sticky bottom-20 z-20 flex gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur md:bottom-4"><button name="intent" value="draft" class="min-h-12 flex-1 rounded-xl border border-slate-300 font-black">Simpan Draft</button><button name="intent" value="publish" class="min-h-12 flex-1 rounded-xl bg-sky-600 font-black text-white">Terbitkan</button></div>
 </form>
-@push('scripts')<script>function quizBuilder(seed){return{questions:seed.map((q,i)=>({...q,key:q.Question_ID||`${Date.now()}-${i}`})),get maximum(){return this.questions.reduce((n,q)=>n+(Number(q.Point)||0),0)},add(){this.questions.push({key:`${Date.now()}-${Math.random()}`,Question_Text:'',Option_A:'',Option_B:'',Option_C:'',Option_D:'',Correct_Option:'A',Point:10})},remove(i){this.questions.splice(i,1)}}}</script>@endpush
+@push('scripts')
+<script>
+function quizBuilder(seed) {
+    const fresh = () => ({
+        key: `${Date.now()}-${Math.random()}`,
+        Question_Text: '',
+        Option_A: '',
+        Option_B: '',
+        Option_C: '',
+        Option_D: '',
+        Correct_Option: 'A',
+        Point: 10,
+    });
+    const normalize = (question, index) => ({
+        ...fresh(),
+        ...question,
+        key: question.Question_ID || `${Date.now()}-${index}-${Math.random()}`,
+    });
+
+    return {
+        questions: seed.length ? seed.map(normalize) : [fresh()],
+        get maximum() {
+            return this.questions.reduce((total, question) => total + (Number(question.Point) || 0), 0);
+        },
+        add() {
+            this.questions.push(fresh());
+        },
+        remove(index) {
+            if (this.questions.length > 1) {
+                this.questions.splice(index, 1);
+            }
+        },
+    };
+}
+</script>
+@endpush
 @endsection

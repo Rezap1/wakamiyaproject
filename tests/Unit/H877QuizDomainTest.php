@@ -212,6 +212,116 @@ class H877QuizDomainTest extends TestCase
         $this->assertCount(2, $this->quizzes->rows);
     }
 
+    public function test_three_questions_persist_all_options_and_edit_keeps_each_question_independent(): void
+    {
+        $quizId = $this->service->create([
+            'Class_ID' => 'C1',
+            'Title' => 'Kosakata',
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'draft',
+            'questions' => [
+                $this->question('Satu', 'A1', 'B1', 'C1', 'D1', 'A', 10),
+                $this->question('Dua', 'A2', 'B2', 'C2', 'D2', 'B', 15),
+                $this->question('Tiga', 'A3', 'B3', 'C3', 'D3', 'C', 20),
+            ],
+        ], ['Teacher_ID' => 'T1'], 'U1');
+
+        $persisted = collect($this->questions->rows)->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->values();
+        $this->assertSame(['A1', 'A2', 'A3'], $persisted->pluck('Option_A')->all());
+        $this->assertSame(['B1', 'B2', 'B3'], $persisted->pluck('Option_B')->all());
+        $this->assertSame(['C1', 'C2', 'C3'], $persisted->pluck('Option_C')->all());
+        $this->assertSame(['D1', 'D2', 'D3'], $persisted->pluck('Option_D')->all());
+        $this->assertSame(['A', 'B', 'C'], $persisted->pluck('Correct_Option')->all());
+        $this->assertSame([10.0, 15.0, 20.0], $persisted->pluck('Point')->all());
+
+        $this->service->update($quizId, [
+            'Class_ID' => 'C1',
+            'Title' => 'Kosakata Edit',
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'draft',
+            'questions' => [
+                $this->question('Satu', 'A1', 'B1', 'C1', 'D1', 'A', 10),
+                $this->question('Tiga', 'A3', 'B3', 'C3', 'D3', 'C', 20),
+            ],
+        ], ['Teacher_ID' => 'T1'], 'U1', ['C1']);
+
+        $edited = collect($this->questions->rows)->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->values();
+        $this->assertSame(['Satu', 'Tiga'], $edited->pluck('Question_Text')->all());
+        $this->assertSame(['A1', 'A3'], $edited->pluck('Option_A')->all());
+        $this->assertSame(['D1', 'D3'], $edited->pluck('Option_D')->all());
+    }
+
+    public function test_teacher_results_are_grouped_by_quiz_and_strictly_isolated_by_class(): void
+    {
+        $this->quizzes->rows = [
+            ['Quiz_ID' => 'QA', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Quiz A', 'Start_At' => '2026-10-02 08:00:00'],
+            ['Quiz_ID' => 'QB', 'Teacher_ID' => 'T1', 'Class_ID' => 'C2', 'Title' => 'Quiz B', 'Start_At' => '2026-10-02 08:00:00'],
+        ];
+        $this->results->rows = [
+            ['Quiz_ID' => 'QA'] + $this->resultRow('RA', 'SA', 'Andi', 'C1', 8, 10, 80, '2026-10-02 09:00:00'),
+            ['Quiz_ID' => 'QB'] + $this->resultRow('RB', 'SB', 'Budi', 'C2', 9, 10, 90, '2026-10-02 09:00:00'),
+        ];
+        $roster = [
+            ['Student_ID' => 'SA', 'Full_Name' => 'Andi'],
+            ['Student_ID' => 'SC', 'Full_Name' => 'Citra'],
+        ];
+
+        $overview = $this->service->teacherResults('T1', 'C1', $roster);
+
+        $this->assertCount(1, $overview['groups']);
+        $this->assertSame('QA', $overview['groups'][0]['quiz_id']);
+        $this->assertSame(['SA'], $overview['groups'][0]['results']->pluck('Student_ID')->all());
+        $this->assertSame(['SC'], $overview['groups'][0]['not_completed']->pluck('Student_ID')->all());
+        $this->assertSame(1, $overview['groups'][0]['completed_count']);
+        $this->assertSame(1, $overview['groups'][0]['not_completed_count']);
+        $this->assertSame(80.0, $overview['groups'][0]['average']);
+
+        $classB = $this->service->leaderboard('C2', CarbonImmutable::parse('2026-10-10', 'Asia/Jakarta'));
+        $this->assertSame(['SB'], $classB['entries']->pluck('Student_ID')->all());
+        $this->assertSame(90.0, $classB['entries'][0]['Points']);
+    }
+
+    public function test_teacher_result_detail_rejects_result_from_unauthorized_class(): void
+    {
+        $this->results->rows[] = $this->resultRow('R-FOREIGN', 'S2', 'Budi', 'C2', 10, 10, 100, '2026-10-02 09:00:00');
+
+        try {
+            $this->service->teacherResult('R-FOREIGN', 'T1', ['C1']);
+            $this->fail('Foreign class result must be forbidden.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+    }
+
+    public function test_teacher_quiz_detail_rejects_quiz_from_no_longer_authorized_class(): void
+    {
+        $this->seedQuiz('Q-FOREIGN', points: [10]);
+
+        try {
+            $this->service->teacherQuiz('Q-FOREIGN', 'T1', ['C2']);
+            $this->fail('Quiz outside active schedule classes must be forbidden.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+    }
+
+    private function question(string $text, string $a, string $b, string $c, string $d, string $correct, float $point): array
+    {
+        return [
+            'Question_Text' => $text,
+            'Option_A' => $a,
+            'Option_B' => $b,
+            'Option_C' => $c,
+            'Option_D' => $d,
+            'Correct_Option' => $correct,
+            'Point' => $point,
+        ];
+    }
+
     private function seedQuiz(string $id, string $start = '2026-10-09 08:00:00', string $end = '2026-10-09 15:00:00', int $duration = 30, array $points = [10]): void
     {
         $this->quizzes->rows[] = ['Quiz_ID' => $id, 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Kuis '.$id, 'Start_At' => $start, 'End_At' => $end, 'Duration_Minutes' => $duration, 'Status' => 'PUBLISHED'];

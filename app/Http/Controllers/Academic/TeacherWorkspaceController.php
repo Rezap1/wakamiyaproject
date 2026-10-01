@@ -776,18 +776,113 @@ class TeacherWorkspaceController extends Controller
     {
         $teacherId = $this->verifyTeacherAccess();
         $scope = $this->scoreService->getTeacherScoreScope($teacherId);
-        $scores = $this->teacherScopedScores($teacherId, $scope);
-
-        $studentsById = collect($this->studentService->getAllStudents())->keyBy('Student_ID');
-        $scores = $scores->map(function ($s) use ($studentsById) {
-            $stu = $studentsById[$s['Student_ID'] ?? ''] ?? null;
-            $s['Student_Name'] = $stu ? ($stu['Full_Name'] ?? $stu['Username'] ?? 'Data siswa tidak ditemukan') : 'Data siswa tidak ditemukan';
-            return $s;
-        });
-
         $assessmentConfigs = collect($this->assessmentConfigService->getActiveCategories())
             ->keyBy(fn ($config) => strtoupper(trim((string) ($config['Category_ID'] ?? ''))))
             ->toArray();
+        $classIds = array_values($scope['class_ids'] ?? []);
+        $reportClasses = collect($scope['classes'] ?? [])
+            ->filter(fn ($class) => in_array(trim((string) ($class['Class_ID'] ?? '')), $classIds, true))
+            ->map(fn ($class) => [
+                'Class_ID' => trim((string) ($class['Class_ID'] ?? '')),
+                'Class_Name' => trim((string) ($class['Class_Name'] ?? $class['Name'] ?? $class['Class_ID'] ?? 'Kelas')),
+            ]);
+        if ($reportClasses->isEmpty()) {
+            $reportClasses = collect($classIds)->map(fn ($id) => [
+                'Class_ID' => trim((string) $id),
+                'Class_Name' => trim((string) $id),
+            ]);
+        }
+        $reportClasses = $reportClasses->sortBy('Class_Name')->values();
+        $requestedClass = trim((string) request()->query('class'));
+        if ($requestedClass !== '' && ! in_array($requestedClass, $classIds, true)) {
+            abort(403, 'Anda tidak memiliki akses ke kelas ini.');
+        }
+        $selectedClass = $requestedClass !== ''
+            ? $requestedClass
+            : trim((string) ($reportClasses->first()['Class_ID'] ?? ''));
+
+        $students = collect($scope['students'] ?? []);
+        if ($students->isEmpty()) {
+            $students = collect($this->studentService->getAllStudents())
+                ->whereIn('Student_ID', $scope['student_ids'] ?? [])
+                ->values();
+        }
+        $studentsById = $students->keyBy('Student_ID');
+        $schedules = collect($scope['schedules'] ?? []);
+        $schedulesById = $schedules->keyBy('Schedule_ID');
+        $subjectsById = $schedules->isEmpty()
+            ? collect()
+            : collect($this->subjectService->getAll())->keyBy('Subject_ID');
+        $singleClassFallback = count($classIds) === 1 ? $classIds[0] : '';
+
+        $scores = $this->teacherScopedScores($teacherId, $scope)->map(function ($score) use ($studentsById, $schedulesById, $subjectsById, $assessmentConfigs, $singleClassFallback) {
+            $student = $studentsById[$score['Student_ID'] ?? ''] ?? null;
+            $schedule = $schedulesById[$score['Schedule_ID'] ?? ''] ?? null;
+            $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
+            $details = is_array($details) ? $details : [];
+            $classId = trim((string) ($score['Class_ID'] ?? $schedule['Class_ID'] ?? $student['Class_ID'] ?? $singleClassFallback));
+            $subjectId = trim((string) ($score['Subject_ID'] ?? $schedule['Subject_ID'] ?? $details['subject_id'] ?? ''));
+            $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
+            $config = $assessmentConfigs[$category] ?? null;
+            $date = trim((string) ($score['Assessment_Date'] ?? $score['Date'] ?? ''));
+            if ($date === '') {
+                $date = substr((string) ($score['Created_At'] ?? ''), 0, 10);
+            }
+
+            $score['Student_Name'] = $student
+                ? ($student['Full_Name'] ?? $student['Username'] ?? 'Data siswa tidak ditemukan')
+                : 'Data siswa tidak ditemukan';
+            $score['Class_ID'] = $classId;
+            $score['Subject_ID'] = $subjectId;
+            $score['Subject_Name'] = HumanReadableResolver::subjectName($subjectId, $subjectsById);
+            $score['Category_Label'] = $config['Category_Name'] ?? ($category ?: 'Penilaian');
+            $score['Display_Date'] = $date;
+
+            return $score;
+        });
+
+        if ($selectedClass !== '') {
+            $scores = $scores->where('Class_ID', $selectedClass);
+        }
+
+        $subjectOptions = $schedules
+            ->when($selectedClass !== '', fn ($rows) => $rows->where('Class_ID', $selectedClass))
+            ->pluck('Subject_ID')
+            ->map(fn ($id) => trim((string) $id))
+            ->filter()
+            ->unique()
+            ->map(fn ($id) => ['Subject_ID' => $id, 'Subject_Name' => HumanReadableResolver::subjectName($id, $subjectsById)])
+            ->sortBy('Subject_Name')
+            ->values();
+        $selectedSubject = trim((string) request()->query('subject'));
+        if ($selectedSubject !== '' && ! $subjectOptions->contains('Subject_ID', $selectedSubject)) {
+            abort(403, 'Mata pelajaran berada di luar scope kelas Anda.');
+        }
+        if ($selectedSubject !== '') {
+            $scores = $scores->where('Subject_ID', $selectedSubject);
+        }
+
+        $selectedCategory = strtolower(trim((string) request()->query('category', 'all')));
+        abort_unless(in_array($selectedCategory, ['all', 'assessment', 'ujian_bab'], true), 422, 'Filter kategori penilaian tidak valid.');
+        if ($selectedCategory === 'ujian_bab') {
+            $scores = $scores->filter(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? ''))) === 'UJIAN_BAB');
+        } elseif ($selectedCategory === 'assessment') {
+            $scores = $scores->reject(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? ''))) === 'UJIAN_BAB');
+        }
+        $scores = $scores->sortByDesc(fn ($score) => ($score['Display_Date'] ?? '').'|'.($score['Created_At'] ?? ''))->values();
+
+        $selectedClassName = $reportClasses->firstWhere('Class_ID', $selectedClass)['Class_Name'] ?? $selectedClass;
+        $selectedSubjectName = $selectedSubject !== ''
+            ? ($subjectOptions->firstWhere('Subject_ID', $selectedSubject)['Subject_Name'] ?? $selectedSubject)
+            : 'Semua Mata Pelajaran';
+        $classStudentIds = collect($scope['students_by_class'][$selectedClass] ?? [])
+            ->map(fn ($id) => trim((string) $id))->filter()->unique();
+        $summary = [
+            'students' => $classStudentIds->count(),
+            'assessed' => $scores->pluck('Student_ID')->filter()->unique()->count(),
+        ];
+        $summary['unassessed'] = max(0, $summary['students'] - $summary['assessed']);
+        $scoreGroups = $scores->groupBy(fn ($score) => ($score['Category_Label'] ?? 'Penilaian').'|'.($score['Display_Date'] ?? ''));
 
         $reportStudents = $studentsById
             ->filter(fn ($student, $id) => in_array(trim((string) $id), $scope['student_ids'] ?? [], true))
@@ -797,21 +892,11 @@ class TeacherWorkspaceController extends Controller
                 'Student_Number' => trim((string) ($student['Student_Number'] ?? '')),
             ])->sortBy('Full_Name')->values();
 
-        $reportClasses = collect($scope['classes'] ?? [])
-            ->filter(fn ($class) => in_array(trim((string) ($class['Class_ID'] ?? '')), $scope['class_ids'] ?? [], true))
-            ->map(fn ($class) => [
-                'Class_ID' => trim((string) ($class['Class_ID'] ?? '')),
-                'Class_Name' => trim((string) ($class['Class_Name'] ?? $class['Name'] ?? $class['Class_ID'] ?? 'Kelas')),
-            ]);
-        if ($reportClasses->isEmpty()) {
-            $reportClasses = collect($scope['class_ids'] ?? [])->map(fn ($id) => [
-                'Class_ID' => trim((string) $id),
-                'Class_Name' => trim((string) $id),
-            ]);
-        }
-        $reportClasses = $reportClasses->sortBy('Class_Name')->values();
-
-        return view('academic.teacher.scores', compact('scores', 'teacherId', 'assessmentConfigs', 'reportStudents', 'reportClasses'));
+        return view('academic.teacher.scores', compact(
+            'scores', 'scoreGroups', 'teacherId', 'assessmentConfigs', 'reportStudents', 'reportClasses',
+            'selectedClass', 'selectedClassName', 'subjectOptions', 'selectedSubject', 'selectedSubjectName',
+            'selectedCategory', 'summary'
+        ));
     }
 
     public function scoresCreate()

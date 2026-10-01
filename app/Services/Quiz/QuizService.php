@@ -47,11 +47,12 @@ class QuizService
         return $quizId;
     }
 
-    public function update(string $quizId, array $data, array $teacher, string $userId): void
+    public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
     {
-        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $data, $teacher, $userId) {
+        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
             $quiz = $this->requireQuizFresh($quizId);
             $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
+            $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
             abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
             $now = $this->stamp($this->periods->now());
             $existingIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
@@ -70,21 +71,24 @@ class QuizService
         });
     }
 
-    public function teacherIndex(string $teacherId): array
+    public function teacherIndex(string $teacherId, ?array $allowedClassIds = null): array
     {
         $questions = collect($this->questions->fetchAll())->groupBy('Quiz_ID');
         $attempts = collect($this->attempts->fetchAll())->groupBy('Quiz_ID');
         $results = collect($this->results->fetchAll())->groupBy('Quiz_ID');
-        $rows = collect($this->quizzes->fetchAll())->where('Teacher_ID', $teacherId)->map(function ($quiz) use ($questions, $attempts, $results) {
-            $quiz = (array) $quiz;
-            $quiz['Lifecycle'] = $this->lifecycle($quiz);
-            $quiz['Question_Count'] = $questions->get($quiz['Quiz_ID'], collect())->count();
-            $quiz['Participant_Count'] = $results->get($quiz['Quiz_ID'], collect())->count();
-            $quiz['Has_Attempt'] = $attempts->get($quiz['Quiz_ID'], collect())->isNotEmpty();
-            $quiz['Editable'] = $this->isEditable($quiz, $quiz['Has_Attempt']);
+        $rows = collect($this->quizzes->fetchAll())->where('Teacher_ID', $teacherId)
+            ->when($allowedClassIds !== null, fn ($rows) => $rows->filter(
+                fn ($quiz) => in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true)
+            ))->map(function ($quiz) use ($questions, $attempts, $results) {
+                $quiz = (array) $quiz;
+                $quiz['Lifecycle'] = $this->lifecycle($quiz);
+                $quiz['Question_Count'] = $questions->get($quiz['Quiz_ID'], collect())->count();
+                $quiz['Participant_Count'] = $results->get($quiz['Quiz_ID'], collect())->count();
+                $quiz['Has_Attempt'] = $attempts->get($quiz['Quiz_ID'], collect())->isNotEmpty();
+                $quiz['Editable'] = $this->isEditable($quiz, $quiz['Has_Attempt']);
 
-            return $quiz;
-        })->sortByDesc('Start_At')->values();
+                return $quiz;
+            })->sortByDesc('Start_At')->values();
 
         return [
             'active' => $rows->where('Lifecycle', 'ACTIVE')->values(),
@@ -93,10 +97,11 @@ class QuizService
         ];
     }
 
-    public function teacherQuiz(string $quizId, string $teacherId): array
+    public function teacherQuiz(string $quizId, string $teacherId, ?array $allowedClassIds = null): array
     {
         $quiz = (array) ($this->quizzes->findById($quizId) ?: abort(404));
         $this->assertTeacherOwns($quiz, $teacherId);
+        $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
         $quiz['questions'] = collect($this->questions->fetchAll())->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->values();
         $quiz['results'] = collect($this->results->fetchAll())->where('Quiz_ID', $quizId)->sortByDesc('Completed_At')->values();
         $quiz['Editable'] = $this->isEditable($quiz);
@@ -104,11 +109,12 @@ class QuizService
         return $quiz;
     }
 
-    public function deleteDraft(string $quizId, string $teacherId): void
+    public function deleteDraft(string $quizId, string $teacherId, ?array $allowedClassIds = null): void
     {
-        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $teacherId) {
+        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $teacherId, $allowedClassIds) {
             $quiz = $this->requireQuizFresh($quizId);
             $this->assertTeacherOwns($quiz, $teacherId);
+            $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
             abort_unless(strtoupper((string) ($quiz['Status'] ?? '')) === 'DRAFT' && $this->isEditable($quiz), 409, 'Hanya draft tanpa attempt yang dapat dihapus.');
             $questionIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
             $this->questions->hardDeleteMany($questionIds);
@@ -116,11 +122,74 @@ class QuizService
         });
     }
 
-    public function teacherResults(string $teacherId, ?string $classId = null)
+    public function teacherResults(string $teacherId, string $classId, iterable $roster = []): array
     {
-        return collect($this->results->fetchAll())->where('Teacher_ID', $teacherId)
-            ->when($classId, fn ($rows) => $rows->where('Class_ID', $classId))
-            ->sortByDesc('Completed_At')->values();
+        $roster = collect($roster)->keyBy(fn ($student) => trim((string) ($student['Student_ID'] ?? '')));
+        $results = collect($this->results->fetchAll())
+            ->filter(fn ($row) => trim((string) ($row['Teacher_ID'] ?? '')) === trim($teacherId)
+                && trim((string) ($row['Class_ID'] ?? '')) === trim($classId))
+            ->sortByDesc('Completed_At')
+            ->values();
+        $resultsByQuiz = $results->groupBy('Quiz_ID');
+        $quizzes = collect($this->quizzes->fetchAll())
+            ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
+                && trim((string) ($quiz['Class_ID'] ?? '')) === trim($classId))
+            ->keyBy('Quiz_ID');
+
+        foreach ($resultsByQuiz as $quizId => $quizResults) {
+            if (! $quizzes->has($quizId)) {
+                $first = (array) $quizResults->first();
+                $quizzes->put($quizId, [
+                    'Quiz_ID' => $quizId,
+                    'Title' => $first['Quiz_Title'] ?? 'Kuis Historis',
+                    'Class_ID' => $classId,
+                    'Teacher_ID' => $teacherId,
+                    'Start_At' => '',
+                ]);
+            }
+        }
+
+        $groups = $quizzes->map(function ($quiz) use ($resultsByQuiz, $roster) {
+            $quizId = trim((string) ($quiz['Quiz_ID'] ?? ''));
+            $rows = collect($resultsByQuiz->get($quizId, collect()))
+                ->unique('Result_ID')
+                ->sortBy(fn ($row) => mb_strtolower(trim((string) ($row['Student_Name'] ?? $row['Student_ID'] ?? ''))))
+                ->values();
+            $firstResult = (array) ($rows->first() ?? []);
+            $completedIds = $rows->pluck('Student_ID')->map(fn ($id) => trim((string) $id))->filter()->unique();
+            $notCompleted = $roster->reject(fn ($student, $studentId) => $completedIds->contains($studentId))->values();
+
+            return [
+                'quiz_id' => $quizId,
+                'title' => trim((string) ($quiz['Title'] ?? $firstResult['Quiz_Title'] ?? 'Kuis')),
+                'participant_count' => max($roster->count(), $completedIds->count()),
+                'completed_count' => $completedIds->count(),
+                'not_completed_count' => $notCompleted->count(),
+                'average' => $rows->isEmpty() ? null : round((float) $rows->avg(fn ($row) => (float) ($row['Normalized_Score'] ?? 0)), 2),
+                'results' => $rows,
+                'not_completed' => $notCompleted,
+                'start_at' => $quiz['Start_At'] ?? '',
+            ];
+        })->sortByDesc('start_at')->values();
+
+        return [
+            'groups' => $groups,
+            'result_count' => $results->count(),
+            'student_count' => $roster->count(),
+        ];
+    }
+
+    public function teacherResult(string $resultId, string $teacherId, array $allowedClassIds): array
+    {
+        $result = (array) ($this->results->findByIdFresh($resultId) ?: abort(404));
+        abort_unless(
+            trim((string) ($result['Teacher_ID'] ?? '')) === trim($teacherId)
+            && in_array(trim((string) ($result['Class_ID'] ?? '')), $allowedClassIds, true),
+            403,
+            'Hasil kuis berada di luar scope kelas Anda.'
+        );
+
+        return $result;
     }
 
     public function studentIndex(array $student): array
@@ -294,6 +363,7 @@ class QuizService
                     'Student_ID' => $first['Student_ID'],
                     'Student_Name' => $first['Student_Name'] ?: 'Siswa',
                     'Points' => round((float) $rows->sum(fn ($row) => (float) ($row['Normalized_Score'] ?? 0)), 4),
+                    'Quiz_Count' => $rows->pluck('Quiz_ID')->filter()->unique()->count(),
                 ];
             })->sort(function ($a, $b) {
                 return $b['Points'] <=> $a['Points'] ?: strcasecmp($a['Student_Name'], $b['Student_Name']);
@@ -355,8 +425,9 @@ class QuizService
 
     private function writeQuestions(string $quizId, array $questions, string $now): void
     {
+        $expected = [];
         foreach (array_values($questions) as $index => $question) {
-            $this->questions->create([
+            $row = [
                 'Question_ID' => 'QQN'.strtoupper(substr(hash('sha256', $quizId.'|'.$index), 0, 20)),
                 'Quiz_ID' => $quizId,
                 'Question_Text' => trim($question['Question_Text']),
@@ -366,7 +437,24 @@ class QuizService
                 'Point' => (float) $question['Point'],
                 'Sort_Order' => $index + 1,
                 'Created_At' => $now, 'Updated_At' => $now,
-            ]);
+            ];
+            $this->questions->create($row);
+            $expected[] = $row;
+        }
+
+        $persisted = collect($this->questions->fetchAllFresh())
+            ->where('Quiz_ID', $quizId)
+            ->sortBy('Sort_Order')
+            ->values();
+        if ($persisted->count() !== count($expected)) {
+            throw new \RuntimeException("Soal kuis {$quizId} tidak tersimpan lengkap.");
+        }
+        foreach ($expected as $index => $row) {
+            foreach (['Question_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order'] as $field) {
+                if ((string) ($persisted[$index][$field] ?? '') !== (string) $row[$field]) {
+                    throw new \RuntimeException("Soal kuis {$quizId} gagal diverifikasi setelah penyimpanan.");
+                }
+            }
         }
     }
 
@@ -385,6 +473,19 @@ class QuizService
     private function assertTeacherOwns(array $quiz, string $teacherId): void
     {
         abort_unless(trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId), 403);
+    }
+
+    private function assertTeacherClassAllowed(array $quiz, ?array $allowedClassIds): void
+    {
+        if ($allowedClassIds === null) {
+            return;
+        }
+
+        abort_unless(
+            in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true),
+            403,
+            'Kuis berada di luar scope kelas Anda.'
+        );
     }
 
     private function assertStudentEligible(array $quiz, array $student): void
