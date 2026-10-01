@@ -9,13 +9,16 @@
         'unpaid' => 'bg-rose-100 text-rose-700 ring-rose-200',
         'partial' => 'bg-amber-100 text-amber-800 ring-amber-200',
         'paid' => 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+        'non_collectible' => 'bg-slate-100 text-slate-800 ring-slate-300',
     ];
 @endphp
 
 <div class="min-w-0 space-y-6">
     <x-page-header
         title="Pembayaran Pendidikan Siswa"
-        description="Monitoring read-only tagihan pendidikan resmi dan pembayaran terverifikasi berdasarkan kelas aktif."
+        :description="$historicalMonitoring
+            ? 'Monitoring read-only histori pembayaran siswa yang tidak lagi ditagih.'
+            : 'Monitoring read-only tagihan pendidikan resmi dan pembayaran terverifikasi berdasarkan kelas aktif.'"
         :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Pembayaran Pendidikan Siswa' => '#']"
     />
 
@@ -51,16 +54,26 @@
         </div>
     </form>
 
-    <section aria-label="Ringkasan pembayaran" class="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-        @foreach([
-            ['label' => 'Jumlah Siswa', 'value' => number_format($kpi['students'], 0, ',', '.')],
-            ['label' => 'Lunas', 'value' => number_format($kpi['paid_students'], 0, ',', '.')],
-            ['label' => 'Cicilan', 'value' => number_format($kpi['partial_students'], 0, ',', '.')],
-            ['label' => 'Belum Bayar', 'value' => number_format($kpi['unpaid_students'], 0, ',', '.')],
-            ['label' => 'Total Biaya Pendidikan', 'value' => $rupiah($kpi['education_fee'])],
-            ['label' => 'Total Terbayar', 'value' => $rupiah($kpi['paid'])],
-            ['label' => 'Total Sisa', 'value' => $rupiah($kpi['remaining'])],
-        ] as $item)
+    <section aria-label="Ringkasan pembayaran" class="grid grid-cols-2 gap-3 sm:grid-cols-4 {{ $historicalMonitoring ? '' : 'xl:grid-cols-7' }}">
+        @php
+            $summaryItems = $historicalMonitoring
+                ? [
+                    ['label' => 'Jumlah Siswa', 'value' => number_format($kpi['students'], 0, ',', '.')],
+                    ['label' => 'Biaya Historis', 'value' => $rupiah($kpi['education_fee'])],
+                    ['label' => 'Diterima LPK', 'value' => $rupiah($kpi['paid'])],
+                    ['label' => 'Tagihan Aktif', 'value' => $rupiah($kpi['remaining'])],
+                ]
+                : [
+                    ['label' => 'Jumlah Siswa', 'value' => number_format($kpi['students'], 0, ',', '.')],
+                    ['label' => 'Lunas', 'value' => number_format($kpi['paid_students'], 0, ',', '.')],
+                    ['label' => 'Cicilan', 'value' => number_format($kpi['partial_students'], 0, ',', '.')],
+                    ['label' => 'Belum Bayar', 'value' => number_format($kpi['unpaid_students'], 0, ',', '.')],
+                    ['label' => 'Total Biaya Pendidikan', 'value' => $rupiah($kpi['education_fee'])],
+                    ['label' => 'Total Terbayar', 'value' => $rupiah($kpi['paid'])],
+                    ['label' => 'Total Sisa', 'value' => $rupiah($kpi['remaining'])],
+                ];
+        @endphp
+        @foreach($summaryItems as $item)
             <div class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">{{ $item['label'] }}</p>
                 <p class="mt-2 break-words text-lg font-black text-slate-900">{{ $item['value'] }}</p>
@@ -84,19 +97,20 @@
                         <div class="flex min-w-0 items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h3 class="break-words text-sm font-black uppercase text-slate-900">{{ $student['student_name'] }}</h3>
-                                <p class="mt-1 text-xs font-medium text-slate-500">{{ $group['class_name'] }} · {{ $student['student_number'] }}</p>
+                                <p class="mt-1 text-xs font-medium text-slate-500">{{ $group['class_name'] }} &middot; {{ $student['student_number'] }}</p>
+                                @if($historicalMonitoring)<p class="mt-1 text-xs font-bold text-slate-700">{{ $student['lifecycle_label'] }}</p>@endif
                             </div>
                             <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 {{ $badgeClasses[$student['status']] }}">{{ $student['status_label'] }}</span>
                         </div>
                         <dl class="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-xs">
-                            <div class="min-w-0"><dt class="text-slate-500">Biaya Pendidikan</dt><dd class="mt-1 break-words font-extrabold text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
-                            <div class="min-w-0"><dt class="text-slate-500">Sudah Dibayar</dt><dd class="mt-1 break-words font-extrabold text-emerald-700">{{ $rupiah($student['paid']) }}</dd></div>
-                            <div class="min-w-0"><dt class="text-slate-500">Sisa</dt><dd class="mt-1 break-words font-extrabold text-rose-700">{{ $rupiah($student['remaining']) }}</dd></div>
+                            <div class="min-w-0"><dt class="text-slate-500">{{ $historicalMonitoring ? 'Biaya Historis' : 'Biaya Pendidikan' }}</dt><dd class="mt-1 break-words font-extrabold text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
+                            <div class="min-w-0"><dt class="text-slate-500">{{ $historicalMonitoring ? 'Diterima LPK' : 'Sudah Dibayar' }}</dt><dd class="mt-1 break-words font-extrabold text-emerald-700">{{ $rupiah($student['paid']) }}</dd></div>
+                            <div class="min-w-0"><dt class="text-slate-500">{{ $historicalMonitoring ? 'Tagihan Aktif' : 'Sisa' }}</dt><dd class="mt-1 break-words font-extrabold {{ $historicalMonitoring ? 'text-slate-800' : 'text-rose-700' }}">{{ $rupiah($student['remaining']) }}</dd></div>
                         </dl>
                         @if($student['excess'] > 0)
                             <p class="rounded-xl bg-sky-50 p-3 text-xs font-bold text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
                         @endif
-                        <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-sky-700 hover:text-sky-900">Lihat Detail</a>
+                        <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-sky-700 hover:text-sky-900">{{ $historicalMonitoring ? 'Buka Histori' : 'Lihat Detail' }}</a>
                     </article>
                 @endforeach
             </div>
@@ -106,9 +120,9 @@
                     <thead class="bg-white text-xs font-bold uppercase tracking-wider text-slate-500">
                         <tr>
                             <th class="w-[28%] px-6 py-4">Nama Siswa</th>
-                            <th class="w-[16%] px-4 py-4 text-right">Biaya Pendidikan</th>
-                            <th class="w-[16%] px-4 py-4 text-right">Sudah Dibayar</th>
-                            <th class="w-[16%] px-4 py-4 text-right">Sisa</th>
+                            <th class="w-[16%] px-4 py-4 text-right">{{ $historicalMonitoring ? 'Biaya Historis' : 'Biaya Pendidikan' }}</th>
+                            <th class="w-[16%] px-4 py-4 text-right">{{ $historicalMonitoring ? 'Diterima LPK' : 'Sudah Dibayar' }}</th>
+                            <th class="w-[16%] px-4 py-4 text-right">{{ $historicalMonitoring ? 'Tagihan Aktif' : 'Sisa' }}</th>
                             <th class="w-[14%] px-4 py-4">Status</th>
                             <th class="w-[10%] px-6 py-4 text-right">Detail</th>
                         </tr>
@@ -119,6 +133,7 @@
                                 <td class="px-6 py-4">
                                     <p class="break-words font-extrabold text-slate-900">{{ $student['student_name'] }}</p>
                                     <p class="mt-1 text-xs text-slate-500">{{ $student['student_number'] }}</p>
+                                    @if($historicalMonitoring)<p class="mt-1 text-xs font-bold text-slate-700">{{ $student['lifecycle_label'] }}</p>@endif
                                 </td>
                                 <td class="px-4 py-4 text-right font-bold text-slate-800">{{ $rupiah($student['education_fee']) }}</td>
                                 <td class="px-4 py-4 text-right font-bold text-emerald-700">
@@ -127,10 +142,10 @@
                                         <p class="mt-2 text-xs text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>
                                     @endif
                                 </td>
-                                <td class="px-4 py-4 text-right font-bold text-rose-700">{{ $rupiah($student['remaining']) }}</td>
+                                <td class="px-4 py-4 text-right font-bold {{ $historicalMonitoring ? 'text-slate-800' : 'text-rose-700' }}">{{ $rupiah($student['remaining']) }}</td>
                                 <td class="px-4 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ring-1 {{ $badgeClasses[$student['status']] }}">{{ $student['status_label'] }}</span></td>
                                 <td class="px-6 py-4 text-right">
-                                    <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="font-bold text-sky-700 hover:text-sky-900">Buka</a>
+                                    <a href="{{ route('finance.education-payments.show', $student['student_id']) }}" class="font-bold text-sky-700 hover:text-sky-900">{{ $historicalMonitoring ? 'Buka Histori' : 'Buka' }}</a>
                                 </td>
                             </tr>
                         @endforeach
@@ -140,7 +155,7 @@
         </section>
     @empty
         <div class="rounded-2xl border border-slate-200 bg-white p-10 shadow-sm">
-            <x-empty-state icon="cash" title="Data pembayaran siswa tidak ditemukan" message="Ubah filter pencarian atau pastikan siswa aktif sudah memiliki kelas aktif." />
+            <x-empty-state icon="cash" title="Data pembayaran siswa tidak ditemukan" :message="$historicalMonitoring ? 'Belum ada siswa dengan status Tidak Ditagih yang sesuai filter.' : 'Ubah filter pencarian atau pastikan siswa aktif sudah memiliki kelas aktif.'" />
         </div>
     @endforelse
 </div>

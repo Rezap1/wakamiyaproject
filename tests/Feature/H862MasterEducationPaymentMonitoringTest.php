@@ -292,9 +292,117 @@ class H862MasterEducationPaymentMonitoringTest extends TestCase
         $this->assertSame(['PAY-EXIT'], $detail['history']->pluck('payment_id')->all());
     }
 
-    public function test_master_and_administrator_can_open_index_and_detail_with_responsive_ui(): void
+    public function test_non_collectible_filter_uses_historical_dataset_without_changing_active_collection(): void
     {
-        foreach (['MASTER', 'ADMINISTRATOR'] as $role) {
+        $students = [
+            $this->student('STU-A', 'Siswa Aktif', 'CLS-A'),
+            array_merge($this->student('STU-B', 'Budi Drop Out', 'CLS-HISTORY'), [
+                'Enrollment_Status' => 'Drop Out',
+                'Is_Active' => 'FALSE',
+            ]),
+            array_merge($this->student('STU-C', 'Citra Drop Out', 'CLS-A'), [
+                'Enrollment_Status' => 'Drop Out',
+                'Is_Active' => 'FALSE',
+            ]),
+        ];
+        $classes = [
+            $this->classRow('CLS-A', 'Kelas A'),
+            array_merge($this->classRow('CLS-HISTORY', 'Kelas Historis'), ['Is_Active' => 'FALSE']),
+        ];
+        $payments = [
+            $this->payment('PAY-A', '', 'STU-A', 2_000_000, 'Verified'),
+            $this->payment('PAY-B', '', 'STU-B', 3_000_000, 'Verified'),
+        ];
+
+        $active = $this->service($students, $classes, payments: $payments)->build();
+        $this->assertSame(['STU-A'], $this->rows($active)->pluck('student_id')->all());
+        $this->assertSame(5_500_000.0, $active['kpi']['remaining']);
+
+        $historical = $this->service($students, $classes, payments: $payments)
+            ->build(['status' => 'non_collectible']);
+        $rows = $this->rows($historical)->keyBy('student_id');
+
+        $this->assertSame(['STU-B', 'STU-C'], $rows->keys()->sort()->values()->all());
+        $this->assertSame(2, $historical['kpi']['students']);
+        $this->assertSame(15_000_000.0, $historical['kpi']['education_fee']);
+        $this->assertSame(3_000_000.0, $historical['kpi']['paid']);
+        $this->assertSame(12_000_000.0, $historical['kpi']['historical_remaining']);
+        $this->assertSame(0.0, $historical['kpi']['remaining']);
+        $this->assertSame(0.0, $rows['STU-B']['remaining']);
+        $this->assertSame(0.0, $rows['STU-C']['remaining']);
+        $this->assertSame('Tidak Ditagih', $rows['STU-B']['status_label']);
+        $this->assertTrue($historical['classOptions']->contains('id', 'CLS-HISTORY'));
+
+        foreach (['Budi', 'NIS-STU-B', 'STU-B'] as $search) {
+            $searched = $this->service($students, $classes, payments: $payments)
+                ->build(['status' => 'non_collectible', 'search' => $search]);
+            $this->assertSame(['STU-B'], $this->rows($searched)->pluck('student_id')->all());
+        }
+
+        $classFiltered = $this->service($students, $classes, payments: $payments)
+            ->build(['status' => 'non_collectible', 'class_id' => 'CLS-HISTORY']);
+        $this->assertSame(['STU-B'], $this->rows($classFiltered)->pluck('student_id')->all());
+    }
+
+    public function test_non_collectible_filter_includes_alumni_but_not_operational_student_with_disabled_account(): void
+    {
+        $students = [
+            array_merge($this->student('STU-ALUMNI', 'Alumni', 'CLS-A'), [
+                'Enrollment_Status' => 'Alumni',
+                'Is_Active' => 'FALSE',
+            ]),
+            array_merge($this->student('STU-LOGIN-OFF', 'Login Nonaktif', 'CLS-A'), [
+                'User_Is_Active' => 'FALSE',
+                'User_Status' => 'DELETED',
+            ]),
+        ];
+
+        $result = $this->service($students, [$this->classRow('CLS-A', 'Kelas A')])
+            ->build(['status' => 'non_collectible']);
+
+        $this->assertSame(['STU-ALUMNI'], $this->rows($result)->pluck('student_id')->all());
+        $this->assertSame('Alumni', $this->rows($result)->first()['lifecycle_label']);
+    }
+
+    public function test_non_collectible_http_view_uses_historical_labels_and_preserves_detail_history(): void
+    {
+        $exited = array_merge($this->student('STU-B', 'Budi Drop Out', 'CLS-A'), [
+            'Enrollment_Status' => 'Drop Out',
+            'Is_Active' => 'FALSE',
+        ]);
+        $this->bindSnapshots(
+            [$exited],
+            [$this->classRow('CLS-A', 'Kelas A')],
+            [], [], [],
+            [$this->payment('PAY-B', '', 'STU-B', 3_000_000, 'Verified')],
+            7_500_000,
+        );
+        $this->actingAsRole('FINANCE');
+
+        $this->get(route('finance.education-payments.index', ['status' => 'non_collectible']))
+            ->assertOk()
+            ->assertSee('Budi Drop Out')
+            ->assertSee('Drop Out')
+            ->assertSee('Biaya Historis')
+            ->assertSee('Diterima LPK')
+            ->assertSee('Tagihan Aktif')
+            ->assertSee('Rp 0')
+            ->assertSee('Tidak Ditagih')
+            ->assertSee('Buka Histori')
+            ->assertDontSee('Total Sisa');
+
+        $this->get(route('finance.education-payments.show', 'STU-B'))
+            ->assertOk()
+            ->assertSee('PAY-B')
+            ->assertSee('Rp 3.000.000')
+            ->assertSee('Selisih Historis: Rp 4.500.000')
+            ->assertSee('Tagihan Aktif')
+            ->assertSee('Tidak Ditagih');
+    }
+
+    public function test_master_administrator_and_finance_can_open_index_and_detail_with_responsive_ui(): void
+    {
+        foreach (['MASTER', 'ADMINISTRATOR', 'FINANCE'] as $role) {
             $this->bindSnapshots(
                 [$this->student('STU-1', 'Budi Santoso', 'CLS-A')],
                 [$this->classRow('CLS-A', 'Kelas A')],
@@ -373,7 +481,7 @@ class H862MasterEducationPaymentMonitoringTest extends TestCase
         $this->mock(BatchRepositoryInterface::class)->shouldNotReceive('fetchAll');
         $this->mock(InvoiceRepositoryInterface::class)->shouldNotReceive('getAll');
         $this->mock(PaymentRepositoryInterface::class)->shouldNotReceive('getAll');
-        $this->actingAsRole('FINANCE');
+        $this->actingAsRole('STUDENT');
         $this->get(route('finance.education-payments.index'))->assertForbidden();
         $this->get(route('finance.education-payments.show', 'STU-1'))->assertForbidden();
     }

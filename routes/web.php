@@ -283,10 +283,10 @@ Route::middleware('auth')->group(function () {
 
     // Finance - Invoices
     Route::get('/finance/education-payments', [\App\Http\Controllers\Finance\EducationPaymentMonitoringController::class, 'index'])
-        ->middleware('role:ADMINISTRATOR')
+        ->middleware('role:ADMINISTRATOR,FINANCE')
         ->name('finance.education-payments.index');
     Route::get('/finance/education-payments/{studentId}', [\App\Http\Controllers\Finance\EducationPaymentMonitoringController::class, 'show'])
-        ->middleware('role:ADMINISTRATOR')
+        ->middleware('role:ADMINISTRATOR,FINANCE')
         ->name('finance.education-payments.show');
 
     Route::prefix('finance/invoices')->name('invoices.')->middleware('role:ADMINISTRATOR,FINANCE')->group(function () {

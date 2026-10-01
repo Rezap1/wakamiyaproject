@@ -41,13 +41,13 @@
                 <span class="rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 {{ $statusClasses[$student['status']] }}">{{ $student['status_label'] }}</span>
             </div>
             <dl class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="rounded-xl bg-slate-50 p-4"><dt class="text-xs font-bold text-slate-500">Biaya Pendidikan</dt><dd class="mt-2 break-words text-lg font-black text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
-                <div class="rounded-xl bg-emerald-50 p-4"><dt class="text-xs font-bold text-emerald-700">Total Sudah Dibayar</dt><dd class="mt-2 break-words text-lg font-black text-emerald-800">{{ $rupiah($student['paid']) }}</dd></div>
+                <div class="rounded-xl bg-slate-50 p-4"><dt class="text-xs font-bold text-slate-500">{{ $student['collectible'] ? 'Biaya Pendidikan' : 'Biaya Historis' }}</dt><dd class="mt-2 break-words text-lg font-black text-slate-900">{{ $rupiah($student['education_fee']) }}</dd></div>
+                <div class="rounded-xl bg-emerald-50 p-4"><dt class="text-xs font-bold text-emerald-700">{{ $student['collectible'] ? 'Total Sudah Dibayar' : 'Diterima LPK' }}</dt><dd class="mt-2 break-words text-lg font-black text-emerald-800">{{ $rupiah($student['paid']) }}</dd></div>
                 <div class="rounded-xl bg-rose-50 p-4"><dt class="text-xs font-bold text-rose-700">Tagihan Aktif</dt><dd class="mt-2 break-words text-lg font-black text-rose-800">{{ $rupiah($student['remaining']) }}</dd></div>
                 <div class="rounded-xl bg-sky-50 p-4"><dt class="text-xs font-bold text-sky-700">Jumlah Pembayaran Terverifikasi</dt><dd class="mt-2 break-words text-lg font-black text-sky-800">{{ $student['verified_payment_count'] }} kali</dd></div>
             </dl>
             @if(!$student['collectible'])
-                <p class="mt-4 rounded-xl border border-slate-300 bg-slate-100 p-3 text-sm font-semibold text-slate-800">Saldo historis belum dibayar {{ $rupiah($student['historical_remaining']) }} dipertahankan untuk audit, tetapi tidak lagi ditagih.</p>
+                <p class="mt-4 rounded-xl border border-slate-300 bg-slate-100 p-3 text-sm font-semibold text-slate-800">Selisih Historis: {{ $rupiah($student['historical_remaining']) }}. Nilai ini dipertahankan untuk audit, tetapi tidak menjadi tagihan aktif.</p>
             @endif
             @if($student['excess'] > 0)
                 <p class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">Kelebihan Bayar: {{ $rupiah($student['excess']) }}</p>

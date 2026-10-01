@@ -144,6 +144,8 @@ class EducationPaymentMonitoringService
 
     private function buildFromSnapshots(array $snapshots, array $filters = [], bool $includeHistorical = false): array
     {
+        $requestedStatus = trim((string) ($filters['status'] ?? ''));
+        $historicalMonitoring = $includeHistorical || $requestedStatus === 'non_collectible';
         $allClasses = $snapshots['classes']->keyBy(fn ($class) => trim((string) ($class['Class_ID'] ?? '')));
         $activeClasses = $snapshots['classes']
             ->filter(fn ($class) => SheetValue::isActive((array) $class))
@@ -154,12 +156,12 @@ class EducationPaymentMonitoringService
         $batchesById = $snapshots['batches']->keyBy('Batch_ID');
 
         $operationalStudents = $snapshots['students']
-            ->filter(fn ($student) => $includeHistorical || $this->studentCollectibility->isCollectible((array) $student))
-            ->filter(function ($student) use ($activeClasses, $includeHistorical) {
+            ->filter(fn ($student) => $historicalMonitoring || $this->studentCollectibility->isCollectible((array) $student))
+            ->filter(function ($student) use ($activeClasses, $historicalMonitoring) {
                 $studentId = trim((string) ($student['Student_ID'] ?? ''));
                 $classId = trim((string) ($student['Class_ID'] ?? ''));
 
-                return $studentId !== '' && ($includeHistorical || ($classId !== '' && $activeClasses->has($classId)));
+                return $studentId !== '' && ($historicalMonitoring || ($classId !== '' && $activeClasses->has($classId)));
             })
             ->unique(fn ($student) => trim((string) $student['Student_ID']))
             ->values();
@@ -236,7 +238,7 @@ class EducationPaymentMonitoringService
         if ($classId !== '') {
             $rows = $rows->where('class_id', $classId);
         }
-        $status = trim((string) ($filters['status'] ?? ''));
+        $status = $requestedStatus;
         if ($status !== '') {
             $rows = $rows->where('status', $status);
         }
@@ -256,9 +258,20 @@ class EducationPaymentMonitoringService
             ->sortBy(fn ($group) => Str::lower((string) $group['class_name']))
             ->values();
 
+        $classOptions = $activeClasses;
+        if ($historicalMonitoring) {
+            $historicalClassIds = $operationalStudents
+                ->filter(fn ($student) => ! $this->studentCollectibility->isCollectible((array) $student))
+                ->pluck('Class_ID')
+                ->map(fn ($id) => trim((string) $id))
+                ->filter()
+                ->unique();
+            $classOptions = $allClasses->only($historicalClassIds->all());
+        }
+
         return [
             'groups' => $groups,
-            'classOptions' => $activeClasses
+            'classOptions' => $classOptions
                 ->map(fn ($class, $id) => [
                     'id' => $id,
                     'name' => $class['Class_Name'] ?? $class['Class_Code'] ?? $id,
@@ -276,7 +289,9 @@ class EducationPaymentMonitoringService
                 'education_fee' => (float) $rows->sum('education_fee'),
                 'paid' => (float) $rows->sum('paid'),
                 'remaining' => (float) $rows->sum('remaining'),
+                'historical_remaining' => (float) $rows->sum('historical_remaining'),
             ],
+            'historicalMonitoring' => $requestedStatus === 'non_collectible',
         ];
     }
 
