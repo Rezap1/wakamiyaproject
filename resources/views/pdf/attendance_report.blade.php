@@ -54,9 +54,15 @@
 
     <h1>{{ $report['title'] }}</h1>
     <table class="meta">
-        <tr><td class="label">Kelas</td><td>: {{ $report['class']['name'] }}</td><td class="label">Jumlah Siswa</td><td>: {{ $report['student_count'] }}</td></tr>
-        <tr><td class="label">Jenis Rekap</td><td>: {{ $report['report_type_label'] }}</td><td class="label">Dicetak</td><td>: {{ \App\Helpers\DateHelper::format($report['printed_at'], 'd F Y, H:i') }} WIB</td></tr>
-        <tr><td class="label">Periode</td><td>: {{ $report['period']['label'] }}</td><td class="label">Guru</td><td>: {{ $report['teacher_name'] ?: '-' }}</td></tr>
+        @if($report['is_individual'])
+            <tr><td class="label">Nama Siswa</td><td>: {{ $report['student']['name'] }}</td><td class="label">NIS / ID Siswa</td><td>: {{ $report['student']['number'] }}</td></tr>
+            <tr><td class="label">Kelas</td><td>: {{ $report['class']['name'] }}</td><td class="label">Jenis Rekap</td><td>: {{ $report['report_type_label'] }}</td></tr>
+            <tr><td class="label">Periode</td><td>: {{ $report['period']['label'] }}</td><td class="label">Dicetak</td><td>: {{ \App\Helpers\DateHelper::format($report['printed_at'], 'd F Y, H:i') }} WIB</td></tr>
+        @else
+            <tr><td class="label">Kelas</td><td>: {{ $report['class']['name'] }}</td><td class="label">Jumlah Siswa</td><td>: {{ $report['student_count'] }}</td></tr>
+            <tr><td class="label">Jenis Rekap</td><td>: {{ $report['report_type_label'] }}</td><td class="label">Dicetak</td><td>: {{ \App\Helpers\DateHelper::format($report['printed_at'], 'd F Y, H:i') }} WIB</td></tr>
+            <tr><td class="label">Periode</td><td>: {{ $report['period']['label'] }}</td><td class="label">Guru</td><td>: {{ $report['teacher_name'] ?: '-' }}</td></tr>
+        @endif
     </table>
 
     <table class="summary">
@@ -67,7 +73,7 @@
     </table>
     <div class="note">{{ $report['absence_note'] }}</div>
 
-    @if($report['report_type'] !== 'harian')
+    @if(! $report['is_individual'] && $report['report_type'] !== 'harian')
         <h2>Rekap Per Siswa</h2>
         <table class="report-table">
             <thead><tr><th style="width:5%">No</th><th style="width:26%">Nama Siswa</th><th style="width:15%">ID/NIS</th>@foreach($report['status_labels'] as $label)<th class="center">{{ $label }}</th>@endforeach</tr></thead>
@@ -81,12 +87,20 @@
 
     <h2>Detail Absensi</h2>
     <table class="report-table">
-        <thead><tr><th style="width:4%">No</th><th style="width:20%">Nama</th><th style="width:12%">ID/NIS</th><th style="width:12%">Tanggal</th><th style="width:9%">Masuk</th><th style="width:9%">Keluar</th><th style="width:11%">Status</th><th style="width:23%">Keterangan</th></tr></thead>
+        @if($report['is_individual'])
+            <thead><tr><th style="width:6%">No</th><th style="width:18%">Tanggal</th><th style="width:12%">Jam Masuk</th><th style="width:12%">Jam Pulang</th><th style="width:16%">Status</th><th style="width:36%">Catatan</th></tr></thead>
+        @else
+            <thead><tr><th style="width:4%">No</th><th style="width:20%">Nama</th><th style="width:12%">ID/NIS</th><th style="width:12%">Tanggal</th><th style="width:9%">Masuk</th><th style="width:9%">Keluar</th><th style="width:11%">Status</th><th style="width:23%">Keterangan</th></tr></thead>
+        @endif
         <tbody>
             @forelse($report['rows'] as $index => $row)
-                <tr><td class="center">{{ $index + 1 }}</td><td>{{ $row['student_name'] }}</td><td>{{ $row['student_number'] }}</td><td>{{ \App\Helpers\DateHelper::format($row['date'], 'd M Y') }}</td><td>{{ $row['check_in'] }}</td><td>{{ $row['check_out'] }}</td><td>{{ $row['status'] }}</td><td>{{ $row['notes'] }}</td></tr>
+                @if($report['is_individual'])
+                    <tr><td class="center">{{ $index + 1 }}</td><td>{{ \App\Helpers\DateHelper::format($row['date'], 'd M Y') }}</td><td>{{ $row['check_in'] }}</td><td>{{ $row['check_out'] }}</td><td>{{ $row['status'] }}</td><td>{{ $row['notes'] }}</td></tr>
+                @else
+                    <tr><td class="center">{{ $index + 1 }}</td><td>{{ $row['student_name'] }}</td><td>{{ $row['student_number'] }}</td><td>{{ \App\Helpers\DateHelper::format($row['date'], 'd M Y') }}</td><td>{{ $row['check_in'] }}</td><td>{{ $row['check_out'] }}</td><td>{{ $row['status'] }}</td><td>{{ $row['notes'] }}</td></tr>
+                @endif
             @empty
-                <tr><td colspan="8" class="empty">Tidak ada data absensi pada periode yang dipilih.</td></tr>
+                <tr><td colspan="{{ $report['is_individual'] ? 6 : 8 }}" class="empty">Tidak ada data absensi pada periode yang dipilih.</td></tr>
             @endforelse
         </tbody>
     </table>

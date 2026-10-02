@@ -45,8 +45,9 @@ class MobileNavigationHardeningTest extends TestCase
 
         $this->assertStringContainsString(route('companies.index'), $bottomNav);
         $this->assertStringContainsString(route('notifications.index'), $bottomNav);
-        $this->assertStringNotContainsString(route('documents.index'), $bottomNav);
-        $this->assertStringNotContainsString(route('documents.index'), $drawer);
+        $this->assertStringNotContainsString('documents.index', $bottomNav);
+        $this->assertStringNotContainsString('documents.index', $drawer);
+        $this->assertStringNotContainsString('Arsip Dokumen', $drawer);
     }
 
     public function test_director_drawer_uses_authorized_finance_reporting_routes(): void
@@ -147,10 +148,10 @@ class MobileNavigationHardeningTest extends TestCase
 
     private function fakeUser(string $role): User
     {
-        $user = new User();
+        $user = new User;
         $user->setAttribute('id', 9001);
-        $user->setAttribute('Username', $role . 'User');
-        $user->setAttribute('Name', $role . ' User');
+        $user->setAttribute('Username', $role.'User');
+        $user->setAttribute('Name', $role.' User');
         $user->setAttribute('Role', $role);
 
         return $user;

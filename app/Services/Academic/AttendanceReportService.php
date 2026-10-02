@@ -31,6 +31,16 @@ class AttendanceReportService
         'ABSENT' => 'Alpa',
     ];
 
+    private ?Collection $classSnapshot = null;
+
+    private ?Collection $studentSnapshot = null;
+
+    private ?Collection $enrollmentSnapshot = null;
+
+    private ?Collection $scheduleSnapshot = null;
+
+    private ?Collection $attendanceSnapshot = null;
+
     public function __construct(
         private AttendanceRepositoryInterface $attendanceRepository,
         private ClassRepositoryInterface $classRepository,
@@ -60,6 +70,40 @@ class AttendanceReportService
             ->values();
     }
 
+    public function availableStudentsByClass($user, string $roleName, iterable $classes): array
+    {
+        $scope = null;
+        if (! $this->isAdministrator($roleName)) {
+            if (strtoupper(trim($roleName)) !== 'TEACHER') {
+                abort(403, 'Anda tidak memiliki hak akses ke Laporan Absensi.');
+            }
+
+            $scope = $this->teacherScopeResolver->resolveForUser($user);
+        }
+
+        $students = $scope === null ? $this->studentRows() : collect($scope['students'] ?? []);
+        $enrollments = $scope === null ? $this->enrollmentRows() : collect();
+
+        return collect($classes)->mapWithKeys(function ($class) use ($students, $enrollments, $scope) {
+            $classId = trim((string) ($class['Class_ID'] ?? ''));
+            $options = $this->classRoster($classId, $students, $enrollments, $scope)
+                ->map(function ($student) {
+                    $studentId = trim((string) ($student['Student_ID'] ?? ''));
+                    $number = $this->studentNumber((array) $student);
+                    $name = $this->studentName((array) $student);
+
+                    return [
+                        'id' => $studentId,
+                        'name' => $name,
+                        'number' => $number,
+                        'label' => $name.($number !== '-' ? ' — '.$number : ''),
+                    ];
+                })->values()->all();
+
+            return [$classId => $options];
+        })->all();
+    }
+
     public function build($user, string $roleName, array $filters): array
     {
         $classId = trim((string) ($filters['class_id'] ?? ''));
@@ -84,13 +128,21 @@ class AttendanceReportService
         }
 
         $period = $this->resolvePeriod($filters);
-        $students = collect($this->studentRepository->fetchAll());
-        $enrollments = collect($this->classEnrollmentRepository->fetchAll());
+        $students = $scope === null ? $this->studentRows() : collect($scope['students'] ?? []);
+        $enrollments = $scope === null ? $this->enrollmentRows() : collect();
         $roster = $this->classRoster($classId, $students, $enrollments, $scope);
-        $rosterById = $roster->keyBy(fn ($student) => trim((string) ($student['Student_ID'] ?? '')));
-        $schedules = collect($this->scheduleRepository->fetchAll());
+        $studentId = trim((string) ($filters['student_id'] ?? ''));
+        $selectedStudent = $studentId === ''
+            ? null
+            : $roster->first(fn ($student) => trim((string) ($student['Student_ID'] ?? '')) === $studentId);
+        if ($studentId !== '' && ! $selectedStudent) {
+            abort(403, 'Siswa berada di luar kelas yang dipilih.');
+        }
+        $reportRoster = $selectedStudent ? collect([$selectedStudent]) : $roster;
+        $rosterById = $reportRoster->keyBy(fn ($student) => trim((string) ($student['Student_ID'] ?? '')));
+        $schedules = $this->scheduleRows();
 
-        $rows = collect($this->attendanceRepository->fetchAll())
+        $rows = $this->attendanceRows()
             ->map(function ($attendance) use ($allClasses, $schedules) {
                 $attendance = is_array($attendance) ? $attendance : (array) $attendance;
                 $classified = $this->legacyClassifier->classify($attendance, $allClasses, $schedules);
@@ -143,7 +195,7 @@ class AttendanceReportService
 
         $studentRecap = $period['type'] === 'harian'
             ? collect()
-            : $roster->map(function ($student) use ($rows) {
+            : $reportRoster->map(function ($student) use ($rows) {
                 $studentId = trim((string) ($student['Student_ID'] ?? ''));
                 $studentRows = $rows->where('student_id', $studentId);
                 $counts = [];
@@ -167,9 +219,14 @@ class AttendanceReportService
             ],
             'report_type' => $period['type'],
             'report_type_label' => $period['type_label'],
-            'title' => $period['title'],
+            'title' => $selectedStudent ? 'REKAP ABSENSI SISWA' : $period['title'],
             'period' => $period,
-            'student_count' => $roster->count(),
+            'student_count' => $reportRoster->count(),
+            'student' => $selectedStudent ? [
+                'name' => $this->studentName((array) $selectedStudent),
+                'number' => $this->studentNumber((array) $selectedStudent),
+            ] : null,
+            'is_individual' => $selectedStudent !== null,
             'teacher_name' => $teacherName,
             'summary' => $summary,
             'total_records' => $rows->count(),
@@ -230,7 +287,7 @@ class AttendanceReportService
 
     private function activeClasses(): Collection
     {
-        return collect($this->classRepository->fetchAll())
+        return $this->classRows()
             ->filter(fn ($row) => trim((string) ($row['Class_ID'] ?? '')) !== '' && $this->isActive($row))
             ->sortBy(fn ($row) => $this->className((array) $row))
             ->values();
@@ -238,6 +295,17 @@ class AttendanceReportService
 
     private function classRoster(string $classId, Collection $students, Collection $enrollments, ?array $teacherScope): Collection
     {
+        if ($teacherScope !== null) {
+            $allowedIds = $teacherScope['students_by_class'][$classId] ?? [];
+
+            return $students
+                ->filter(fn ($student) => $this->isActive($student)
+                    && in_array(trim((string) ($student['Student_ID'] ?? '')), $allowedIds, true))
+                ->unique(fn ($student) => trim((string) ($student['Student_ID'] ?? '')))
+                ->sortBy(fn ($student) => $this->studentName((array) $student))
+                ->values();
+        }
+
         $enrolledIds = $enrollments
             ->filter(fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === $classId && $this->isActive($row))
             ->pluck('Student_ID')
@@ -249,11 +317,6 @@ class AttendanceReportService
             ->map(fn ($id) => trim((string) $id))
             ->filter();
         $studentIds = $enrolledIds->merge($directIds)->unique()->values();
-
-        if ($teacherScope !== null) {
-            $allowedIds = $teacherScope['students_by_class'][$classId] ?? [];
-            $studentIds = $studentIds->filter(fn ($id) => in_array($id, $allowedIds, true))->values();
-        }
 
         return $students
             ->filter(fn ($student) => $this->isActive($student) && $studentIds->contains(trim((string) ($student['Student_ID'] ?? ''))))
@@ -333,5 +396,40 @@ class AttendanceReportService
     private function isAdministrator(string $roleName): bool
     {
         return in_array(strtoupper(trim($roleName)), ['MASTER', 'ADMINISTRATOR'], true);
+    }
+
+    private function studentName(array $student): string
+    {
+        return trim((string) ($student['Full_Name'] ?? $student['Name'] ?? '')) ?: 'Siswa';
+    }
+
+    private function studentNumber(array $student): string
+    {
+        return trim((string) ($student['Student_Number'] ?? $student['NIS'] ?? $student['Registration_Number'] ?? '')) ?: '-';
+    }
+
+    private function classRows(): Collection
+    {
+        return $this->classSnapshot ??= collect($this->classRepository->fetchAll());
+    }
+
+    private function studentRows(): Collection
+    {
+        return $this->studentSnapshot ??= collect($this->studentRepository->fetchAll());
+    }
+
+    private function enrollmentRows(): Collection
+    {
+        return $this->enrollmentSnapshot ??= collect($this->classEnrollmentRepository->fetchAll());
+    }
+
+    private function scheduleRows(): Collection
+    {
+        return $this->scheduleSnapshot ??= collect($this->scheduleRepository->fetchAll());
+    }
+
+    private function attendanceRows(): Collection
+    {
+        return $this->attendanceSnapshot ??= collect($this->attendanceRepository->fetchAll());
     }
 }

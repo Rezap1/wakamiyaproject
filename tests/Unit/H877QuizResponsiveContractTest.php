@@ -104,14 +104,23 @@ class H877QuizResponsiveContractTest extends TestCase
 
         $this->assertContains($width, [375, 390, 430, 768, 1024]);
         $this->assertStringContainsString("document.body.classList.toggle('overflow-hidden', deleteOpen)", $teacherShow);
+        $this->assertStringContainsString("document.body.classList.toggle('wms-modal-open', deleteOpen)", $teacherShow);
+        $this->assertStringContainsString('x-teleport="body"', $teacherShow);
         $this->assertStringContainsString('max-h-[calc(100dvh-1.5rem)]', $teacherShow);
         $this->assertStringContainsString('min-h-0 overflow-y-auto', $teacherShow);
-        $this->assertStringContainsString('sticky bottom-0', $teacherShow);
+        $this->assertStringContainsString('grid shrink-0 grid-cols-2', $teacherShow);
         $this->assertStringContainsString('shrink-0', $teacherShow);
-        $this->assertStringContainsString('env(safe-area-inset-bottom)', $teacherShow);
-        $this->assertStringContainsString('z-[80]', $teacherShow);
+        $this->assertStringContainsString('env(safe-area-inset-bottom, 0px)', $teacherShow);
+        $this->assertStringContainsString('z-[100]', $teacherShow);
         $this->assertStringContainsString('Batal', $teacherShow);
         $this->assertStringContainsString('Hapus Permanen', $teacherShow);
+
+        $layout = file_get_contents(resource_path('views/layouts/app.blade.php'));
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('main-content min-w-0 flex-1 flex flex-col relative z-0', $layout);
+        $this->assertStringContainsString('body.wms-modal-open .mobile-bottom-nav', $css);
+        $this->assertStringContainsString('visibility: hidden', $css);
+        $this->assertStringContainsString('pointer-events: none', $css);
     }
 
     public static function modalWidths(): array

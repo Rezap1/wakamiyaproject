@@ -44,7 +44,6 @@
         ]],
         ['group' => 'MARKETING', 'items' => [
             ['label' => 'Perusahaan', 'route' => 'companies.index', 'active_route' => 'companies.*', 'icon' => 'office-building'],
-            ['label' => 'Arsip Dokumen', 'route' => 'documents.index', 'active_route' => 'documents.*', 'icon' => 'folder-open'],
         ]],
         ['group' => 'SYSTEM', 'items' => [
             ['label' => 'Pengaturan Sistem', 'route' => 'settings.index', 'active_route' => 'settings.*', 'icon' => 'cog'],

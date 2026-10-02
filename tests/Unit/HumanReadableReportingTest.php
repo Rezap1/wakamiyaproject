@@ -160,22 +160,6 @@ class HumanReadableReportingTest extends TestCase
         $this->assertRawIdsAbsent($mapped, ['STU-A']);
     }
 
-    public function test_salary_slip_template_does_not_display_raw_employee_reference_id(): void
-    {
-        $html = view('document.pdf.salary-slip', [
-            'document' => [
-                'Reference_ID' => 'EMP-A',
-                'Title' => 'Aiko Employee',
-                'Department' => 'HR',
-                'Role' => 'Staff',
-            ],
-        ])->render();
-
-        $this->assertStringContainsString('No. Pegawai', $html);
-        $this->assertStringNotContainsString('Employee ID', $html);
-        $this->assertStringNotContainsString('EMP-A', $html);
-    }
-
     private function assertRawIdsAbsent(array $cells, array $tokens): void
     {
         $joined = implode(' | ', array_map(static fn ($value) => (string) $value, $cells));

@@ -124,9 +124,7 @@
         $summaryLabel = 'Mitra perusahaan';
         $summaryValue = number_format((int) ($kpiData['companies'] ?? 0), 0, ',', '.').' perusahaan';
         $summaryTone = 'border-rose-400';
-        $metrics = [
-            ['label' => 'Arsip dokumen', 'value' => $kpiData['documents'] ?? 0],
-        ];
+        $metrics = [];
     } elseif ($role === 'DIRECTOR') {
         $summaryTitle = 'Ringkasan Eksekutif';
         $summaryLabel = 'Menunggu persetujuan';

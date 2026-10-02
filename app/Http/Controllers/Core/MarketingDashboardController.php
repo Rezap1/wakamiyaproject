@@ -3,24 +3,23 @@
 namespace App\Http\Controllers\Core;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
-
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
-use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class MarketingDashboardController extends Controller
 {
-    protected $companyRepo, $documentRepo, $activityLogRepo;
+    protected $companyRepo;
+
+    protected $activityLogRepo;
 
     public function __construct(
         CompanyRepositoryInterface $companyRepo,
-        DocumentRepositoryInterface $documentRepo,
         ActivityLogRepositoryInterface $activityLogRepo
     ) {
         $this->companyRepo = $companyRepo;
-        $this->documentRepo = $documentRepo;
         $this->activityLogRepo = $activityLogRepo;
     }
 
@@ -28,27 +27,20 @@ class MarketingDashboardController extends Controller
     {
         try {
             $dashboardData = Cache::remember('wms_marketing_dashboard_data', 300, function () {
-                $countActive = function($repo) {
+                $countActive = function ($repo) {
                     return collect($repo->fetchAll())->where('Is_Active', '!=', 'FALSE')->count();
                 };
 
                 // 1. KPI Counts
                 $kpi = [
                     'companies' => $countActive($this->companyRepo),
-                    'documents' => $countActive($this->documentRepo),
                 ];
 
                 // 2. Notifications & Alerts
-                $incompleteDocuments = collect($this->documentRepo->fetchAll())
-                    ->where('Is_Active', '!=', 'FALSE')
-                    ->filter(function($d) {
-                        return ($d['Document_Status'] ?? '') === 'PENDING';
-                    })->values()->toArray();
-
                 try {
                     $recentActivities = collect($this->activityLogRepo->fetchAll())
                         ->filter(function ($log) {
-                            return in_array(strtoupper($log['Module'] ?? ''), ['MARKETING', 'COMPANY', 'DOCUMENT']);
+                            return in_array(strtoupper($log['Module'] ?? ''), ['MARKETING', 'COMPANY']);
                         })
                         ->sortByDesc('Created_At')
                         ->take(10)
@@ -63,28 +55,27 @@ class MarketingDashboardController extends Controller
                                 } else {
                                     $action = str_replace('_', ' ', $log['Action'] ?? '');
                                     $refId = $log['Reference_ID'] ?? '';
-                                    $desc = "Aktivitas " . ucwords(strtolower($action)) . ($refId ? " pada {$refId}" : '');
+                                    $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
                                 }
                             }
+
                             return [
-                                'title'       => $log['Action'] ?? 'Aktivitas',
-                                'description' => ($log['Module'] ?? '') . ' — ' . $desc,
-                                'time'        => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
+                                'title' => $log['Action'] ?? 'Aktivitas',
+                                'description' => ($log['Module'] ?? '').' — '.$desc,
+                                'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
                             ];
                         })
                         ->values()
                         ->toArray();
                 } catch (\Exception $e) {
                     $recentActivities = [];
-                    \Illuminate\Support\Facades\Log::error('Failed to fetch audit log for Marketing dashboard: ' . $e->getMessage());
+                    Log::error('Failed to fetch audit log for Marketing dashboard: '.$e->getMessage());
                 }
 
                 return [
                     'kpi' => $kpi,
-                    'notifications' => [
-                        'incompleteDocuments' => $incompleteDocuments
-                    ],
-                    'recentActivities' => $recentActivities
+                    'notifications' => [],
+                    'recentActivities' => $recentActivities,
                 ];
             });
         } catch (\Exception $e) {

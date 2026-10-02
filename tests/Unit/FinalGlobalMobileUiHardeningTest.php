@@ -50,7 +50,8 @@ class FinalGlobalMobileUiHardeningTest extends TestCase
 
         Auth::login($this->fakeUser('MARKETING'));
         $marketing = view('components.mobile-dashboard-hero', ['userRole' => 'MARKETING'])->render();
-        $this->assertStringNotContainsString(route('documents.index'), $marketing);
+        $this->assertStringNotContainsString('Arsip Dokumen', $marketing);
+        $this->assertNull(app('router')->getRoutes()->getByName('documents.index'));
 
         Auth::login($this->fakeUser('DIRECTOR'));
         $director = view('components.mobile-dashboard-hero', ['userRole' => 'DIRECTOR'])->render();
@@ -124,7 +125,7 @@ class FinalGlobalMobileUiHardeningTest extends TestCase
 
     private function fakeUser(string $role): User
     {
-        $user = new User();
+        $user = new User;
         $user->setAttribute('id', 8450);
         $user->setAttribute('User_ID', 'USR-H845-'.$role);
         $user->setAttribute('Username', $role.'User');

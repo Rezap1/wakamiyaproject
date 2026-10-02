@@ -80,6 +80,95 @@ class AttendanceReportServiceTest extends TestCase
         ]);
     }
 
+    public function test_student_selector_is_derived_from_the_selected_class_only(): void
+    {
+        $service = $this->service([]);
+        $classes = $service->availableClasses($this->admin(), 'ADMINISTRATOR');
+        $students = $service->availableStudentsByClass($this->admin(), 'ADMINISTRATOR', $classes);
+
+        $this->assertSame(['STU-A', 'STU-C'], array_column($students['CLS-A'], 'id'));
+        $this->assertSame(['Andi', 'Citra'], array_column($students['CLS-A'], 'name'));
+        $this->assertSame(['NIS-1', 'NIS-3'], array_column($students['CLS-A'], 'number'));
+        $this->assertSame(['STU-B'], array_column($students['CLS-B'], 'id'));
+    }
+
+    public function test_teacher_report_reuses_bulk_scope_and_repository_snapshots_without_n_plus_one_reads(): void
+    {
+        $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendanceRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            $this->attendance('ATT-A', 'STU-A', 'CLS-A', '2026-10-02', 'PRESENT'),
+        ]));
+        $classRepo = Mockery::mock(ClassRepositoryInterface::class);
+        $classRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Class_ID' => 'CLS-A', 'Class_Name' => 'Kelas A', 'Is_Active' => 'TRUE'],
+        ]));
+        $studentRepo = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepo->shouldNotReceive('fetchAll');
+        $enrollmentRepo = Mockery::mock(ClassEnrollmentRepositoryInterface::class);
+        $enrollmentRepo->shouldNotReceive('fetchAll');
+        $scheduleRepo = Mockery::mock(ScheduleRepositoryInterface::class);
+        $scheduleRepo->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Schedule_ID' => 'SCH-A', 'Class_ID' => 'CLS-A', 'Teacher_ID' => 'T-1'],
+        ]));
+        $scope = $this->scope(['CLS-A'], ['CLS-A' => ['STU-A', 'STU-C']]);
+        $scopeResolver = Mockery::mock(TeacherScopeResolver::class);
+        $scopeResolver->shouldReceive('resolveForUser')->times(3)->andReturn($scope);
+        $scopeResolver->shouldReceive('classAllowed')->once()->with($scope, 'CLS-A')->andReturnTrue();
+
+        $service = new AttendanceReportService(
+            $attendanceRepo,
+            $classRepo,
+            $studentRepo,
+            $enrollmentRepo,
+            $scheduleRepo,
+            $scopeResolver,
+            new AttendanceLegacyClassifier
+        );
+        $classes = $service->availableClasses($this->teacher(), 'TEACHER');
+        $service->availableStudentsByClass($this->teacher(), 'TEACHER', $classes);
+        $report = $service->build($this->teacher(), 'TEACHER', [
+            'class_id' => 'CLS-A', 'student_id' => 'STU-A', 'report_type' => 'harian', 'daily_date' => '2026-10-02',
+        ]);
+
+        $this->assertSame(['ATT-A'], $report['rows']->pluck('attendance_id')->all());
+    }
+
+    public function test_teacher_can_select_each_student_in_authorized_class_without_cross_student_leakage(): void
+    {
+        $service = $this->service([
+            $this->attendance('ATT-A', 'STU-A', 'CLS-A', '2026-10-02', 'PRESENT'),
+            $this->attendance('ATT-C', 'STU-C', 'CLS-A', '2026-10-02', 'LATE'),
+            $this->attendance('ATT-B', 'STU-B', 'CLS-B', '2026-10-02', 'SICK'),
+        ]);
+
+        $all = $service->build($this->teacher(), 'TEACHER', [
+            'class_id' => 'CLS-A', 'report_type' => 'harian', 'daily_date' => '2026-10-02',
+        ]);
+        $andi = $service->build($this->teacher(), 'TEACHER', [
+            'class_id' => 'CLS-A', 'student_id' => 'STU-A', 'report_type' => 'harian', 'daily_date' => '2026-10-02',
+        ]);
+        $citra = $service->build($this->teacher(), 'TEACHER', [
+            'class_id' => 'CLS-A', 'student_id' => 'STU-C', 'report_type' => 'harian', 'daily_date' => '2026-10-02',
+        ]);
+
+        $this->assertFalse($all['is_individual']);
+        $this->assertSame(['ATT-A', 'ATT-C'], $all['rows']->pluck('attendance_id')->all());
+        $this->assertSame(['ATT-A'], $andi['rows']->pluck('attendance_id')->all());
+        $this->assertSame('Andi', $andi['student']['name']);
+        $this->assertSame(['ATT-C'], $citra['rows']->pluck('attendance_id')->all());
+        $this->assertSame('Citra', $citra['student']['name']);
+    }
+
+    public function test_teacher_forged_student_from_another_class_is_forbidden(): void
+    {
+        $this->expectException(HttpException::class);
+        $this->expectExceptionMessage('Siswa berada di luar kelas yang dipilih.');
+
+        $this->service([])->build($this->teacher(), 'TEACHER', [
+            'class_id' => 'CLS-A', 'student_id' => 'STU-B', 'report_type' => 'harian', 'daily_date' => '2026-10-02',
+        ]);
+    }
+
     public function test_teacher_with_multiple_and_duplicate_assignments_sees_each_class_once(): void
     {
         $scope = $this->scope(
@@ -165,6 +254,67 @@ class AttendanceReportServiceTest extends TestCase
         $this->assertSame($multiple['total_records'], collect($multiple['summary'])->sum('count'));
     }
 
+    #[DataProvider('individualPeriodProvider')]
+    public function test_individual_periods_filter_the_exact_canonical_dataset(array $filters, array $expectedIds): void
+    {
+        $report = $this->service([
+            $this->attendance('SEP-27', 'STU-A', 'CLS-A', '2026-09-27', 'PRESENT'),
+            $this->attendance('SEP-28', 'STU-A', 'CLS-A', '2026-09-28', 'LATE'),
+            $this->attendance('OCT-02', 'STU-A', 'CLS-A', '2026-10-02', 'PERMITTED'),
+            $this->attendance('OCT-04', 'STU-A', 'CLS-A', '2026-10-04', 'SICK'),
+            $this->attendance('OCT-05', 'STU-A', 'CLS-A', '2026-10-05', 'PRESENT'),
+            $this->attendance('OTHER', 'STU-C', 'CLS-A', '2026-10-02', 'PRESENT'),
+        ])->build($this->admin(), 'MASTER', array_merge([
+            'class_id' => 'CLS-A', 'student_id' => 'STU-A',
+        ], $filters));
+
+        $this->assertTrue($report['is_individual']);
+        $this->assertSame($expectedIds, $report['rows']->pluck('attendance_id')->all());
+        $this->assertNotContains('OTHER', $report['rows']->pluck('attendance_id')->all());
+    }
+
+    public static function individualPeriodProvider(): array
+    {
+        return [
+            'daily exact date' => [['report_type' => 'harian', 'daily_date' => '2026-10-02'], ['OCT-02']],
+            'weekly Monday-Sunday' => [['report_type' => 'mingguan', 'weekly_anchor' => '2026-10-01'], ['SEP-28', 'OCT-02', 'OCT-04']],
+            'monthly calendar' => [['report_type' => 'bulanan', 'month' => 10, 'year' => 2026], ['OCT-02', 'OCT-04', 'OCT-05']],
+            'custom inclusive' => [['report_type' => 'rentang', 'date_start' => '2026-09-28', 'date_end' => '2026-10-02'], ['SEP-28', 'OCT-02']],
+        ];
+    }
+
+    public function test_individual_preview_and_pdf_share_one_dataset_and_show_historical_late(): void
+    {
+        $report = $this->service([
+            $this->attendance('ATT-LATE', 'STU-A', 'CLS-A', '2026-10-02', 'LATE'),
+            $this->attendance('ATT-OTHER', 'STU-C', 'CLS-A', '2026-10-02', 'PRESENT'),
+        ])->build($this->admin(), 'ADMINISTRATOR', [
+            'class_id' => 'CLS-A', 'student_id' => 'STU-A', 'report_type' => 'bulanan', 'month' => 10, 'year' => 2026,
+        ]);
+
+        $preview = view('academic.attendance-reports.index', [
+            'classes' => collect(),
+            'studentsByClass' => [],
+            'report' => $report,
+            'defaults' => [
+                'report_type' => 'bulanan', 'daily_date' => '2026-10-02', 'weekly_anchor' => '2026-10-02',
+                'month' => 10, 'year' => 2026, 'date_start' => '2026-10-01', 'date_end' => '2026-10-31',
+                'student_id' => 'STU-A',
+            ],
+            'userRole' => 'ADMINISTRATOR',
+        ])->render();
+        $pdf = view('pdf.attendance_report', compact('report'))->render();
+
+        foreach ([$preview, $pdf] as $html) {
+            $this->assertStringContainsString('Andi', $html);
+            $this->assertStringContainsString('NIS-1', $html);
+            $this->assertStringContainsString('Terlambat', $html);
+            $this->assertStringNotContainsString('Citra', $html);
+            $this->assertStringNotContainsString('ATT-OTHER', $html);
+        }
+        $this->assertSame(0, $report['summary']['ABSENT']['count']);
+    }
+
     public function test_pdf_view_contains_identity_summary_recap_detail_and_generates_bytes(): void
     {
         $report = $this->service([
@@ -223,14 +373,14 @@ class AttendanceReportServiceTest extends TestCase
 
     public static function mobileViewportProvider(): array
     {
-        return ['375px' => [375], '390px' => [390], '430px' => [430]];
+        return ['375px' => [375], '390px' => [390], '430px' => [430], '768px' => [768], '1024px' => [1024]];
     }
 
     public function test_report_page_has_bounded_desktop_layout(): void
     {
         $view = file_get_contents(resource_path('views/academic/attendance-reports/index.blade.php'));
 
-        $this->assertStringContainsString('lg:grid-cols-2', $view);
+        $this->assertStringContainsString('lg:grid-cols-3', $view);
         $this->assertStringContainsString('max-w-2xl', $view);
         $this->assertStringContainsString('xl:grid-cols-6', $view);
     }
@@ -242,7 +392,7 @@ class AttendanceReportServiceTest extends TestCase
             $this->assertNotNull($route);
             $middleware = collect($route->gatherMiddleware());
             $this->assertTrue($middleware->contains('auth'));
-            $this->assertTrue($middleware->contains(fn ($item) => str_contains($item, 'role:TEACHER,ADMINISTRATOR')));
+            $this->assertTrue($middleware->contains(fn ($item) => str_contains($item, 'role:TEACHER,ADMINISTRATOR,MASTER')));
         }
     }
 
@@ -315,6 +465,28 @@ class AttendanceReportServiceTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
+    public function test_pdf_endpoint_independently_rejects_forged_cross_class_student(): void
+    {
+        $roleService = Mockery::mock(RoleService::class);
+        $roleService->shouldReceive('getRoleById')->once()->with('TEACHER')->andReturn([
+            'Role_ID' => 'TEACHER', 'Role_Name' => 'TEACHER', 'Is_Active' => 'TRUE',
+        ]);
+        $controller = new AttendanceReportController($this->service([]), $roleService);
+        $request = Request::create('/attendance/reports/pdf', 'GET', [
+            'class_id' => 'CLS-A',
+            'student_id' => 'STU-B',
+            'report_type' => 'harian',
+            'daily_date' => '2026-10-02',
+        ]);
+        $request->setUserResolver(fn () => (object) [
+            'User_ID' => 'USR-T1', 'Role_ID' => 'TEACHER', 'Full_Name' => 'Guru Satu',
+        ]);
+
+        $this->expectException(HttpException::class);
+        $this->expectExceptionMessage('Siswa berada di luar kelas yang dipilih.');
+        $controller->pdf($request);
+    }
+
     private function service(array $attendances, ?array $scope = null): AttendanceReportService
     {
         $attendanceRepo = Mockery::mock(AttendanceRepositoryInterface::class);
@@ -378,7 +550,13 @@ class AttendanceReportServiceTest extends TestCase
 
     private function scope(array $classIds, array $studentsByClass): array
     {
-        return ['class_ids' => $classIds, 'students_by_class' => $studentsByClass];
+        $students = collect([
+            ['Student_ID' => 'STU-A', 'Student_Number' => 'NIS-1', 'Full_Name' => 'Andi', 'Class_ID' => 'CLS-A', 'Is_Active' => 'TRUE'],
+            ['Student_ID' => 'STU-C', 'Student_Number' => 'NIS-3', 'Full_Name' => 'Citra', 'Class_ID' => 'CLS-A', 'Is_Active' => 'TRUE'],
+            ['Student_ID' => 'STU-B', 'Student_Number' => 'NIS-2', 'Full_Name' => 'Budi', 'Class_ID' => 'CLS-B', 'Is_Active' => 'TRUE'],
+        ])->whereIn('Student_ID', array_values(array_unique(array_merge(...array_values($studentsByClass ?: [[]])))))->values();
+
+        return ['class_ids' => $classIds, 'students_by_class' => $studentsByClass, 'students' => $students];
     }
 
     private function teacher(): object

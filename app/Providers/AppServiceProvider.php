@@ -2,110 +2,110 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\URL;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Http\Request;
-use App\Support\LoginRateLimiter;
-use App\Providers\GoogleSheetsUserProvider;
-use App\Services\Core\UserService;
-use Carbon\Carbon;
-
-use App\Interfaces\GoogleSheets\UserRepositoryInterface;
-use App\Repositories\GoogleSheets\UserRepository;
-use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
-use App\Repositories\GoogleSheets\RoleRepository;
-use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
-use App\Repositories\GoogleSheets\ActivityLogRepository;
-use App\Interfaces\GoogleSheets\DepartmentRepositoryInterface;
-use App\Repositories\GoogleSheets\DepartmentRepository;
-use App\Interfaces\GoogleSheets\PositionRepositoryInterface;
-use App\Repositories\GoogleSheets\PositionRepository;
-use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
-use App\Repositories\GoogleSheets\EmployeeRepository;
-use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
-use App\Repositories\GoogleSheets\TeacherRepository;
-use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
-use App\Repositories\GoogleSheets\ProgramRepository;
-use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
-use App\Repositories\GoogleSheets\BatchRepository;
-use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
-use App\Repositories\GoogleSheets\ClassRepository;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Repositories\GoogleSheets\StudentRepository;
-use App\Interfaces\GoogleSheets\AlumniRepositoryInterface;
-use App\Repositories\GoogleSheets\AlumniRepository;
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
-use App\Repositories\GoogleSheets\CompanyRepository;
-use App\Interfaces\GoogleSheets\ModuleRepositoryInterface;
-use App\Repositories\GoogleSheets\ModuleRepository;
-use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
-use App\Repositories\GoogleSheets\DocumentRepository;
-
 use App\Interfaces\GoogleSheets\AcademicYearRepositoryInterface;
-use App\Repositories\GoogleSheets\AcademicYearRepository;
-use App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface;
-use App\Repositories\GoogleSheets\ClassEnrollmentRepository;
-use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
-use App\Repositories\GoogleSheets\SubjectRepository;
-use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
-use App\Repositories\GoogleSheets\ScheduleRepository;
+use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
+use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
+use App\Interfaces\GoogleSheets\AlumniRepositoryInterface;
+use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
+use App\Interfaces\GoogleSheets\ApprovalHistoryRepositoryInterface;
+use App\Interfaces\GoogleSheets\ApprovalRepositoryInterface;
+use App\Interfaces\GoogleSheets\AssessmentConfigRepositoryInterface;
+use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\AssignmentRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
-use App\Repositories\GoogleSheets\AttendanceRequestRepository;
-use App\Repositories\GoogleSheets\AttendanceRepository;
-use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
-use App\Repositories\GoogleSheets\ScoreRepository;
-use App\Interfaces\GoogleSheets\AssignmentRepositoryInterface;
-use App\Repositories\GoogleSheets\AssignmentRepository;
-use App\Interfaces\GoogleSheets\AnnouncementRepositoryInterface;
-use App\Repositories\GoogleSheets\AnnouncementRepository;
-use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
-use App\Repositories\GoogleSheets\NotificationRepository;
-use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
-use App\Repositories\GoogleSheets\AssessmentRepository;
-use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
-use App\Repositories\GoogleSheets\InvoiceRepository;
-use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
-use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
-use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
-use App\Repositories\GoogleSheets\PaymentRepository;
-use App\Repositories\GoogleSheets\AccountRepository;
-use App\Repositories\GoogleSheets\TransactionRepository;
-
-// Phase 9.3 & 9.4 Bindings
-use App\Interfaces\GoogleSheets\PayrollRepositoryInterface;
-use App\Repositories\GoogleSheets\PayrollRepository;
-use App\Interfaces\GoogleSheets\LeaveRepositoryInterface;
-use App\Repositories\GoogleSheets\LeaveRepository;
-use App\Interfaces\GoogleSheets\OvertimeRepositoryInterface;
-use App\Repositories\GoogleSheets\OvertimeRepository;
-use App\Interfaces\GoogleSheets\SalaryComponentRepositoryInterface;
-use App\Repositories\GoogleSheets\SalaryComponentRepository;
-use App\Interfaces\GoogleSheets\DocumentTemplateRepositoryInterface;
-use App\Repositories\GoogleSheets\DocumentTemplateRepository;
-
-use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
-use App\Repositories\GoogleSheets\WorkflowRepository;
-use App\Interfaces\GoogleSheets\ApprovalRepositoryInterface;
-use App\Repositories\GoogleSheets\ApprovalRepository;
-use App\Interfaces\GoogleSheets\ApprovalHistoryRepositoryInterface;
-use App\Repositories\GoogleSheets\ApprovalHistoryRepository;
-
 use App\Interfaces\GoogleSheets\AuditLogRepositoryInterface;
-use App\Repositories\GoogleSheets\AuditLogRepository;
-
-use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
-use App\Repositories\GoogleSheets\SystemSettingRepository;
-use App\Interfaces\GoogleSheets\SystemParameterRepositoryInterface;
-use App\Repositories\GoogleSheets\SystemParameterRepository;
-
+use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\DepartmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
+use App\Interfaces\GoogleSheets\LeaveRepositoryInterface;
+use App\Interfaces\GoogleSheets\ModuleRepositoryInterface;
+use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
+use App\Interfaces\GoogleSheets\OvertimeRepositoryInterface;
+use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
+use App\Interfaces\GoogleSheets\PayrollRepositoryInterface;
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
-use App\Repositories\GoogleSheets\PermanentQrRepository;
-
-use App\Interfaces\GoogleSheets\AssessmentConfigRepositoryInterface;
+use App\Interfaces\GoogleSheets\PositionRepositoryInterface;
+use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface;
+use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
+use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
+use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
+use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
+use App\Interfaces\GoogleSheets\SalaryComponentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
+use App\Interfaces\GoogleSheets\SystemParameterRepositoryInterface;
+use App\Interfaces\GoogleSheets\SystemSettingRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
+use App\Interfaces\GoogleSheets\UserRepositoryInterface;
+use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
+use App\Repositories\GoogleSheets\AcademicYearRepository;
+use App\Repositories\GoogleSheets\AccountRepository;
+use App\Repositories\GoogleSheets\ActivityLogRepository;
+use App\Repositories\GoogleSheets\AlumniRepository;
+use App\Repositories\GoogleSheets\AnnouncementRepository;
+use App\Repositories\GoogleSheets\ApprovalHistoryRepository;
+use App\Repositories\GoogleSheets\ApprovalRepository;
 use App\Repositories\GoogleSheets\AssessmentConfigRepository;
+use App\Repositories\GoogleSheets\AssessmentRepository;
+use App\Repositories\GoogleSheets\AssignmentRepository;
+use App\Repositories\GoogleSheets\AttendanceRepository;
+use App\Repositories\GoogleSheets\AttendanceRequestRepository;
+use App\Repositories\GoogleSheets\AuditLogRepository;
+use App\Repositories\GoogleSheets\BatchRepository;
+use App\Repositories\GoogleSheets\ClassEnrollmentRepository;
+use App\Repositories\GoogleSheets\ClassRepository;
+use App\Repositories\GoogleSheets\CompanyRepository;
+use App\Repositories\GoogleSheets\DepartmentRepository;
+use App\Repositories\GoogleSheets\DocumentRepository;
+use App\Repositories\GoogleSheets\EmployeeRepository;
+use App\Repositories\GoogleSheets\InvoiceRepository;
+use App\Repositories\GoogleSheets\LeaveRepository;
+// Phase 9.3 & 9.4 Bindings
+use App\Repositories\GoogleSheets\ModuleRepository;
+use App\Repositories\GoogleSheets\NotificationRepository;
+use App\Repositories\GoogleSheets\OvertimeRepository;
+use App\Repositories\GoogleSheets\PaymentRepository;
+use App\Repositories\GoogleSheets\PayrollRepository;
+use App\Repositories\GoogleSheets\PermanentQrRepository;
+use App\Repositories\GoogleSheets\PositionRepository;
+use App\Repositories\GoogleSheets\ProgramRepository;
+use App\Repositories\GoogleSheets\QuizAttemptRepository;
+use App\Repositories\GoogleSheets\QuizQuestionRepository;
+use App\Repositories\GoogleSheets\QuizRepository;
+use App\Repositories\GoogleSheets\QuizResultRepository;
+use App\Repositories\GoogleSheets\RoleRepository;
+use App\Repositories\GoogleSheets\SalaryComponentRepository;
+use App\Repositories\GoogleSheets\ScheduleRepository;
+use App\Repositories\GoogleSheets\ScoreRepository;
+use App\Repositories\GoogleSheets\StudentRepository;
+use App\Repositories\GoogleSheets\SubjectRepository;
+use App\Repositories\GoogleSheets\SystemParameterRepository;
+use App\Repositories\GoogleSheets\SystemSettingRepository;
+use App\Repositories\GoogleSheets\TeacherRepository;
+use App\Repositories\GoogleSheets\TransactionRepository;
+use App\Repositories\GoogleSheets\UserRepository;
+use App\Repositories\GoogleSheets\WorkflowRepository;
+use App\Services\Core\EnterpriseAutomationService;
+use App\Services\Core\SystemSettingService;
+use App\Services\Core\UserService;
+use App\Services\Dashboard\DashboardContextService;
+use App\Support\LoginRateLimiter;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -148,21 +148,22 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(LeaveRepositoryInterface::class, LeaveRepository::class);
         $this->app->bind(OvertimeRepositoryInterface::class, OvertimeRepository::class);
         $this->app->bind(SalaryComponentRepositoryInterface::class, SalaryComponentRepository::class);
-        $this->app->bind(DocumentTemplateRepositoryInterface::class, DocumentTemplateRepository::class);
-    $this->app->bind(WorkflowRepositoryInterface::class, WorkflowRepository::class);
+        $this->app->bind(WorkflowRepositoryInterface::class, WorkflowRepository::class);
         $this->app->bind(ApprovalRepositoryInterface::class, ApprovalRepository::class);
         $this->app->bind(ApprovalHistoryRepositoryInterface::class, ApprovalHistoryRepository::class);
-            $this->app->bind(AuditLogRepositoryInterface::class, AuditLogRepository::class);
-            $this->app->singleton(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
+        $this->app->bind(AuditLogRepositoryInterface::class, AuditLogRepository::class);
+        $this->app->singleton(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
         $this->app->singleton(SystemParameterRepositoryInterface::class, SystemParameterRepository::class);
-        
+
         $this->app->singleton(PermanentQrRepositoryInterface::class, PermanentQrRepository::class);
         $this->app->singleton(AssessmentConfigRepositoryInterface::class, AssessmentConfigRepository::class);
-        $this->app->bind(\App\Interfaces\GoogleSheets\QuizRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizRepository::class);
-        $this->app->bind(\App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizQuestionRepository::class);
-        $this->app->bind(\App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizAttemptRepository::class);
-        $this->app->bind(\App\Interfaces\GoogleSheets\QuizResultRepositoryInterface::class, \App\Repositories\GoogleSheets\QuizResultRepository::class);
-        $this->app->singleton(\App\Services\Core\EnterpriseAutomationService::class, function ($app) { return new \App\Services\Core\EnterpriseAutomationService(); });
+        $this->app->bind(QuizRepositoryInterface::class, QuizRepository::class);
+        $this->app->bind(QuizQuestionRepositoryInterface::class, QuizQuestionRepository::class);
+        $this->app->bind(QuizAttemptRepositoryInterface::class, QuizAttemptRepository::class);
+        $this->app->bind(QuizResultRepositoryInterface::class, QuizResultRepository::class);
+        $this->app->singleton(EnterpriseAutomationService::class, function ($app) {
+            return new EnterpriseAutomationService;
+        });
     }
 
     /**
@@ -190,7 +191,7 @@ class AppServiceProvider extends ServiceProvider
                 static $brandingPayload = null;
 
                 if ($brandingPayload === null) {
-                    $settingService = app(\App\Services\Core\SystemSettingService::class);
+                    $settingService = app(SystemSettingService::class);
                     $brandingPayload = [
                         'themeTokens' => $settingService->getThemeTokens(),
                         'companyProfile' => $settingService->getCompanyProfile(),
@@ -215,7 +216,7 @@ class AppServiceProvider extends ServiceProvider
 
                 $resolvedDashboardContext = $request->attributes->get('wms.dashboard_context');
                 if ($resolvedDashboardContext === null) {
-                    $contextService = app(\App\Services\Dashboard\DashboardContextService::class);
+                    $contextService = app(DashboardContextService::class);
                     $resolvedDashboardContext = $contextService->getContext();
                     $request->attributes->set('wms.dashboard_context', $resolvedDashboardContext);
                 }
@@ -231,11 +232,10 @@ class AppServiceProvider extends ServiceProvider
                     'timezone' => 'Asia/Jakarta',
                     'user_name' => auth()->user()->Full_Name ?? 'User',
                     'role' => auth()->user()->Role ?? 'USER',
-                    'timestamp' => time()
+                    'timestamp' => time(),
                 ]);
             }
         });
-
 
     }
 }

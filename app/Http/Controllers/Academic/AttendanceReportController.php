@@ -22,6 +22,7 @@ class AttendanceReportController extends Controller
     {
         $roleName = $this->roleName($request);
         $classes = $this->reportService->availableClasses($request->user(), $roleName);
+        $studentsByClass = $this->reportService->availableStudentsByClass($request->user(), $roleName, $classes);
         $report = null;
 
         if ($request->filled('report_type') || $request->filled('class_id')) {
@@ -31,6 +32,7 @@ class AttendanceReportController extends Controller
 
         return view('academic.attendance-reports.index', [
             'classes' => $classes,
+            'studentsByClass' => $studentsByClass,
             'report' => $report,
             'defaults' => $this->defaults($request),
         ]);
@@ -42,7 +44,7 @@ class AttendanceReportController extends Controller
         $report = $this->reportService->build($request->user(), $this->roleName($request), $filters);
         $filename = $this->filename($report);
         $pdf = Pdf::loadView('pdf.attendance_report', ['report' => $report])
-            ->setPaper('A4', $report['report_type'] === 'harian' ? 'portrait' : 'landscape');
+            ->setPaper('A4', $report['is_individual'] || $report['report_type'] === 'harian' ? 'portrait' : 'landscape');
         $pdf->getDomPDF()->getOptions()->set([
             'defaultFont' => 'Helvetica',
             'isHtml5ParserEnabled' => true,
@@ -58,6 +60,7 @@ class AttendanceReportController extends Controller
     {
         return Validator::make($request->all(), [
             'class_id' => ['required', 'string', 'max:100'],
+            'student_id' => ['nullable', 'string', 'max:100'],
             'report_type' => ['required', 'string', 'in:harian,mingguan,bulanan,rentang'],
             'daily_date' => ['nullable', 'required_if:report_type,harian', 'date_format:Y-m-d'],
             'weekly_anchor' => ['nullable', 'required_if:report_type,mingguan', 'date_format:Y-m-d'],
@@ -103,12 +106,14 @@ class AttendanceReportController extends Controller
             'year' => (int) $request->input('year', $now->year),
             'date_start' => $request->input('date_start', $now->toDateString()),
             'date_end' => $request->input('date_end', $now->toDateString()),
+            'student_id' => $request->input('student_id', ''),
         ];
     }
 
     private function filename(array $report): string
     {
         $class = Str::slug($report['class']['name']) ?: 'kelas';
+        $student = $report['student'] ? Str::slug($report['student']['name']) : null;
         $start = $report['period']['start']->format('d-m-Y');
         $end = $report['period']['end']->format('d-m-Y');
 
@@ -118,6 +123,9 @@ class AttendanceReportController extends Controller
             'bulanan' => 'absensi-bulanan-'.$class.'-'.Str::slug($report['period']['label']),
             default => "absensi-{$class}-{$start}-{$end}",
         };
+        if ($student) {
+            $base = "rekap-absensi-siswa-{$student}-{$start}-{$end}";
+        }
 
         return strtolower(ReportHelper::safeFilename($base)).'.pdf';
     }

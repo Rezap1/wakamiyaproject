@@ -4,37 +4,46 @@ namespace App\Http\Controllers\Core;
 
 use App\Helpers\SheetValue;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-
-use App\Interfaces\GoogleSheets\UserRepositoryInterface;
-use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
-use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
-use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
+use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class DirectorDashboardController extends Controller
 {
-    protected $employeeRepo, $teacherRepo, $studentRepo, $companyRepo, $documentRepo, $activityLogRepo, $programRepo, $batchRepo;
+    protected $employeeRepo;
+
+    protected $teacherRepo;
+
+    protected $studentRepo;
+
+    protected $companyRepo;
+
+    protected $activityLogRepo;
+
+    protected $programRepo;
+
+    protected $batchRepo;
 
     public function __construct(
         EmployeeRepositoryInterface $employeeRepo,
         TeacherRepositoryInterface $teacherRepo,
         StudentRepositoryInterface $studentRepo,
         CompanyRepositoryInterface $companyRepo,
-        DocumentRepositoryInterface $documentRepo,
         ActivityLogRepositoryInterface $activityLogRepo,
-        \App\Interfaces\GoogleSheets\ProgramRepositoryInterface $programRepo,
-        \App\Interfaces\GoogleSheets\BatchRepositoryInterface $batchRepo
+        ProgramRepositoryInterface $programRepo,
+        BatchRepositoryInterface $batchRepo
     ) {
         $this->employeeRepo = $employeeRepo;
         $this->teacherRepo = $teacherRepo;
         $this->studentRepo = $studentRepo;
         $this->companyRepo = $companyRepo;
-        $this->documentRepo = $documentRepo;
         $this->activityLogRepo = $activityLogRepo;
         $this->programRepo = $programRepo;
         $this->batchRepo = $batchRepo;
@@ -44,7 +53,7 @@ class DirectorDashboardController extends Controller
     {
         try {
             $dashboardData = Cache::remember('wms_director_dashboard_data', 300, function () {
-                $countActive = function($repo) {
+                $countActive = function ($repo) {
                     return collect($repo->fetchAll())->where('Is_Active', '!=', 'FALSE')->count();
                 };
 
@@ -56,13 +65,12 @@ class DirectorDashboardController extends Controller
                     'teachers' => $countActive($this->teacherRepo),
                     'employees' => $countActive($this->employeeRepo),
                     'companies' => $countActive($this->companyRepo),
-                    'documents' => $countActive($this->documentRepo),
                 ];
 
                 // 2. Executive Charts Data
                 $students = collect($this->studentRepo->fetchAll())
                     ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
-                
+
                 // Student per Program
                 $programs = collect($this->programRepo->fetchAll())->keyBy('Program_ID');
                 $studentProgramCount = $students->groupBy('Program_ID')->map->count();
@@ -105,7 +113,7 @@ class DirectorDashboardController extends Controller
 
                 $notifications = [
                     'interviewsToday' => [],
-                    'pendingApplications' => []
+                    'pendingApplications' => [],
                 ];
 
                 // 5. Recent Activity (Lintas Modul dari AUDIT_LOG)
@@ -124,20 +132,21 @@ class DirectorDashboardController extends Controller
                                 } else {
                                     $action = str_replace('_', ' ', $log['Action'] ?? '');
                                     $refId = $log['Reference_ID'] ?? '';
-                                    $desc = "Aktivitas " . ucwords(strtolower($action)) . ($refId ? " pada {$refId}" : '');
+                                    $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
                                 }
                             }
+
                             return [
-                                'title'       => $log['Action'] ?? 'Aktivitas',
-                                'description' => ($log['Module'] ?? '') . ' — ' . $desc,
-                                'time'        => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
+                                'title' => $log['Action'] ?? 'Aktivitas',
+                                'description' => ($log['Module'] ?? '').' — '.$desc,
+                                'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
                             ];
                         })
                         ->values()
                         ->toArray();
                 } catch (\Exception $e) {
                     $recentActivities = [];
-                    \Illuminate\Support\Facades\Log::error('Failed to fetch audit log for director dashboard: ' . $e->getMessage());
+                    Log::error('Failed to fetch audit log for director dashboard: '.$e->getMessage());
                 }
 
                 return compact('kpi', 'charts', 'summary', 'notifications', 'recentActivities');

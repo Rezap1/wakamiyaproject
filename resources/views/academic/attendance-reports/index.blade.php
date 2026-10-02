@@ -3,7 +3,7 @@
 @section('header', 'Laporan Absensi')
 
 @section('content')
-<div class="space-y-6 pb-24 md:pb-8" x-data="attendanceReportFilters()">
+<div class="space-y-6 pb-24 md:pb-8" x-data="attendanceReportFilters(@js($studentsByClass ?? []), @js(request('class_id', '')), @js(request('student_id', '')))">
     <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <div class="mb-5">
             <h1 class="text-xl font-black text-slate-900 sm:text-2xl">Laporan Absensi</h1>
@@ -11,10 +11,10 @@
         </div>
 
         <form method="GET" action="{{ route('attendance.reports.index') }}" class="space-y-5">
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <label class="block">
                     <span class="mb-1.5 block text-sm font-bold text-slate-700">Kelas</span>
-                    <select name="class_id" required class="min-h-11 w-full rounded-xl border-slate-300 bg-white text-sm focus:border-sky-500 focus:ring-sky-500">
+                    <select name="class_id" x-model="classId" @change="studentId = ''" required class="min-h-11 w-full rounded-xl border-slate-300 bg-white text-sm focus:border-sky-500 focus:ring-sky-500">
                         <option value="">Pilih kelas</option>
                         @foreach($classes as $class)
                             @php
@@ -30,6 +30,17 @@
                     @if($classes->isEmpty())
                         <span class="mt-1 block text-xs font-semibold text-amber-700">Tidak ada kelas aktif dalam ruang lingkup akun Anda.</span>
                     @endif
+                </label>
+
+                <label class="block min-w-0">
+                    <span class="mb-1.5 block text-sm font-bold text-slate-700">Siswa</span>
+                    <select name="student_id" x-model="studentId" :disabled="!classId" class="min-h-11 w-full min-w-0 rounded-xl border-slate-300 bg-white text-sm focus:border-sky-500 focus:ring-sky-500 disabled:bg-slate-100 disabled:text-slate-400">
+                        <option value="">Semua Siswa</option>
+                        <template x-for="student in students" :key="student.id">
+                            <option :value="student.id" x-text="student.label"></option>
+                        </template>
+                    </select>
+                    <span x-show="!classId" class="mt-1 block text-xs text-slate-500">Pilih kelas terlebih dahulu.</span>
                 </label>
 
                 <label class="block">
@@ -99,11 +110,15 @@
                 <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-sky-600">{{ $report['title'] }}</p>
-                        <h2 class="mt-1 text-xl font-black text-slate-900">{{ $report['class']['name'] }}</h2>
+                        <h2 class="mt-1 break-words text-xl font-black text-slate-900">{{ $report['is_individual'] ? $report['student']['name'] : $report['class']['name'] }}</h2>
                         <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                            @if($report['is_individual'])
+                                <dt class="font-semibold text-slate-500">NIS / ID Siswa</dt><dd class="break-words font-bold text-slate-800">{{ $report['student']['number'] }}</dd>
+                                <dt class="font-semibold text-slate-500">Kelas</dt><dd class="break-words font-bold text-slate-800">{{ $report['class']['name'] }}</dd>
+                            @endif
                             <dt class="font-semibold text-slate-500">Jenis Rekap</dt><dd class="font-bold text-slate-800">{{ $report['report_type_label'] }}</dd>
                             <dt class="font-semibold text-slate-500">Periode</dt><dd class="font-bold text-slate-800">{{ $report['period']['label'] }}</dd>
-                            <dt class="font-semibold text-slate-500">Jumlah Siswa</dt><dd class="font-bold text-slate-800">{{ $report['student_count'] }}</dd>
+                            @unless($report['is_individual'])<dt class="font-semibold text-slate-500">Jumlah Siswa</dt><dd class="font-bold text-slate-800">{{ $report['student_count'] }}</dd>@endunless
                         </dl>
                     </div>
                     <a href="{{ route('attendance.reports.pdf', request()->query()) }}" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-rose-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-rose-700">
@@ -127,7 +142,7 @@
 
             <p class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-900">{{ $report['absence_note'] }}</p>
 
-            @if($report['report_type'] !== 'harian')
+            @if(! $report['is_individual'] && $report['report_type'] !== 'harian')
                 <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div class="border-b border-slate-200 px-4 py-4 sm:px-6">
                         <h3 class="font-black text-slate-900">Rekap Per Siswa</h3>
@@ -158,6 +173,21 @@
                 </div>
                 @if($report['rows']->isEmpty())
                     <div class="px-6 py-12 text-center text-sm font-semibold text-slate-500">Tidak ada data absensi pada periode yang dipilih.</div>
+                @elseif($report['is_individual'])
+                    <div class="space-y-3 p-4 md:hidden">
+                        @foreach($report['rows'] as $row)
+                            <article class="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <div class="flex flex-wrap items-start justify-between gap-2"><p class="font-black text-slate-900">{{ \App\Helpers\DateHelper::format($row['date'], 'd M Y') }}</p><span class="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-700">{{ $row['status'] }}</span></div>
+                                <dl class="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-xs font-semibold text-slate-500">Jam Masuk</dt><dd class="font-bold text-slate-800">{{ $row['check_in'] }}</dd></div><div><dt class="text-xs font-semibold text-slate-500">Jam Pulang</dt><dd class="font-bold text-slate-800">{{ $row['check_out'] }}</dd></div><div class="col-span-2 min-w-0"><dt class="text-xs font-semibold text-slate-500">Catatan</dt><dd class="break-words text-slate-800">{{ $row['notes'] }}</dd></div></dl>
+                            </article>
+                        @endforeach
+                    </div>
+                    <div class="hidden md:block">
+                        <table class="w-full table-fixed text-sm">
+                            <thead class="bg-slate-50 text-left text-xs uppercase text-slate-600"><tr><th class="w-12 px-4 py-3">No</th><th class="px-4 py-3">Tanggal</th><th class="px-4 py-3">Jam Masuk</th><th class="px-4 py-3">Jam Pulang</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Catatan</th></tr></thead>
+                            <tbody class="divide-y divide-slate-100">@foreach($report['rows'] as $index => $row)<tr><td class="px-4 py-3">{{ $index + 1 }}</td><td class="px-4 py-3">{{ \App\Helpers\DateHelper::format($row['date'], 'd M Y') }}</td><td class="px-4 py-3">{{ $row['check_in'] }}</td><td class="px-4 py-3">{{ $row['check_out'] }}</td><td class="px-4 py-3 font-semibold">{{ $row['status'] }}</td><td class="break-words px-4 py-3">{{ $row['notes'] }}</td></tr>@endforeach</tbody>
+                        </table>
+                    </div>
                 @else
                     <div class="overflow-x-auto">
                         <table class="min-w-[900px] w-full text-sm">
@@ -178,10 +208,16 @@
 </div>
 
 <script>
-function attendanceReportFilters() {
+function attendanceReportFilters(studentsByClass, initialClass, initialStudent) {
     return {
         type: @js($defaults['report_type']),
+        classId: initialClass,
+        studentId: initialStudent,
+        studentsByClass,
         weeklyAnchor: @js($defaults['weekly_anchor']),
+        get students() {
+            return this.studentsByClass[this.classId] || [];
+        },
         get weeklyLabel() {
             if (!this.weeklyAnchor) return 'Pilih tanggal acuan untuk melihat rentang Senin-Minggu.';
             const anchor = new Date(this.weeklyAnchor + 'T12:00:00');

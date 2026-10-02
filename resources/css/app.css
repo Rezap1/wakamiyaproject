@@ -95,6 +95,11 @@ body {
   touch-action: none;
 }
 
+body.wms-modal-open .mobile-bottom-nav {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .wms-mobile-dashboard {
   display: grid;
   width: 100%;

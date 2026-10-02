@@ -3,31 +3,39 @@
 namespace App\Services\Dashboard;
 
 use App\Helpers\SheetValue;
-use App\Interfaces\GoogleSheets\UserRepositoryInterface;
-use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
-use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
-use App\Interfaces\GoogleSheets\DocumentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
-use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
+use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
+use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Interfaces\GoogleSheets\UserRepositoryInterface;
+use App\Services\Academic\ScheduleService;
 use App\Services\Core\NotificationService;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Core\RoleService;
+use App\Services\Finance\TransactionService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class AdminDashboardService
 {
     protected $userRepo;
+
     protected $employeeRepo;
+
     protected $teacherRepo;
+
     protected $studentRepo;
+
     protected $companyRepo;
-    protected $documentRepo;
+
     protected $activityLogRepo;
+
     protected $programRepo;
+
     protected $batchRepo;
+
     protected $notificationService;
 
     public function __construct(
@@ -36,7 +44,6 @@ class AdminDashboardService
         TeacherRepositoryInterface $teacherRepo,
         StudentRepositoryInterface $studentRepo,
         CompanyRepositoryInterface $companyRepo,
-        DocumentRepositoryInterface $documentRepo,
         ActivityLogRepositoryInterface $activityLogRepo,
         ProgramRepositoryInterface $programRepo,
         BatchRepositoryInterface $batchRepo,
@@ -47,7 +54,6 @@ class AdminDashboardService
         $this->teacherRepo = $teacherRepo;
         $this->studentRepo = $studentRepo;
         $this->companyRepo = $companyRepo;
-        $this->documentRepo = $documentRepo;
         $this->activityLogRepo = $activityLogRepo;
         $this->programRepo = $programRepo;
         $this->batchRepo = $batchRepo;
@@ -69,7 +75,7 @@ class AdminDashboardService
             return collect($repo->fetchAll())->where('Is_Active', '!=', 'FALSE')->count();
         };
 
-        $roleService = app(\App\Services\Core\RoleService::class);
+        $roleService = app(RoleService::class);
         $roles = collect($roleService->getAllRoles())->keyBy('Role_ID');
 
         $countByRole = function ($roleName) use ($users, $roles) {
@@ -78,23 +84,23 @@ class AdminDashboardService
                 if (isset($roles[$roleId])) {
                     return stripos($roles[$roleId]['Role_Name'] ?? '', $roleName) !== false;
                 }
+
                 return false;
             })->count();
         };
 
         // 1. KPI
         $kpi = [
-            'users'     => $users->count(),
+            'users' => $users->count(),
             'employees' => $employees->count(),
-            'teachers'  => $countByRole('TEACHER'),
-            'students'  => $students->count(),
+            'teachers' => $countByRole('TEACHER'),
+            'students' => $students->count(),
             'companies' => $countActive($this->companyRepo),
-            'documents' => $countActive($this->documentRepo),
-            'programs'  => $programs->count(),
-            'batches'   => $batches->count(),
-            'hr'        => $countByRole('HR'),
-            'finance'   => $countByRole('FINANCE'),
-            'academic'  => $countByRole('ACADEMIC'),
+            'programs' => $programs->count(),
+            'batches' => $batches->count(),
+            'hr' => $countByRole('HR'),
+            'finance' => $countByRole('FINANCE'),
+            'academic' => $countByRole('ACADEMIC'),
             'marketing' => $countByRole('MARKETING'),
         ];
 
@@ -137,7 +143,8 @@ class AdminDashboardService
 
             $activeInMonth = $allStudentsRaw->filter(function ($s) use ($monthKey) {
                 $createdAt = $s['Created_At'] ?? $s['Registration_Date'] ?? '';
-                return $createdAt <= $monthKey . '-31'
+
+                return $createdAt <= $monthKey.'-31'
                     && SheetValue::isOperationalStudent((array) $s);
             })->count();
             $growthActive[] = $activeInMonth;
@@ -164,13 +171,14 @@ class AdminDashboardService
                         } else {
                             $action = str_replace('_', ' ', $log['Action'] ?? '');
                             $refId = $log['Reference_ID'] ?? '';
-                            $desc = "Aktivitas " . ucwords(strtolower($action)) . ($refId ? " pada {$refId}" : '');
+                            $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
                         }
                     }
+
                     return [
-                        'title'       => $log['Action'] ?? 'Aktivitas',
-                        'description' => ($log['Module'] ?? '') . ' — ' . $desc,
-                        'time'        => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
+                        'title' => $log['Action'] ?? 'Aktivitas',
+                        'description' => ($log['Module'] ?? '').' — '.$desc,
+                        'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
                     ];
                 })
                 ->values()
@@ -181,15 +189,15 @@ class AdminDashboardService
 
         // 4. Finance Summary (riil from FINANCE_TRANSACTION via TransactionService)
         $financeSummary = [
-            'pendapatan'      => 0,
-            'pengeluaran'     => 0,
-            'saldo'           => 0,
-            'revenue_change'  => 0,
-            'expense_change'  => 0,
-            'balance_change'  => 0,
+            'pendapatan' => 0,
+            'pengeluaran' => 0,
+            'saldo' => 0,
+            'revenue_change' => 0,
+            'expense_change' => 0,
+            'balance_change' => 0,
         ];
         try {
-            $transactionService = app(\App\Services\Finance\TransactionService::class);
+            $transactionService = app(TransactionService::class);
             $allTransactions = collect($transactionService->getAll());
 
             $thisMonth = Carbon::now()->format('Y-m');
@@ -206,7 +214,7 @@ class AdminDashboardService
             $thisMonthTxns = $allTransactions->filter(function ($t) use ($thisMonth) {
                 return str_starts_with($t['Transaction_Date'] ?? '', $thisMonth);
             });
-            
+
             $lastMonthTxns = $allTransactions->filter(function ($t) use ($lastMonth) {
                 return str_starts_with($t['Transaction_Date'] ?? '', $lastMonth);
             });
@@ -232,13 +240,13 @@ class AdminDashboardService
         if ($userId && $userId !== 'anonymous') {
             try {
                 $unreadNotifications = $this->notificationService->UnreadCount($userId, 'ADMINISTRATOR');
-                
+
                 // Fetch real notifications for pengumuman
                 $recentNotifs = $this->notificationService->RecentNotification($userId, 'ADMINISTRATOR', 5);
-                $pengumuman = collect($recentNotifs)->map(function($n) {
+                $pengumuman = collect($recentNotifs)->map(function ($n) {
                     return [
                         'title' => $n['Title'] ?? 'Pengumuman',
-                        'description' => $n['Message'] ?? ''
+                        'description' => $n['Message'] ?? '',
                     ];
                 })->values()->toArray();
             } catch (\Exception $e) {
@@ -249,13 +257,13 @@ class AdminDashboardService
         // 6. Calendar / Upcoming Schedules
         $calendar = [];
         try {
-            $scheduleService = app(\App\Services\Academic\ScheduleService::class);
+            $scheduleService = app(ScheduleService::class);
             $allSchedules = collect($scheduleService->getAll());
-            $calendar = $allSchedules->sortBy('Date')->take(5)->map(function($s) {
+            $calendar = $allSchedules->sortBy('Date')->take(5)->map(function ($s) {
                 return [
                     'date' => $s['Date'] ?? date('Y-m-d'),
-                    'title' => ($s['Subject_ID'] ?? 'Kegiatan') . ' - ' . ($s['Topic'] ?? ''),
-                    'type' => $s['Type'] ?? 'Acara'
+                    'title' => ($s['Subject_ID'] ?? 'Kegiatan').' - '.($s['Topic'] ?? ''),
+                    'type' => $s['Type'] ?? 'Acara',
                 ];
             })->values()->toArray();
         } catch (\Exception $e) {
@@ -263,17 +271,17 @@ class AdminDashboardService
         }
 
         return [
-            'kpi'               => $kpi,
-            'charts'            => [
+            'kpi' => $kpi,
+            'charts' => [
                 'studentProgram' => ['labels' => $studentProgramLabels, 'data' => $studentProgramData],
-                'studentBatch'   => ['labels' => $studentBatchLabels, 'data' => $studentBatchData],
-                'studentGrowth'  => ['labels' => $growthLabels, 'registered' => $growthRegistered, 'active' => $growthActive],
+                'studentBatch' => ['labels' => $studentBatchLabels, 'data' => $studentBatchData],
+                'studentGrowth' => ['labels' => $growthLabels, 'registered' => $growthRegistered, 'active' => $growthActive],
             ],
-            'notifications'     => ['pengumuman' => $pengumuman],
-            'recentActivities'  => $recentActivities,
-            'financeSummary'    => $financeSummary,
+            'notifications' => ['pengumuman' => $pengumuman],
+            'recentActivities' => $recentActivities,
+            'financeSummary' => $financeSummary,
             'unreadNotifications' => $unreadNotifications,
-            'calendar'          => $calendar,
+            'calendar' => $calendar,
         ];
     }
 
