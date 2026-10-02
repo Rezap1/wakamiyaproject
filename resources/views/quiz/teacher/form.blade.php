@@ -1,14 +1,24 @@
 @extends('layouts.app')
 @section('header', $quiz ? 'Edit Kuis' : 'Buat Kuis')
 @section('content')
-@php $seed = old('questions', collect($questions)->map(fn($q) => (array)$q)->values()->all()); @endphp
-<form method="POST" action="{{ $quiz ? route('teacher.quizzes.update', $quiz['Quiz_ID']) : route('teacher.quizzes.store') }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed))">
+@php
+    $seed = old('questions', collect($questions)->map(fn($q) => (array)$q)->values()->all());
+    $lockedClass = $lockedClass ?? null;
+    $formAction = $quiz
+        ? route('teacher.quizzes.update', $quiz['Quiz_ID'])
+        : ($lockedClass ? route('teacher.quizzes.class.store', $lockedClass['Class_ID']) : route('teacher.quizzes.store'));
+@endphp
+<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed))">
     @csrf @if($quiz) @method('PUT') @endif
     @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ $errors->first() }}</div>@endif
     <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><h2 class="text-xl font-black">Informasi Kuis</h2>
         <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <label class="sm:col-span-2 text-sm font-bold">Judul Kuis<input name="Title" value="{{ old('Title', $quiz['Title'] ?? '') }}" required maxlength="160" class="mt-2 min-h-12 w-full rounded-xl border-slate-300 focus:border-sky-500 focus:ring-sky-500"></label>
-            <label class="text-sm font-bold">Kelas<select name="Class_ID" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300">@foreach($classes as $class)<option value="{{ $class['Class_ID'] }}" @selected(old('Class_ID', $quiz['Class_ID'] ?? '') === $class['Class_ID'])>{{ $class['Class_Name'] ?? $class['Class_ID'] }}</option>@endforeach</select></label>
+            @if($lockedClass)
+                <label class="text-sm font-bold">Kelas<input type="hidden" name="Class_ID" value="{{ $lockedClass['Class_ID'] }}"><span class="mt-2 flex min-h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-800">{{ $lockedClass['Class_Name'] ?? 'Kelas Anda' }}</span></label>
+            @else
+                <label class="text-sm font-bold">Kelas<select name="Class_ID" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300">@foreach($classes as $class)<option value="{{ $class['Class_ID'] }}" @selected(old('Class_ID', $quiz['Class_ID'] ?? '') === $class['Class_ID'])>{{ $class['Class_Name'] ?? $class['Class_ID'] }}</option>@endforeach</select></label>
+            @endif
             <label class="text-sm font-bold">Durasi (menit)<input type="number" min="1" max="480" name="Duration_Minutes" value="{{ old('Duration_Minutes', $quiz['Duration_Minutes'] ?? 30) }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>
             <label class="text-sm font-bold">Mulai<input type="datetime-local" name="Start_At" value="{{ old('Start_At', isset($quiz['Start_At']) ? str_replace(' ', 'T', substr($quiz['Start_At'], 0, 16)) : '') }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>
             <label class="text-sm font-bold">Selesai<input type="datetime-local" name="End_At" value="{{ old('End_At', isset($quiz['End_At']) ? str_replace(' ', 'T', substr($quiz['End_At'], 0, 16)) : '') }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>

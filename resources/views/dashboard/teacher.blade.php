@@ -3,12 +3,10 @@
 
 @section('content')
 @php
-    $ctx = app(\App\Services\Dashboard\DashboardContextService::class)->getContext();
-    $greeting = $ctx['greeting'] ?? 'Selamat datang';
-    $dateFormatted = $ctx['dateFormatted'] ?? date('l, d F Y');
-    $timeFormatted = \Carbon\Carbon::now('Asia/Jakarta')->format('H:i');
-
-    $teacherName = $ctx['user_name'] ?? 'Pengajar';
+    $greeting = $dashboardContext['greeting'] ?? 'Selamat datang';
+    $dateFormatted = $dashboardContext['dateFormatted'] ?? date('l, d F Y');
+    $timeFormatted = $dashboardContext['timeFormatted'] ?? date('H:i');
+    $teacherName = $dashboardContext['teacherName'] ?? 'Pengajar';
 
     $kpiList = [
         ['title' => "Jadwal Hari Ini", 'value' => $kpi['today_classes'] ?? 0, 'icon' => 'calendar', 'color' => 'blue', 'link' => route('teacher.workspace.schedule')],

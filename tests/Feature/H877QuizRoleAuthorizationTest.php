@@ -24,6 +24,9 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->actingAsRole($role);
         $this->get(route('teacher.quizzes.index'))->assertForbidden();
         $this->post(route('teacher.quizzes.store'), [])->assertForbidden();
+        $this->get(route('teacher.quizzes.class', 'FORGED'))->assertForbidden();
+        $this->get(route('teacher.quizzes.class.create', 'FORGED'))->assertForbidden();
+        $this->post(route('teacher.quizzes.class.store', 'FORGED'), [])->assertForbidden();
         $this->get(route('teacher.quizzes.results'))->assertForbidden();
         $this->get(route('teacher.quizzes.result', 'FORGED'))->assertForbidden();
         $this->get(route('teacher.quizzes.leaderboard', 'FORGED'))->assertForbidden();
@@ -66,6 +69,52 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->app->instance(QuizService::class, $quizzes);
 
         $this->get(route('teacher.quizzes.results', ['class' => 'C3']))->assertForbidden();
+    }
+
+    public function test_teacher_class_hub_rejects_forged_class_before_quiz_reads(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('classesForTeacher')->once()->with('T1')->andReturn(collect([
+            ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+            ['Class_ID' => 'C2', 'Class_Name' => 'Kelas B'],
+        ]));
+        $scope->shouldNotReceive('studentsForClass');
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldNotReceive('teacherClassHub');
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->get(route('teacher.quizzes.class', 'C3'))->assertForbidden();
+    }
+
+    public function test_class_context_store_overrides_forged_client_class_id(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('classesForTeacher')->once()->with('T1')->andReturn(collect([
+            ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+        ]));
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldReceive('create')->once()->withArgs(function (array $data, array $teacher, string $userId) {
+            return $data['Class_ID'] === 'C1'
+                && $teacher['Teacher_ID'] === 'T1'
+                && $userId === 'U-TEACHER';
+        })->andReturn('Q1');
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->post(route('teacher.quizzes.class.store', 'C1'), [
+            'Title' => 'Kuis Aman',
+            'Class_ID' => 'C3',
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'draft',
+            'questions' => [],
+        ])->assertRedirect(route('teacher.quizzes.show', 'Q1'));
     }
 
     private function actingAsRole(string $role): void

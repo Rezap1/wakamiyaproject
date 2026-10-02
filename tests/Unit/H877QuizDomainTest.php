@@ -275,6 +275,59 @@ class H877QuizDomainTest extends TestCase
         $this->assertStringNotContainsString('Correct_Option', json_encode($payload, JSON_THROW_ON_ERROR));
     }
 
+    public function test_teacher_class_landing_uses_only_quiz_snapshot_and_keeps_empty_authorized_class(): void
+    {
+        $this->quizzes->rows = [
+            ['Quiz_ID' => 'ACTIVE', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'UPCOMING', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Start_At' => '2026-10-10 07:00:00', 'End_At' => '2026-10-10 09:00:00', 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'COMPLETED', 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Start_At' => '2026-10-08 07:00:00', 'End_At' => '2026-10-08 09:00:00', 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'FOREIGN-CLASS', 'Teacher_ID' => 'T1', 'Class_ID' => 'C3', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Status' => 'PUBLISHED'],
+            ['Quiz_ID' => 'FOREIGN-TEACHER', 'Teacher_ID' => 'T2', 'Class_ID' => 'C1', 'Start_At' => '2026-10-09 07:00:00', 'End_At' => '2026-10-09 09:00:00', 'Status' => 'PUBLISHED'],
+        ];
+
+        $cards = $this->service->teacherClassIndex('T1', [
+            ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+            ['Class_ID' => 'C2', 'Class_Name' => 'Kelas B'],
+        ], collect(['C1' => 28, 'C2' => 17]));
+
+        $this->assertSame(['C1', 'C2'], $cards->pluck('Class_ID')->all());
+        $this->assertSame([1, 1, 1, 3, 28], array_values(collect($cards[0])->only(['Active_Quiz_Count', 'Upcoming_Quiz_Count', 'Completed_Quiz_Count', 'Quiz_Count', 'Student_Count'])->all()));
+        $this->assertSame(0, $cards[1]['Quiz_Count']);
+        $this->assertSame(17, $cards[1]['Student_Count']);
+        $this->assertSame(1, $this->quizzes->fetchAllCalls);
+        $this->assertSame(0, $this->questions->fetchAllCalls);
+        $this->assertSame(0, $this->attempts->fetchAllCalls);
+        $this->assertSame(0, $this->results->fetchAllCalls);
+    }
+
+    public function test_teacher_class_hub_is_class_isolated_bounded_and_has_no_n_plus_one_reads(): void
+    {
+        for ($index = 1; $index <= 14; $index++) {
+            $this->quizzes->rows[] = ['Quiz_ID' => 'DONE-'.$index, 'Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Title' => 'Kuis '.$index, 'Start_At' => '2026-10-08 07:00:00', 'End_At' => '2026-10-08 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'];
+            $this->questions->rows[] = ['Question_ID' => 'QUESTION-'.$index, 'Quiz_ID' => 'DONE-'.$index];
+        }
+        $this->quizzes->rows[] = ['Quiz_ID' => 'CLASS-B', 'Teacher_ID' => 'T1', 'Class_ID' => 'C2', 'Title' => 'Rahasia Kelas B', 'Start_At' => '2026-10-08 07:00:00', 'End_At' => '2026-10-08 09:00:00', 'Duration_Minutes' => 30, 'Status' => 'PUBLISHED'];
+        $this->results->rows = [
+            ['Quiz_ID' => 'DONE-1'] + $this->resultRow('R1', 'S1', 'Aiko', 'C1', 55, 100, 55, '2026-10-08 08:00:00'),
+            ['Quiz_ID' => 'CLASS-B'] + $this->resultRow('R2', 'S2', 'Budi', 'C2', 99, 100, 99, '2026-10-08 08:00:00'),
+        ];
+
+        $hub = $this->service->teacherClassHub('T1', 'C1', [
+            ['Student_ID' => 'S1'], ['Student_ID' => 'S3'],
+        ]);
+
+        $this->assertSame(14, $hub['quiz_count']);
+        $this->assertSame(14, $hub['group_totals']['completed']);
+        $this->assertCount(12, $hub['groups']['completed']);
+        $this->assertSame(2, $hub['summary']['students']);
+        $this->assertSame(['S1'], $hub['leaderboard']['entries']->pluck('Student_ID')->all());
+        $this->assertStringNotContainsString('Rahasia Kelas B', json_encode($hub, JSON_THROW_ON_ERROR));
+        $this->assertSame(1, $this->quizzes->fetchAllCalls);
+        $this->assertSame(1, $this->questions->fetchAllCalls);
+        $this->assertSame(1, $this->results->fetchAllCalls);
+        $this->assertSame(0, $this->attempts->fetchAllCalls);
+    }
+
     public function test_completed_quiz_delete_cascades_exact_graph_and_updates_leaderboard(): void
     {
         $this->seedQuiz('Q1', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [5, 5, 5]);

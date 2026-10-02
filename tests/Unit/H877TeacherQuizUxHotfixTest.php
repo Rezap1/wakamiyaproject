@@ -63,6 +63,22 @@ class H877TeacherQuizUxHotfixTest extends TestCase
         }
     }
 
+    public function test_class_hub_create_form_locks_authorized_class_context(): void
+    {
+        $html = view('quiz.teacher.form', [
+            'quiz' => null,
+            'questions' => collect(),
+            'classes' => collect([['Class_ID' => 'C1', 'Class_Name' => 'Kelas A']]),
+            'lockedClass' => ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+            'errors' => new ViewErrorBag,
+        ])->render();
+
+        $this->assertStringContainsString('action="'.route('teacher.quizzes.class.store', 'C1').'"', $html);
+        $this->assertStringContainsString('type="hidden" name="Class_ID" value="C1"', $html);
+        $this->assertStringContainsString('Kelas A', $html);
+        $this->assertStringNotContainsString('<select name="Class_ID"', $html);
+    }
+
     #[DataProvider('invalidPublishedQuestionProvider')]
     public function test_publish_rejects_incomplete_or_invalid_question(string $field, mixed $value, string $errorKey, string $message): void
     {

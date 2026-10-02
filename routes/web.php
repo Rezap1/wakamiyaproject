@@ -745,6 +745,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'index'])->name('index');
         Route::get('/create', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'store'])->name('store');
+        Route::get('/classes/{class}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'classHub'])->name('class');
+        Route::get('/classes/{class}/create', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'createForClass'])->name('class.create');
+        Route::post('/classes/{class}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'storeForClass'])->name('class.store');
         Route::get('/results', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'results'])->name('results');
         Route::get('/results/{result}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'result'])->name('result');
         Route::get('/leaderboard/{class}', [\App\Http\Controllers\Quiz\TeacherQuizController::class, 'leaderboard'])->name('leaderboard');

@@ -65,4 +65,27 @@ class H877QuizScopeTest extends TestCase
             }
         }
     }
+
+    public function test_request_snapshots_reuse_master_reads_for_counts_roster_and_repeated_authorization(): void
+    {
+        $teachers = Mockery::mock(TeacherRepositoryInterface::class);
+        $students = Mockery::mock(StudentRepositoryInterface::class);
+        $schedules = Mockery::mock(ScheduleRepositoryInterface::class);
+        $classes = Mockery::mock(ClassRepositoryInterface::class);
+        $teachers->shouldReceive('fetchAll')->once()->andReturn(collect([['Teacher_ID' => 'T1', 'User_ID' => 'U1', 'Is_Active' => 'TRUE']]));
+        $students->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Student_ID' => 'S1', 'Class_ID' => 'C1', 'Full_Name' => 'Aiko', 'Is_Active' => 'TRUE'],
+            ['Student_ID' => 'S2', 'Class_ID' => 'C1', 'Full_Name' => 'Budi', 'Is_Active' => 'TRUE'],
+            ['Student_ID' => 'S3', 'Class_ID' => 'C2', 'Full_Name' => 'Cici', 'Is_Active' => 'TRUE'],
+        ]));
+        $schedules->shouldReceive('fetchAll')->once()->andReturn(collect([['Teacher_ID' => 'T1', 'Class_ID' => 'C1', 'Is_Active' => 'TRUE']]));
+        $classes->shouldReceive('fetchAll')->once()->andReturn(collect([['Class_ID' => 'C1', 'Class_Name' => 'Kelas A', 'Is_Active' => 'TRUE']]));
+        $scope = new QuizScopeService($teachers, $students, $schedules, $classes);
+
+        $scope->teacherForUser(new GenericUser(['User_ID' => 'U1']));
+        $this->assertSame(['C1'], $scope->classesForTeacher('T1')->pluck('Class_ID')->all());
+        $this->assertSame(['C1'], $scope->classesForTeacher('T1')->pluck('Class_ID')->all());
+        $this->assertSame(2, $scope->studentCountsForClasses(['C1'])->get('C1'));
+        $this->assertSame(['S1', 'S2'], $scope->studentsForClass('C1')->pluck('Student_ID')->all());
+    }
 }

@@ -14,6 +14,7 @@ use App\Services\Core\NotificationService;
 use App\Helpers\AttendanceStatusHelper;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use App\Support\Presentation\IndonesianPresentation;
 
 class TeacherDashboardService
 {
@@ -258,8 +259,22 @@ class TeacherDashboardService
             $unreadNotifications = 0;
         }
 
+        $dashboardNow = Carbon::now('Asia/Jakarta');
+        $dashboardHour = $dashboardNow->hour;
+        $dashboardContext = [
+            'greeting' => match (true) {
+                $dashboardHour >= 5 && $dashboardHour < 11 => 'Selamat pagi',
+                $dashboardHour >= 11 && $dashboardHour < 15 => 'Selamat siang',
+                $dashboardHour >= 15 && $dashboardHour < 18 => 'Selamat sore',
+                default => 'Selamat malam',
+            },
+            'dateFormatted' => IndonesianPresentation::date($dashboardNow, 'l, j F Y'),
+            'timeFormatted' => $dashboardNow->format('H:i'),
+            'teacherName' => $teacher['Full_Name'] ?? $user->Full_Name ?? 'Pengajar',
+        ];
+
         return compact(
-            'kpi', 'todayClasses', 'attendanceStats', 'reminders', 'recentActivities', 'unreadNotifications'
+            'kpi', 'todayClasses', 'attendanceStats', 'reminders', 'recentActivities', 'unreadNotifications', 'dashboardContext'
         );
     }
 

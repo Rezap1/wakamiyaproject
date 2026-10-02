@@ -1,24 +1,38 @@
 @extends('layouts.app')
-@section('header', 'Kuis')
+@section('header', 'Kuis Kelas')
 @section('content')
-<div class="space-y-6 pb-24 md:pb-8">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 class="text-2xl font-black text-slate-900">Kuis Kelas</h2><p class="text-sm text-slate-600">Buat dan pantau kuis untuk kelas yang Anda ajar.</p></div>
-        <div class="flex gap-2"><a href="{{ route('teacher.quizzes.results') }}" class="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold">Hasil</a><a href="{{ route('teacher.quizzes.create') }}" class="rounded-xl bg-sky-600 px-4 py-3 text-sm font-bold text-white shadow-sm">+ Buat Kuis</a></div>
+<div class="mx-auto max-w-6xl space-y-6 pb-28 md:pb-10">
+    <header class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div class="min-w-0">
+            <p class="text-xs font-black uppercase tracking-widest text-sky-700">Ruang Kuis Pengajar</p>
+            <h2 class="mt-1 break-words text-2xl font-black text-slate-900">Pilih Kelas</h2>
+            <p class="mt-1 text-sm text-slate-600">Buka satu kelas untuk mengelola kuis dan melihat peringkat tanpa mencampur kelas lain.</p>
+        </div>
+        <a href="{{ route('teacher.quizzes.create') }}" class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-black text-slate-800 shadow-sm">Buat Kuis Umum</a>
+    </header>
+
+    <div class="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        @forelse($classes as $class)
+            <article class="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                <div class="flex min-w-0 items-start gap-3">
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700" aria-hidden="true"><x-sidebar.icon name="academic-cap" class="h-6 w-6" /></span>
+                    <div class="min-w-0"><p class="text-[11px] font-black uppercase tracking-widest text-sky-700">Kelas</p><h3 class="break-words text-xl font-black text-slate-900">{{ $class['Class_Name'] ?? 'Kelas Anda' }}</h3></div>
+                </div>
+                <dl class="mt-5 grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-xl bg-emerald-50 p-3"><dt class="text-[10px] font-bold uppercase text-emerald-700">Aktif</dt><dd class="mt-1 text-xl font-black text-emerald-900">{{ $class['Active_Quiz_Count'] }}</dd></div>
+                    <div class="rounded-xl bg-amber-50 p-3"><dt class="text-[10px] font-bold uppercase text-amber-700">Akan Datang</dt><dd class="mt-1 text-xl font-black text-amber-900">{{ $class['Upcoming_Quiz_Count'] }}</dd></div>
+                    <div class="rounded-xl bg-slate-100 p-3"><dt class="text-[10px] font-bold uppercase text-slate-600">Selesai</dt><dd class="mt-1 text-xl font-black text-slate-900">{{ $class['Completed_Quiz_Count'] }}</dd></div>
+                </dl>
+                <div class="mt-4 flex items-center gap-2 text-sm font-bold text-slate-600"><x-sidebar.icon name="user-group" class="h-5 w-5 text-slate-400" /><span>{{ $class['Student_Count'] }} siswa</span><span aria-hidden="true">·</span><span>{{ $class['Quiz_Count'] }} kuis</span></div>
+                <a href="{{ route('teacher.quizzes.class', $class['Class_ID']) }}" class="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-black text-white">Buka Kelas</a>
+            </article>
+        @empty
+            <section class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center md:col-span-2 xl:col-span-3">
+                <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500"><x-sidebar.icon name="academic-cap" class="h-7 w-7" /></span>
+                <h3 class="mt-4 font-black text-slate-900">Belum ada kelas aktif</h3>
+                <p class="mt-1 text-sm text-slate-500">Kelas akan tampil setelah Anda memiliki jadwal mengajar aktif.</p>
+            </section>
+        @endforelse
     </div>
-    @foreach(['active' => 'Aktif', 'upcoming' => 'Akan Datang', 'completed' => 'Selesai'] as $key => $label)
-        <section aria-labelledby="quiz-{{ $key }}"><h3 id="quiz-{{ $key }}" class="mb-3 text-lg font-black text-slate-900">{{ $label }}</h3>
-            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                @forelse($groups[$key] as $quiz)
-                    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div class="flex items-start justify-between gap-3"><h4 class="font-black text-slate-900">{{ $quiz['Title'] }}</h4><span class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">{{ $quiz['Lifecycle'] }}</span></div>
-                        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-slate-500">Kelas</dt><dd class="font-bold">{{ $quiz['Class_ID'] }}</dd></div><div><dt class="text-slate-500">Durasi</dt><dd class="font-bold">{{ $quiz['Duration_Minutes'] }} menit</dd></div><div><dt class="text-slate-500">Soal</dt><dd class="font-bold">{{ $quiz['Question_Count'] }}</dd></div><div><dt class="text-slate-500">Peserta</dt><dd class="font-bold">{{ $quiz['Participant_Count'] }}</dd></div></dl>
-                        <p class="mt-4 text-xs text-slate-500">{{ $quiz['Start_At'] }} – {{ $quiz['End_At'] }} WIB</p>
-                        <div class="mt-4 flex flex-wrap gap-2"><a class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white" href="{{ route('teacher.quizzes.show', $quiz['Quiz_ID']) }}">Detail</a><a class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold" href="{{ route('teacher.quizzes.leaderboard', $quiz['Class_ID']) }}">Peringkat</a>@if($quiz['Editable'])<a class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold" href="{{ route('teacher.quizzes.edit', $quiz['Quiz_ID']) }}">Edit</a>@endif</div>
-                    </article>
-                @empty <p class="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500 md:col-span-2 xl:col-span-3">Belum ada kuis {{ strtolower($label) }}.</p> @endforelse
-            </div>
-        </section>
-    @endforeach
 </div>
 @endsection

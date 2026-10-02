@@ -6,7 +6,6 @@
     <title>{{ $companyProfile['company']['name'] ?? 'WAKAMIYA MANAGEMENT SYSTEM' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         :root {
             --color-primary: {{ $themeTokens['primary'] ?? '#38BDF8' }};
@@ -84,11 +83,15 @@
 
                     @if(Route::has('notifications.index'))
                         @php
-                            try {
-                                $mobileUnreadCount = app(\App\Services\Core\NotificationService::class)
-                                    ->summarizeForUser(null, null, 1)['unreadCount'] ?? 0;
-                            } catch (\Throwable) {
-                                $mobileUnreadCount = 0;
+                            if (isset($unreadNotifications)) {
+                                $mobileUnreadCount = (int) $unreadNotifications;
+                            } else {
+                                try {
+                                    $mobileUnreadCount = app(\App\Services\Core\NotificationService::class)
+                                        ->summarizeForUser(null, null, 1)['unreadCount'] ?? 0;
+                                } catch (\Throwable) {
+                                    $mobileUnreadCount = 0;
+                                }
                             }
                         @endphp
                         <a href="{{ route('notifications.index') }}"

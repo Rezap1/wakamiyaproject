@@ -119,7 +119,7 @@
         <a href="{{ route('student.quizzes.index') }}" class="inline-flex min-h-11 items-center text-sm font-black text-sky-700">Lihat Semua Kuis</a>
     </div>
     <div class="mt-4 grid min-w-0 gap-4 lg:grid-cols-2">
-        <div class="min-w-0 space-y-4">
+        <div class="order-2 min-w-0 space-y-4 lg:order-1">
             <div>
                 <h3 class="text-sm font-black text-slate-900">Tersedia Sekarang</h3>
                 <div class="mt-2 space-y-2">
@@ -141,20 +141,32 @@
                 <div><h3 class="text-sm font-black text-slate-900">Akan Datang</h3><ul class="mt-2 space-y-2">@foreach($upcomingQuizzes as $quiz)<li class="min-w-0 rounded-xl border border-slate-200 p-3"><p class="break-words font-bold text-slate-900">{{ $quiz['Title'] }}</p><p class="mt-1 break-words text-xs text-slate-500">Mulai {{ $quiz['Start_At'] }} WIB</p></li>@endforeach</ul></div>
             @endif
         </div>
-        <div class="min-w-0 rounded-2xl bg-amber-50 p-4">
-            <div class="flex items-center justify-between gap-3"><div><h3 class="font-black text-amber-950">Leaderboard Kelas</h3>@if(data_get($quizPayload, 'leaderboard.period.label'))<p class="text-xs text-amber-800">Periode {{ data_get($quizPayload, 'leaderboard.period.label') }}</p>@endif</div><a href="{{ route('student.quizzes.leaderboard') }}" class="shrink-0 text-xs font-black text-amber-900">Lihat Semua</a></div>
-            <div class="mt-3 space-y-2">
+        <div class="order-1 min-w-0 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 lg:order-2">
+            <div class="flex min-w-0 items-start justify-between gap-3 bg-gradient-to-r from-amber-100 to-amber-50 p-4">
+                <div class="flex min-w-0 items-start gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-amber-950" aria-hidden="true"><x-sidebar.icon name="trophy" class="h-6 w-6" /></span>
+                    <div class="min-w-0"><p class="text-[10px] font-black uppercase tracking-widest text-amber-700">Kelas Anda</p><h3 class="font-black text-amber-950">Peringkat Kuis</h3>@if(data_get($quizPayload, 'leaderboard.period.label'))<p class="mt-1 flex items-center gap-1 text-xs text-amber-800"><x-sidebar.icon name="calendar" class="h-3.5 w-3.5 shrink-0" /> Periode {{ data_get($quizPayload, 'leaderboard.period.label') }}</p>@endif</div>
+                </div>
+                <a href="{{ route('student.quizzes.leaderboard') }}" class="inline-flex min-h-11 shrink-0 items-center text-xs font-black text-amber-900">Lihat Semua</a>
+            </div>
+            <div class="space-y-2 py-3">
                 @forelse($leaderboardTop as $entry)
-                    <div class="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white p-3 {{ $entry['Student_ID'] === $dashboardStudentId ? 'ring-2 ring-sky-300' : '' }}">
-                        <span class="min-w-0 break-words text-sm font-bold text-slate-900">#{{ $entry['Rank'] }} {{ $entry['Student_Name'] }} @if($entry['Student_ID'] === $dashboardStudentId) &middot; Anda @endif</span>
-                        <strong class="shrink-0 text-sm text-slate-900">{{ (float) $entry['Points'] }} poin</strong>
+                    @php
+                        $dashboardRank = (int) $entry['Rank'];
+                        $dashboardRankTone = match ($dashboardRank) { 1 => 'bg-amber-400 text-amber-950', 2 => 'bg-slate-300 text-slate-900', 3 => 'bg-orange-300 text-orange-950', default => 'bg-slate-100 text-slate-700' };
+                        $dashboardIsCurrent = $entry['Student_ID'] === $dashboardStudentId;
+                    @endphp
+                    <div class="mx-3 flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white p-3 {{ $dashboardIsCurrent ? 'ring-2 ring-sky-300' : '' }}">
+                        <div class="flex min-w-0 items-center gap-2.5"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black {{ $dashboardRankTone }}">#{{ $entry['Rank'] }}</span><div class="min-w-0"><div class="flex min-w-0 flex-wrap items-center gap-1.5"><span class="min-w-0 break-words text-sm font-black text-slate-900">{{ $entry['Student_Name'] }}</span>@if($dashboardIsCurrent)<span class="rounded-full bg-sky-600 px-1.5 py-0.5 text-[8px] font-black uppercase text-white">Anda</span>@endif</div><p class="text-[10px] text-slate-500">{{ $entry['Quiz_Count'] ?? 0 }} kuis</p></div></div>
+                        <strong class="flex shrink-0 items-center gap-1 text-sm text-slate-900"><x-sidebar.icon name="star" class="h-4 w-4 text-amber-500" /> {{ (float) $entry['Points'] }} poin</strong>
                     </div>
                 @empty
-                    <p class="rounded-xl bg-white p-3 text-sm text-slate-500">Leaderboard akan muncul setelah siswa menyelesaikan kuis.</p>
+                    <p class="mx-3 rounded-xl bg-white p-3 text-sm text-slate-500">Leaderboard akan muncul setelah siswa menyelesaikan kuis.</p>
                 @endforelse
                 @if($leaderboardCurrent)
-                    <div class="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-sky-50 p-3 ring-2 ring-sky-300"><span class="min-w-0 break-words text-sm font-black text-slate-900">#{{ $leaderboardCurrent['Rank'] }} {{ $leaderboardCurrent['Student_Name'] }} · Anda</span><strong class="shrink-0 text-sm text-slate-900">{{ (float) $leaderboardCurrent['Points'] }} poin</strong></div>
+                    <div class="border-t border-amber-200 bg-white/70 p-3"><p class="mb-2 text-[10px] font-black uppercase tracking-widest text-sky-700">Posisi Anda</p><div class="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-sky-50 p-3 ring-2 ring-sky-300"><span class="min-w-0 break-words text-sm font-black text-slate-900">#{{ $leaderboardCurrent['Rank'] }} {{ $leaderboardCurrent['Student_Name'] }} <span class="rounded-full bg-sky-600 px-1.5 py-0.5 text-[8px] uppercase text-white">Anda</span></span><strong class="flex shrink-0 items-center gap-1 text-sm text-slate-900"><x-sidebar.icon name="star" class="h-4 w-4 text-amber-500" /> {{ (float) $leaderboardCurrent['Points'] }} poin</strong></div></div>
                 @endif
+                <div class="px-3"><a href="{{ route('student.quizzes.leaderboard') }}" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-amber-300 bg-white text-sm font-black text-amber-900">Lihat Semua Peringkat</a></div>
             </div>
         </div>
     </div>

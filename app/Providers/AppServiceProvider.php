@@ -207,8 +207,20 @@ class AppServiceProvider extends ServiceProvider
         // Dashboard Context Composer
         view()->composer(['dashboard.*', 'components.dashboard-header', 'components.mobile-dashboard-hero'], function ($view) {
             try {
-                $contextService = app(\App\Services\Dashboard\DashboardContextService::class);
-                $view->with('dashboardContext', $contextService->getContext());
+                $request = request();
+                $preparedContext = $view->getData()['dashboardContext'] ?? null;
+                if (is_array($preparedContext)) {
+                    $request->attributes->set('wms.dashboard_context', $preparedContext);
+                }
+
+                $resolvedDashboardContext = $request->attributes->get('wms.dashboard_context');
+                if ($resolvedDashboardContext === null) {
+                    $contextService = app(\App\Services\Dashboard\DashboardContextService::class);
+                    $resolvedDashboardContext = $contextService->getContext();
+                    $request->attributes->set('wms.dashboard_context', $resolvedDashboardContext);
+                }
+
+                $view->with('dashboardContext', $resolvedDashboardContext);
             } catch (\Throwable $e) {
                 // Safe fallback
                 $view->with('dashboardContext', [

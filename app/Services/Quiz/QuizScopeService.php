@@ -7,9 +7,20 @@ use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use Illuminate\Support\Collection;
 
 class QuizScopeService
 {
+    private ?Collection $teacherSnapshot = null;
+
+    private ?Collection $studentSnapshot = null;
+
+    private ?Collection $scheduleSnapshot = null;
+
+    private ?Collection $classSnapshot = null;
+
+    private array $teacherClassSnapshots = [];
+
     public function __construct(
         private TeacherRepositoryInterface $teachers,
         private StudentRepositoryInterface $students,
@@ -20,7 +31,7 @@ class QuizScopeService
     public function teacherForUser(object $user): array
     {
         $userId = trim((string) ($user->User_ID ?? ''));
-        $teacher = collect($this->teachers->fetchAll())->first(
+        $teacher = $this->teacherRows()->first(
             fn ($row) => trim((string) ($row['User_ID'] ?? '')) === $userId && $this->active((array) $row)
         );
         abort_unless($teacher && trim((string) ($teacher['Teacher_ID'] ?? '')) !== '', 403, 'Profil pengajar aktif tidak ditemukan.');
@@ -31,7 +42,7 @@ class QuizScopeService
     public function studentForUser(object $user): array
     {
         $userId = trim((string) ($user->User_ID ?? ''));
-        $student = collect($this->students->fetchAll())->first(
+        $student = $this->studentRows()->first(
             fn ($row) => trim((string) ($row['User_ID'] ?? '')) === $userId && $this->active((array) $row)
         );
         abort_unless($student && trim((string) ($student['Student_ID'] ?? '')) !== '' && trim((string) ($student['Class_ID'] ?? '')) !== '', 403, 'Profil siswa aktif atau kelas siswa tidak ditemukan.');
@@ -41,23 +52,41 @@ class QuizScopeService
 
     public function classesForTeacher(string $teacherId)
     {
-        $classIds = collect($this->schedules->fetchAll())
+        $teacherId = trim($teacherId);
+        if (array_key_exists($teacherId, $this->teacherClassSnapshots)) {
+            return collect($this->teacherClassSnapshots[$teacherId]);
+        }
+
+        $classIds = $this->scheduleRows()
             ->filter(fn ($row) => trim((string) ($row['Teacher_ID'] ?? '')) === trim($teacherId) && $this->active((array) $row))
             ->pluck('Class_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values();
 
-        return collect($this->classes->fetchAll())
+        $classes = $this->classRows()
             ->filter(fn ($row) => $classIds->contains(trim((string) ($row['Class_ID'] ?? ''))) && $this->active((array) $row))
             ->sortBy(fn ($row) => mb_strtolower(trim((string) ($row['Class_Name'] ?? $row['Class_ID'] ?? ''))))
             ->values();
+        $this->teacherClassSnapshots[$teacherId] = $classes->all();
+
+        return $classes;
     }
 
     public function studentsForClass(string $classId)
     {
-        return collect($this->students->fetchAll())
+        return $this->studentRows()
             ->filter(fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($classId))
             ->filter(fn ($row) => SheetValue::isOperationalStudent((array) $row))
             ->sortBy(fn ($row) => mb_strtolower(trim((string) ($row['Full_Name'] ?? $row['Student_Name'] ?? $row['Student_ID'] ?? ''))))
             ->values();
+    }
+
+    public function studentCountsForClasses(iterable $classIds): Collection
+    {
+        $classIds = collect($classIds)->map(fn ($id) => trim((string) $id))->filter()->unique();
+
+        return $this->studentRows()
+            ->filter(fn ($row) => $classIds->contains(trim((string) ($row['Class_ID'] ?? ''))))
+            ->filter(fn ($row) => SheetValue::isOperationalStudent((array) $row))
+            ->countBy(fn ($row) => trim((string) ($row['Class_ID'] ?? '')));
     }
 
     public function assertTeacherClass(string $teacherId, string $classId): void
@@ -76,5 +105,25 @@ class QuizScopeService
         }
 
         return true;
+    }
+
+    private function teacherRows(): Collection
+    {
+        return $this->teacherSnapshot ??= collect($this->teachers->fetchAll());
+    }
+
+    private function studentRows(): Collection
+    {
+        return $this->studentSnapshot ??= collect($this->students->fetchAll());
+    }
+
+    private function scheduleRows(): Collection
+    {
+        return $this->scheduleSnapshot ??= collect($this->schedules->fetchAll());
+    }
+
+    private function classRows(): Collection
+    {
+        return $this->classSnapshot ??= collect($this->classes->fetchAll());
     }
 }

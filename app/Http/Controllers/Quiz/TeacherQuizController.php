@@ -17,9 +17,14 @@ class TeacherQuizController extends Controller
     {
         $teacher = $this->scope->teacherForUser($request->user());
         $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $classIds = $classes->pluck('Class_ID')->all();
 
         return view('quiz.teacher.index', [
-            'groups' => $this->quizzes->teacherIndex($teacher['Teacher_ID'], $classes->pluck('Class_ID')->all()),
+            'classes' => $this->quizzes->teacherClassIndex(
+                $teacher['Teacher_ID'],
+                $classes,
+                $this->scope->studentCountsForClasses($classIds),
+            ),
         ]);
     }
 
@@ -28,6 +33,42 @@ class TeacherQuizController extends Controller
         $teacher = $this->scope->teacherForUser($request->user());
 
         return view('quiz.teacher.form', ['quiz' => null, 'questions' => collect(), 'classes' => $this->scope->classesForTeacher($teacher['Teacher_ID'])]);
+    }
+
+    public function classHub(Request $request, string $class)
+    {
+        $teacher = $this->scope->teacherForUser($request->user());
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $selectedClass = $classes->first(
+            fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($class)
+        );
+        abort_unless($selectedClass, 403, 'Kelas berada di luar jadwal mengajar Anda.');
+        $hub = $this->quizzes->teacherClassHub(
+            $teacher['Teacher_ID'],
+            (string) $selectedClass['Class_ID'],
+            $this->scope->studentsForClass((string) $selectedClass['Class_ID']),
+        );
+
+        return view('quiz.teacher.class-hub', $hub + [
+            'class' => $selectedClass,
+        ]);
+    }
+
+    public function createForClass(Request $request, string $class)
+    {
+        $teacher = $this->scope->teacherForUser($request->user());
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $selectedClass = $classes->first(
+            fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($class)
+        );
+        abort_unless($selectedClass, 403, 'Kelas berada di luar jadwal mengajar Anda.');
+
+        return view('quiz.teacher.form', [
+            'quiz' => null,
+            'questions' => collect(),
+            'classes' => collect([$selectedClass]),
+            'lockedClass' => $selectedClass,
+        ]);
     }
 
     public function store(Request $request)
@@ -40,12 +81,32 @@ class TeacherQuizController extends Controller
         return redirect()->route('teacher.quizzes.show', $id)->with('success', 'Kuis berhasil disimpan.');
     }
 
+    public function storeForClass(Request $request, string $class)
+    {
+        $teacher = $this->scope->teacherForUser($request->user());
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $selectedClass = $classes->first(
+            fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($class)
+        );
+        abort_unless($selectedClass, 403, 'Kelas berada di luar jadwal mengajar Anda.');
+        $request->merge(['Class_ID' => (string) $selectedClass['Class_ID']]);
+        $data = $this->validated($request);
+        $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
+
+        return redirect()->route('teacher.quizzes.show', $id)->with('success', 'Kuis berhasil disimpan.');
+    }
+
     public function show(Request $request, string $quiz)
     {
         $teacher = $this->scope->teacherForUser($request->user());
-        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
+        $classes = $this->scope->classesForTeacher($teacher['Teacher_ID']);
+        $classIds = $classes->pluck('Class_ID')->all();
+        $row = $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'], $classIds);
 
-        return view('quiz.teacher.show', ['quiz' => $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'], $classIds)]);
+        return view('quiz.teacher.show', [
+            'quiz' => $row,
+            'className' => $classes->firstWhere('Class_ID', $row['Class_ID'])['Class_Name'] ?? 'Kelas Anda',
+        ]);
     }
 
     public function edit(Request $request, string $quiz)
@@ -74,7 +135,7 @@ class TeacherQuizController extends Controller
         $teacher = $this->scope->teacherForUser($request->user());
         $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
         try {
-            $this->quizzes->deleteQuiz(
+            $deleted = $this->quizzes->deleteQuiz(
                 $quiz,
                 $teacher['Teacher_ID'],
                 $classIds,
@@ -92,7 +153,7 @@ class TeacherQuizController extends Controller
             return back()->with('error', 'Kuis belum dapat dihapus sepenuhnya. Tidak ada tahap berikutnya yang dijalankan; silakan coba lagi.');
         }
 
-        return redirect()->route('teacher.quizzes.index')->with('success', 'Kuis berhasil dihapus. Soal, hasil siswa, dan poin leaderboard terkait juga telah dihapus.');
+        return redirect()->route('teacher.quizzes.class', $deleted['quiz']['Class_ID'])->with('success', 'Kuis berhasil dihapus. Soal, hasil siswa, dan poin leaderboard terkait juga telah dihapus.');
     }
 
     public function results(Request $request)
@@ -132,7 +193,7 @@ class TeacherQuizController extends Controller
 
         return view('quiz.leaderboard', $this->quizzes->leaderboard($class) + [
             'currentStudentId' => null,
-            'backRoute' => route('teacher.quizzes.results', ['class' => $class]),
+            'backRoute' => route('teacher.quizzes.class', $class),
             'classId' => $class,
             'className' => $selectedClass['Class_Name'] ?? $class,
             'classOptions' => $classes,

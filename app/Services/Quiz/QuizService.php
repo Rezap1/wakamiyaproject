@@ -8,6 +8,7 @@ use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -96,6 +97,89 @@ class QuizService
             'active' => $rows->where('Lifecycle', 'ACTIVE')->values(),
             'upcoming' => $rows->whereIn('Lifecycle', ['DRAFT', 'SCHEDULED'])->values(),
             'completed' => $rows->whereIn('Lifecycle', ['EXPIRED', 'CLOSED'])->values(),
+        ];
+    }
+
+    public function teacherClassIndex(string $teacherId, iterable $classes, Collection $studentCounts): Collection
+    {
+        $classes = collect($classes)->values();
+        if ($classes->isEmpty()) {
+            return collect();
+        }
+
+        $allowedClassIds = $classes->pluck('Class_ID')->map(fn ($id) => trim((string) $id))->filter()->all();
+        $quizzes = collect($this->quizzes->fetchAll())
+            ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
+                && in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true))
+            ->map(function ($quiz) {
+                $quiz = (array) $quiz;
+                $quiz['Lifecycle'] = $this->lifecycle($quiz);
+
+                return $quiz;
+            })
+            ->groupBy(fn ($quiz) => trim((string) ($quiz['Class_ID'] ?? '')));
+
+        return $classes->map(function ($class) use ($quizzes, $studentCounts) {
+            $class = (array) $class;
+            $classId = trim((string) ($class['Class_ID'] ?? ''));
+            $classQuizzes = collect($quizzes->get($classId, collect()));
+
+            return $class + [
+                'Active_Quiz_Count' => $classQuizzes->where('Lifecycle', 'ACTIVE')->count(),
+                'Upcoming_Quiz_Count' => $classQuizzes->whereIn('Lifecycle', ['DRAFT', 'SCHEDULED'])->count(),
+                'Completed_Quiz_Count' => $classQuizzes->whereIn('Lifecycle', ['EXPIRED', 'CLOSED'])->count(),
+                'Quiz_Count' => $classQuizzes->count(),
+                'Student_Count' => (int) $studentCounts->get($classId, 0),
+            ];
+        })->values();
+    }
+
+    public function teacherClassHub(string $teacherId, string $classId, iterable $roster = []): array
+    {
+        $questionsByQuiz = collect($this->questions->fetchAll())->countBy('Quiz_ID');
+        $allResults = collect($this->results->fetchAll());
+        $resultsByQuiz = $allResults->groupBy('Quiz_ID');
+        $quizzes = collect($this->quizzes->fetchAll())
+            ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
+                && trim((string) ($quiz['Class_ID'] ?? '')) === trim($classId))
+            ->map(function ($quiz) use ($questionsByQuiz, $resultsByQuiz) {
+                $quiz = (array) $quiz;
+                $quizId = trim((string) ($quiz['Quiz_ID'] ?? ''));
+                $quizResults = collect($resultsByQuiz->get($quizId, collect()));
+                $quiz['Lifecycle'] = $this->lifecycle($quiz);
+                $quiz['Question_Count'] = (int) $questionsByQuiz->get($quizId, 0);
+                $quiz['Participant_Count'] = $quizResults->pluck('Student_ID')->filter()->unique()->count();
+                $quiz['Completion_Count'] = $quizResults->pluck('Result_ID')->filter()->unique()->count();
+
+                return $quiz;
+            })
+            ->sortByDesc('Start_At')
+            ->values();
+        $period = $this->periods->periodFor();
+
+        return [
+            'summary' => [
+                'active' => $quizzes->where('Lifecycle', 'ACTIVE')->count(),
+                'upcoming' => $quizzes->whereIn('Lifecycle', ['DRAFT', 'SCHEDULED'])->count(),
+                'completed' => $quizzes->whereIn('Lifecycle', ['EXPIRED', 'CLOSED'])->count(),
+                'students' => collect($roster)->count(),
+            ],
+            'leaderboard' => [
+                'period' => $period,
+                'entries' => $this->leaderboardFromResults($allResults, $classId, $period),
+            ],
+            'groups' => [
+                'active' => $quizzes->where('Lifecycle', 'ACTIVE')->take(12)->values(),
+                'upcoming' => $quizzes->whereIn('Lifecycle', ['DRAFT', 'SCHEDULED'])->take(12)->values(),
+                'completed' => $quizzes->whereIn('Lifecycle', ['EXPIRED', 'CLOSED'])->take(12)->values(),
+            ],
+            'group_totals' => [
+                'active' => $quizzes->where('Lifecycle', 'ACTIVE')->count(),
+                'upcoming' => $quizzes->whereIn('Lifecycle', ['DRAFT', 'SCHEDULED'])->count(),
+                'completed' => $quizzes->whereIn('Lifecycle', ['EXPIRED', 'CLOSED'])->count(),
+            ],
+            'quiz_count' => $quizzes->count(),
+            'section_limit' => 12,
         ];
     }
 
