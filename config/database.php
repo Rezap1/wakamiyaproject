@@ -64,6 +64,30 @@ return [
             ]) : [],
         ],
 
+        /*
+         * M1-only destination. The application's default connection is
+         * deliberately unchanged so the current Google Sheets runtime keeps
+         * its existing behaviour until an explicit cutover is approved.
+         */
+        'wms_migration' => [
+            'driver' => 'mysql',
+            'host' => env('WMS_MIGRATION_DB_HOST', env('DB_HOST')),
+            'port' => env('WMS_MIGRATION_DB_PORT', env('DB_PORT')),
+            'database' => env('WMS_MIGRATION_DB_DATABASE', env('DB_DATABASE')),
+            'username' => env('WMS_MIGRATION_DB_USERNAME', env('DB_USERNAME')),
+            'password' => env('WMS_MIGRATION_DB_PASSWORD', env('DB_PASSWORD')),
+            'unix_socket' => env('WMS_MIGRATION_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => 'InnoDB',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('WMS_MIGRATION_MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),
