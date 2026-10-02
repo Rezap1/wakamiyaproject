@@ -16,15 +16,13 @@ class AttendanceRepository extends BaseSheetRepository implements AttendanceRepo
 
     public function findById(string $id)
     {
-        $items = $this->fetchAll();
-        return $items->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function findByEmployeeAndSession(string $employeeId, string $sessionId)
     {
-        $items = $this->fetchAll();
-        return $items->first(function ($att) use ($employeeId, $sessionId) {
-            return ($att['Employee_ID'] ?? '') === $employeeId && 
+        return $this->rowsWhereColumn('Employee_ID', $employeeId)->first(function ($att) use ($sessionId) {
+            return ($att['Employee_ID'] ?? '') === $employeeId &&
                    ($att['Session_ID'] ?? '') === $sessionId &&
                    strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
         });
@@ -32,10 +30,8 @@ class AttendanceRepository extends BaseSheetRepository implements AttendanceRepo
 
     public function findEmployeeAttendances(string $employeeId)
     {
-        $items = $this->fetchAll();
-        return $items->filter(function ($att) use ($employeeId) {
-            return ($att['Employee_ID'] ?? '') === $employeeId &&
-                   strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+        return $this->rowsWhereColumn('Employee_ID', $employeeId)->filter(function ($att) {
+            return strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
         })->values();
     }
 
@@ -43,12 +39,12 @@ class AttendanceRepository extends BaseSheetRepository implements AttendanceRepo
     {
         return $this->append($data);
     }
-    
+
     public function update($id, array $data)
     {
         return $this->updateRow($id, $data);
     }
-    
+
     public function softDelete($id)
     {
         return $this->updateRow($id, ['Is_Active' => 'FALSE']);

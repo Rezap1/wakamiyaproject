@@ -19,7 +19,7 @@ class QuizResultRepository extends BaseSheetRepository implements QuizResultRepo
 
     public function findById(string $id)
     {
-        return $this->fetchAll()->firstWhere('Result_ID', $id);
+        return $this->findByIdFresh($id);
     }
 
     public function create(array $data)

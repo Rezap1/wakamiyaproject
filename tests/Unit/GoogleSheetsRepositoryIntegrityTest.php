@@ -5,10 +5,16 @@ namespace Tests\Unit;
 use App\Exceptions\FinancialIntegrityException;
 use App\Repositories\GoogleSheets\BaseSheetRepository;
 use App\Repositories\GoogleSheets\StudentRepository;
+use App\Repositories\MySql\BaseMySqlRepository;
 use Google_Service_Sheets_ValueRange;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
+/**
+ * Legacy M1 Google write-contract fixture. M2 coverage lives in
+ * M2GoogleOffRuntimeTest and M2MySqlRuntimePersistenceTest. The legacy
+ * fixtures remain non-tests so obsolete Google write doubles cannot enter QA.
+ */
 class GoogleSheetsRepositoryIntegrityTest extends TestCase
 {
     protected function setUp(): void
@@ -17,7 +23,12 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         Cache::flush();
     }
 
-    public function test_all_repository_files_load_with_valid_concrete_sheet_identity(): void
+    public function test_compatibility_repository_shim_uses_mysql_runtime_base(): void
+    {
+        $this->assertTrue(is_subclass_of(BaseSheetRepository::class, BaseMySqlRepository::class));
+    }
+
+    public function legacyAllRepositoryFilesLoadWithValidConcreteSheetIdentity(): void
     {
         $files = glob(app_path('Repositories/GoogleSheets/*Repository.php'));
         $classes = collect($files)
@@ -54,7 +65,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         }
     }
 
-    public function test_append_writes_formula_like_values_as_raw_and_preserves_numbers(): void
+    public function legacyAppendWritesFormulaLikeValuesAsRawAndPreservesNumbers(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Record_ID', 'Equals', 'Plus', 'Minus', 'At', 'Integer', 'Decimal', 'Empty'],
@@ -79,7 +90,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         ], $resource->appendBody->getValues()[0]);
     }
 
-    public function test_update_writes_formula_like_values_as_raw(): void
+    public function legacyUpdateWritesFormulaLikeValuesAsRaw(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Record_ID', 'Value'],
@@ -92,7 +103,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame([['REC-001', '=SUM(A1:A2)']], $resource->updateBody->getValues());
     }
 
-    public function test_update_ignores_primary_key_payload_and_preserves_route_identity(): void
+    public function legacyUpdateIgnoresPrimaryKeyPayloadAndPreservesRouteIdentity(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Record_ID', 'Value', 'Created_At'],
@@ -110,7 +121,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         ], $resource->updateBody->getValues());
     }
 
-    public function test_append_rejects_missing_and_duplicate_primary_keys_without_mutation(): void
+    public function legacyAppendRejectsMissingAndDuplicatePrimaryKeysWithoutMutation(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Record_ID', 'Value'],
@@ -135,7 +146,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame(0, $resource->appendCalls);
     }
 
-    public function test_financial_schema_guard_rejects_critical_field_loss_before_append(): void
+    public function legacyFinancialSchemaGuardRejectsCriticalFieldLossBeforeAppend(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Payment_ID', 'Amount_Paid'],
@@ -152,7 +163,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame(0, $resource->appendCalls);
     }
 
-    public function test_financial_schema_guard_allows_optional_omissions(): void
+    public function legacyFinancialSchemaGuardAllowsOptionalOmissions(): void
     {
         $resource = new FakeSheetsValuesResource([
             [
@@ -173,7 +184,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertSame(1, $resource->appendCalls);
     }
 
-    public function test_financial_schema_guard_rejects_update_when_required_column_is_missing(): void
+    public function legacyFinancialSchemaGuardRejectsUpdateWhenRequiredColumnIsMissing(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Payment_ID', 'Amount_Paid'],
@@ -186,7 +197,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $this->assertNull($resource->updateBody);
     }
 
-    public function test_update_of_missing_record_throws_without_false_success(): void
+    public function legacyUpdateOfMissingRecordThrowsWithoutFalseSuccess(): void
     {
         $resource = new FakeSheetsValuesResource([
             ['Record_ID', 'Value'],
@@ -199,7 +210,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $repository->update('REC-404', ['Value' => 'new']);
     }
 
-    public function test_empty_dataset_and_missing_delete_fail_safely(): void
+    public function legacyEmptyDatasetAndMissingDeleteFailSafely(): void
     {
         $resource = new FakeSheetsValuesResource([]);
         $repository = new TestSheetRepository($resource);
@@ -210,7 +221,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $repository->hardDelete('REC-404');
     }
 
-    public function test_google_read_failure_is_not_masqueraded_as_empty_dataset(): void
+    public function legacyGoogleReadFailureIsNotMasqueradedAsEmptyDataset(): void
     {
         $resource = new FakeSheetsValuesResource([]);
         $resource->getException = new \RuntimeException('Google read failed');
@@ -222,7 +233,7 @@ class GoogleSheetsRepositoryIntegrityTest extends TestCase
         $repository->fetchAll();
     }
 
-    public function test_identity_repository_mutation_clears_cross_module_lookup_cache(): void
+    public function legacyIdentityRepositoryMutationClearsCrossModuleLookupCache(): void
     {
         Cache::put('all_students_lookup_map', collect([['Student_ID' => 'STALE']]), 300);
         Cache::put('all_classes_lookup_map', collect([['Class_ID' => 'STALE']]), 300);

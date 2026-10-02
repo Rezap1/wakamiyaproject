@@ -2,37 +2,39 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\CollectionHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePositionRequest;
 use App\Http\Requests\UpdatePositionRequest;
-use App\Services\Core\PositionService;
 use App\Services\Core\DepartmentService;
-use App\Services\Core\ActivityLogService;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Core\PositionService;
+use App\Traits\Exportable;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 
 class PositionController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-    protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
         $positions = $this->positionService->getAllPositions();
         $departments = $this->departmentService->getAllDepartments();
         $departmentsById = $departments->keyBy('Department_ID');
-        
+
         $positions = $positions->map(function ($position) use ($departmentsById) {
             $dept = $departmentsById[$position['Department_ID'] ?? ''] ?? null;
             $position['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
+
             return $position;
         });
 
         $search = $request->input('search');
-        if (!empty($search)) {
-            $positions = \App\Helpers\CollectionHelper::search($positions, $search, ['Position_ID', 'Position_Name', 'Department_Name']);
+        if (! empty($search)) {
+            $positions = CollectionHelper::search($positions, $search, ['Position_ID', 'Position_Name', 'Department_Name']);
         }
         if ($request->filled('department')) {
             $positions = $positions->where('Department_ID', $request->input('department'));
@@ -43,24 +45,26 @@ class PositionController extends Controller
                 $positions = $positions->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
             }
         }
-        
+
         return [
             'moduleName' => 'POSITIONS',
             'data' => $positions,
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Nama Posisi', 'Departemen', 'Status'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
                 return [
-                    $row['Position_Name'] ?? '-', 
+                    $row['Position_Name'] ?? '-',
                     $row['Department_Name'] ?? '-',
-                    ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif'
+                    ($row['Is_Active'] ?? 'TRUE') === 'TRUE' ? 'Aktif' : 'Nonaktif',
                 ];
             },
             'isLandscape' => false,
-            'summary' => '<tr><td>Total Posisi</td><td>: '.$positions->count().'</td></tr>'
+            'summary' => '<tr><td>Total Posisi</td><td>: '.$positions->count().'</td></tr>',
         ];
     }
+
     protected $positionService;
+
     protected $departmentService;
 
     public function __construct(PositionService $positionService, DepartmentService $departmentService)
@@ -74,11 +78,12 @@ class PositionController extends Controller
         try {
             $positions = $this->positionService->getAllPositions();
             $departments = $this->departmentService->getAllDepartments();
-            
+
             // Map department names to positions for display
             $positions = $positions->map(function ($position) use ($departments) {
                 $dept = $departments->firstWhere('Department_ID', $position['Department_ID']);
                 $position['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
+
                 return $position;
             });
 
@@ -89,14 +94,15 @@ class PositionController extends Controller
             $positionsPaginated = new LengthAwarePaginator($currentItems, count($positions), $perPage, $currentPage, [
                 'path' => LengthAwarePaginator::resolveCurrentPath(),
             ]);
-            
+
             return view('positions.index', [
                 'positions' => $positionsPaginated,
-                'departments' => $departments->where('Is_Active', 'TRUE')
+                'departments' => $departments->where('Is_Active', 'TRUE'),
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching positions: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data posisi dari Google Sheets.');
+            Log::error('Error fetching positions: '.$e->getMessage());
+
+            return redirect()->route('dashboard')->with('error', 'Gagal memuat data posisi dari database.');
         }
     }
 
@@ -104,9 +110,11 @@ class PositionController extends Controller
     {
         try {
             $departments = $this->departmentService->getAllDepartments()->where('Is_Active', 'TRUE');
+
             return view('positions.create', compact('departments'));
         } catch (\Exception $e) {
-            Log::error('Error loading create position form: ' . $e->getMessage());
+            Log::error('Error loading create position form: '.$e->getMessage());
+
             return redirect()->route('positions.index')->with('error', 'Gagal memuat data referensi departemen.');
         }
     }
@@ -119,8 +127,9 @@ class PositionController extends Controller
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil ditambahkan.');
         } catch (\Exception $e) {
-            Log::error('Error creating position: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data ke Google Sheets.')->withInput();
+            Log::error('Error creating position: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data ke database.')->withInput();
         }
     }
 
@@ -128,16 +137,17 @@ class PositionController extends Controller
     {
         try {
             $position = $this->positionService->getPositionById($id);
-            if (!$position) {
+            if (! $position) {
                 return redirect()->route('positions.index')->with('error', 'Posisi tidak ditemukan.');
             }
-            
+
             $dept = $this->departmentService->getDepartmentById($position['Department_ID']);
             $position['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
 
             return view('positions.show', compact('position'));
         } catch (\Exception $e) {
-            Log::error('Error showing position: ' . $e->getMessage());
+            Log::error('Error showing position: '.$e->getMessage());
+
             return redirect()->route('positions.index')->with('error', 'Terjadi kesalahan saat memuat data posisi.');
         }
     }
@@ -146,14 +156,14 @@ class PositionController extends Controller
     {
         try {
             $position = $this->positionService->getPositionById($id);
-            if (!$position) {
+            if (! $position) {
                 return redirect()->route('positions.index')->with('error', 'Posisi tidak ditemukan.');
             }
-            
+
             $departments = $this->departmentService->getAllDepartments()->where('Is_Active', 'TRUE');
-            
+
             // If the current department is inactive but assigned to this position, we should still include it in the list so the dropdown doesn't break
-            if (!collect($departments)->contains('Department_ID', $position['Department_ID'])) {
+            if (! collect($departments)->contains('Department_ID', $position['Department_ID'])) {
                 $currentDept = $this->departmentService->getDepartmentById($position['Department_ID']);
                 if ($currentDept) {
                     $departments->push($currentDept);
@@ -162,7 +172,8 @@ class PositionController extends Controller
 
             return view('positions.edit', compact('position', 'departments'));
         } catch (\Exception $e) {
-            Log::error('Error editing position: ' . $e->getMessage());
+            Log::error('Error editing position: '.$e->getMessage());
+
             return redirect()->route('positions.index')->with('error', 'Terjadi kesalahan saat memuat data posisi.');
         }
     }
@@ -171,7 +182,7 @@ class PositionController extends Controller
     {
         try {
             $position = $this->positionService->getPositionById($id);
-            if (!$position) {
+            if (! $position) {
                 return redirect()->route('positions.index')->with('error', 'Posisi tidak ditemukan.');
             }
 
@@ -180,8 +191,9 @@ class PositionController extends Controller
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil diperbarui.');
         } catch (\Exception $e) {
-            Log::error('Error updating position: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data di Google Sheets.')->withInput();
+            Log::error('Error updating position: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data di database.')->withInput();
         }
     }
 
@@ -189,7 +201,7 @@ class PositionController extends Controller
     {
         try {
             $position = $this->positionService->getPositionById($id);
-            if (!$position) {
+            if (! $position) {
                 return redirect()->route('positions.index')->with('error', 'Posisi tidak ditemukan.');
             }
 
@@ -197,8 +209,9 @@ class PositionController extends Controller
 
             return redirect()->route('positions.index')->with('success', 'Posisi berhasil dinonaktifkan.');
         } catch (\Exception $e) {
-            Log::error('Error deleting position: ' . $e->getMessage());
-            return redirect()->route('positions.index')->with('error', 'Terjadi kesalahan saat menghapus data di Google Sheets.');
+            Log::error('Error deleting position: '.$e->getMessage());
+
+            return redirect()->route('positions.index')->with('error', 'Terjadi kesalahan saat menghapus data di database.');
         }
     }
 }

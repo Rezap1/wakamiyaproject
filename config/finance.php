@@ -10,10 +10,9 @@ return [
     ],
 
     /*
-     * These are the columns that must exist before a finance-domain row may
-     * be written.  Google Sheets has no database migration/transaction layer;
-     * therefore a schema mismatch is a hard stop rather than an invitation to
-     * drop fields that carry identity, audit, or reconciliation meaning.
+     * These columns must exist before a finance-domain row may be written.
+     * A schema mismatch is a hard stop because identity, audit, and
+     * reconciliation fields may never be silently dropped.
      */
     'schema' => [
         'FINANCE_PAYMENT' => [

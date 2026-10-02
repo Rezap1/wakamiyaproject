@@ -2,29 +2,29 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\CollectionHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProgramRequest;
 use App\Http\Requests\UpdateProgramRequest;
 use App\Services\Core\ProgramService;
-use App\Services\Core\ActivityLogService;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Pagination\LengthAwarePaginator;
+use App\Traits\Exportable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ProgramController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-        protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
 
         $programs = $this->programService->getAllPrograms();
 
         $search = $request->input('search');
-        if (!empty($search)) {
-            $programs = \App\Helpers\CollectionHelper::search($programs, $search, ['Program_Code', 'Program_Name', 'Description']);
+        if (! empty($search)) {
+            $programs = CollectionHelper::search($programs, $search, ['Program_Code', 'Program_Name', 'Description']);
         }
 
         if ($request->filled('status')) {
@@ -33,23 +33,23 @@ class ProgramController extends Controller
                 $programs = $programs->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
             }
         }
-        
+
         return [
             'moduleName' => 'Program Pelatihan (Program)',
             'data' => collect(array_values($programs->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Kode Program', 'Nama Program', 'Durasi', 'Status'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
 
                 return [
                     $row['Program_Code'] ?? '-',
                     $row['Program_Name'] ?? '-',
                     $row['Duration'] ?? '-',
-                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif',
                 ];
-                    },
+            },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data</td><td>: '.$programs->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data</td><td>: '.$programs->count().'</td></tr>',
         ];
     }
 
@@ -61,14 +61,14 @@ class ProgramController extends Controller
         $this->programService = $programService;
     }
 
-    public function index(\Illuminate\Http\Request $request)
+    public function index(Request $request)
     {
         try {
             $programs = $this->programService->getAllPrograms();
 
             $search = $request->input('search');
-            if (!empty($search)) {
-                $programs = \App\Helpers\CollectionHelper::search($programs, $search, ['Program_ID', 'Program_Code', 'Program_Name', 'Description']);
+            if (! empty($search)) {
+                $programs = CollectionHelper::search($programs, $search, ['Program_ID', 'Program_Code', 'Program_Name', 'Description']);
             }
 
             if ($request->filled('status')) {
@@ -79,14 +79,15 @@ class ProgramController extends Controller
             }
 
             // Pagination
-            $programsPaginated = \App\Helpers\CollectionHelper::paginate($programs, 10)->withQueryString();
-            
+            $programsPaginated = CollectionHelper::paginate($programs, 10)->withQueryString();
+
             return view('programs.index', [
-                'programs' => $programsPaginated
+                'programs' => $programsPaginated,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching programs: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master program dari Google Sheets.');
+            Log::error('Error fetching programs: '.$e->getMessage());
+
+            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master program dari database.');
         }
     }
 
@@ -103,8 +104,9 @@ class ProgramController extends Controller
 
             return redirect()->route('programs.index')->with('success', 'Program berhasil ditambahkan.');
         } catch (\Exception $e) {
-            Log::error('Error creating program: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error creating program: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -112,13 +114,14 @@ class ProgramController extends Controller
     {
         try {
             $program = $this->programService->getProgramById($id);
-            if (!$program) {
+            if (! $program) {
                 return redirect()->route('programs.index')->with('error', 'Data program tidak ditemukan.');
             }
 
             return view('programs.show', compact('program'));
         } catch (\Exception $e) {
-            Log::error('Error showing program: ' . $e->getMessage());
+            Log::error('Error showing program: '.$e->getMessage());
+
             return redirect()->route('programs.index')->with('error', 'Terjadi kesalahan saat memuat data program.');
         }
     }
@@ -127,13 +130,14 @@ class ProgramController extends Controller
     {
         try {
             $program = $this->programService->getProgramById($id);
-            if (!$program) {
+            if (! $program) {
                 return redirect()->route('programs.index')->with('error', 'Data program tidak ditemukan.');
             }
 
             return view('programs.edit', compact('program'));
         } catch (\Exception $e) {
-            Log::error('Error editing program: ' . $e->getMessage());
+            Log::error('Error editing program: '.$e->getMessage());
+
             return redirect()->route('programs.index')->with('error', 'Terjadi kesalahan saat memuat form edit program.');
         }
     }
@@ -142,7 +146,7 @@ class ProgramController extends Controller
     {
         try {
             $program = $this->programService->getProgramById($id);
-            if (!$program) {
+            if (! $program) {
                 return redirect()->route('programs.index')->with('error', 'Data program tidak ditemukan.');
             }
 
@@ -151,8 +155,9 @@ class ProgramController extends Controller
 
             return redirect()->route('programs.index')->with('success', 'Data program berhasil diperbarui.');
         } catch (\Exception $e) {
-            Log::error('Error updating program: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error updating program: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -160,7 +165,7 @@ class ProgramController extends Controller
     {
         try {
             $program = $this->programService->getProgramById($id);
-            if (!$program) {
+            if (! $program) {
                 return redirect()->route('programs.index')->with('error', 'Data program tidak ditemukan.');
             }
 
@@ -168,7 +173,8 @@ class ProgramController extends Controller
 
             return redirect()->route('programs.index')->with('success', 'Data program berhasil dihapus.');
         } catch (\Exception $e) {
-            Log::error('Error deleting program: ' . $e->getMessage());
+            Log::error('Error deleting program: '.$e->getMessage());
+
             return redirect()->route('programs.index')->with('error', 'Terjadi kesalahan saat menghapus data program.');
         }
     }

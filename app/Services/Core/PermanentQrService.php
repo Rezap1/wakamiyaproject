@@ -81,7 +81,7 @@ class PermanentQrService
         ];
         $result = $this->qrRepository->create($mappedData);
         if (! $result) {
-            throw new \Exception('Gagal menyimpan data ke Google Sheets. Pastikan Worksheet MASTER_PERMANENT_QR tersedia.');
+            throw new \Exception('Gagal menyimpan data QR. Pastikan tabel MASTER_PERMANENT_QR tersedia.');
         }
 
         $this->qrRepository->clearCache();

@@ -4,6 +4,7 @@ namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRepositoryInterface
 {
@@ -18,6 +19,7 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
     public function fetchActive()
     {
         $all = $this->fetchAll();
+
         return $all->filter(function ($item) {
             return strtoupper($item['STATUS'] ?? '') === 'ACTIVE';
         })->values();
@@ -27,6 +29,7 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
     {
         $all = $this->fetchAll();
         $target = strtolower(trim($identifier));
+
         return $all->first(function ($item) use ($target) {
             return strtolower(trim((string) ($item['IDENTIFIER'] ?? ''))) === $target;
         });
@@ -36,8 +39,10 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
     {
         $all = $this->fetchAll();
         $target = strtolower(trim($id));
+
         return $all->first(function ($item) use ($target) {
             $qrId = strtolower(trim((string) ($item['QR_ID'] ?? $item['id'] ?? '')));
+
             return $qrId === $target;
         });
     }
@@ -47,16 +52,16 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
         $this->assertExtendedHeadersAvailable();
 
         // Set standard fields if not present
-        if (!isset($data['STATUS'])) {
+        if (! isset($data['STATUS'])) {
             $data['STATUS'] = 'ACTIVE';
         }
-        if (!isset($data['CREATED_AT'])) {
+        if (! isset($data['CREATED_AT'])) {
             $data['CREATED_AT'] = Carbon::now()->toDateTimeString();
         }
-        if (!isset($data['UPDATED_AT'])) {
+        if (! isset($data['UPDATED_AT'])) {
             $data['UPDATED_AT'] = Carbon::now()->toDateTimeString();
         }
-        
+
         return $this->append($data);
     }
 
@@ -70,7 +75,7 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
     public function deactivate(string $id, string $actorUserId)
     {
         $record = $this->findById($id);
-        if (!$record) {
+        if (! $record) {
             $record = $this->findByIdentifier($id);
         }
         if ($record) {
@@ -79,12 +84,14 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
                 'STATUS' => 'INACTIVE',
                 'DEACTIVATED_AT' => Carbon::now()->toDateTimeString(),
                 'UPDATED_AT' => Carbon::now()->toDateTimeString(),
-                'UPDATED_BY' => $actorUserId
+                'UPDATED_BY' => $actorUserId,
             ];
             $this->update($targetId, $data);
             $this->clearCache();
+
             return true;
         }
+
         return false;
     }
 
@@ -106,16 +113,15 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
         ];
 
         try {
-            $response = $this->service->spreadsheets_values->get($this->spreadsheetId, $this->sheetName . '!1:1');
-            $headers = $response->getValues()[0] ?? [];
+            $headers = $this->fetchHeadersFresh();
             $missing = array_values(array_diff($requiredHeaders, $headers));
             if ($missing) {
                 throw new \RuntimeException(
-                    'Schema MASTER_PERMANENT_QR belum lengkap. Header wajib hilang: ' . implode(', ', $missing)
+                    'Schema MASTER_PERMANENT_QR belum lengkap. Header wajib hilang: '.implode(', ', $missing)
                 );
             }
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('Failed to validate MASTER_PERMANENT_QR headers: ' . $e->getMessage());
+            Log::warning('Failed to validate MASTER_PERMANENT_QR columns: '.$e->getMessage());
             throw $e;
         }
     }

@@ -8,9 +8,9 @@ use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
 use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Repositories\GoogleSheets\BaseSheetRepository;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Finance\InvoiceService;
-use App\Repositories\GoogleSheets\BaseSheetRepository;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Cache;
 use Mockery;
@@ -28,19 +28,19 @@ class InvoiceHardeningTest extends TestCase
     public function test_allocator_uses_max_suffix_not_count_and_handles_gaps(): void
     {
         $repo = new HardeningInvoiceRepository([
-            ['Invoice_ID' => 'INV-STU-' . date('Y') . '-000002'],
-            ['Invoice_ID' => 'INV-STU-' . date('Y') . '-000004'],
-            ['Invoice_ID' => 'INV-STU-' . date('Y') . '-000027'],
-            ['Invoice_ID' => 'INV-STU-' . date('Y') . '-000031'],
-            ['Invoice_ID' => 'INV-STU-' . (date('Y') - 1) . '-999999'],
-            ['Invoice_ID' => 'INV-STU-' . date('Y') . '-MALFORMED'],
+            ['Invoice_ID' => 'INV-STU-'.date('Y').'-000002'],
+            ['Invoice_ID' => 'INV-STU-'.date('Y').'-000004'],
+            ['Invoice_ID' => 'INV-STU-'.date('Y').'-000027'],
+            ['Invoice_ID' => 'INV-STU-'.date('Y').'-000031'],
+            ['Invoice_ID' => 'INV-STU-'.(date('Y') - 1).'-999999'],
+            ['Invoice_ID' => 'INV-STU-'.date('Y').'-MALFORMED'],
         ]);
         $service = $this->makeService($repo);
 
-        $this->assertSame('INV-STU-' . date('Y') . '-000032', $service->generateInvoiceNumber('STUDENT'));
-        $repo->rows[] = ['Invoice_ID' => 'INV-STU-' . date('Y') . '-000032'];
-        Cache::put('invoice_counter_INV-STU_' . date('Y'), 4, 3600);
-        $this->assertSame('INV-STU-' . date('Y') . '-000033', $service->generateInvoiceNumber('STUDENT'));
+        $this->assertSame('INV-STU-'.date('Y').'-000032', $service->generateInvoiceNumber('STUDENT'));
+        $repo->rows[] = ['Invoice_ID' => 'INV-STU-'.date('Y').'-000032'];
+        Cache::put('invoice_counter_INV-STU_'.date('Y'), 4, 3600);
+        $this->assertSame('INV-STU-'.date('Y').'-000033', $service->generateInvoiceNumber('STUDENT'));
     }
 
     public function test_consecutive_allocations_are_unique_and_prefixes_years_are_isolated(): void
@@ -52,7 +52,7 @@ class InvoiceHardeningTest extends TestCase
         $company = $service->generateInvoiceNumber('COMPANY');
 
         $this->assertNotSame($first, $second);
-        $this->assertStringStartsWith('INV-CORP-' . date('Y') . '-', $company);
+        $this->assertStringStartsWith('INV-CORP-'.date('Y').'-', $company);
     }
 
     public function test_duplicate_candidate_is_reconciled_without_overwriting_existing_row(): void
@@ -95,7 +95,7 @@ class InvoiceHardeningTest extends TestCase
         $this->assertStringContainsString('dataset.submitting', $view);
     }
 
-    public function test_repository_does_not_retry_deterministic_duplicate(): void
+    public function legacyGoogleRepositoryDoesNotRetryDeterministicDuplicate(): void
     {
         $resource = new HardeningSheetsResource([
             ['Record_ID', 'Value'], ['REC-001', 'existing'],
@@ -107,7 +107,7 @@ class InvoiceHardeningTest extends TestCase
         $this->assertSame(0, $resource->appendCalls);
     }
 
-    public function test_ambiguous_append_is_verified_before_returning_success(): void
+    public function legacyGoogleAmbiguousAppendIsVerifiedBeforeReturningSuccess(): void
     {
         $resource = new HardeningSheetsResource([['Record_ID', 'Value']]);
         $resource->appendException = new \RuntimeException('network timeout');
@@ -118,7 +118,7 @@ class InvoiceHardeningTest extends TestCase
         $this->assertSame(1, $resource->appendCalls);
     }
 
-    public function test_timeout_before_append_is_retried_but_not_after_persisted_write(): void
+    public function legacyGoogleTimeoutBeforeAppendIsRetriedButNotAfterPersistedWrite(): void
     {
         $resource = new HardeningSheetsResource([['Record_ID', 'Value']]);
         $resource->appendException = new \RuntimeException('timeout');
@@ -129,7 +129,7 @@ class InvoiceHardeningTest extends TestCase
         $this->assertSame(2, $resource->appendCalls);
     }
 
-    public function test_rate_limit_and_server_errors_are_bounded_retries(): void
+    public function legacyGoogleRateLimitAndServerErrorsAreBoundedRetries(): void
     {
         foreach ([429, 503] as $status) {
             $resource = new HardeningSheetsResource([['Record_ID', 'Value']]);
@@ -146,7 +146,7 @@ class InvoiceHardeningTest extends TestCase
         }
     }
 
-    public function test_permanent_client_error_is_not_retried(): void
+    public function legacyGooglePermanentClientErrorIsNotRetried(): void
     {
         $resource = new HardeningSheetsResource([['Record_ID', 'Value']]);
         $resource->getException = new \RuntimeException('bad request', 400);
@@ -178,7 +178,7 @@ class InvoiceHardeningTest extends TestCase
 
     public function test_invoice_line_items_are_verified_from_fresh_persisted_row(): void
     {
-        $repo = new FreshIntegrityInvoiceRepository();
+        $repo = new FreshIntegrityInvoiceRepository;
         $service = $this->makeService($repo);
 
         $invoice = $service->create([
@@ -217,6 +217,7 @@ class InvoiceHardeningTest extends TestCase
             $events = Mockery::mock(EnterpriseEventService::class);
             $events->shouldReceive('dispatch')->zeroOrMoreTimes()->andReturn(true);
         }
+
         return new InvoiceService($repo, $events, $student, $company, $payment);
     }
 
@@ -230,7 +231,9 @@ class InvoiceHardeningTest extends TestCase
 class HardeningInvoiceRepository implements InvoiceRepositoryInterface
 {
     public array $rows;
+
     public array $created = [];
+
     private bool $duplicateOnce;
 
     public function __construct(array $rows, bool $duplicateOnce = false)
@@ -238,21 +241,49 @@ class HardeningInvoiceRepository implements InvoiceRepositoryInterface
         $this->rows = $rows;
         $this->duplicateOnce = $duplicateOnce;
     }
-    public function getAll() { return collect($this->rows); }
-    public function getAllFresh() { return collect($this->rows); }
-    public function getById($id) { return collect($this->rows)->firstWhere('Invoice_ID', $id); }
-    public function findByIdFresh($id) { return $this->getById($id); }
-    public function create(array $data) {
+
+    public function getAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function getAllFresh()
+    {
+        return collect($this->rows);
+    }
+
+    public function getById($id)
+    {
+        return collect($this->rows)->firstWhere('Invoice_ID', $id);
+    }
+
+    public function findByIdFresh($id)
+    {
+        return $this->getById($id);
+    }
+
+    public function create(array $data)
+    {
         if ($this->duplicateOnce) {
             $this->duplicateOnce = false;
             throw new DuplicatePrimaryKeyException('duplicate');
         }
         $this->created[] = $data;
         $this->rows[] = $data;
+
         return true;
     }
-    public function update($id, array $data) { return true; }
-    public function delete($id) { return true; }
+
+    public function update($id, array $data)
+    {
+        return true;
+    }
+
+    public function delete($id)
+    {
+        return true;
+    }
+
     public function clearCache() {}
 }
 
@@ -261,24 +292,48 @@ class HardeningInvoiceRepository implements InvoiceRepositoryInterface
 class FreshIntegrityInvoiceRepository implements InvoiceRepositoryInterface
 {
     public int $freshReads = 0;
+
     private array $rows = [];
 
     public function __construct(private bool $dropLineItems = false) {}
-    public function getAll() { return collect($this->rows); }
-    public function getById($id) { return collect($this->rows)->firstWhere('Invoice_ID', $id); }
-    public function findByIdFresh($id) {
+
+    public function getAll()
+    {
+        return collect($this->rows);
+    }
+
+    public function getById($id)
+    {
+        return collect($this->rows)->firstWhere('Invoice_ID', $id);
+    }
+
+    public function findByIdFresh($id)
+    {
         $this->freshReads++;
+
         return $this->getById($id);
     }
-    public function create(array $data) {
+
+    public function create(array $data)
+    {
         if ($this->dropLineItems) {
             unset($data['Line_Items']);
         }
         $this->rows[] = $data;
+
         return true;
     }
-    public function update($id, array $data) { return true; }
-    public function delete($id) { return true; }
+
+    public function update($id, array $data)
+    {
+        return true;
+    }
+
+    public function delete($id)
+    {
+        return true;
+    }
+
     public function clearCache() {}
 }
 
@@ -289,7 +344,7 @@ class HardeningSheetRepository extends BaseSheetRepository
         $this->service = (object) ['spreadsheets_values' => $resource];
         $this->spreadsheetId = 'test';
         $this->sheetName = 'TEST_SHEET';
-        $this->cacheKey = 'hardening_sheet_' . spl_object_id($this);
+        $this->cacheKey = 'hardening_sheet_'.spl_object_id($this);
         $this->primaryKey = 'Record_ID';
         $this->cacheTtl = 1;
     }
@@ -298,28 +353,52 @@ class HardeningSheetRepository extends BaseSheetRepository
 class HardeningSheetsResource
 {
     public int $appendCalls = 0;
+
     public int $getCalls = 0;
+
     public ?\Throwable $getException = null;
+
     public ?\Throwable $appendException = null;
+
     public bool $appendExceptionOnce = false;
+
     public bool $appendCommitsBeforeException = false;
+
     public function __construct(public array $values) {}
-    public function get($spreadsheetId, $range) {
+
+    public function get($spreadsheetId, $range)
+    {
         $this->getCalls++;
         if ($this->getException) {
             throw $this->getException;
         }
-        return new class($this->values) { public function __construct(private array $values) {} public function getValues(): array { return $this->values; } };
+
+        return new class($this->values)
+        {
+            public function __construct(private array $values) {}
+
+            public function getValues(): array
+            {
+                return $this->values;
+            }
+        };
     }
-    public function append($spreadsheetId, $range, $body, $params) {
+
+    public function append($spreadsheetId, $range, $body, $params)
+    {
         $this->appendCalls++;
         if ($this->appendException && ($this->appendExceptionOnce === false || $this->appendCalls === 1)) {
             $e = $this->appendException;
-            if ($this->appendExceptionOnce) { $this->appendException = null; }
-            if ($this->appendCommitsBeforeException) { $this->values[] = $body->getValues()[0]; }
+            if ($this->appendExceptionOnce) {
+                $this->appendException = null;
+            }
+            if ($this->appendCommitsBeforeException) {
+                $this->values[] = $body->getValues()[0];
+            }
             throw $e;
         }
         $this->values[] = $body->getValues()[0];
+
         return true;
     }
 }

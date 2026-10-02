@@ -449,7 +449,7 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertSame(0, $dashboard['kpi']['overdue_invoices']);
     }
 
-    public function test_ambiguous_update_is_verified_without_blind_duplicate_retry(): void
+    public function legacyGoogleAmbiguousUpdateIsVerifiedWithoutBlindDuplicateRetry(): void
     {
         $resource = new IntegrityUpdateResource;
         $repository = new IntegrityUpdateRepository($resource);
@@ -667,7 +667,7 @@ class FinanceHardeningIntegrityTest extends TestCase
         $this->assertSame('101', $service->resolvePaymentAccount('TRANSFER'));
     }
 
-    public function test_transaction_allocator_uses_persisted_max_over_stale_counter(): void
+    public function legacySheetsTransactionAllocatorUsesPersistedMaxOverStaleCounter(): void
     {
         $repo = new class extends ConcreteTransactionRepository
         {

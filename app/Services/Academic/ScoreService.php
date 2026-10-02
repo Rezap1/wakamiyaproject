@@ -2,24 +2,34 @@
 
 namespace App\Services\Academic;
 
-use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
-use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Services\Core\EnterpriseEventService;
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Helpers\GradeHelper;
+use App\Interfaces\GoogleSheets\AssessmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScoreRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Services\Core\EnterpriseEventService;
 use App\Support\Academic\TeacherScopeResolver;
+use App\Support\ActorIdentity;
 use Exception;
 
 class ScoreService
 {
     protected $repository;
+
     protected $enterpriseEvent;
+
     protected $assessmentRepository;
+
     protected $studentRepository;
+
     protected $assessmentConfigService;
 
     public function __construct(
-        ScoreRepositoryInterface $repository, 
+        ScoreRepositoryInterface $repository,
         EnterpriseEventService $enterpriseEvent,
         AssessmentRepositoryInterface $assessmentRepository,
         StudentRepositoryInterface $studentRepository,
@@ -32,43 +42,47 @@ class ScoreService
         $this->assessmentConfigService = $assessmentConfigService;
     }
 
-    public function getAll() 
-    { 
-        $scores = $this->repository->fetchAll(); 
-        return $scores->map(function($item) {
+    public function getAll()
+    {
+        $scores = $this->repository->fetchAll();
+
+        return $scores->map(function ($item) {
             $item['Parsed_Details'] = $this->parseEvaluationDetails($item);
+
             return $item;
         });
     }
 
-    public function getById($id) 
-    { 
-        $score = $this->repository->findById($id); 
+    public function getById($id)
+    {
+        $score = $this->repository->findById($id);
         if ($score) {
             $score['Parsed_Details'] = $this->parseEvaluationDetails($score);
         }
+
         return $score;
     }
 
-    public function generateId() 
-    { 
-        return $this->repository->generateNewId('SCR', 6); 
+    public function generateId()
+    {
+        return $this->repository->generateNewId('SCR', 6);
     }
 
     public function parseEvaluationDetails($score): array
     {
         $detailsRaw = $score['Evaluation_Details'] ?? null;
-        if (!empty($detailsRaw) && is_string($detailsRaw)) {
+        if (! empty($detailsRaw) && is_string($detailsRaw)) {
             $decoded = json_decode($detailsRaw, true);
             if (is_array($decoded)) {
                 return $decoded;
             }
         }
-        
+
         $category = strtolower($score['Assessment_Category'] ?? 'general');
+
         return [
             'category' => $category,
-            'notes' => $score['Notes'] ?? $score['Remarks'] ?? ''
+            'notes' => $score['Notes'] ?? $score['Remarks'] ?? '',
         ];
     }
 
@@ -80,28 +94,28 @@ class ScoreService
         $isNumericCategory = false;
         if ($this->assessmentConfigService) {
             $categoryConfig = $this->assessmentConfigService->getCategoryConfig($category);
-            if (!$categoryConfig) {
+            if (! $categoryConfig) {
                 throw new Exception('Kategori penilaian tidak terdaftar pada MASTER_ASSESSMENT_CONFIG.');
             }
             $isNumericCategory = $this->assessmentConfigService->isNumericCategory($category);
         }
-        
+
         $details = ['category' => strtolower($category)];
         $notes = $data['Notes'] ?? $data['Remarks'] ?? '';
         $details['notes'] = $notes;
 
         $reservedKeys = [
-            '_token', 'Student_ID', 'Assessment_Category', 'Date', 'Notes', 'Remarks', 
+            '_token', 'Student_ID', 'Assessment_Category', 'Date', 'Notes', 'Remarks',
             '_method', 'Score_ID', 'Score_Value', 'Score', 'Subject_ID', 'Assessment_ID', 'Assignment_ID', 'Schedule_ID', 'Class_ID', 'Assessment_Date', 'Teacher_ID', 'Parsed_Details',
-            'Evaluation_Details', 'Grade', 'Status', 'Created_At', 'Updated_At', 'Is_Active', 'Date'
+            'Evaluation_Details', 'Grade', 'Status', 'Created_At', 'Updated_At', 'Is_Active', 'Date',
         ];
         $reservedKeysNormalized = array_map(fn ($key) => strtolower((string) $key), $reservedKeys);
 
         foreach ($data as $key => $val) {
-            if (!in_array(strtolower((string) $key), $reservedKeysNormalized, true) && $val !== '' && $val !== null) {
+            if (! in_array(strtolower((string) $key), $reservedKeysNormalized, true) && $val !== '' && $val !== null) {
                 // Parse numeric strings if they look like numbers
                 if (is_numeric($val)) {
-                    $details[$key] = strpos((string)$val, '.') !== false ? (float)$val : (int)$val;
+                    $details[$key] = strpos((string) $val, '.') !== false ? (float) $val : (int) $val;
                 } else {
                     $details[$key] = $val;
                 }
@@ -110,11 +124,11 @@ class ScoreService
 
         if ($this->assessmentConfigService) {
             $configuredAspects = $this->assessmentConfigService->getAspects($category);
-            if (!empty($configuredAspects)) {
+            if (! empty($configuredAspects)) {
                 $aspectPayload = collect($details)
                     ->except(['category', 'notes', 'subject_id'])
                     ->toArray();
-                if (!$this->assessmentConfigService->validateAspectPayload($category, $aspectPayload)) {
+                if (! $this->assessmentConfigService->validateAspectPayload($category, $aspectPayload)) {
                     throw new Exception('Aspek penilaian tidak valid atau belum lengkap.');
                 }
             }
@@ -128,16 +142,16 @@ class ScoreService
             $scoreVal = (float) $data['Score'];
         }
 
-        if ($isNumericCategory || ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes']))) ) {
+        if ($isNumericCategory || ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes'])))) {
             $rawScore = $data['Score_Value'] ?? $data['Score'] ?? null;
             if ($rawScore === null || $rawScore === '') {
                 throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
             }
-            if (!is_int($rawScore) && !is_float($rawScore) && !is_string($rawScore)) {
+            if (! is_int($rawScore) && ! is_float($rawScore) && ! is_string($rawScore)) {
                 throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
             }
             $rawScore = trim((string) $rawScore);
-            if ($rawScore === '' || !is_numeric($rawScore) || !is_finite((float) $rawScore)) {
+            if ($rawScore === '' || ! is_numeric($rawScore) || ! is_finite((float) $rawScore)) {
                 throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
             }
             $scoreVal = (float) $rawScore;
@@ -153,7 +167,7 @@ class ScoreService
         return [
             'category' => $category,
             'score_value' => $scoreVal,
-            'evaluation_details' => json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            'evaluation_details' => json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
         ];
     }
 
@@ -161,33 +175,33 @@ class ScoreService
     {
         $this->validateDependencies($data);
         $evalResult = $this->processEvaluationDetails($data);
-        
-        if (!isset($data['Score_ID'])) {
+
+        if (! isset($data['Score_ID'])) {
             $data['Score_ID'] = $this->generateId();
         }
-        
+
         $scoreVal = $evalResult['score_value'];
-        
+
         $data['Assessment_Category'] = $evalResult['category'];
         // MASTER_SCORE stores the legacy Assignment_ID column. Preserve the
         // caller's assessment reference without relying on a non-existent
         // Assessment_ID header.
-        if (empty($data['Assignment_ID']) && !empty($data['Assessment_ID'])) {
+        if (empty($data['Assignment_ID']) && ! empty($data['Assessment_ID'])) {
             $data['Assignment_ID'] = $data['Assessment_ID'];
         }
         $data['Score'] = $scoreVal ?? '';
         $data['Score_Value'] = $scoreVal ?? '';
         $data['Evaluation_Details'] = $evalResult['evaluation_details'];
-        
+
         if ($scoreVal !== null) {
-            $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
+            $gradeResult = GradeHelper::calculate($scoreVal);
             $data['Grade'] = $gradeResult['grade'];
             $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
         } else {
             $data['Grade'] = '';
             $data['Status'] = 'COMPLETED';
         }
-        
+
         $data['Remarks'] = $data['Notes'] ?? ($data['Remarks'] ?? '');
         $data['Created_At'] = now()->toDateTimeString();
 
@@ -211,45 +225,46 @@ class ScoreService
             $persisted = method_exists($this->repository, 'findByIdFresh')
                 ? $this->repository->findByIdFresh($data['Score_ID'])
                 : null;
-            if (!$persisted || !$this->sameSubmission($persisted, $data)) {
+            if (! $persisted || ! $this->sameSubmission($persisted, $data)) {
                 throw new Exception('ID penilaian idempotent bertabrakan dengan data lain.', 0, $e);
             }
+
             return $persisted;
         }
         $this->repository->clearCache();
 
-        // Google Sheets writes are not transactional. A successful append API
+        // Preserve the authoritative persisted row after the database write.
         // response is not sufficient evidence that the intended row is
         // durable, so verify the persisted row before emitting side effects.
         $persisted = $this->readBackPersisted($data['Score_ID']);
         $this->assertPersistedIdentity($persisted, $data);
-        
+
         // Notify Student & Dispatch Event
         $this->enterpriseEvent->dispatch(
             'ACADEMIC',
             'PUBLISH',
             'SCORE',
             $data['Score_ID'],
-            \App\Support\ActorIdentity::required(),
+            ActorIdentity::required(),
             ['ACADEMIC'],
             [$data['Student_ID']],
             $persisted
         );
-        
+
         return $persisted ?: $res;
     }
 
     public function update($id, array $data)
     {
         $this->validateDependencies($data);
-        
+
         $existing = $this->getById($id);
-        if (!$existing) {
-            throw new Exception("Record nilai tidak ditemukan.");
+        if (! $existing) {
+            throw new Exception('Record nilai tidak ditemukan.');
         }
 
         // Merge existing category if not passed
-        if (empty($data['Assessment_Category']) && !empty($existing['Assessment_Category'])) {
+        if (empty($data['Assessment_Category']) && ! empty($existing['Assessment_Category'])) {
             $data['Assessment_Category'] = $existing['Assessment_Category'];
         }
 
@@ -257,22 +272,22 @@ class ScoreService
         $scoreVal = $evalResult['score_value'];
 
         $data['Assessment_Category'] = $evalResult['category'];
-        if (empty($data['Assignment_ID']) && !empty($data['Assessment_ID'])) {
+        if (empty($data['Assignment_ID']) && ! empty($data['Assessment_ID'])) {
             $data['Assignment_ID'] = $data['Assessment_ID'];
         }
         $data['Score'] = $scoreVal ?? '';
         $data['Score_Value'] = $scoreVal ?? '';
         $data['Evaluation_Details'] = $evalResult['evaluation_details'];
-        
+
         if ($scoreVal !== null) {
-            $gradeResult = \App\Helpers\GradeHelper::calculate($scoreVal);
+            $gradeResult = GradeHelper::calculate($scoreVal);
             $data['Grade'] = $gradeResult['grade'];
             $data['Status'] = $gradeResult['pass'] ? 'PASS' : 'FAIL';
         } else {
             $data['Grade'] = '';
             $data['Status'] = 'COMPLETED';
         }
-        
+
         $data['Remarks'] = $data['Notes'] ?? ($data['Remarks'] ?? ($existing['Remarks'] ?? ''));
         $data['Updated_At'] = now()->toDateTimeString();
 
@@ -289,7 +304,7 @@ class ScoreService
             'UPDATE',
             'SCORE',
             $id,
-            \App\Support\ActorIdentity::required(),
+            ActorIdentity::required(),
             ['ACADEMIC'],
             $studentId ? [$studentId] : [],
             $persisted
@@ -311,7 +326,7 @@ class ScoreService
             'DELETE',
             'SCORE',
             $id,
-            \App\Support\ActorIdentity::required(),
+            ActorIdentity::required(),
             ['ACADEMIC'],
             $studentId ? [$studentId] : [],
             []
@@ -324,8 +339,8 @@ class ScoreService
     {
         if (isset($data['Student_ID'])) {
             $student = $this->studentRepository->findById($data['Student_ID']);
-            if (!$student) {
-                throw new Exception("Siswa tidak valid.");
+            if (! $student) {
+                throw new Exception('Siswa tidak valid.');
             }
         }
     }
@@ -339,7 +354,7 @@ class ScoreService
             $persisted = $this->repository->findById($scoreId);
         }
 
-        if (!$persisted || !is_array($persisted)) {
+        if (! $persisted || ! is_array($persisted)) {
             throw new Exception('Nilai tersimpan tidak dapat diverifikasi dari sumber data.');
         }
 
@@ -350,7 +365,9 @@ class ScoreService
     {
         foreach (['Score_ID', 'Student_ID', 'Schedule_ID', 'Assignment_ID', 'Assessment_Category', 'Evaluation_Details'] as $field) {
             $expectedValue = trim((string) ($expected[$field] ?? ($field === 'Assignment_ID' ? ($expected['Assessment_ID'] ?? '') : '')));
-            if ($expectedValue === '') continue;
+            if ($expectedValue === '') {
+                continue;
+            }
             $persistedValue = trim((string) ($persisted[$field] ?? ($field === 'Assignment_ID' ? ($persisted['Assessment_ID'] ?? '') : '')));
             if ($field === 'Assessment_Category') {
                 $expectedValue = strtoupper($expectedValue);
@@ -371,8 +388,11 @@ class ScoreService
                 $left = strtoupper($left);
                 $right = strtoupper($right);
             }
-            if ($left !== $right) return false;
+            if ($left !== $right) {
+                return false;
+            }
         }
+
         return true;
     }
 
@@ -391,6 +411,7 @@ class ScoreService
     public function isStudentInTeacherScope($studentId, $teacherId): bool
     {
         $scopedStudents = $this->getStudentsInTeacherScope($teacherId);
+
         return collect($scopedStudents)->contains('Student_ID', $studentId);
     }
 
@@ -402,11 +423,11 @@ class ScoreService
     public function getTeacherScoreScope(string $teacherId): array
     {
         $resolver = new TeacherScopeResolver(
-            app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class),
-            app(\App\Interfaces\GoogleSheets\ScheduleRepositoryInterface::class),
-            app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class),
+            app(TeacherRepositoryInterface::class),
+            app(ScheduleRepositoryInterface::class),
+            app(ClassRepositoryInterface::class),
             $this->studentRepository,
-            app(\App\Interfaces\GoogleSheets\ClassEnrollmentRepositoryInterface::class),
+            app(ClassEnrollmentRepositoryInterface::class),
             $this->assessmentRepository
         );
 
@@ -416,6 +437,7 @@ class ScoreService
     public function isAssessmentInTeacherScope($assessmentId, string $teacherId): bool
     {
         $assessmentId = trim((string) $assessmentId);
+
         return $assessmentId !== '' && in_array($assessmentId, $this->getTeacherScoreScope($teacherId)['assessment_ids'], true);
     }
 
@@ -423,7 +445,7 @@ class ScoreService
     {
         $scope ??= $this->getTeacherScoreScope($teacherId);
         $studentId = trim((string) ($score['Student_ID'] ?? ''));
-        if ($studentId === '' || !in_array($studentId, $scope['student_ids'], true)) {
+        if ($studentId === '' || ! in_array($studentId, $scope['student_ids'], true)) {
             return false;
         }
 
@@ -443,6 +465,7 @@ class ScoreService
         }
 
         $assessmentId = trim((string) ($score['Assessment_ID'] ?? $score['Assignment_ID'] ?? ''));
+
         return $assessmentId !== '' && in_array($assessmentId, $scope['assessment_ids'], true);
     }
 
@@ -451,6 +474,7 @@ class ScoreService
         if ($scope === null) {
             return false;
         }
+
         return in_array($studentId, $scope['schedule_student_ids'][$scheduleId] ?? [], true);
     }
 }

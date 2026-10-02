@@ -16,42 +16,26 @@ class TeacherRepository extends BaseSheetRepository implements TeacherRepository
 
     public function findById(string $id)
     {
-        $teachers = $this->fetchAll();
-        return $teachers->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function findByEmployeeId(string $employeeId)
     {
-        $teachers = $this->fetchAll();
-        return $teachers->firstWhere('Employee_ID', $employeeId);
+        return $this->firstWhereColumn('Employee_ID', $employeeId);
     }
 
     public function generateTeacherCode(string $prefix, string $year, int $padding = 3): string
     {
-        $lockKey = $this->sheetName . '_tchcode_lock';
-        $counterKey = 'tchcode_counter_' . $this->sheetName . '_' . $prefix . '_' . $year;
+        $pattern = '/^'.preg_quote($prefix, '/').'-'.preg_quote($year, '/').'-(\d+)$/i';
+        $next = $this->allocateNextSequence(
+            strtolower($this->sheetName.':teacher_code:'.$prefix.':'.$year),
+            'Teacher_Code',
+            static fn (string $value): ?int => preg_match($pattern, $value, $matches)
+                ? (int) $matches[1]
+                : null
+        );
 
-        return \Illuminate\Support\Facades\Cache::lock($lockKey, 10)->block(5, function () use ($prefix, $year, $padding, $counterKey) {
-            if (!\Illuminate\Support\Facades\Cache::has($counterKey)) {
-                $teachers = $this->fetchAll();
-                $maxNumber = 0;
-                $pattern = "/^{$prefix}-{$year}-(\d{{$padding}})$/i";
-                
-                foreach ($teachers as $teacher) {
-                    $tchCode = $teacher['Teacher_Code'] ?? '';
-                    if (preg_match($pattern, $tchCode, $matches)) {
-                        $number = (int) $matches[1];
-                        if ($number > $maxNumber) {
-                            $maxNumber = $number;
-                        }
-                    }
-                }
-                \Illuminate\Support\Facades\Cache::forever($counterKey, $maxNumber);
-            }
-            
-            $nextNumber = \Illuminate\Support\Facades\Cache::increment($counterKey);
-            return $prefix . '-' . $year . '-' . str_pad((string)$nextNumber, $padding, '0', STR_PAD_LEFT);
-        });
+        return $prefix.'-'.$year.'-'.str_pad((string) $next, $padding, '0', STR_PAD_LEFT);
     }
 
     public function create(array $data)

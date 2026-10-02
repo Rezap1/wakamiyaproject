@@ -2,27 +2,30 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\CollectionHelper;
+use App\Helpers\SheetValue;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreClassRequest;
 use App\Http\Requests\UpdateClassRequest;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
 use App\Services\Core\ProgramService;
-use App\Services\Core\BatchService;
+use App\Services\Core\RoleService;
+use App\Services\Core\StudentService;
 use App\Services\Core\TeacherService;
-use App\Services\Core\ActivityLogService;
-use App\Helpers\SheetValue;
 use App\Support\Academic\TeacherScopeResolver;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Pagination\LengthAwarePaginator;
+use App\Traits\Exportable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ClassController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-        protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
 
         $classes = $this->classService->getAllClasses();
@@ -38,12 +41,13 @@ class ClassController extends Controller
             $cls['Program_Name'] = $program ? $program['Program_Name'] : '-';
             $cls['Batch_Name'] = $batch ? $batch['Batch_Name'] : '-';
             $cls['Teacher_Name'] = $teacher ? $teacher['Full_Name'] : '-';
+
             return $cls;
         });
 
         $search = $request->input('search');
-        if (!empty($search)) {
-            $classes = \App\Helpers\CollectionHelper::search($classes, $search, ['Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
+        if (! empty($search)) {
+            $classes = CollectionHelper::search($classes, $search, ['Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
         }
 
         if ($request->filled('status')) {
@@ -64,13 +68,13 @@ class ClassController extends Controller
                 $classes = $classes->where('Batch_ID', $batchId);
             }
         }
-        
+
         return [
             'moduleName' => 'Kelas (Class)',
             'data' => collect(array_values($classes->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Kode Kelas', 'Nama Kelas', 'Program', 'Angkatan', 'Wali Kelas', 'Ruangan', 'Status'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
 
                 return [
                     $row['Class_Code'] ?? '-',
@@ -79,17 +83,20 @@ class ClassController extends Controller
                     $row['Batch_Name'] ?? '-',
                     $row['Teacher_Name'] ?? '-',
                     $row['Room'] ?? '-',
-                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif',
                 ];
-                    },
+            },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data</td><td>: '.$classes->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data</td><td>: '.$classes->count().'</td></tr>',
         ];
     }
 
     protected $classService;
+
     protected $programService;
+
     protected $batchService;
+
     protected $teacherService;
 
     public function __construct(
@@ -104,7 +111,7 @@ class ClassController extends Controller
         $this->teacherService = $teacherService;
     }
 
-    public function index(\Illuminate\Http\Request $request)
+    public function index(Request $request)
     {
         try {
             $classes = $this->classService->getAllClasses();
@@ -121,13 +128,13 @@ class ClassController extends Controller
                 $cls['Program_Name'] = $program ? $program['Program_Name'] : 'Program Tidak Ditemukan';
                 $cls['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Angkatan Tidak Ditemukan';
                 $cls['Teacher_Name'] = $teacher ? $teacher['Full_Name'] : 'Wali Kelas Tidak Ditemukan';
-                
+
                 return $cls;
             });
 
             $search = $request->input('search');
-            if (!empty($search)) {
-                $classes = \App\Helpers\CollectionHelper::search($classes, $search, ['Class_ID', 'Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
+            if (! empty($search)) {
+                $classes = CollectionHelper::search($classes, $search, ['Class_ID', 'Class_Code', 'Class_Name', 'Program_Name', 'Batch_Name', 'Teacher_Name', 'Room']);
             }
 
             if ($request->filled('status')) {
@@ -136,14 +143,14 @@ class ClassController extends Controller
                     $classes = $classes->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
                 }
             }
-            
+
             if ($request->filled('program_id')) {
                 $programId = $request->input('program_id');
                 if ($programId !== 'all') {
                     $classes = $classes->where('Program_ID', $programId);
                 }
             }
-            
+
             if ($request->filled('batch_id')) {
                 $batchId = $request->input('batch_id');
                 if ($batchId !== 'all') {
@@ -152,8 +159,8 @@ class ClassController extends Controller
             }
 
             // Pagination
-            $classesPaginated = \App\Helpers\CollectionHelper::paginate($classes, 10)->withQueryString();
-            
+            $classesPaginated = CollectionHelper::paginate($classes, 10)->withQueryString();
+
             // For filter
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
             $activeBatches = $batches->where('Is_Active', 'TRUE')->values();
@@ -161,11 +168,12 @@ class ClassController extends Controller
             return view('academic.classes.index', [
                 'classes' => $classesPaginated,
                 'programs' => $activePrograms,
-                'batches' => $activeBatches
+                'batches' => $activeBatches,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching classes: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master kelas dari Google Sheets.');
+            Log::error('Error fetching classes: '.$e->getMessage());
+
+            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master kelas dari database.');
         }
     }
 
@@ -175,10 +183,11 @@ class ClassController extends Controller
             $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
             $batches = $this->batchService->getAllBatches()->where('Is_Active', 'TRUE')->values();
             $teachers = $this->teacherService->getAllTeachers()->where('Is_Active', 'TRUE')->values();
-            
+
             return view('academic.classes.create', compact('programs', 'batches', 'teachers'));
         } catch (\Exception $e) {
-            Log::error('Error loading create class form: ' . $e->getMessage());
+            Log::error('Error loading create class form: '.$e->getMessage());
+
             return redirect()->route('classes.index')->with('error', 'Gagal memuat form pendaftaran kelas.');
         }
     }
@@ -191,8 +200,9 @@ class ClassController extends Controller
 
             return redirect()->route('classes.index')->with('success', 'Kelas berhasil ditambahkan.');
         } catch (\Exception $e) {
-            Log::error('Error creating class: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error creating class: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -200,7 +210,7 @@ class ClassController extends Controller
     {
         try {
             $class = $this->classService->getClassById($id);
-            if (!$class) {
+            if (! $class) {
                 return redirect()->route('classes.index')->with('error', 'Data kelas tidak ditemukan.');
             }
 
@@ -214,7 +224,8 @@ class ClassController extends Controller
 
             return view('academic.classes.show', compact('class'));
         } catch (\Exception $e) {
-            Log::error('Error showing class: ' . $e->getMessage());
+            Log::error('Error showing class: '.$e->getMessage());
+
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat memuat data kelas.');
         }
     }
@@ -223,25 +234,25 @@ class ClassController extends Controller
     {
         try {
             $class = $this->classService->getClassById($id);
-            if (!$class) {
+            if (! $class) {
                 return redirect()->route('classes.index')->with('error', 'Data kelas tidak ditemukan.');
             }
 
             $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
             $batches = $this->batchService->getAllBatches()->where('Is_Active', 'TRUE')->values();
             $teachers = $this->teacherService->getAllTeachers()->where('Is_Active', 'TRUE')->values();
-            
+
             // Include inactive ones if currently selected
             $currentProgram = $this->programService->getProgramById($class['Program_ID']);
             if ($currentProgram && ($currentProgram['Is_Active'] ?? 'TRUE') === 'FALSE') {
                 $programs->push($currentProgram);
             }
-            
+
             $currentBatch = $this->batchService->getBatchById($class['Batch_ID']);
             if ($currentBatch && ($currentBatch['Is_Active'] ?? 'TRUE') === 'FALSE') {
                 $batches->push($currentBatch);
             }
-            
+
             $currentTeacher = $this->teacherService->getTeacherById($class['Homeroom_Teacher_ID']);
             if ($currentTeacher && ($currentTeacher['Is_Active'] ?? 'TRUE') === 'FALSE') {
                 $teachers->push($currentTeacher);
@@ -249,7 +260,8 @@ class ClassController extends Controller
 
             return view('academic.classes.edit', compact('class', 'programs', 'batches', 'teachers'));
         } catch (\Exception $e) {
-            Log::error('Error editing class: ' . $e->getMessage());
+            Log::error('Error editing class: '.$e->getMessage());
+
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat memuat form edit kelas.');
         }
     }
@@ -258,7 +270,7 @@ class ClassController extends Controller
     {
         try {
             $class = $this->classService->getClassById($id);
-            if (!$class) {
+            if (! $class) {
                 return redirect()->route('classes.index')->with('error', 'Data kelas tidak ditemukan.');
             }
 
@@ -267,8 +279,9 @@ class ClassController extends Controller
 
             return redirect()->route('classes.index')->with('success', 'Data kelas berhasil diperbarui.');
         } catch (\Exception $e) {
-            Log::error('Error updating class: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error updating class: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -276,7 +289,7 @@ class ClassController extends Controller
     {
         try {
             $class = $this->classService->getClassById($id);
-            if (!$class) {
+            if (! $class) {
                 return redirect()->route('classes.index')->with('error', 'Data kelas tidak ditemukan.');
             }
 
@@ -284,31 +297,32 @@ class ClassController extends Controller
 
             return redirect()->route('classes.index')->with('success', 'Data kelas berhasil dihapus.');
         } catch (\Exception $e) {
-            Log::error('Error deleting class: ' . $e->getMessage());
+            Log::error('Error deleting class: '.$e->getMessage());
+
             return redirect()->route('classes.index')->with('error', 'Terjadi kesalahan saat menghapus data kelas.');
         }
     }
 
-    public function getStudents($id, \App\Services\Core\StudentService $studentService)
+    public function getStudents($id, StudentService $studentService)
     {
         try {
             $requestedClassId = SheetValue::id($id);
             $user = auth()->user();
-            $roleService = app(\App\Services\Core\RoleService::class);
+            $roleService = app(RoleService::class);
             $role = collect($roleService->getAllRoles())->firstWhere('Role_ID', $user->Role_ID ?? '');
             $roleName = strtoupper(trim((string) ($role['Role_Name'] ?? $user->Role ?? session('role') ?? '')));
             $allowedStudentIds = null;
 
             if (str_contains($roleName, 'TEACHER') || str_contains($roleName, 'GURU')) {
-                $teacherRepo = app(\App\Interfaces\GoogleSheets\TeacherRepositoryInterface::class);
+                $teacherRepo = app(TeacherRepositoryInterface::class);
                 $teacher = collect($teacherRepo->fetchAll())->firstWhere('User_ID', $user->User_ID ?? '');
-                if (!$teacher || empty($teacher['Teacher_ID'])) {
+                if (! $teacher || empty($teacher['Teacher_ID'])) {
                     return response()->json(['error' => 'Profil pengajar tidak ditemukan.'], 403);
                 }
 
                 $resolver = app(TeacherScopeResolver::class);
                 $scope = $resolver->resolveForTeacherId($teacher['Teacher_ID']);
-                if (!$resolver->classAllowed($scope, $requestedClassId)) {
+                if (! $resolver->classAllowed($scope, $requestedClassId)) {
                     return response()->json(['error' => 'Akses Ditolak: Kelas di luar wewenang Anda.'], 403);
                 }
                 $allowedStudentIds = $scope['students_by_class'][$requestedClassId] ?? [];
@@ -328,6 +342,7 @@ class ClassController extends Controller
                 ->map(function ($student) {
                     $student['Student_ID'] = trim((string) ($student['Student_ID'] ?? ''));
                     $student['Full_Name'] = trim((string) ($student['Full_Name'] ?? $student['Student_ID'] ?? 'Siswa'));
+
                     return $student;
                 })
                 ->values()
@@ -335,7 +350,8 @@ class ClassController extends Controller
 
             return response()->json($classStudents);
         } catch (\Exception $e) {
-            Log::error('Error fetching students by class: ' . $e->getMessage());
+            Log::error('Error fetching students by class: '.$e->getMessage());
+
             return response()->json(['error' => 'Internal Server Error'], 500);
         }
     }

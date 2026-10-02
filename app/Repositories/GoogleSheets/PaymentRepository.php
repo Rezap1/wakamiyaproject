@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
@@ -20,8 +21,7 @@ class PaymentRepository extends BaseSheetRepository implements PaymentRepository
 
     public function getById($id)
     {
-        $items = $this->fetchAll();
-        return $items->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function getAllFresh()
@@ -38,5 +38,4 @@ class PaymentRepository extends BaseSheetRepository implements PaymentRepository
     {
         return $this->append($data);
     }
-
 }

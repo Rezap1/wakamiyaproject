@@ -16,14 +16,12 @@ class StudentRepository extends BaseSheetRepository implements StudentRepository
 
     public function findById(string $id)
     {
-        $students = $this->fetchAll();
-        return $students->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function findByStudentNumber(string $number)
     {
-        $students = $this->fetchAll();
-        return $students->firstWhere('Student_Number', $number);
+        return $this->firstWhereColumn('Student_Number', $number);
     }
 
     public function findByNationalId(string $nationalId)
@@ -31,8 +29,8 @@ class StudentRepository extends BaseSheetRepository implements StudentRepository
         if (empty($nationalId)) {
             return null;
         }
-        $students = $this->fetchAll();
-        return $students->firstWhere('National_ID', $nationalId);
+
+        return $this->firstWhereColumn('National_ID', $nationalId);
     }
 
     public function create(array $data)

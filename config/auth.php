@@ -63,7 +63,7 @@ return [
 
     'providers' => [
         'users' => [
-            'driver' => 'google_sheets',
+            'driver' => 'wms_mysql',
         ],
 
         // 'users' => [

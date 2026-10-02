@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Repositories\GoogleSheets;
 
 use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
@@ -25,8 +26,7 @@ class InvoiceRepository extends BaseSheetRepository implements InvoiceRepository
 
     public function getById($id)
     {
-        $items = $this->fetchAll();
-        return $items->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function findByIdFresh($id)
@@ -38,6 +38,4 @@ class InvoiceRepository extends BaseSheetRepository implements InvoiceRepository
     {
         return $this->append($data);
     }
-
-
 }

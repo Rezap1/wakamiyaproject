@@ -2,23 +2,23 @@
 
 namespace App\Http\Controllers\Core;
 
+use App\Helpers\CollectionHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreBatchRequest;
 use App\Http\Requests\UpdateBatchRequest;
 use App\Services\Core\BatchService;
 use App\Services\Core\ProgramService;
-use App\Services\Core\ActivityLogService;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Pagination\LengthAwarePaginator;
+use App\Traits\Exportable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class BatchController extends Controller
 {
-    use \App\Traits\Exportable;
+    use Exportable;
 
     protected $exportDateField = 'Created_At';
 
-        protected function getExportConfig(\Illuminate\Http\Request $request)
+    protected function getExportConfig(Request $request)
     {
 
         $batches = $this->batchService->getAllBatches();
@@ -27,12 +27,13 @@ class BatchController extends Controller
         $batches = $batches->map(function ($batch) use ($programs) {
             $program = $programs->firstWhere('Program_ID', $batch['Program_ID']);
             $batch['Program_Name'] = $program ? $program['Program_Name'] : 'Tidak Ditemukan';
+
             return $batch;
         });
 
         $search = $request->input('search');
-        if (!empty($search)) {
-            $batches = \App\Helpers\CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
+        if (! empty($search)) {
+            $batches = CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
         }
 
         if ($request->filled('status')) {
@@ -41,34 +42,35 @@ class BatchController extends Controller
                 $batches = $batches->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
             }
         }
-        
+
         if ($request->filled('program_id')) {
             $programId = $request->input('program_id');
             if ($programId !== 'all') {
                 $batches = $batches->where('Program_ID', $programId);
             }
         }
-        
+
         return [
             'moduleName' => 'Angkatan (Batch)',
             'data' => collect(array_values($batches->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Kode Angkatan', 'Nama Angkatan', 'Program', 'Status'],
-            'mapRow' => function($row) {
+            'mapRow' => function ($row) {
 
                 return [
                     $row['Batch_Code'] ?? '-',
                     $row['Batch_Name'] ?? '-',
                     $row['Program_Name'] ?? '-',
-                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif'
+                    ($row['Is_Active'] ?? '') === 'TRUE' ? 'Aktif' : 'Tidak Aktif',
                 ];
-                    },
+            },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data</td><td>: '.$batches->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data</td><td>: '.$batches->count().'</td></tr>',
         ];
     }
 
     protected $batchService;
+
     protected $programService;
 
     public function __construct(
@@ -79,7 +81,7 @@ class BatchController extends Controller
         $this->programService = $programService;
     }
 
-    public function index(\Illuminate\Http\Request $request)
+    public function index(Request $request)
     {
         try {
             $batches = $this->batchService->getAllBatches();
@@ -90,12 +92,13 @@ class BatchController extends Controller
                 $program = $programs->firstWhere('Program_ID', $batch['Program_ID']);
                 $batch['Program_Name'] = $program ? $program['Program_Name'] : 'Program Tidak Ditemukan';
                 $batch['Program_Code'] = $program ? $program['Program_Code'] : '-';
+
                 return $batch;
             });
 
             $search = $request->input('search');
-            if (!empty($search)) {
-                $batches = \App\Helpers\CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
+            if (! empty($search)) {
+                $batches = CollectionHelper::search($batches, $search, ['Batch_ID', 'Batch_Code', 'Batch_Name', 'Program_Name', 'Description']);
             }
 
             if ($request->filled('status')) {
@@ -104,7 +107,7 @@ class BatchController extends Controller
                     $batches = $batches->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
                 }
             }
-            
+
             if ($request->filled('program_id')) {
                 $programId = $request->input('program_id');
                 if ($programId !== 'all') {
@@ -113,18 +116,19 @@ class BatchController extends Controller
             }
 
             // Pagination
-            $batchesPaginated = \App\Helpers\CollectionHelper::paginate($batches, 10)->withQueryString();
-            
+            $batchesPaginated = CollectionHelper::paginate($batches, 10)->withQueryString();
+
             // For filter
             $activePrograms = $programs->where('Is_Active', 'TRUE')->values();
 
             return view('academic.batches.index', [
                 'batches' => $batchesPaginated,
-                'programs' => $activePrograms
+                'programs' => $activePrograms,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching batches: ' . $e->getMessage());
-            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master batch dari Google Sheets.');
+            Log::error('Error fetching batches: '.$e->getMessage());
+
+            return redirect()->route('dashboard')->with('error', 'Gagal memuat data master batch dari database.');
         }
     }
 
@@ -132,9 +136,11 @@ class BatchController extends Controller
     {
         try {
             $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
+
             return view('academic.batches.create', compact('programs'));
         } catch (\Exception $e) {
-            Log::error('Error loading create batch form: ' . $e->getMessage());
+            Log::error('Error loading create batch form: '.$e->getMessage());
+
             return redirect()->route('batches.index')->with('error', 'Gagal memuat data program untuk pendaftaran angkatan.');
         }
     }
@@ -147,8 +153,9 @@ class BatchController extends Controller
 
             return redirect()->route('batches.index')->with('success', 'Angkatan (Batch) berhasil ditambahkan.');
         } catch (\Exception $e) {
-            Log::error('Error creating batch: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error creating batch: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -156,7 +163,7 @@ class BatchController extends Controller
     {
         try {
             $batch = $this->batchService->getBatchById($id);
-            if (!$batch) {
+            if (! $batch) {
                 return redirect()->route('batches.index')->with('error', 'Data angkatan tidak ditemukan.');
             }
 
@@ -167,7 +174,8 @@ class BatchController extends Controller
 
             return view('academic.batches.show', compact('batch'));
         } catch (\Exception $e) {
-            Log::error('Error showing batch: ' . $e->getMessage());
+            Log::error('Error showing batch: '.$e->getMessage());
+
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat memuat data angkatan.');
         }
     }
@@ -176,12 +184,12 @@ class BatchController extends Controller
     {
         try {
             $batch = $this->batchService->getBatchById($id);
-            if (!$batch) {
+            if (! $batch) {
                 return redirect()->route('batches.index')->with('error', 'Data angkatan tidak ditemukan.');
             }
 
             $programs = $this->programService->getAllPrograms()->where('Is_Active', 'TRUE')->values();
-            
+
             // Pastikan program yang sudah tidak aktif tapi dipakai oleh batch ini tetap bisa tampil jika diperlukan
             $currentProgram = $this->programService->getProgramById($batch['Program_ID']);
             if ($currentProgram && ($currentProgram['Is_Active'] ?? 'TRUE') === 'FALSE') {
@@ -190,7 +198,8 @@ class BatchController extends Controller
 
             return view('academic.batches.edit', compact('batch', 'programs'));
         } catch (\Exception $e) {
-            Log::error('Error editing batch: ' . $e->getMessage());
+            Log::error('Error editing batch: '.$e->getMessage());
+
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat memuat form edit angkatan.');
         }
     }
@@ -199,7 +208,7 @@ class BatchController extends Controller
     {
         try {
             $batch = $this->batchService->getBatchById($id);
-            if (!$batch) {
+            if (! $batch) {
                 return redirect()->route('batches.index')->with('error', 'Data angkatan tidak ditemukan.');
             }
 
@@ -208,8 +217,9 @@ class BatchController extends Controller
 
             return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil diperbarui.');
         } catch (\Exception $e) {
-            Log::error('Error updating batch: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: ' . $this->safeExceptionMessage($e))->withInput();
+            Log::error('Error updating batch: '.$e->getMessage());
+
+            return back()->with('error', 'Terjadi kesalahan saat memperbarui data: '.$this->safeExceptionMessage($e))->withInput();
         }
     }
 
@@ -217,7 +227,7 @@ class BatchController extends Controller
     {
         try {
             $batch = $this->batchService->getBatchById($id);
-            if (!$batch) {
+            if (! $batch) {
                 return redirect()->route('batches.index')->with('error', 'Data angkatan tidak ditemukan.');
             }
 
@@ -225,7 +235,8 @@ class BatchController extends Controller
 
             return redirect()->route('batches.index')->with('success', 'Data angkatan berhasil dihapus.');
         } catch (\Exception $e) {
-            Log::error('Error deleting batch: ' . $e->getMessage());
+            Log::error('Error deleting batch: '.$e->getMessage());
+
             return redirect()->route('batches.index')->with('error', 'Terjadi kesalahan saat menghapus data angkatan.');
         }
     }

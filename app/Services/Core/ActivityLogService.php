@@ -3,10 +3,9 @@
 namespace App\Services\Core;
 
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 use App\Support\ActorIdentity;
-
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class ActivityLogService
 {
@@ -22,7 +21,7 @@ class ActivityLogService
         return $this->activityLogRepository->fetchAll();
     }
 
-    public function log(string $module, string $action, string $description, $oldValue = null, $newValue = null, string $ipAddress = null, string $userAgent = null)
+    public function log(string $module, string $action, string $description, $oldValue = null, $newValue = null, ?string $ipAddress = null, ?string $userAgent = null)
     {
         return $this->logAction(
             ActorIdentity::required(),
@@ -36,7 +35,7 @@ class ActivityLogService
         );
     }
 
-    public function logAction(string $userId, string $action, string $module, string $description, string $ipAddress = null, $oldValue = null, $newValue = null, string $userAgent = null, string $referenceType = '', string $referenceId = '')
+    public function logAction(string $userId, string $action, string $module, string $description, ?string $ipAddress = null, $oldValue = null, $newValue = null, ?string $userAgent = null, string $referenceType = '', string $referenceId = '')
     {
         try {
             $newId = $this->activityLogRepository->generateNewId('LOG', 7);
@@ -60,15 +59,16 @@ class ActivityLogService
                 'Status' => 'SUCCESS',
                 'Created_At' => now()->toDateTimeString(),
             ];
-            
+
             $result = $this->activityLogRepository->create($data);
-            
-            // Dashboard cache invalidation is now handled centrally by DashboardCacheService 
+
+            // Dashboard cache invalidation is now handled centrally by DashboardCacheService
             // via EnterpriseEventService. No direct Cache::forget here.
-            
+
             return $result;
         } catch (\Exception $e) {
-            Log::error('Failed to write Audit Log to Google Sheets: ' . $e->getMessage());
+            Log::error('Failed to write Audit Log to MySQL: '.$e->getMessage());
+
             return false;
         }
     }

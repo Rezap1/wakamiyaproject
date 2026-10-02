@@ -16,24 +16,17 @@ class UserRepository extends BaseSheetRepository implements UserRepositoryInterf
 
     public function findById(string $id)
     {
-        $users = $this->fetchAll();
-        return $users->firstWhere($this->primaryKey, $id);
+        return $this->findByIdFresh($id);
     }
 
     public function findByEmail(string $email)
     {
-        $users = $this->fetchAll();
-        return $users->first(function ($user) use ($email) {
-            return strtolower($user['Email'] ?? '') === strtolower($email);
-        });
+        return $this->firstWhereColumn('Email', $email, true);
     }
 
     public function findByUsername(string $username)
     {
-        $users = $this->fetchAll();
-        return $users->first(function ($user) use ($username) {
-            return strtolower($user['Username'] ?? '') === strtolower($username);
-        });
+        return $this->firstWhereColumn('Username', $username, true);
     }
 
     public function create(array $data)

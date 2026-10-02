@@ -64,11 +64,7 @@ return [
             ]) : [],
         ],
 
-        /*
-         * M1-only destination. The application's default connection is
-         * deliberately unchanged so the current Google Sheets runtime keeps
-         * its existing behaviour until an explicit cutover is approved.
-         */
+        /* Read-only M1 importer destination; normal runtime uses `mysql`. */
         'wms_migration' => [
             'driver' => 'mysql',
             'host' => env('WMS_MIGRATION_DB_HOST', env('DB_HOST')),

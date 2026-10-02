@@ -182,8 +182,8 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        Auth::provider('google_sheets', function ($app, array $config) {
-            return new GoogleSheetsUserProvider($app->make(UserService::class));
+        Auth::provider('wms_mysql', function ($app, array $config) {
+            return new MySqlUserProvider($app->make(UserService::class));
         });
 
         view()->composer('*', function ($view) {

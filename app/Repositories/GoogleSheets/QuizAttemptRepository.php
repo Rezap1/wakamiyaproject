@@ -19,7 +19,7 @@ class QuizAttemptRepository extends BaseSheetRepository implements QuizAttemptRe
 
     public function findById(string $id)
     {
-        return $this->fetchAll()->firstWhere('Attempt_ID', $id);
+        return $this->findByIdFresh($id);
     }
 
     public function create(array $data)

@@ -6,6 +6,7 @@ use App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Core\ActivityLogService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -25,52 +26,57 @@ class QuizService
 
     public function create(array $data, array $teacher, string $userId): string
     {
-        $now = $this->stamp($this->periods->now());
         $quizId = 'QIZ'.strtoupper(substr(str_replace('-', '', (string) Str::uuid()), 0, 20));
-        $publish = ($data['intent'] ?? 'draft') === 'publish';
-        $this->quizzes->create([
-            'Quiz_ID' => $quizId,
-            'Teacher_ID' => $teacher['Teacher_ID'],
-            'Class_ID' => $data['Class_ID'],
-            'Title' => trim($data['Title']),
-            'Start_At' => $this->stamp($this->date($data['Start_At'])),
-            'End_At' => $this->stamp($this->date($data['End_At'])),
-            'Duration_Minutes' => (int) $data['Duration_Minutes'],
-            'Status' => 'DRAFT',
-            'Created_At' => $now,
-            'Updated_At' => $now,
-            'Created_By' => $userId,
-            'Updated_By' => $userId,
-        ]);
-        $this->writeQuestions($quizId, $data['questions'], $now);
-        if ($publish) {
-            $this->quizzes->update($quizId, ['Status' => 'PUBLISHED', 'Updated_At' => $now, 'Updated_By' => $userId]);
-        }
 
-        return $quizId;
-    }
-
-    public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
-    {
-        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
-            $quiz = $this->requireQuizFresh($quizId);
-            $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
-            $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
-            abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
+        return $this->runtimeTransaction($this->quizzes, function () use ($data, $teacher, $userId, $quizId): string {
             $now = $this->stamp($this->periods->now());
-            $existingIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
-            $this->questions->hardDeleteMany($existingIds);
-            $this->writeQuestions($quizId, $data['questions'], $now);
-            $this->quizzes->update($quizId, [
+            $publish = ($data['intent'] ?? 'draft') === 'publish';
+            $this->quizzes->create([
+                'Quiz_ID' => $quizId,
+                'Teacher_ID' => $teacher['Teacher_ID'],
                 'Class_ID' => $data['Class_ID'],
                 'Title' => trim($data['Title']),
                 'Start_At' => $this->stamp($this->date($data['Start_At'])),
                 'End_At' => $this->stamp($this->date($data['End_At'])),
                 'Duration_Minutes' => (int) $data['Duration_Minutes'],
-                'Status' => ($data['intent'] ?? 'draft') === 'publish' ? 'PUBLISHED' : 'DRAFT',
+                'Status' => 'DRAFT',
+                'Created_At' => $now,
                 'Updated_At' => $now,
+                'Created_By' => $userId,
                 'Updated_By' => $userId,
             ]);
+            $this->writeQuestions($quizId, $data['questions'], $now);
+            if ($publish) {
+                $this->quizzes->update($quizId, ['Status' => 'PUBLISHED', 'Updated_At' => $now, 'Updated_By' => $userId]);
+            }
+
+            return $quizId;
+        });
+    }
+
+    public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
+    {
+        Cache::lock('quiz_edit_'.hash('sha256', $quizId), 30)->block(10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
+            return $this->runtimeTransaction($this->quizzes, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds): void {
+                $quiz = $this->requireQuizFresh($quizId);
+                $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
+                $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+                abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
+                $now = $this->stamp($this->periods->now());
+                $existingIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
+                $this->questions->hardDeleteMany($existingIds);
+                $this->writeQuestions($quizId, $data['questions'], $now);
+                $this->quizzes->update($quizId, [
+                    'Class_ID' => $data['Class_ID'],
+                    'Title' => trim($data['Title']),
+                    'Start_At' => $this->stamp($this->date($data['Start_At'])),
+                    'End_At' => $this->stamp($this->date($data['End_At'])),
+                    'Duration_Minutes' => (int) $data['Duration_Minutes'],
+                    'Status' => ($data['intent'] ?? 'draft') === 'publish' ? 'PUBLISHED' : 'DRAFT',
+                    'Updated_At' => $now,
+                    'Updated_By' => $userId,
+                ]);
+            }, [[$this->quizzes, $quizId]]);
         });
     }
 
@@ -204,45 +210,47 @@ class QuizService
         ?string $userAgent = null,
     ): array {
         return Cache::lock('quiz_delete_'.hash('sha256', $quizId), 45)->block(15, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent) {
-            $quiz = $this->requireQuizFresh($quizId);
-            $this->assertTeacherOwns($quiz, $teacherId);
-            $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+            return $this->runtimeTransaction($this->quizzes, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
+                $quiz = $this->requireQuizFresh($quizId);
+                $this->assertTeacherOwns($quiz, $teacherId);
+                $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
 
-            $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
-            $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
-            $questionIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
+                $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
+                $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
+                $questionIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
 
-            $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
-            $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
-            $this->deleteChildrenAndVerify($this->questions, $questionIds, $quizId, 'soal kuis');
-            $this->quizzes->hardDeleteMany([$quizId]);
-            if ($this->quizzes->findByIdFresh($quizId)) {
-                throw new \RuntimeException("Kuis {$quizId} belum terhapus sepenuhnya.");
-            }
+                $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
+                $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
+                $this->deleteChildrenAndVerify($this->questions, $questionIds, $quizId, 'soal kuis');
+                $this->quizzes->hardDeleteMany([$quizId]);
+                if ($this->quizzes->findByIdFresh($quizId)) {
+                    throw new \RuntimeException("Kuis {$quizId} belum terhapus sepenuhnya.");
+                }
 
-            $deleted = [
-                'quiz' => 1,
-                'questions' => count($questionIds),
-                'attempts' => count($attemptIds),
-                'results' => count($resultIds),
-            ];
-            $this->activityLog->logAction(
-                $userId,
-                'DELETE',
-                'QUIZ',
-                'Kuis dihapus permanen beserta data turunannya.',
-                $ipAddress,
-                [
-                    'Title' => trim((string) ($quiz['Title'] ?? '')),
-                    'Class_ID' => trim((string) ($quiz['Class_ID'] ?? '')),
-                ],
-                null,
-                $userAgent,
-                'QUIZ',
-                $quizId,
-            );
+                $deleted = [
+                    'quiz' => 1,
+                    'questions' => count($questionIds),
+                    'attempts' => count($attemptIds),
+                    'results' => count($resultIds),
+                ];
+                $this->activityLog->logAction(
+                    $userId,
+                    'DELETE',
+                    'QUIZ',
+                    'Kuis dihapus permanen beserta data turunannya.',
+                    $ipAddress,
+                    [
+                        'Title' => trim((string) ($quiz['Title'] ?? '')),
+                        'Class_ID' => trim((string) ($quiz['Class_ID'] ?? '')),
+                    ],
+                    null,
+                    $userAgent,
+                    'QUIZ',
+                    $quizId,
+                );
 
-            return ['quiz' => $quiz, 'deleted' => $deleted];
+                return ['quiz' => $quiz, 'deleted' => $deleted];
+            }, [[$this->quizzes, $quizId]]);
         });
     }
 
@@ -352,34 +360,36 @@ class QuizService
         $attemptId = $this->attemptId($quizId, $student['Student_ID']);
 
         return Cache::lock('quiz_start_'.hash('sha256', $attemptId), 30)->block(10, function () use ($quizId, $student, $attemptId) {
-            $quiz = $this->requireQuizFresh($quizId);
-            $this->assertStudentEligible($quiz, $student);
-            abort_unless(($quiz['Status'] ?? '') === 'PUBLISHED', 403, 'Kuis belum diterbitkan.');
-            $now = $this->periods->now();
-            abort_unless($this->lifecycle($quiz, $now) === 'ACTIVE', 403, 'Kuis belum dimulai atau sudah ditutup.');
-            $existing = collect($this->attempts->fetchAllFresh())->firstWhere('Attempt_ID', $attemptId);
-            if (! $existing) {
-                $end = $this->date($quiz['End_At']);
-                $deadline = $now->addMinutes((int) $quiz['Duration_Minutes']);
-                if ($deadline->greaterThan($end)) {
-                    $deadline = $end;
+            return $this->runtimeTransaction($this->attempts, function () use ($quizId, $student, $attemptId): array {
+                $quiz = $this->requireQuizFresh($quizId);
+                $this->assertStudentEligible($quiz, $student);
+                abort_unless(($quiz['Status'] ?? '') === 'PUBLISHED', 403, 'Kuis belum diterbitkan.');
+                $now = $this->periods->now();
+                abort_unless($this->lifecycle($quiz, $now) === 'ACTIVE', 403, 'Kuis belum dimulai atau sudah ditutup.');
+                $existing = collect($this->attempts->fetchAllFresh())->firstWhere('Attempt_ID', $attemptId);
+                if (! $existing) {
+                    $end = $this->date($quiz['End_At']);
+                    $deadline = $now->addMinutes((int) $quiz['Duration_Minutes']);
+                    if ($deadline->greaterThan($end)) {
+                        $deadline = $end;
+                    }
+                    $stamp = $this->stamp($now);
+                    $this->attempts->create($existing = [
+                        'Attempt_ID' => $attemptId,
+                        'Quiz_ID' => $quizId,
+                        'Student_ID' => $student['Student_ID'],
+                        'Started_At' => $stamp,
+                        'Deadline_At' => $this->stamp($deadline),
+                        'Status' => 'IN_PROGRESS',
+                        'Submitted_Answers_JSON' => '',
+                        'Submitted_At' => '',
+                        'Created_At' => $stamp,
+                        'Updated_At' => $stamp,
+                    ]);
                 }
-                $stamp = $this->stamp($now);
-                $this->attempts->create($existing = [
-                    'Attempt_ID' => $attemptId,
-                    'Quiz_ID' => $quizId,
-                    'Student_ID' => $student['Student_ID'],
-                    'Started_At' => $stamp,
-                    'Deadline_At' => $this->stamp($deadline),
-                    'Status' => 'IN_PROGRESS',
-                    'Submitted_Answers_JSON' => '',
-                    'Submitted_At' => '',
-                    'Created_At' => $stamp,
-                    'Updated_At' => $stamp,
-                ]);
-            }
 
-            return $this->playerPayload($quiz, (array) $existing, $student);
+                return $this->playerPayload($quiz, (array) $existing, $student);
+            }, [[$this->quizzes, $quizId]]);
         });
     }
 
@@ -397,63 +407,65 @@ class QuizService
     public function submit(string $attemptId, array $student, array $answers): array
     {
         return Cache::lock('quiz_submit_'.hash('sha256', $attemptId), 45)->block(15, function () use ($attemptId, $student, $answers) {
-            $resultId = $this->resultId($attemptId);
-            $existingResult = $this->results->findByIdFresh($resultId);
-            if ($existingResult) {
-                abort_unless(($existingResult['Student_ID'] ?? '') === $student['Student_ID'], 403);
+            return $this->runtimeTransaction($this->attempts, function () use ($attemptId, $student, $answers): array {
+                $resultId = $this->resultId($attemptId);
+                $existingResult = $this->results->findByIdFresh($resultId);
+                if ($existingResult) {
+                    abort_unless(($existingResult['Student_ID'] ?? '') === $student['Student_ID'], 403);
 
-                return (array) $existingResult;
-            }
-            $attempt = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
-            abort_unless(($attempt['Student_ID'] ?? '') === $student['Student_ID'], 403);
-            $quiz = $this->requireQuizFresh($attempt['Quiz_ID']);
-            $this->assertStudentEligible($quiz, $student);
-            $questions = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quiz['Quiz_ID'])->sortBy('Sort_Order')->values();
-            abort_if($questions->isEmpty(), 409, 'Kuis tidak memiliki soal.');
-            $now = $this->periods->now();
-            $onTime = $now->lessThan($this->date($attempt['Deadline_At'])) && $now->lessThan($this->date($quiz['End_At']));
-            $accepted = [];
-            $maximum = 0.0;
-            $raw = 0.0;
-            foreach ($questions as $question) {
-                $questionId = (string) $question['Question_ID'];
-                $point = (float) $question['Point'];
-                $maximum += $point;
-                $selected = strtoupper(trim((string) ($answers[$questionId] ?? '')));
-                if ($onTime && in_array($selected, ['A', 'B', 'C', 'D'], true)) {
-                    $accepted[$questionId] = $selected;
-                    if ($selected === strtoupper(trim((string) $question['Correct_Option']))) {
-                        $raw += $point;
+                    return (array) $existingResult;
+                }
+                $attempt = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
+                abort_unless(($attempt['Student_ID'] ?? '') === $student['Student_ID'], 403);
+                $quiz = $this->requireQuizFresh($attempt['Quiz_ID']);
+                $this->assertStudentEligible($quiz, $student);
+                $questions = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quiz['Quiz_ID'])->sortBy('Sort_Order')->values();
+                abort_if($questions->isEmpty(), 409, 'Kuis tidak memiliki soal.');
+                $now = $this->periods->now();
+                $onTime = $now->lessThan($this->date($attempt['Deadline_At'])) && $now->lessThan($this->date($quiz['End_At']));
+                $accepted = [];
+                $maximum = 0.0;
+                $raw = 0.0;
+                foreach ($questions as $question) {
+                    $questionId = (string) $question['Question_ID'];
+                    $point = (float) $question['Point'];
+                    $maximum += $point;
+                    $selected = strtoupper(trim((string) ($answers[$questionId] ?? '')));
+                    if ($onTime && in_array($selected, ['A', 'B', 'C', 'D'], true)) {
+                        $accepted[$questionId] = $selected;
+                        if ($selected === strtoupper(trim((string) $question['Correct_Option']))) {
+                            $raw += $point;
+                        }
                     }
                 }
-            }
-            $normalized = $maximum > 0 ? round(($raw / $maximum) * 100, 4) : 0.0;
-            $stamp = $this->stamp($now);
-            $result = [
-                'Result_ID' => $resultId,
-                'Quiz_ID' => $quiz['Quiz_ID'],
-                'Quiz_Title' => $quiz['Title'],
-                'Attempt_ID' => $attemptId,
-                'Student_ID' => $student['Student_ID'],
-                'Student_Name' => $student['Full_Name'] ?? $student['Student_Name'] ?? 'Siswa',
-                'Class_ID' => $quiz['Class_ID'],
-                'Teacher_ID' => $quiz['Teacher_ID'],
-                'Raw_Score' => $raw,
-                'Maximum_Score' => $maximum,
-                'Normalized_Score' => $normalized,
-                'Started_At' => $attempt['Started_At'],
-                'Completed_At' => $stamp,
-                'Created_At' => $stamp,
-            ];
-            $this->results->create($result);
-            $this->attempts->update($attemptId, [
-                'Status' => $onTime ? 'SUBMITTED' : 'EXPIRED',
-                'Submitted_Answers_JSON' => json_encode($accepted, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-                'Submitted_At' => $stamp,
-                'Updated_At' => $stamp,
-            ]);
+                $normalized = $maximum > 0 ? round(($raw / $maximum) * 100, 4) : 0.0;
+                $stamp = $this->stamp($now);
+                $result = [
+                    'Result_ID' => $resultId,
+                    'Quiz_ID' => $quiz['Quiz_ID'],
+                    'Quiz_Title' => $quiz['Title'],
+                    'Attempt_ID' => $attemptId,
+                    'Student_ID' => $student['Student_ID'],
+                    'Student_Name' => $student['Full_Name'] ?? $student['Student_Name'] ?? 'Siswa',
+                    'Class_ID' => $quiz['Class_ID'],
+                    'Teacher_ID' => $quiz['Teacher_ID'],
+                    'Raw_Score' => $raw,
+                    'Maximum_Score' => $maximum,
+                    'Normalized_Score' => $normalized,
+                    'Started_At' => $attempt['Started_At'],
+                    'Completed_At' => $stamp,
+                    'Created_At' => $stamp,
+                ];
+                $this->results->create($result);
+                $this->attempts->update($attemptId, [
+                    'Status' => $onTime ? 'SUBMITTED' : 'EXPIRED',
+                    'Submitted_Answers_JSON' => json_encode($accepted, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                    'Submitted_At' => $stamp,
+                    'Updated_At' => $stamp,
+                ]);
 
-            return $result;
+                return $result;
+            }, [[$this->attempts, $attemptId]]);
         });
     }
 
@@ -675,6 +687,29 @@ class QuizService
     private function assertStudentEligible(array $quiz, array $student): void
     {
         abort_unless(trim((string) ($quiz['Class_ID'] ?? '')) === trim((string) ($student['Class_ID'] ?? '')), 403);
+    }
+
+    /**
+     * Keep unit repository doubles lightweight while making production
+     * multi-table quiz mutations atomic on the shared MariaDB connection.
+     *
+     * @param  list<array{0: object, 1: string}>  $locks
+     */
+    private function runtimeTransaction(object $coordinator, callable $callback, array $locks = [])
+    {
+        if (! $coordinator instanceof BaseMySqlRepository) {
+            return $callback();
+        }
+
+        return $coordinator->transaction(function () use ($callback, $locks) {
+            foreach ($locks as [$repository, $id]) {
+                if ($repository instanceof BaseMySqlRepository && trim($id) !== '') {
+                    $repository->lockById($id);
+                }
+            }
+
+            return $callback();
+        });
     }
 
     private function attemptId(string $quizId, string $studentId): string

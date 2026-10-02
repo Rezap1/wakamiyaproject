@@ -318,7 +318,7 @@ class AttendanceController extends Controller
                         'Status' => $student['Status'],
                         'Attendance_Date' => $date,
                         'Class_ID' => $classId,
-                        'Schedule_ID' => $classId, // Workaround: Google Sheets lacks Class_ID column, use Schedule_ID
+                        'Schedule_ID' => $classId, // Legacy compatibility for historical rows that used the class as schedule scope.
                         'Teacher_ID' => auth()->user()->Employee_ID ?? auth()->user()->User_ID,
                         'Notes' => $student['Notes'] ?? '',
                     ];

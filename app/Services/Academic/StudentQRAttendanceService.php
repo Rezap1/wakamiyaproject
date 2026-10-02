@@ -5,6 +5,7 @@ namespace App\Services\Academic;
 use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Attendance\AttendanceWindowException;
 use App\Services\Attendance\AttendanceWindowService;
 use App\Services\Core\EnterpriseEventService;
@@ -301,89 +302,109 @@ class StudentQRAttendanceService
         $lockKey = "student_qr_scan_{$sessionId}_{$studentId}_{$classId}_CLASS_QR";
 
         return Cache::lock($lockKey, 10)->block(3, function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window) {
-            // Check Duplicate Attendance for this Student today
-            $todayStr = $window['now']->toDateString();
-            $allAttendances = collect($this->attendanceRepository->fetchAll());
-            $existing = $allAttendances->first(function ($att) use ($studentId, $classId, $todayStr) {
-                return ($att['Student_ID'] ?? '') === $studentId &&
-                       trim((string) ($att['Class_ID'] ?? '')) === $classId &&
-                       strtoupper(trim((string) ($att['Attendance_Type'] ?? ''))) === 'CLASS_QR' &&
-                       ($att['Attendance_Date'] ?? '') === $todayStr &&
-                       strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
-            });
+            return $this->runtimeTransaction(function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window): array {
+                // Check Duplicate Attendance for this Student today
+                $todayStr = $window['now']->toDateString();
+                $allAttendances = collect($this->attendanceRepository->fetchAll());
+                $existing = $allAttendances->first(function ($att) use ($studentId, $classId, $todayStr) {
+                    return ($att['Student_ID'] ?? '') === $studentId &&
+                           trim((string) ($att['Class_ID'] ?? '')) === $classId &&
+                           strtoupper(trim((string) ($att['Attendance_Type'] ?? ''))) === 'CLASS_QR' &&
+                           ($att['Attendance_Date'] ?? '') === $todayStr &&
+                           strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+                });
 
-            if ($existing) {
-                throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.');
+                if ($existing) {
+                    throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.');
+                }
+
+                $statusDecision = $this->attendanceWindow->resolveStudentStatus($window);
+                $status = $statusDecision['status'];
+                $lateMinutes = $statusDecision['late_minutes'];
+                $nowCarbon = $window['now'];
+
+                // 10. Master Attendance Persistence
+                $attendanceId = $this->deterministicAttendanceId($studentId, $todayStr, $classId);
+                $record = [
+                    'Attendance_ID' => $attendanceId,
+                    'User_ID' => $user->User_ID,
+                    'Student_ID' => $studentId,
+                    'Batch_ID' => $batchId,
+                    'Class_ID' => $classId,
+                    'Schedule_ID' => '',
+                    'Attendance_Type' => 'CLASS_QR',
+                    'Attendance_Date' => $todayStr,
+                    'Check_In_Time' => $nowCarbon->format('H:i:s'),
+                    'Status' => $status,
+                    'Late_Minutes' => $lateMinutes,
+                    'Verification_Method' => 'STUDENT_GEO_QR',
+                    'Device_Info' => ($deviceInfo ?? request()->header('User-Agent', 'Mobile Browser'))." [Dist: {$distance}m]",
+                    'Is_Active' => 'TRUE',
+                    'Created_At' => $nowCarbon->toDateTimeString(),
+                    'Updated_At' => $nowCarbon->toDateTimeString(),
+                    'Created_By' => $user->User_ID,
+                ];
+
+                try {
+                    $created = $this->attendanceRepository->create($record);
+                } catch (DuplicatePrimaryKeyException $e) {
+                    throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.', 0, $e);
+                }
+                if ($created === false || $created === null) {
+                    throw new Exception('Presensi siswa gagal disimpan ke penyimpanan.');
+                }
+
+                // Notifications are post-commit side effects. Their failure must
+                // never turn a durable attendance write into a rejected response.
+                try {
+                    $this->enterpriseEvent->dispatch(
+                        'ACADEMIC',
+                        'CREATE',
+                        'STUDENT_ATTENDANCE',
+                        $attendanceId,
+                        $user->User_ID,
+                        ['STUDENT', 'TEACHER', 'ACADEMIC'],
+                        [$studentId],
+                        [
+                            'Student_Name' => $student['Full_Name'] ?? $studentId,
+                            'Batch_ID' => $batchId,
+                            'Status' => $status,
+                            'Distance_Meters' => $distance,
+                        ]
+                    );
+                } catch (\Throwable $eventFailure) {
+                    $this->logPostCommitFailure($attendanceId, $eventFailure);
+                }
+
+                return [
+                    'attendance_id' => $attendanceId,
+                    'student_name' => $student['Full_Name'] ?? $studentId,
+                    'action' => 'CHECK_IN',
+                    'status' => $status,
+                    'late_minutes' => $lateMinutes,
+                    'check_in_time' => $nowCarbon->format('H:i:s'),
+                    'check_out_time' => null,
+                    'distance_meters' => $distance,
+                ];
+            }, [[$this->studentRepository, $studentId]]);
+        });
+    }
+
+    /** @param list<array{0: object, 1: string}> $locks */
+    private function runtimeTransaction(callable $callback, array $locks = [])
+    {
+        if (! $this->attendanceRepository instanceof BaseMySqlRepository) {
+            return $callback();
+        }
+
+        return $this->attendanceRepository->transaction(function () use ($callback, $locks) {
+            foreach ($locks as [$repository, $id]) {
+                if ($repository instanceof BaseMySqlRepository && trim($id) !== '') {
+                    $repository->lockById($id);
+                }
             }
 
-            $statusDecision = $this->attendanceWindow->resolveStudentStatus($window);
-            $status = $statusDecision['status'];
-            $lateMinutes = $statusDecision['late_minutes'];
-            $nowCarbon = $window['now'];
-
-            // 10. Master Attendance Persistence
-            $attendanceId = $this->deterministicAttendanceId($studentId, $todayStr, $classId);
-            $record = [
-                'Attendance_ID' => $attendanceId,
-                'User_ID' => $user->User_ID,
-                'Student_ID' => $studentId,
-                'Batch_ID' => $batchId,
-                'Class_ID' => $classId,
-                'Schedule_ID' => '',
-                'Attendance_Type' => 'CLASS_QR',
-                'Attendance_Date' => $todayStr,
-                'Check_In_Time' => $nowCarbon->format('H:i:s'),
-                'Status' => $status,
-                'Late_Minutes' => $lateMinutes,
-                'Verification_Method' => 'STUDENT_GEO_QR',
-                'Device_Info' => ($deviceInfo ?? request()->header('User-Agent', 'Mobile Browser'))." [Dist: {$distance}m]",
-                'Is_Active' => 'TRUE',
-                'Created_At' => $nowCarbon->toDateTimeString(),
-                'Updated_At' => $nowCarbon->toDateTimeString(),
-                'Created_By' => $user->User_ID,
-            ];
-
-            try {
-                $created = $this->attendanceRepository->create($record);
-            } catch (DuplicatePrimaryKeyException $e) {
-                throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.', 0, $e);
-            }
-            if ($created === false || $created === null) {
-                throw new Exception('Presensi siswa gagal disimpan ke penyimpanan.');
-            }
-
-            // Notifications are post-commit side effects. Their failure must
-            // never turn a durable attendance write into a rejected response.
-            try {
-                $this->enterpriseEvent->dispatch(
-                    'ACADEMIC',
-                    'CREATE',
-                    'STUDENT_ATTENDANCE',
-                    $attendanceId,
-                    $user->User_ID,
-                    ['STUDENT', 'TEACHER', 'ACADEMIC'],
-                    [$studentId],
-                    [
-                        'Student_Name' => $student['Full_Name'] ?? $studentId,
-                        'Batch_ID' => $batchId,
-                        'Status' => $status,
-                        'Distance_Meters' => $distance,
-                    ]
-                );
-            } catch (\Throwable $eventFailure) {
-                $this->logPostCommitFailure($attendanceId, $eventFailure);
-            }
-
-            return [
-                'attendance_id' => $attendanceId,
-                'student_name' => $student['Full_Name'] ?? $studentId,
-                'action' => 'CHECK_IN',
-                'status' => $status,
-                'late_minutes' => $lateMinutes,
-                'check_in_time' => $nowCarbon->format('H:i:s'),
-                'check_out_time' => null,
-                'distance_meters' => $distance,
-            ];
+            return $callback();
         });
     }
 

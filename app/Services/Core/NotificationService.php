@@ -352,7 +352,7 @@ class NotificationService
     /**
      * Shared read-only snapshot for notification UI components.
      * This keeps topbar/mobile/dashboard widgets from triggering multiple
-     * Google Sheets reads for the same data in a single request.
+     * repeated repository reads for the same data in a single request.
      */
     public function summarizeForUser($userId = null, $role = null, int $limit = 6): array
     {

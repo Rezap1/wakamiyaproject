@@ -4,22 +4,26 @@ namespace App\Services\Academic;
 
 use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Core\EnterpriseEventService;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Collection;
+use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class AttendanceService
 {
     protected $repository;
+
     protected $enterpriseEvent;
+
     protected $legacyClassifier;
 
     public function __construct(AttendanceRepositoryInterface $repository, EnterpriseEventService $enterpriseEvent, ?AttendanceLegacyClassifier $legacyClassifier = null)
     {
         $this->repository = $repository;
         $this->enterpriseEvent = $enterpriseEvent;
-        $this->legacyClassifier = $legacyClassifier ?: new AttendanceLegacyClassifier();
+        $this->legacyClassifier = $legacyClassifier ?: new AttendanceLegacyClassifier;
     }
 
     public function getAll()
@@ -54,6 +58,7 @@ class AttendanceService
         $activeClasses = $classes
             ->filter(function ($class) {
                 $isActive = strtoupper(trim((string) ($class['Is_Active'] ?? '')));
+
                 return ($isActive === 'TRUE' || $isActive === '')
                     && trim((string) ($class['Class_ID'] ?? '')) !== '';
             })
@@ -61,7 +66,7 @@ class AttendanceService
         $classesById = $activeClasses->keyBy(fn ($class) => trim((string) $class['Class_ID']));
 
         $classFilter = trim((string) $classFilter);
-        if ($classFilter !== '' && !$classesById->has($classFilter)) {
+        if ($classFilter !== '' && ! $classesById->has($classFilter)) {
             return collect();
         }
 
@@ -94,7 +99,7 @@ class AttendanceService
             }
 
             try {
-                $normalizedDate = \Carbon\Carbon::parse(str_replace('/', '-', $attendanceDate))->format('Y-m-d');
+                $normalizedDate = Carbon::parse(str_replace('/', '-', $attendanceDate))->format('Y-m-d');
             } catch (\Throwable $e) {
                 continue;
             }
@@ -112,7 +117,7 @@ class AttendanceService
                 continue;
             }
             $classId = trim((string) ($classified['class_id'] ?? ''));
-            if ($classId === '' || !$classesById->has($classId)) {
+            if ($classId === '' || ! $classesById->has($classId)) {
                 continue;
             }
             if ($classFilter !== '' && $classId !== $classFilter) {
@@ -120,7 +125,7 @@ class AttendanceService
             }
 
             $key = implode('|', [$studentId, $classId, $normalizedDate, $attendanceType]);
-            $attendanceByStudentClass[$studentId . '|' . $classId][$key] = $attendance + [
+            $attendanceByStudentClass[$studentId.'|'.$classId][$key] = $attendance + [
                 'Resolved_Class_ID' => $classId,
                 'Resolved_Schedule_ID' => $classified['schedule_id'],
                 'Original_Schedule_ID' => $classified['original_schedule_id'],
@@ -131,7 +136,7 @@ class AttendanceService
 
         $dateDisplay = (string) $dateFilter;
         if ($dateEndFilter !== null && $dateEndFilter !== '' && $dateFilter !== $dateEndFilter) {
-            $dateDisplay .= ' - ' . $dateEndFilter;
+            $dateDisplay .= ' - '.$dateEndFilter;
         }
 
         return $activeClasses
@@ -146,16 +151,15 @@ class AttendanceService
                     $studentName = (string) ($student['Full_Name'] ?? $student['Name'] ?? 'Data siswa tidak ditemukan');
                     $studentNumber = trim((string) ($student['Student_Number'] ?? $student['NIS'] ?? ''));
                     if ($search !== ''
-                        && !str_contains(strtolower($studentId), $search)
-                        && !str_contains(strtolower($studentName), $search)) {
+                        && ! str_contains(strtolower($studentId), $search)
+                        && ! str_contains(strtolower($studentName), $search)) {
                         continue;
                     }
 
-                    $candidates = collect(array_values($attendanceByStudentClass[$studentId . '|' . $classId] ?? []));
+                    $candidates = collect(array_values($attendanceByStudentClass[$studentId.'|'.$classId] ?? []));
                     if ($statusFilter !== null && trim($statusFilter) !== '') {
                         $wantedStatus = AttendanceStatusHelper::normalize($statusFilter);
-                        $candidates = $candidates->filter(fn ($attendance) =>
-                            AttendanceStatusHelper::normalize($attendance['Status'] ?? '') === $wantedStatus
+                        $candidates = $candidates->filter(fn ($attendance) => AttendanceStatusHelper::normalize($attendance['Status'] ?? '') === $wantedStatus
                         );
                     }
                     $attendance = $candidates->first();
@@ -194,7 +198,7 @@ class AttendanceService
                     'Class_ID' => $classId,
                     'Class_Code' => trim((string) ($class['Class_Code'] ?? '')),
                     'Class_Name' => (trim((string) ($class['Class_Name'] ?? '')) ?: 'Kelas tidak ditemukan')
-                        . (!empty($class['Class_Code']) ? ' (' . $class['Class_Code'] . ')' : ''),
+                        .(! empty($class['Class_Code']) ? ' ('.$class['Class_Code'].')' : ''),
                     'Date_Display' => $dateDisplay,
                     'Total' => $rows->count(),
                     'Hadir' => $rows->where('Status_Key', 'PRESENT')->count(),
@@ -224,18 +228,18 @@ class AttendanceService
         // $data contains: Schedule_ID, Teacher_ID, Attendance_Date, Semester, Academic_Year, Grace_Period
         // Validation: Teacher can only open attendance for today or past (not future)
         if (strtotime($data['Attendance_Date']) > strtotime(date('Y-m-d'))) {
-            throw new Exception("Cannot open attendance for future dates.");
+            throw new Exception('Cannot open attendance for future dates.');
         }
-        
+
         // Cannot open twice for the same schedule and date
-        $existing = $this->getAll()->first(function($item) use ($data) {
-            return $item['Schedule_ID'] === ($data['Schedule_ID'] ?? '') 
+        $existing = $this->getAll()->first(function ($item) use ($data) {
+            return $item['Schedule_ID'] === ($data['Schedule_ID'] ?? '')
                 && $item['Attendance_Date'] === ($data['Attendance_Date'] ?? '')
                 && ($item['Session_Status'] ?? '') === 'OPEN';
         });
 
         if ($existing) {
-            throw new Exception("Attendance session is already open for this schedule and date.");
+            throw new Exception('Attendance session is already open for this schedule and date.');
         }
 
         // Simulating opening a session by inserting a master record (or just directly inserting absent default for all students)
@@ -254,30 +258,41 @@ class AttendanceService
         }
 
         $scope = $data['Class_ID'] ?? $data['Schedule_ID'] ?? '';
-        $lockKey = 'student_attendance_' . sha1("{$studentId}|{$attendanceDate}|{$scope}");
+        $lockKey = 'student_attendance_'.sha1("{$studentId}|{$attendanceDate}|{$scope}");
 
         return Cache::lock($lockKey, 30)->block(5, function () use ($data) {
-            $existing = $this->findExistingStudentAttendance($data);
+            return $this->runtimeTransaction(function () use ($data) {
+                $existing = $this->findExistingStudentAttendance($data);
 
-            if ($existing && !empty($existing['Attendance_ID'])) {
+                if ($existing && ! empty($existing['Attendance_ID'])) {
+                    $data['Updated_At'] = now()->toDateTimeString();
+                    $result = $this->repository->update($existing['Attendance_ID'], $data);
+                    $this->repository->clearCache();
+
+                    return $result;
+                }
+
+                if (empty($data['Attendance_ID'])) {
+                    $data['Attendance_ID'] = $this->generateId();
+                }
+
+                $data['Created_At'] = now()->toDateTimeString();
                 $data['Updated_At'] = now()->toDateTimeString();
-                $result = $this->repository->update($existing['Attendance_ID'], $data);
+                $data['Is_Active'] = $data['Is_Active'] ?? 'TRUE';
+
+                $result = $this->repository->create($data);
                 $this->repository->clearCache();
+
                 return $result;
-            }
-
-            if (empty($data['Attendance_ID'])) {
-                $data['Attendance_ID'] = $this->generateId();
-            }
-
-            $data['Created_At'] = now()->toDateTimeString();
-            $data['Updated_At'] = now()->toDateTimeString();
-            $data['Is_Active'] = $data['Is_Active'] ?? 'TRUE';
-
-            $result = $this->repository->create($data);
-            $this->repository->clearCache();
-            return $result;
+            });
         });
+    }
+
+    private function runtimeTransaction(callable $callback)
+    {
+        return $this->repository instanceof BaseMySqlRepository
+            ? $this->repository->transaction($callback)
+            : $callback();
     }
 
     public function update($id, array $data)
@@ -286,6 +301,7 @@ class AttendanceService
         $data['Updated_At'] = now()->toDateTimeString();
         $result = $this->repository->update($id, $data);
         $this->repository->clearCache();
+
         return $result;
     }
 
@@ -293,6 +309,7 @@ class AttendanceService
     {
         $result = $this->repository->delete($id);
         $this->repository->clearCache();
+
         return $result;
     }
 
@@ -315,7 +332,7 @@ class AttendanceService
             $data['Check_In_Time'] = now()->format('H:i:s');
         }
 
-        if (!AttendanceStatusHelper::isPresentLike($status)) {
+        if (! AttendanceStatusHelper::isPresentLike($status)) {
             $data['Check_In_Time'] = $data['Check_In_Time'] ?? '';
             $data['Check_Out_Time'] = $data['Check_Out_Time'] ?? '';
         }
