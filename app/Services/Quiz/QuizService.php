@@ -637,8 +637,17 @@ class QuizService
         }
         foreach ($expected as $index => $row) {
             foreach (['Question_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order'] as $field) {
-                if ((string) ($persisted[$index][$field] ?? '') !== (string) $row[$field]) {
-                    throw new \RuntimeException("Soal kuis {$quizId} gagal diverifikasi setelah penyimpanan.");
+                $persistedValue = $persisted[$index][$field] ?? null;
+                $expectedValue = $row[$field];
+
+                $matches = match ($field) {
+                    'Point' => abs((float) $persistedValue - (float) $expectedValue) < 0.00001,
+                    'Sort_Order' => (int) $persistedValue === (int) $expectedValue,
+                    default => (string) $persistedValue === (string) $expectedValue,
+                };
+
+                if (! $matches) {
+                    throw new \RuntimeException("Soal kuis {$quizId} gagal diverifikasi setelah penyimpanan pada field {$field}.");
                 }
             }
         }
