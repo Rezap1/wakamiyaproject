@@ -113,7 +113,16 @@ class H877QuizRoleAuthorizationTest extends TestCase
             'End_At' => '2026-10-10 09:00:00',
             'Duration_Minutes' => 30,
             'intent' => 'draft',
-            'questions' => [],
+            'question_count' => 1,
+            'questions' => [[
+                'Question_Text' => '',
+                'Option_A' => '',
+                'Option_B' => '',
+                'Option_C' => '',
+                'Option_D' => '',
+                'Correct_Option' => 'A',
+                'Point' => 10,
+            ]],
         ])->assertRedirect(route('teacher.quizzes.show', 'Q1'));
     }
 

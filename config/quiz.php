@@ -6,5 +6,7 @@ return [
     'period_days' => 14,
     'review_minutes' => 4,
     'max_duration_minutes' => 480,
+    // Bound both client rendering work and the accepted server payload size.
+    'max_questions' => 100,
     'cleanup_batch_size' => 50,
 ];

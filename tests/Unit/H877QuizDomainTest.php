@@ -481,6 +481,74 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(['D1', 'D3'], $edited->pluck('Option_D')->all());
     }
 
+    public function test_service_rejects_empty_unbounded_and_nonsequential_question_payloads_before_write(): void
+    {
+        $base = [
+            'Class_ID' => 'C1',
+            'Title' => 'Payload Guard',
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'draft',
+        ];
+        $question = $this->question('Satu', 'A', 'B', 'C', 'D', 'A', 10);
+        $invalidPayloads = [
+            'empty' => [],
+            'above maximum' => array_fill(0, 101, $question),
+            'nonsequential' => [1 => $question],
+        ];
+
+        foreach ($invalidPayloads as $label => $questions) {
+            try {
+                $this->service->create($base + ['questions' => $questions], ['Teacher_ID' => 'T1'], 'U1');
+                $this->fail("{$label} question payload must be rejected.");
+            } catch (\InvalidArgumentException) {
+                $this->assertTrue(true);
+            }
+        }
+
+        $this->assertCount(0, $this->quizzes->rows);
+        $this->assertCount(0, $this->questions->rows);
+    }
+
+    public function test_draft_and_publish_keep_question_count_order_and_unique_identity(): void
+    {
+        $payload = fn (string $intent, int $count) => [
+            'Class_ID' => 'C1',
+            'Title' => ucfirst($intent).' Count',
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => $intent,
+            'questions' => collect(range(1, $count))->map(fn (int $index) => $this->question(
+                'Pertanyaan '.$index,
+                'A'.$index,
+                'B'.$index,
+                'C'.$index,
+                'D'.$index,
+                'A',
+                10,
+            ))->all(),
+        ];
+
+        $draftId = $this->service->create($payload('draft', 1), ['Teacher_ID' => 'T1'], 'U1');
+        $publishedId = $this->service->create($payload('publish', 20), ['Teacher_ID' => 'T1'], 'U1');
+        $publishedQuestions = collect($this->questions->rows)
+            ->where('Quiz_ID', $publishedId)
+            ->sortBy('Sort_Order')
+            ->values();
+
+        $this->assertSame('DRAFT', collect($this->quizzes->rows)->firstWhere('Quiz_ID', $draftId)['Status']);
+        $this->assertSame('PUBLISHED', collect($this->quizzes->rows)->firstWhere('Quiz_ID', $publishedId)['Status']);
+        $this->assertCount(1, collect($this->questions->rows)->where('Quiz_ID', $draftId));
+        $this->assertCount(20, $publishedQuestions);
+        $this->assertSame(range(1, 20), $publishedQuestions->pluck('Sort_Order')->all());
+        $this->assertSame(range(1, 20), $publishedQuestions->pluck('Question_Text')->map(
+            fn (string $text) => (int) str_replace('Pertanyaan ', '', $text)
+        )->all());
+        $this->assertCount(20, $publishedQuestions->pluck('Question_ID')->unique());
+    }
+
     public function test_teacher_results_are_grouped_by_quiz_and_strictly_isolated_by_class(): void
     {
         $this->quizzes->rows = [

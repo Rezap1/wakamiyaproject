@@ -212,6 +212,7 @@ class TeacherQuizController extends Controller
 
     private function validated(Request $request): array
     {
+        $maxQuestions = (int) config('quiz.max_questions', 100);
         $validator = Validator::make($request->all(), [
             'Title' => ['required', 'string', 'max:160'],
             'Class_ID' => ['required', 'string', 'max:80'],
@@ -219,7 +220,8 @@ class TeacherQuizController extends Controller
             'End_At' => ['required', 'date', 'after:Start_At'],
             'Duration_Minutes' => ['required', 'integer', 'min:1', 'max:'.config('quiz.max_duration_minutes', 480)],
             'intent' => ['required', 'in:draft,publish'],
-            'questions' => ['array'],
+            'question_count' => ['required', 'integer', 'min:1', 'max:'.$maxQuestions],
+            'questions' => ['required', 'array', 'min:1', 'max:'.$maxQuestions],
             'questions.*.Question_Text' => ['required_if:intent,publish', 'nullable', 'string', 'max:2000'],
             'questions.*.Option_A' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
             'questions.*.Option_B' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
@@ -228,8 +230,14 @@ class TeacherQuizController extends Controller
             'questions.*.Correct_Option' => ['required_if:intent,publish', 'nullable', 'in:A,B,C,D'],
             'questions.*.Point' => ['required_if:intent,publish', 'nullable', 'numeric', 'gt:0', 'max:10000'],
         ], [
+            'question_count.required' => 'Jumlah soal wajib diisi.',
+            'question_count.integer' => 'Jumlah soal harus berupa bilangan bulat.',
+            'question_count.min' => 'Jumlah soal minimal 1.',
+            'question_count.max' => "Jumlah soal maksimal {$maxQuestions}.",
+            'questions.required' => 'Minimal satu soal diperlukan.',
             'questions.required_if' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
             'questions.min' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
+            'questions.max' => "Jumlah soal maksimal {$maxQuestions}.",
             'questions.*.Question_Text.required_if' => 'Pertanyaan wajib diisi sebelum kuis diterbitkan.',
             'questions.*.Option_A.required_if' => 'Pilihan A wajib diisi sebelum kuis diterbitkan.',
             'questions.*.Option_B.required_if' => 'Pilihan B wajib diisi sebelum kuis diterbitkan.',
@@ -242,6 +250,18 @@ class TeacherQuizController extends Controller
             'questions.*.Point.gt' => 'Poin harus lebih besar dari 0.',
         ]);
         $validator->after(function ($validator) use ($request) {
+            $questions = $request->input('questions', []);
+            if (is_array($questions)) {
+                if (! array_is_list($questions)) {
+                    $validator->errors()->add('questions', 'Urutan soal tidak valid. Gunakan indeks berurutan mulai dari 0.');
+                }
+
+                $requestedCount = filter_var($request->input('question_count'), FILTER_VALIDATE_INT);
+                if ($requestedCount !== false && $requestedCount !== count($questions)) {
+                    $validator->errors()->add('question_count', 'Jumlah soal tidak sesuai dengan form soal yang dikirim.');
+                }
+            }
+
             if ($request->input('intent') === 'publish' && count((array) $request->input('questions', [])) === 0) {
                 $validator->errors()->add('questions', 'Minimal satu soal diperlukan sebelum kuis diterbitkan.');
             }

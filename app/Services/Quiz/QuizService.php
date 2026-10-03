@@ -29,6 +29,7 @@ class QuizService
         $quizId = 'QIZ'.strtoupper(substr(str_replace('-', '', (string) Str::uuid()), 0, 20));
 
         return $this->runtimeTransaction($this->quizzes, function () use ($data, $teacher, $userId, $quizId): string {
+            $this->assertQuestionPayload($data['questions'] ?? []);
             $now = $this->stamp($this->periods->now());
             $publish = ($data['intent'] ?? 'draft') === 'publish';
             $this->quizzes->create([
@@ -62,6 +63,7 @@ class QuizService
                 $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
                 $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
                 abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
+                $this->assertQuestionPayload($data['questions'] ?? []);
                 $now = $this->stamp($this->periods->now());
                 $existingIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
                 $this->questions->hardDeleteMany($existingIds);
@@ -639,6 +641,18 @@ class QuizService
                     throw new \RuntimeException("Soal kuis {$quizId} gagal diverifikasi setelah penyimpanan.");
                 }
             }
+        }
+    }
+
+    private function assertQuestionPayload(array $questions): void
+    {
+        $maximum = (int) config('quiz.max_questions', 100);
+        $count = count($questions);
+        if ($count < 1 || $count > $maximum) {
+            throw new \InvalidArgumentException("Jumlah soal harus antara 1 dan {$maximum}.");
+        }
+        if (! array_is_list($questions)) {
+            throw new \InvalidArgumentException('Urutan soal harus berurutan mulai dari 0.');
         }
     }
 

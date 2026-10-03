@@ -3,12 +3,13 @@
 @section('content')
 @php
     $seed = old('questions', collect($questions)->map(fn($q) => (array)$q)->values()->all());
+    $maxQuestions = (int) config('quiz.max_questions', 100);
     $lockedClass = $lockedClass ?? null;
     $formAction = $quiz
         ? route('teacher.quizzes.update', $quiz['Quiz_ID'])
         : ($lockedClass ? route('teacher.quizzes.class.store', $lockedClass['Class_ID']) : route('teacher.quizzes.store'));
 @endphp
-<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed))">
+<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed), {{ $maxQuestions }})">
     @csrf @if($quiz) @method('PUT') @endif
     @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ $errors->first() }}</div>@endif
     <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><h2 class="text-xl font-black">Informasi Kuis</h2>
@@ -25,9 +26,17 @@
         </div>
     </section>
     <section class="min-w-0 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div><h2 class="text-xl font-black">Soal A–D</h2><p class="text-sm text-slate-500">Skor maksimum: <strong x-text="maximum"></strong></p></div>
-            <button type="button" @click="add" class="min-h-11 rounded-xl bg-sky-50 px-4 py-2 font-bold text-sky-700">+ Soal</button>
+            <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-[minmax(0,12rem)_auto] sm:items-end lg:w-auto">
+                <label class="text-sm font-bold text-slate-700">Jumlah Soal
+                    <input type="number" min="1" max="{{ $maxQuestions }}" step="1" x-model.number="requestedCount" @keydown.enter.prevent="applyQuestionCount" class="mt-2 min-h-11 w-full rounded-xl border-slate-300" aria-describedby="question-count-help question-count-error">
+                </label>
+                <button type="button" @click="applyQuestionCount" class="min-h-11 rounded-xl bg-sky-50 px-4 py-2 font-bold text-sky-700" x-text="questionActionLabel">Buat Soal</button>
+                <input type="hidden" name="question_count" :value="questions.length">
+                <p id="question-count-help" class="text-xs text-slate-500 sm:col-span-2">Minimal 1, maksimal {{ $maxQuestions }} soal. Menambah jumlah tidak menghapus jawaban yang sudah diisi.</p>
+                <p id="question-count-error" x-cloak x-show="countError" x-text="countError" role="alert" class="text-sm font-bold text-rose-700 sm:col-span-2"></p>
+            </div>
         </div>
         <div class="mt-5 space-y-5">
             <template x-for="(q, i) in questions" :key="q.key">
@@ -57,7 +66,6 @@
                             <input type="number" min="0.01" step="0.01" :name="`questions[${i}][Point]`" x-model.number="q.Point" class="mt-2 min-h-11 w-full rounded-xl border-slate-300">
                         </label>
                     </div>
-                    <button type="button" @click="remove(i)" :disabled="questions.length === 1" class="mt-5 min-h-11 rounded-xl border border-rose-200 px-4 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">Hapus Soal</button>
                 </fieldset>
             </template>
         </div>
@@ -66,7 +74,7 @@
 </form>
 @push('scripts')
 <script>
-function quizBuilder(seed) {
+function quizBuilder(seed, maxQuestions) {
     const fresh = () => ({
         key: `${Date.now()}-${Math.random()}`,
         Question_Text: '',
@@ -83,18 +91,42 @@ function quizBuilder(seed) {
         key: question.Question_ID || `${Date.now()}-${index}-${Math.random()}`,
     });
 
+    const initialQuestions = seed.length ? seed.map(normalize) : [fresh()];
+
     return {
-        questions: seed.length ? seed.map(normalize) : [fresh()],
+        questions: initialQuestions,
+        requestedCount: initialQuestions.length,
+        maxQuestions,
+        countError: '',
         get maximum() {
             return this.questions.reduce((total, question) => total + (Number(question.Point) || 0), 0);
         },
-        add() {
-            this.questions.push(fresh());
+        get questionActionLabel() {
+            const count = Number(this.requestedCount);
+            return Number.isInteger(count) ? `Buat ${count} Soal` : 'Buat Soal';
         },
-        remove(index) {
-            if (this.questions.length > 1) {
-                this.questions.splice(index, 1);
+        applyQuestionCount() {
+            const target = Number(this.requestedCount);
+            if (!Number.isInteger(target) || target < 1 || target > this.maxQuestions) {
+                this.countError = `Jumlah soal harus berupa bilangan bulat antara 1 dan ${this.maxQuestions}.`;
+                return;
             }
+
+            this.countError = '';
+            if (target < this.questions.length) {
+                const removed = this.questions.length - target;
+                const confirmed = window.confirm(`Kurangi jumlah soal menjadi ${target}? Data pada ${removed} soal terakhir akan dihapus dari formulir.`);
+                if (!confirmed) {
+                    this.requestedCount = this.questions.length;
+                    return;
+                }
+                this.questions.splice(target);
+            } else {
+                while (this.questions.length < target) {
+                    this.questions.push(fresh());
+                }
+            }
+            this.requestedCount = this.questions.length;
         },
     };
 }
