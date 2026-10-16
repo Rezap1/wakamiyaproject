@@ -1,16 +1,19 @@
 <?php
+
 namespace App\Http\Controllers\Core;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\Core\ApprovalService;
 use App\Services\Core\ApprovalHistoryService;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Core\ApprovalService;
 use App\Services\Core\RoleService;
+use App\Support\ActorIdentity;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class ApprovalController extends Controller
 {
     protected $approvalService;
+
     protected $historyService;
 
     public function __construct(ApprovalService $approvalService, ApprovalHistoryService $historyService)
@@ -23,9 +26,9 @@ class ApprovalController extends Controller
     {
         $user = Auth::user();
         $userRole = $this->currentRoleName($user);
-        
+
         $approvals = $this->approvalService->getAll()
-            ->filter(function($a) use ($userRole) {
+            ->filter(function ($a) use ($userRole) {
                 if ($userRole === 'ADMINISTRATOR') {
                     return ($a['Status'] ?? '') === 'Waiting Approval';
                 }
@@ -40,9 +43,11 @@ class ApprovalController extends Controller
     public function show($id)
     {
         $approval = $this->approvalService->getById($id);
-        if (!$approval) abort(404);
+        if (! $approval) {
+            abort(404);
+        }
         $this->authorizeApprovalAccess($approval);
-        
+
         $history = $this->historyService->history($id);
         $currentRole = $this->currentRoleName();
 
@@ -51,39 +56,53 @@ class ApprovalController extends Controller
 
     public function approve(Request $request, $id)
     {
+        $validated = $request->validate([
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
         $user = Auth::user();
         $userEmail = $this->authenticatedActor($user);
         $approval = $this->approvalService->getById($id);
-        if (!$approval) abort(404);
+        if (! $approval) {
+            abort(404);
+        }
         $this->authorizeApprovalAccess($approval);
-        $remarks = $request->input('remarks', '');
-        
+        $remarks = $validated['remarks'] ?? '';
+
         $this->approvalService->approve($id, $userEmail, $remarks);
+
         return redirect()->route('approvals.index')->with('success', 'Request Approved.');
     }
 
     public function reject(Request $request, $id)
     {
+        $validated = $request->validate([
+            'remarks' => ['required', 'string', 'min:3', 'max:1000'],
+        ], [
+            'remarks.required' => 'Alasan penolakan wajib diisi.',
+        ]);
         $user = Auth::user();
         $userEmail = $this->authenticatedActor($user);
         $approval = $this->approvalService->getById($id);
-        if (!$approval) abort(404);
+        if (! $approval) {
+            abort(404);
+        }
         $this->authorizeApprovalAccess($approval);
-        $remarks = $request->input('remarks', '');
-        
+        $remarks = $validated['remarks'];
+
         $this->approvalService->reject($id, $userEmail, $remarks);
+
         return redirect()->route('approvals.index')->with('danger', 'Request Rejected.');
     }
 
     private function currentRoleName($user = null): string
     {
         $user = $user ?? Auth::user();
-        if (!$user) {
+        if (! $user) {
             abort(403, 'Sesi pengguna tidak valid.');
         }
 
         $roleName = strtoupper(trim((string) ($user->Role ?? '')));
-        if ($roleName === '' && !empty($user->Role_ID)) {
+        if ($roleName === '' && ! empty($user->Role_ID)) {
             $role = app(RoleService::class)->getRoleById($user->Role_ID);
             $roleName = strtoupper(trim($role['Role_Name'] ?? ''));
         }
@@ -110,6 +129,6 @@ class ApprovalController extends Controller
 
     private function authenticatedActor($user): string
     {
-        return \App\Support\ActorIdentity::required();
+        return ActorIdentity::required();
     }
 }

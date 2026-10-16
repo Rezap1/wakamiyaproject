@@ -2,7 +2,7 @@
 @section('header', 'Kotak Masuk Persetujuan')
 @section('content')
 <div class="space-y-6 max-w-5xl mx-auto">
-    <x-page-header title="Kotak Masuk Persetujuan" description="Tinjau dan proses permintaan yang memerlukan otorisasi Anda." :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Persetujuan' => '#']" />
+    <x-page-header title="Kotak Masuk Persetujuan" description="Tinjau dan proses permintaan yang memerlukan otorisasi Anda." :breadcrumbs="['Dasbor' => route('dashboard'), 'Persetujuan' => '#']" />
     
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="divide-y divide-slate-50">

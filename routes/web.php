@@ -139,6 +139,10 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:MARKETING,ADMINISTRATOR')->get('/dashboard/marketing', [MarketingDashboardController::class, 'index'])->name('dashboard.marketing');
     Route::middleware('role:FINANCE,ADMINISTRATOR')->get('/dashboard/finance', [FinanceDashboardController::class, 'index'])->name('dashboard.finance');
     Route::middleware('role:DIRECTOR,ADMINISTRATOR')->get('/dashboard/director', [DirectorDashboardController::class, 'index'])->name('dashboard.director');
+    Route::middleware('role:DIRECTOR,ADMINISTRATOR')->group(function () {
+        Route::get('/director/reports', [DirectorDashboardController::class, 'reports'])->name('director.reports');
+        Route::get('/director/reports/export-csv', [DirectorDashboardController::class, 'exportCsv'])->name('director.reports.export-csv');
+    });
     Route::middleware('role:TEACHER')->get('/dashboard/teacher', [TeacherDashboardController::class, 'index'])->name('dashboard.teacher');
     Route::middleware('role:STUDENT')->get('/dashboard/student', [StudentDashboardController::class, 'index'])->name('dashboard.student');
     Route::middleware('role:ADMINISTRATOR')->get('/dashboard/administrator', [DashboardController::class, 'index'])->name('dashboard.administrator');
@@ -447,9 +451,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/session/{sessionId}/close', [QRAttendanceController::class, 'closeSession'])->name('close');
         Route::get('/session/{sessionId}/summary', [QRAttendanceController::class, 'sessionSummary'])->name('summary');
     });
-    Route::get('/hr/attendance/qr/scanner', [QRAttendanceController::class, 'scanner'])->name('hr.attendance.qr.scanner');
+    Route::get('/hr/attendance/qr/scanner', [QRAttendanceController::class, 'scanner'])
+        ->middleware('role:EMPLOYEE,TEACHER,MARKETING,FINANCE,HR,ADMINISTRATOR')
+        ->name('hr.attendance.qr.scanner');
     Route::post('/hr/attendance/qr/scan', [QRAttendanceController::class, 'scan'])
-        ->middleware('throttle:20,1')
+        ->middleware(['role:EMPLOYEE,TEACHER,MARKETING,FINANCE,HR,ADMINISTRATOR', 'throttle:20,1'])
         ->name('hr.attendance.qr.scan');
 
     // HR - Leave Management Engine
@@ -755,7 +761,7 @@ Route::middleware('auth')->group(function () {
     // HR Attendance Monitoring
     Route::get('/hr/attendance/monitoring', [AttendanceMonitoringController::class, 'index'])
         ->name('hr.attendance.monitoring')
-        ->middleware('role:HR,ADMINISTRATOR');
+        ->middleware('role:HR,ADMINISTRATOR,DIRECTOR');
 
     // Student Attendance History
     Route::get('/attendance/my-history', [AttendanceHistoryController::class, 'index'])

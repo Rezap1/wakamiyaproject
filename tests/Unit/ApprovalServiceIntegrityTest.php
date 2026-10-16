@@ -9,6 +9,7 @@ use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\WorkflowService;
 use Exception;
 use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Facades\Cache;
 use Mockery;
 use Tests\TestCase;
 
@@ -67,8 +68,7 @@ class ApprovalServiceIntegrityTest extends TestCase
 
         $event = Mockery::mock(EnterpriseEventService::class);
         $event->shouldReceive('dispatch')->once()->withArgs(
-            fn ($module, $action, $referenceType, $referenceId, $actor) =>
-                $module === 'PAYROLL'
+            fn ($module, $action, $referenceType, $referenceId, $actor) => $module === 'PAYROLL'
                 && $action === 'SUBMIT'
                 && $referenceType === 'Payroll_Record'
                 && $referenceId === 'PRL-001'
@@ -129,6 +129,25 @@ class ApprovalServiceIntegrityTest extends TestCase
         $this->expectExceptionMessage('Gagal menyimpan persetujuan');
 
         $service->approve('APP-001', 'SPOOFED-ACTOR');
+    }
+
+    public function test_concurrent_approval_transition_is_rejected_before_any_write(): void
+    {
+        $repository = Mockery::mock(ApprovalRepositoryInterface::class);
+        $repository->shouldNotReceive('getById');
+        $repository->shouldNotReceive('update');
+        $service = $this->makeService($repository);
+        $lock = Cache::lock('approval-transition:'.hash('sha256', 'APP-LOCKED'), 10);
+        $this->assertTrue($lock->get());
+
+        try {
+            $service->approve('APP-LOCKED', 'SPOOFED-ACTOR');
+            $this->fail('A concurrent approval transition must not continue.');
+        } catch (Exception $e) {
+            $this->assertStringContainsString('sedang diproses', $e->getMessage());
+        } finally {
+            $lock->release();
+        }
     }
 
     private function makeService(

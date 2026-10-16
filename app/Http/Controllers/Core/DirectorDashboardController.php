@@ -2,159 +2,132 @@
 
 namespace App\Http\Controllers\Core;
 
-use App\Helpers\SheetValue;
+use App\Helpers\CollectionHelper;
 use App\Http\Controllers\Controller;
-use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
-use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
-use App\Interfaces\GoogleSheets\CompanyRepositoryInterface;
-use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
-use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Services\Dashboard\DirectorDashboardService;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DirectorDashboardController extends Controller
 {
-    protected $employeeRepo;
+    private const REPORT_DIVISIONS = ['finance', 'academic', 'hr', 'marketing', 'approvals'];
 
-    protected $teacherRepo;
+    public function __construct(private readonly DirectorDashboardService $dashboardService) {}
 
-    protected $studentRepo;
-
-    protected $companyRepo;
-
-    protected $activityLogRepo;
-
-    protected $programRepo;
-
-    protected $batchRepo;
-
-    public function __construct(
-        EmployeeRepositoryInterface $employeeRepo,
-        TeacherRepositoryInterface $teacherRepo,
-        StudentRepositoryInterface $studentRepo,
-        CompanyRepositoryInterface $companyRepo,
-        ActivityLogRepositoryInterface $activityLogRepo,
-        ProgramRepositoryInterface $programRepo,
-        BatchRepositoryInterface $batchRepo
-    ) {
-        $this->employeeRepo = $employeeRepo;
-        $this->teacherRepo = $teacherRepo;
-        $this->studentRepo = $studentRepo;
-        $this->companyRepo = $companyRepo;
-        $this->activityLogRepo = $activityLogRepo;
-        $this->programRepo = $programRepo;
-        $this->batchRepo = $batchRepo;
-    }
-
-    public function index()
+    public function index(Request $request)
     {
+        $filters = $this->validatedFilters($request, false);
+
         try {
-            $dashboardData = Cache::remember('wms_director_dashboard_data', 300, function () {
-                $countActive = function ($repo) {
-                    return collect($repo->fetchAll())->where('Is_Active', '!=', 'FALSE')->count();
-                };
-
-                // 1. Executive KPI Counts
-                $kpi = [
-                    'students' => collect($this->studentRepo->fetchAll())
-                        ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student))
-                        ->count(),
-                    'teachers' => $countActive($this->teacherRepo),
-                    'employees' => $countActive($this->employeeRepo),
-                    'companies' => $countActive($this->companyRepo),
-                ];
-
-                // 2. Executive Charts Data
-                $students = collect($this->studentRepo->fetchAll())
-                    ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
-
-                // Student per Program
-                $programs = collect($this->programRepo->fetchAll())->keyBy('Program_ID');
-                $studentProgramCount = $students->groupBy('Program_ID')->map->count();
-                $studentProgramLabels = [];
-                $studentProgramData = [];
-                foreach ($studentProgramCount as $progId => $count) {
-                    $progName = isset($programs[$progId]) ? $programs[$progId]['Program_Name'] : 'Tidak Diketahui';
-                    $studentProgramLabels[] = $progName;
-                    $studentProgramData[] = $count;
-                }
-
-                // Student per Batch
-                $batches = collect($this->batchRepo->fetchAll())->keyBy('Batch_ID');
-                $studentBatchCount = $students->groupBy('Batch_ID')->map->count();
-                $studentBatchLabels = [];
-                $studentBatchData = [];
-                foreach ($studentBatchCount as $batchId => $count) {
-                    $batchName = isset($batches[$batchId]) ? $batches[$batchId]['Batch_Name'] : 'Tidak Diketahui';
-                    $studentBatchLabels[] = $batchName;
-                    $studentBatchData[] = $count;
-                }
-
-                // Application Status (Removed due to SSOT)
-
-                $charts = [
-                    'studentProgram' => ['labels' => $studentProgramLabels, 'data' => $studentProgramData],
-                    'studentBatch' => ['labels' => $studentBatchLabels, 'data' => $studentBatchData],
-                ];
-
-                // 3. Executive Summary
-                $summary = [
-                    'active_students' => $kpi['students'],
-                    'active_employees' => $kpi['employees'],
-                    'active_companies' => $kpi['companies'],
-                ];
-
-                // 4. Notifications
-                $today = Carbon::today()->format('Y-m-d');
-                $thirtyDays = Carbon::today()->addDays(30)->format('Y-m-d');
-
-                $notifications = [
-                    'interviewsToday' => [],
-                    'pendingApplications' => [],
-                ];
-
-                // 5. Recent Activity (Lintas Modul dari AUDIT_LOG)
-                try {
-                    $recentActivities = collect($this->activityLogRepo->fetchAll())
-                        ->sortByDesc('Created_At')
-                        ->take(10)
-                        ->map(function ($log) {
-                            $desc = $log['Description'] ?? ($log['New_Value'] ?? '');
-                            if (is_string($desc) && str_starts_with($desc, '{')) {
-                                $decoded = json_decode($desc, true);
-                                if (is_array($decoded) && isset($decoded['description'])) {
-                                    $desc = $decoded['description'];
-                                } elseif (is_array($decoded) && isset($decoded['title'])) {
-                                    $desc = $decoded['title'];
-                                } else {
-                                    $action = str_replace('_', ' ', $log['Action'] ?? '');
-                                    $refId = $log['Reference_ID'] ?? '';
-                                    $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
-                                }
-                            }
-
-                            return [
-                                'title' => $log['Action'] ?? 'Aktivitas',
-                                'description' => ($log['Module'] ?? '').' — '.$desc,
-                                'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
-                            ];
-                        })
-                        ->values()
-                        ->toArray();
-                } catch (\Exception $e) {
-                    $recentActivities = [];
-                    Log::error('Failed to fetch audit log for director dashboard: '.$e->getMessage());
-                }
-
-                return compact('kpi', 'charts', 'summary', 'notifications', 'recentActivities');
-            });
-        } catch (\Exception $e) {
-            $dashboardData = ['api_error' => true, 'error_message' => $this->safeExceptionMessage($e)];
+            $dashboardData = $this->dashboardService->getDashboardData($filters);
+        } catch (\Throwable $e) {
+            report($e);
+            $dashboardData = [
+                'api_error' => true,
+                'error_message' => $this->safeExceptionMessage($e),
+                'filters' => $filters,
+            ];
         }
 
         return view('dashboard.director', $dashboardData);
+    }
+
+    public function reports(Request $request)
+    {
+        $filters = $this->validatedFilters($request, true);
+
+        try {
+            $report = $this->dashboardService->report($filters['division'], $filters);
+            $report['paginated'] = CollectionHelper::paginate($report['rows'], 25)->withQueryString();
+            unset($report['rows']);
+            $report['filters'] = $filters;
+        } catch (\Throwable $e) {
+            report($e);
+            $report = [
+                'api_error' => true,
+                'error_message' => $this->safeExceptionMessage($e),
+                'filters' => $filters,
+            ];
+        }
+
+        return view('director.reports.index', $report);
+    }
+
+    public function exportCsv(Request $request): StreamedResponse
+    {
+        $filters = $this->validatedFilters($request, true);
+        $report = $this->dashboardService->report($filters['division'], $filters);
+        $filename = 'laporan-direktur-'.$filters['division'].'-'.$filters['start_date'].'-'.$filters['end_date'].'.csv';
+
+        return response()->streamDownload(function () use ($report): void {
+            $output = fopen('php://output', 'wb');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, array_values($report['columns']));
+            foreach ($report['rows'] as $row) {
+                fputcsv($output, array_map(
+                    fn ($field) => $this->safeCsvCell($row[$field] ?? ''),
+                    array_keys($report['columns'])
+                ));
+            }
+            fclose($output);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function validatedFilters(Request $request, bool $withReportFilters): array
+    {
+        $timezone = config('app.timezone', 'Asia/Jakarta');
+        $today = now($timezone);
+        $defaults = [
+            'start_date' => $today->copy()->startOfMonth()->toDateString(),
+            'end_date' => $today->toDateString(),
+        ];
+
+        $rules = [
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+        ];
+        if ($withReportFilters) {
+            $rules += [
+                'division' => ['nullable', Rule::in(self::REPORT_DIVISIONS)],
+                'search' => ['nullable', 'string', 'max:100'],
+                'status' => ['nullable', 'string', 'max:50'],
+                'program_id' => ['nullable', 'string', 'max:80'],
+                'batch_id' => ['nullable', 'string', 'max:80'],
+                'department_id' => ['nullable', 'string', 'max:80'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
+        $filters = [
+            'start_date' => $validated['start_date'] ?? $defaults['start_date'],
+            'end_date' => $validated['end_date'] ?? $defaults['end_date'],
+        ];
+
+        if (Carbon::parse($filters['start_date'], $timezone)->diffInDays(Carbon::parse($filters['end_date'], $timezone)) > 366) {
+            throw ValidationException::withMessages(['end_date' => 'Rentang laporan maksimal 366 hari.']);
+        }
+
+        if ($withReportFilters) {
+            $filters += [
+                'division' => $validated['division'] ?? 'finance',
+                'search' => trim((string) ($validated['search'] ?? '')),
+                'status' => trim((string) ($validated['status'] ?? '')),
+                'program_id' => trim((string) ($validated['program_id'] ?? '')),
+                'batch_id' => trim((string) ($validated['batch_id'] ?? '')),
+                'department_id' => trim((string) ($validated['department_id'] ?? '')),
+            ];
+        }
+
+        return $filters;
+    }
+
+    private function safeCsvCell(mixed $value): string
+    {
+        $value = is_scalar($value) || $value === null ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE);
+
+        return preg_match('/^[=+\-@]/', $value) ? "'".$value : $value;
     }
 }

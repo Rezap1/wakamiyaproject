@@ -64,8 +64,8 @@
         $items = [
             ['label' => 'Dashboard', 'route' => 'dashboard.director', 'icon' => 'home', 'active' => request()->routeIs('dashboard.director')],
             ['label' => 'Persetujuan', 'route' => 'approvals.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('approvals.*')],
-            ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'barcode-scan', 'active' => request()->routeIs('hr.attendance.qr.*')],
-            ['label' => 'Laporan', 'route' => 'reports.finance.index', 'icon' => 'chart-bar', 'active' => request()->routeIs('reports.*')],
+            ['label' => 'Kehadiran', 'route' => 'hr.attendance.monitoring', 'icon' => 'clock', 'active' => request()->routeIs('hr.attendance.monitoring')],
+            ['label' => 'Laporan', 'route' => 'director.reports', 'icon' => 'chart-bar', 'active' => request()->routeIs('director.reports*')],
             ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
         ];
     } elseif ($role === 'MASTER') {

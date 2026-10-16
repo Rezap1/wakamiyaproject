@@ -53,8 +53,8 @@
         'DIRECTOR' => [
             ['label' => 'Persetujuan', 'route' => 'approvals.index', 'icon' => 'inbox'],
             ['label' => 'Transaksi', 'route' => 'transactions.index', 'icon' => 'switch-horizontal'],
-            ['label' => 'Laporan', 'route' => 'reports.finance.index', 'icon' => 'chart-bar'],
-            ['label' => 'Scan QR', 'route' => 'hr.attendance.qr.scanner', 'icon' => 'camera'],
+            ['label' => 'Laporan', 'route' => 'director.reports', 'icon' => 'chart-bar'],
+            ['label' => 'Kehadiran', 'route' => 'hr.attendance.monitoring', 'icon' => 'clock'],
         ],
         'STUDENT' => [
             ['label' => 'Jadwal', 'route' => 'student.schedule', 'icon' => 'calendar'],
@@ -128,11 +128,11 @@
     } elseif ($role === 'DIRECTOR') {
         $summaryTitle = 'Ringkasan Eksekutif';
         $summaryLabel = 'Menunggu persetujuan';
-        $summaryValue = number_format((int) ($kpiData['pending_applications'] ?? 0), 0, ',', '.').' pengajuan';
+        $summaryValue = number_format((int) ($kpiData['pending_approvals'] ?? 0), 0, ',', '.').' pengajuan';
         $summaryTone = 'border-amber-400';
         $metrics = [
-            ['label' => 'Pendapatan bulan ini', 'value' => $formatMoney($kpiData['revenue_this_month'] ?? 0)],
-            ['label' => 'Pengeluaran bulan ini', 'value' => $formatMoney($kpiData['expense_this_month'] ?? 0)],
+            ['label' => 'Penerimaan periode', 'value' => $formatMoney($kpiData['income'] ?? 0)],
+            ['label' => 'Pengeluaran periode', 'value' => $formatMoney($kpiData['expense'] ?? 0)],
             ['label' => 'Siswa aktif', 'value' => $kpiData['active_students'] ?? 0],
         ];
     } elseif ($role === 'STUDENT') {

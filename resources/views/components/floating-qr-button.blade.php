@@ -6,12 +6,14 @@
         $roleName = strtoupper(trim($roleData['Role_Name'] ?? ''));
     }
 
-    $scannerUrl = ($roleName === 'STUDENT' || str_contains($roleName, 'STUDENT'))
+    $isStudent = $roleName === 'STUDENT' || str_contains($roleName, 'STUDENT');
+    $canUseEmployeeScanner = in_array($roleName, ['EMPLOYEE', 'TEACHER', 'MARKETING', 'FINANCE', 'HR', 'ADMINISTRATOR', 'MASTER'], true);
+    $scannerUrl = $isStudent
         ? route('attendances.student.scanner')
         : route('hr.attendance.qr.scanner');
 @endphp
 
-@if($roleName === 'STUDENT' || str_contains($roleName, 'STUDENT'))
+@if($isStudent)
     <!-- Student Scan stays independent from the five equal-width nav tabs. -->
     <a id="student-scan-fab"
        href="{{ route('attendances.student.scanner') }}"
@@ -29,7 +31,8 @@
 @endif
 
 <!-- FLOATING QR SCANNER QUICK ACTION BUTTON (FAB - DESKTOP ONLY) -->
-<div id="floating-qr-button" class="fixed bottom-6 right-6 z-50 hidden {{ ($roleName === 'STUDENT' || str_contains($roleName, 'STUDENT')) ? 'lg:flex' : 'md:flex' }} group">
+@if($isStudent || $canUseEmployeeScanner)
+<div id="floating-qr-button" class="fixed bottom-6 right-6 z-50 hidden {{ $isStudent ? 'lg:flex' : 'md:flex' }} group">
     <!-- Tooltip Banner -->
     <div class="absolute bottom-full right-0 mb-3 hidden group-hover:flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-full shadow-lg whitespace-nowrap border border-white/10 animate-fade-in">
         <span>📷 Absensi QR Code (Pindai)</span>
@@ -57,3 +60,4 @@
         </svg>
     </a>
 </div>
+@endif

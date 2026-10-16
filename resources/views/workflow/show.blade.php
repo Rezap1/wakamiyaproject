@@ -2,7 +2,7 @@
 @section('header', 'Detail Persetujuan')
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6">
-    <x-page-header title="Detail Persetujuan" description="Tinjau permintaan sebelum mengambil tindakan." :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'Persetujuan' => route('approvals.index'), 'Detail' => '#']" />
+    <x-page-header title="Detail Persetujuan" description="Tinjau permintaan sebelum mengambil tindakan." :breadcrumbs="['Dasbor' => route('dashboard'), 'Persetujuan' => route('approvals.index'), 'Detail' => '#']" />
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Main Content -->
@@ -77,7 +77,7 @@
                     @csrf
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Keterangan (Opsional)</label>
-                        <textarea name="remarks" rows="2" class="w-full text-sm rounded-lg border-slate-200 focus:border-blue-500 focus:ring-blue-500" placeholder="Tambahkan catatan persetujuan..."></textarea>
+                        <textarea name="remarks" rows="2" maxlength="1000" class="w-full text-sm rounded-lg border-slate-200 focus:border-blue-500 focus:ring-blue-500" placeholder="Tambahkan catatan persetujuan...">{{ old('remarks') }}</textarea>
                     </div>
                     <button type="submit" class="w-full py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-bold rounded-xl text-sm border border-emerald-200 transition-colors shadow-sm">Setujui Permintaan</button>
                 </form>
@@ -86,7 +86,9 @@
                     @csrf
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Alasan Penolakan</label>
-                        <textarea name="remarks" rows="2" class="w-full text-sm rounded-lg border-slate-200 focus:border-red-500 focus:ring-red-500" placeholder="Mengapa ini ditolak?" required></textarea>
+                        <textarea name="remarks" rows="2" minlength="3" maxlength="1000" class="w-full text-sm rounded-lg border-slate-200 focus:border-red-500 focus:ring-red-500" placeholder="Mengapa ini ditolak?" required aria-describedby="reject-reason-help">{{ old('remarks') }}</textarea>
+                        <p id="reject-reason-help" class="mt-1 text-[11px] text-slate-500">Wajib diisi, minimal 3 karakter.</p>
+                        @error('remarks')<p class="mt-1 text-xs font-bold text-red-600">{{ $message }}</p>@enderror
                     </div>
                     <button type="submit" class="w-full py-2.5 bg-white text-red-600 hover:bg-red-50 font-bold rounded-xl text-sm border border-red-200 transition-colors">Tolak Permintaan</button>
                 </form>
