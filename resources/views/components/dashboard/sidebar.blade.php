@@ -15,6 +15,7 @@
             ['label' => 'Dasbor Pemasaran', 'route' => 'dashboard.marketing', 'active_route' => 'dashboard.marketing', 'icon' => 'dashboard'],
         ]],
         ['group' => 'OPERASIONAL', 'items' => [
+            ['label' => 'Agenda Management', 'route' => 'agendas.index', 'active_route' => 'agendas.*', 'icon' => 'calendar'],
             ['label' => 'Kotak Persetujuan', 'route' => 'approvals.index', 'active_route' => 'approvals.*', 'icon' => 'inbox'],
             ['label' => 'Pegawai', 'route' => 'employees.index', 'active_route' => 'employees.*', 'icon' => 'identification'],
             ['label' => 'Monitoring Kehadiran', 'route' => 'hr.attendance.monitoring', 'active_route' => 'hr.attendance.*', 'icon' => 'clock'],
@@ -153,6 +154,9 @@
             <!-- NON-MASTER ROLES (Original Structure with Alpine visibility wrappers) -->
             <div class="space-y-1">
                 <x-sidebar.nav-link href="{{ route('announcement-feed.index') }}" active="{{ request()->routeIs('announcement-feed.*') }}" icon="inbox">Kotak Pengumuman</x-sidebar.nav-link>
+                @if($userRole !== 'STUDENT')
+                    <x-sidebar.nav-link href="{{ route('agendas.index') }}" active="{{ request()->routeIs('agendas.*') }}" icon="calendar">Agenda Management</x-sidebar.nav-link>
+                @endif
                 @if($userRole === 'ADMINISTRATOR')
                     <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('finance.education-payments.index') }}" active="{{ request()->routeIs('finance.education-payments.*') }}" icon="cash">Pembayaran Pendidikan</x-sidebar.nav-link>

@@ -49,6 +49,7 @@ use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
+use App\Interfaces\AgendaRepositoryInterface;
 use App\Repositories\GoogleSheets\AcademicYearRepository;
 use App\Repositories\GoogleSheets\AccountRepository;
 use App\Repositories\GoogleSheets\ActivityLogRepository;
@@ -96,6 +97,7 @@ use App\Repositories\GoogleSheets\TeacherRepository;
 use App\Repositories\GoogleSheets\TransactionRepository;
 use App\Repositories\GoogleSheets\UserRepository;
 use App\Repositories\GoogleSheets\WorkflowRepository;
+use App\Repositories\MySql\AgendaRepository;
 use App\Services\Academic\DisabledExternalGifProvider;
 use App\Services\Core\EnterpriseAutomationService;
 use App\Services\Core\SystemSettingService;
@@ -116,6 +118,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(AgendaRepositoryInterface::class, AgendaRepository::class);
         $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
         $this->app->bind(RoleRepositoryInterface::class, RoleRepository::class);
         $this->app->bind(ActivityLogRepositoryInterface::class, ActivityLogRepository::class);

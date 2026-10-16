@@ -26,6 +26,9 @@ class ProtectMassAssignment
         'announcements.update',
         'assessments.update',
         'attendances.update',
+        // Agenda status is an intentional, enum-validated workflow input.
+        'agendas.store',
+        'agendas.update',
         'workflow.*',
     ];
 

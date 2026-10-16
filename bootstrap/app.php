@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AgendaAccess;
 use App\Http\Middleware\ProtectMassAssignment;
 use App\Http\Middleware\RoleMiddleware;
 use App\Http\Middleware\ShareUserRole;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'agenda.access' => AgendaAccess::class,
             'role' => RoleMiddleware::class,
         ]);
     })

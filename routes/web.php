@@ -19,6 +19,7 @@ use App\Http\Controllers\Academic\SubjectController;
 use App\Http\Controllers\Academic\TeacherWorkspaceController;
 use App\Http\Controllers\Admin\StickerAdminController;
 use App\Http\Controllers\Core\AcademicDashboardController;
+use App\Http\Controllers\Core\AgendaController;
 use App\Http\Controllers\Core\ActivityController;
 use App\Http\Controllers\Core\AnnouncementFeedController;
 use App\Http\Controllers\Core\ApprovalController;
@@ -93,6 +94,16 @@ Route::get('/verify-overtime/{id}', [OvertimeController::class, 'verifyOvertimeP
 
 // Requires authentication
 Route::middleware('auth')->group(function () {
+    Route::prefix('agendas')->name('agendas.')->middleware('agenda.access')->group(function () {
+        Route::get('/', [AgendaController::class, 'index'])->name('index');
+        Route::get('/create', [AgendaController::class, 'create'])->name('create');
+        Route::post('/', [AgendaController::class, 'store'])->name('store');
+        Route::get('/{id}', [AgendaController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [AgendaController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [AgendaController::class, 'update'])->name('update');
+        Route::delete('/{id}', [AgendaController::class, 'destroy'])->name('destroy');
+    });
+
     // Audience-facing Announcement V2. Visibility is resolved server-side for
     // every authenticated role; management routes remain separately scoped.
     Route::get('/announcements', [AnnouncementFeedController::class, 'index'])->name('announcement-feed.index');
