@@ -2,9 +2,10 @@
 
 namespace App\Repositories\GoogleSheets;
 
+use App\Interfaces\Attendance\StudentAttendanceLookupInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 
-class AttendanceRepository extends BaseSheetRepository implements AttendanceRepositoryInterface
+class AttendanceRepository extends BaseSheetRepository implements AttendanceRepositoryInterface, StudentAttendanceLookupInterface
 {
     public function __construct()
     {
@@ -33,6 +34,21 @@ class AttendanceRepository extends BaseSheetRepository implements AttendanceRepo
         return $this->rowsWhereColumn('Employee_ID', $employeeId)->filter(function ($att) {
             return strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
         })->values();
+    }
+
+    public function findActiveStudentClassAttendance(
+        string $studentId,
+        string $classId,
+        string $date,
+        string $attendanceType = 'CLASS_QR'
+    ): ?array {
+        return $this->rowsWhereColumn('Student_ID', $studentId)->first(function (array $attendance) use ($studentId, $classId, $date, $attendanceType): bool {
+            return strcasecmp(trim((string) ($attendance['Student_ID'] ?? '')), $studentId) === 0
+                && trim((string) ($attendance['Class_ID'] ?? '')) === $classId
+                && trim((string) ($attendance['Attendance_Date'] ?? '')) === $date
+                && strtoupper(trim((string) ($attendance['Attendance_Type'] ?? ''))) === strtoupper($attendanceType)
+                && strtoupper(trim((string) ($attendance['Is_Active'] ?? 'TRUE'))) !== 'FALSE';
+        });
     }
 
     public function create(array $data)

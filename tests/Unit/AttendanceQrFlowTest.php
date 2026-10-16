@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\StudentAttendanceRejectedException;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
@@ -626,15 +627,18 @@ class AttendanceQrFlowTest extends TestCase
         Carbon::setTestNow('2026-08-23 08:10:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('khusus untuk Presensi Pegawai');
-
-        $service->processStudentScan(
-            $this->permanentQrUrl('employee', 'wms-att-emp-exist01'),
-            -6.81234,
-            107.19451,
-            'Student Device'
-        );
+        try {
+            $service->processStudentScan(
+                $this->permanentQrUrl('employee', 'wms-att-emp-exist01'),
+                -6.81234,
+                107.19451,
+                'Student Device'
+            );
+            $this->fail('QR pegawai seharusnya ditolak untuk siswa.');
+        } catch (StudentAttendanceRejectedException $e) {
+            $this->assertSame('WRONG_QR_TYPE', $e->reasonCode);
+            $this->assertStringContainsString('khusus untuk presensi pegawai', $e->getMessage());
+        }
     }
 
     public function test_student_qr_without_student_mapping_is_denied_without_creating_attendance(): void
@@ -659,10 +663,13 @@ class AttendanceQrFlowTest extends TestCase
         Carbon::setTestNow('2026-08-23 08:10:00');
         $this->actingAs(new GenericUser(['id' => 'USR-UNMAPPED', 'User_ID' => 'USR-UNMAPPED', 'Role' => 'STUDENT']));
 
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Profil siswa tidak ditemukan');
-
-        $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
+        try {
+            $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
+            $this->fail('Akun tanpa pemetaan siswa seharusnya ditolak.');
+        } catch (StudentAttendanceRejectedException $e) {
+            $this->assertSame('STUDENT_PROFILE_NOT_FOUND', $e->reasonCode);
+            $this->assertStringContainsString('profil siswa belum terhubung', $e->getMessage());
+        }
     }
 
     public function test_student_qr_inside_window_is_present_without_late_minutes(): void

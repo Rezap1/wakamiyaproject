@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Academic;
 
+use App\Exceptions\StudentAttendanceRejectedException;
 use App\Http\Controllers\Controller;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Academic\StudentQRAttendanceService;
+use App\Services\Attendance\AttendanceWindowException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StudentQRAttendanceController extends Controller
@@ -71,6 +74,8 @@ class StudentQRAttendanceController extends Controller
 
             return response()->json([
                 'success' => true,
+                'status' => 'recorded',
+                'reason_code' => null,
                 'message' => $isCheckOut
                     ? 'Check-Out Berhasil Dicatat!'
                     : "Check-In Berhasil Dicatat! ({$statusLabel})",
@@ -84,13 +89,49 @@ class StudentQRAttendanceController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal: '.json_encode($e->errors()),
+                'status' => 'rejected',
+                'reason_code' => 'REQUEST_VALIDATION_FAILED',
+                'message' => 'Presensi ditolak: '.collect($e->errors())->flatten()->first(),
+                'data' => null,
             ], 422);
-        } catch (\Exception $e) {
+        } catch (AttendanceWindowException $e) {
             return response()->json([
                 'success' => false,
-                'message' => $this->safeExceptionMessage($e, 'Presensi QR siswa tidak dapat diproses.'),
+                'status' => 'rejected',
+                'reason_code' => $e->reasonCode,
+                'message' => 'Presensi ditolak: '.$e->userMessage,
+                'data' => null,
             ], 422);
+        } catch (StudentAttendanceRejectedException $e) {
+            Log::warning('Student QR attendance rejected', [
+                'reason_code' => $e->reasonCode,
+                'user_id' => auth()->user()?->User_ID,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'status' => 'rejected',
+                'reason_code' => $e->reasonCode,
+                'message' => $e->userMessage,
+                'data' => $e->data ?: null,
+            ], $e->httpStatus);
+        } catch (\Throwable $e) {
+            $reportId = 'SQR-'.strtoupper(Str::random(10));
+            Log::error('Unexpected student QR attendance failure', [
+                'report_id' => $reportId,
+                'user_id' => auth()->user()?->User_ID,
+                'exception_class' => $e::class,
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'status' => 'error',
+                'reason_code' => 'SYSTEM_ERROR',
+                'message' => "Presensi belum dapat diproses karena terjadi gangguan sistem. Silakan coba kembali nanti atau hubungi administrator dengan menyebutkan kode laporan {$reportId}.",
+                'report_id' => $reportId,
+                'data' => null,
+            ], 500);
         }
     }
 

@@ -474,7 +474,20 @@
                         device_info: navigator.userAgent
                     })
                 })
-                .then(response => response.json())
+                .then(async response => {
+                    let data = null;
+                    try {
+                        data = await response.json();
+                    } catch (error) {
+                        throw new Error(`Server mengirim respons yang tidak dapat dibaca (HTTP ${response.status}).`);
+                    }
+
+                    if (!response.ok && data.success !== false) {
+                        data.success = false;
+                    }
+
+                    return data;
+                })
                 .then(data => {
                     if (data.success) {
                         const now = new Date();
@@ -489,18 +502,24 @@
                         this.viewState = 'SUCCESS';
                     } else {
                         const msg = data.message || 'Gagal memproses presensi.';
+                        const reasonCode = data.reason_code || 'UNKNOWN_ERROR';
                         this.errorMessage = msg;
-                        if (msg.includes('bukan QR Absensi Siswa') || msg.includes('khusus untuk Presensi Pegawai')) {
+                        if (reasonCode === 'WRONG_QR_TYPE') {
                             this.viewState = 'CROSS_QR_ERROR';
-                        } else if (msg.includes('di luar area LPK')) {
+                        } else if (reasonCode === 'OUTSIDE_GEOFENCE') {
+                            if (data.data && Number.isFinite(Number(data.data.distance_meters))) {
+                                this.coords.distanceText = Number(data.data.distance_meters).toFixed(1).replace('.', ',') + ' meter';
+                            }
                             this.viewState = 'OUTSIDE_GEOFENCE';
                         } else {
                             this.viewState = 'GENERAL_ERROR';
                         }
                     }
                 })
-                .catch(() => {
-                    this.errorMessage = 'Terjadi kesalahan koneksi server.';
+                .catch((error) => {
+                    this.errorMessage = error && error.message
+                        ? `Presensi belum dapat diproses: ${error.message}`
+                        : 'Presensi belum dapat diproses karena koneksi ke server terganggu. Silakan coba kembali.';
                     this.viewState = 'GENERAL_ERROR';
                 });
             },

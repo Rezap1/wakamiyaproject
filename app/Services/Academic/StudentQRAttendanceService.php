@@ -3,6 +3,8 @@
 namespace App\Services\Academic;
 
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Exceptions\StudentAttendanceRejectedException;
+use App\Interfaces\Attendance\StudentAttendanceLookupInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Repositories\MySql\BaseMySqlRepository;
@@ -14,6 +16,7 @@ use App\Services\Core\RoleService;
 use App\Services\Core\SystemSettingService;
 use App\Support\CoordinateNormalizer;
 use Exception;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -144,7 +147,11 @@ class StudentQRAttendanceService
         // before any token, GPS, duplicate, or persistence work.
         $user = auth()->user();
         if (! $user) {
-            throw new Exception('Sesi pengguna tidak valid. Silakan login kembali.');
+            throw new StudentAttendanceRejectedException(
+                'AUTHENTICATION_REQUIRED',
+                'Presensi ditolak: sesi Anda sudah berakhir. Silakan login kembali.',
+                401
+            );
         }
 
         $roleName = strtoupper(trim((string) ($user->Role ?? session('role', ''))));
@@ -155,12 +162,19 @@ class StudentQRAttendanceService
         }
 
         if ($roleName !== 'STUDENT' && ! str_contains($roleName, 'STUDENT')) {
-            throw new Exception('Akses Ditolak: Fitur ini khusus untuk akun Siswa.');
+            throw new StudentAttendanceRejectedException(
+                'ACCESS_DENIED',
+                'Presensi ditolak: akun Anda tidak memiliki akses untuk presensi siswa.',
+                403
+            );
         }
 
         $student = $this->resolveStudentForUser($user);
         if (! $student) {
-            throw new Exception('Akun Anda tidak dapat melakukan absensi. Profil siswa tidak ditemukan atau tidak aktif.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_PROFILE_NOT_FOUND',
+                'Presensi ditolak: profil siswa belum terhubung dengan akun Anda. Silakan hubungi administrator.'
+            );
         }
 
         try {
@@ -173,12 +187,18 @@ class StudentQRAttendanceService
 
         if (! is_finite($userLat) || ! is_finite($userLon)
             || $userLat < -90 || $userLat > 90 || $userLon < -180 || $userLon > 180) {
-            throw new Exception('GPS wajib aktif dan koordinat lokasi harus valid untuk presensi QR siswa.');
+            throw new StudentAttendanceRejectedException(
+                'GPS_INVALID',
+                'Presensi ditolak: lokasi GPS tidak valid. Aktifkan lokasi lalu coba lagi.'
+            );
         }
 
         // 1. Decode Payload & Identify QR Type
         if ($this->extractPermanentQrIdentifier($tokenString, 'EMP')) {
-            throw new Exception('Akses Ditolak: QR Code ini khusus untuk Presensi Pegawai.');
+            throw new StudentAttendanceRejectedException(
+                'WRONG_QR_TYPE',
+                'Presensi ditolak: QR ini khusus untuk presensi pegawai.'
+            );
         }
 
         $permanentIdentifier = $this->extractPermanentQrIdentifier($tokenString, 'STU');
@@ -188,12 +208,25 @@ class StudentQRAttendanceService
             $qr = $permanentQrService->getQrByIdentifier($permanentIdentifier);
 
             if (! $qr || strtoupper(trim((string) ($qr['QR_TYPE'] ?? ''))) !== 'STUDENT' || strtoupper(trim((string) ($qr['STATUS'] ?? ''))) !== 'ACTIVE') {
-                throw new Exception('QR Code Permanen tidak valid atau sudah tidak aktif.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_INVALID',
+                    'Presensi ditolak: QR tidak valid atau tidak dapat diverifikasi.'
+                );
             }
 
             $availability = $permanentQrService->getAvailabilityStatus($qr);
             if (! $availability['usable']) {
-                throw new Exception($availability['message']);
+                $state = strtoupper(trim((string) ($availability['state'] ?? 'INVALID')));
+                $reasonCode = match ($state) {
+                    'INACTIVE' => 'QR_INACTIVE',
+                    'UPCOMING' => 'QR_NOT_YET_ACTIVE',
+                    'EXPIRED' => 'QR_EXPIRED',
+                    default => 'QR_CONFIGURATION_INVALID',
+                };
+                throw new StudentAttendanceRejectedException(
+                    $reasonCode,
+                    'Presensi ditolak: '.trim((string) $availability['message'])
+                );
             }
 
             // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
@@ -207,12 +240,18 @@ class StudentQRAttendanceService
             // Support for Dynamic QR Code (Base64 JSON)
             $decodedJson = base64_decode($tokenString, true);
             if (! $decodedJson) {
-                throw new Exception('QR Code tidak valid atau sudah kedaluwarsa.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_INVALID',
+                    'Presensi ditolak: QR tidak valid atau tidak dapat diverifikasi.'
+                );
             }
 
             $payload = json_decode($decodedJson, true);
             if (! is_array($payload) || empty($payload['session_id']) || empty($payload['expires_at']) || empty($payload['nonce']) || empty($payload['sig'])) {
-                throw new Exception('Format data QR Code tidak valid.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_INVALID',
+                    'Presensi ditolak: QR tidak valid atau tidak dapat diverifikasi.'
+                );
             }
 
             $qrType = $payload['qr_type'] ?? 'STUDENT';
@@ -223,28 +262,43 @@ class StudentQRAttendanceService
 
             // 2. Strict QR Type Check
             if (strtoupper($qrType) !== 'STUDENT') {
-                throw new Exception('Akses Ditolak: QR Code ini khusus untuk Presensi Pegawai.');
+                throw new StudentAttendanceRejectedException(
+                    'WRONG_QR_TYPE',
+                    'Presensi ditolak: QR ini khusus untuk presensi pegawai.'
+                );
             }
 
             // 3. Expiration Check
             if ($expiresAt < $window['now']->timestamp) {
-                throw new Exception('QR Code telah kedaluwarsa. Silakan pindai ulang QR Code terbaru pada layar.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_EXPIRED',
+                    'Presensi ditolak: QR sudah kedaluwarsa. Silakan minta QR presensi yang masih berlaku.'
+                );
             }
 
             // 4. Single-use Nonce Replay Check
             if (! Cache::has("qr_student_nonce_{$nonce}")) {
-                throw new Exception('QR Code telah digunakan atau kedaluwarsa. Silakan pindai QR terbaru.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_EXPIRED',
+                    'Presensi ditolak: QR sudah kedaluwarsa. Silakan minta QR presensi yang masih berlaku.'
+                );
             }
 
             // 5. Cryptographic Signature Verification
             $expectedSig = hash_hmac('sha256', "{$qrType}|{$sessionId}|{$expiresAt}|{$nonce}", $this->signingKey());
             if (! hash_equals($expectedSig, $sig)) {
-                throw new Exception('Tanda tangan digital QR Code tidak valid atau telah dimanipulasi.');
+                throw new StudentAttendanceRejectedException(
+                    'QR_INVALID',
+                    'Presensi ditolak: QR tidak valid atau tidak dapat diverifikasi.'
+                );
             }
 
             $session = Cache::get("student_qr_session_{$sessionId}");
             if (! $this->isStudentSessionActive($session, $window['now']->toDateString())) {
-                throw new Exception($this->studentSessionClosedMessage($session ?? null));
+                throw new StudentAttendanceRejectedException(
+                    'QR_SESSION_INACTIVE',
+                    'Presensi ditolak: sesi presensi tidak sedang aktif.'
+                );
             }
 
             // NOTE: We DO NOT consume the nonce via Cache::forget here.
@@ -262,12 +316,20 @@ class StudentQRAttendanceService
             $this->settingService->get('LPK_ALLOWED_RADIUS_METERS', null)
         );
         if ($distance > $maxRadius) {
-            throw new Exception("Anda berada di luar area LPK. Jarak Anda: {$distance} meter. Maksimal jarak yang diizinkan: {$maxRadius} meter.");
+            throw new StudentAttendanceRejectedException(
+                'OUTSIDE_GEOFENCE',
+                "Presensi ditolak: Anda berada di luar area LPK (jarak {$distance} meter; batas {$maxRadius} meter). Silakan mendekati lokasi LPK.",
+                422,
+                ['distance_meters' => $distance, 'max_radius_meters' => $maxRadius]
+            );
         }
 
         // 7. Student eligibility is server-resolved; request Student_ID is ignored.
         if (strtoupper(trim($student['Is_Active'] ?? 'TRUE')) === 'FALSE') {
-            throw new Exception('Akun Anda tidak dapat melakukan absensi. Profil siswa tidak ditemukan atau tidak aktif.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_INACTIVE',
+                'Presensi ditolak: profil siswa Anda sedang tidak aktif. Silakan hubungi administrator.'
+            );
         }
 
         // 8. Strict Student Status Rules
@@ -276,118 +338,150 @@ class StudentQRAttendanceService
         $batchId = trim((string) ($student['Batch_ID'] ?? ''));
 
         if ($graduationStatus === 'LULUS' || str_contains($enrollmentStatus, 'ALUMNI')) {
-            throw new Exception('Absensi Gagal: Siswa berstatus Lulus / Alumni tidak diperkenankan presensi harian.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_NOT_ELIGIBLE',
+                'Presensi ditolak: status siswa lulus/alumni tidak dapat menggunakan presensi harian.'
+            );
         }
 
         if (str_contains($enrollmentStatus, 'CUTI') || str_contains($enrollmentStatus, 'DROPOUT') || str_contains($enrollmentStatus, 'NON-AKTIF') || str_contains($enrollmentStatus, 'OUT')) {
-            throw new Exception("Absensi Gagal: Status pendaftaran siswa saat ini ({$student['Enrollment_Status']}) tidak aktif.");
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_NOT_ELIGIBLE',
+                'Presensi ditolak: status pendaftaran siswa Anda tidak aktif. Silakan hubungi administrator.'
+            );
         }
 
         if (empty($batchId)) {
-            throw new Exception('Absensi Gagal: Batch siswa belum dikonfigurasi pada sistem.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_BATCH_MISSING',
+                'Presensi ditolak: batch siswa belum dikonfigurasi. Silakan hubungi administrator.'
+            );
         }
 
         $studentId = trim((string) ($student['Student_ID'] ?? ''));
         if ($studentId === '') {
-            throw new Exception('Akun Anda tidak dapat melakukan absensi. Profil siswa tidak ditemukan atau tidak aktif.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_PROFILE_INVALID',
+                'Presensi ditolak: data profil siswa belum lengkap. Silakan hubungi administrator.'
+            );
         }
 
         $classId = trim((string) ($student['Class_ID'] ?? ''));
 
         if ($classId === '' || $classId === '-') {
-            throw new Exception('Absensi Gagal: Kelas siswa belum dikonfigurasi pada sistem.');
+            throw new StudentAttendanceRejectedException(
+                'STUDENT_CLASS_MISSING',
+                'Presensi ditolak: kelas siswa belum dikonfigurasi. Silakan hubungi administrator.'
+            );
         }
 
         // 9. Atomic Concurrency Locking & Duplicate Check
         $lockKey = "student_qr_scan_{$sessionId}_{$studentId}_{$classId}_CLASS_QR";
 
-        return Cache::lock($lockKey, 10)->block(3, function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window) {
-            return $this->runtimeTransaction(function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window): array {
-                // Check Duplicate Attendance for this Student today
-                $todayStr = $window['now']->toDateString();
-                $allAttendances = collect($this->attendanceRepository->fetchAll());
-                $existing = $allAttendances->first(function ($att) use ($studentId, $classId, $todayStr) {
-                    return ($att['Student_ID'] ?? '') === $studentId &&
-                           trim((string) ($att['Class_ID'] ?? '')) === $classId &&
-                           strtoupper(trim((string) ($att['Attendance_Type'] ?? ''))) === 'CLASS_QR' &&
-                           ($att['Attendance_Date'] ?? '') === $todayStr &&
-                           strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
-                });
+        try {
+            return Cache::lock($lockKey, 10)->block(3, function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window) {
+                return $this->runtimeTransaction(function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window): array {
+                    // Check Duplicate Attendance for this Student today
+                    $todayStr = $window['now']->toDateString();
+                    $existing = $this->findExistingAttendance($studentId, $classId, $todayStr);
 
-                if ($existing) {
-                    throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.');
-                }
+                    if ($existing) {
+                        throw new StudentAttendanceRejectedException(
+                            'ALREADY_ATTENDED',
+                            'Presensi tidak dicatat ulang karena Anda sudah melakukan presensi pada sesi ini.',
+                            409
+                        );
+                    }
 
-                $statusDecision = $this->attendanceWindow->resolveStudentStatus($window);
-                $status = $statusDecision['status'];
-                $lateMinutes = $statusDecision['late_minutes'];
-                $nowCarbon = $window['now'];
+                    $statusDecision = $this->attendanceWindow->resolveStudentStatus($window);
+                    $status = $statusDecision['status'];
+                    $lateMinutes = $statusDecision['late_minutes'];
+                    $nowCarbon = $window['now'];
 
-                // 10. Master Attendance Persistence
-                $attendanceId = $this->deterministicAttendanceId($studentId, $todayStr, $classId);
-                $record = [
-                    'Attendance_ID' => $attendanceId,
-                    'User_ID' => $user->User_ID,
-                    'Student_ID' => $studentId,
-                    'Batch_ID' => $batchId,
-                    'Class_ID' => $classId,
-                    'Schedule_ID' => '',
-                    'Attendance_Type' => 'CLASS_QR',
-                    'Attendance_Date' => $todayStr,
-                    'Check_In_Time' => $nowCarbon->format('H:i:s'),
-                    'Status' => $status,
-                    'Late_Minutes' => $lateMinutes,
-                    'Verification_Method' => 'STUDENT_GEO_QR',
-                    'Device_Info' => ($deviceInfo ?? request()->header('User-Agent', 'Mobile Browser'))." [Dist: {$distance}m]",
-                    'Is_Active' => 'TRUE',
-                    'Created_At' => $nowCarbon->toDateTimeString(),
-                    'Updated_At' => $nowCarbon->toDateTimeString(),
-                    'Created_By' => $user->User_ID,
-                ];
+                    // 10. Master Attendance Persistence
+                    $attendanceId = $this->deterministicAttendanceId($studentId, $todayStr, $classId);
+                    $record = [
+                        'Attendance_ID' => $attendanceId,
+                        'User_ID' => $user->User_ID,
+                        'Student_ID' => $studentId,
+                        'Batch_ID' => $batchId,
+                        'Class_ID' => $classId,
+                        'Schedule_ID' => '',
+                        'Attendance_Type' => 'CLASS_QR',
+                        'Attendance_Date' => $todayStr,
+                        'Check_In_Time' => $nowCarbon->format('H:i:s'),
+                        'Status' => $status,
+                        'Late_Minutes' => $lateMinutes,
+                        'Verification_Method' => 'STUDENT_GEO_QR',
+                        'Device_Info' => ($deviceInfo ?? request()->header('User-Agent', 'Mobile Browser'))." [Dist: {$distance}m]",
+                        'Is_Active' => 'TRUE',
+                        'Created_At' => $nowCarbon->toDateTimeString(),
+                        'Updated_At' => $nowCarbon->toDateTimeString(),
+                        'Created_By' => $user->User_ID,
+                    ];
 
-                try {
-                    $created = $this->attendanceRepository->create($record);
-                } catch (DuplicatePrimaryKeyException $e) {
-                    throw new Exception('Absensi gagal: Anda sudah melakukan presensi hari ini.', 0, $e);
-                }
-                if ($created === false || $created === null) {
-                    throw new Exception('Presensi siswa gagal disimpan ke penyimpanan.');
-                }
+                    try {
+                        $created = $this->attendanceRepository->create($record);
+                    } catch (DuplicatePrimaryKeyException $e) {
+                        throw new StudentAttendanceRejectedException(
+                            'ALREADY_ATTENDED',
+                            'Presensi tidak dicatat ulang karena Anda sudah melakukan presensi pada sesi ini.',
+                            409,
+                            [],
+                            $e
+                        );
+                    }
+                    if ($created === false || $created === null) {
+                        throw new StudentAttendanceRejectedException(
+                            'ATTENDANCE_WRITE_FAILED',
+                            'Presensi belum dapat disimpan karena terjadi gangguan sistem. Silakan coba kembali nanti.',
+                            503
+                        );
+                    }
 
-                // Notifications are post-commit side effects. Their failure must
-                // never turn a durable attendance write into a rejected response.
-                try {
-                    $this->enterpriseEvent->dispatch(
-                        'ACADEMIC',
-                        'CREATE',
-                        'STUDENT_ATTENDANCE',
-                        $attendanceId,
-                        $user->User_ID,
-                        ['STUDENT', 'TEACHER', 'ACADEMIC'],
-                        [$studentId],
-                        [
-                            'Student_Name' => $student['Full_Name'] ?? $studentId,
-                            'Batch_ID' => $batchId,
-                            'Status' => $status,
-                            'Distance_Meters' => $distance,
-                        ]
-                    );
-                } catch (\Throwable $eventFailure) {
-                    $this->logPostCommitFailure($attendanceId, $eventFailure);
-                }
+                    // Notifications are post-commit side effects. Their failure must
+                    // never turn a durable attendance write into a rejected response.
+                    try {
+                        $this->enterpriseEvent->dispatch(
+                            'ACADEMIC',
+                            'CREATE',
+                            'STUDENT_ATTENDANCE',
+                            $attendanceId,
+                            $user->User_ID,
+                            ['STUDENT', 'TEACHER', 'ACADEMIC'],
+                            [$studentId],
+                            [
+                                'Student_Name' => $student['Full_Name'] ?? $studentId,
+                                'Batch_ID' => $batchId,
+                                'Status' => $status,
+                                'Distance_Meters' => $distance,
+                            ]
+                        );
+                    } catch (\Throwable $eventFailure) {
+                        $this->logPostCommitFailure($attendanceId, $eventFailure);
+                    }
 
-                return [
-                    'attendance_id' => $attendanceId,
-                    'student_name' => $student['Full_Name'] ?? $studentId,
-                    'action' => 'CHECK_IN',
-                    'status' => $status,
-                    'late_minutes' => $lateMinutes,
-                    'check_in_time' => $nowCarbon->format('H:i:s'),
-                    'check_out_time' => null,
-                    'distance_meters' => $distance,
-                ];
-            }, [[$this->studentRepository, $studentId]]);
-        });
+                    return [
+                        'attendance_id' => $attendanceId,
+                        'student_name' => $student['Full_Name'] ?? $studentId,
+                        'action' => 'CHECK_IN',
+                        'status' => $status,
+                        'late_minutes' => $lateMinutes,
+                        'check_in_time' => $nowCarbon->format('H:i:s'),
+                        'check_out_time' => null,
+                        'distance_meters' => $distance,
+                    ];
+                }, [[$this->studentRepository, $studentId]]);
+            });
+        } catch (LockTimeoutException $e) {
+            throw new StudentAttendanceRejectedException(
+                'ATTENDANCE_BUSY',
+                'Presensi sedang diproses dari permintaan sebelumnya. Tunggu sebentar lalu coba lagi.',
+                409,
+                [],
+                $e
+            );
+        }
     }
 
     /** @param list<array{0: object, 1: string}> $locks */
@@ -415,6 +509,26 @@ class StudentQRAttendanceService
         }
 
         return trim((string) ($session['Date'] ?? '')) === $serverDate;
+    }
+
+    private function findExistingAttendance(string $studentId, string $classId, string $date): ?array
+    {
+        if ($this->attendanceRepository instanceof StudentAttendanceLookupInterface) {
+            return $this->attendanceRepository->findActiveStudentClassAttendance(
+                $studentId,
+                $classId,
+                $date,
+                'CLASS_QR'
+            );
+        }
+
+        return collect($this->attendanceRepository->fetchAll())->first(function (array $attendance) use ($studentId, $classId, $date): bool {
+            return ($attendance['Student_ID'] ?? '') === $studentId
+                && trim((string) ($attendance['Class_ID'] ?? '')) === $classId
+                && strtoupper(trim((string) ($attendance['Attendance_Type'] ?? ''))) === 'CLASS_QR'
+                && ($attendance['Attendance_Date'] ?? '') === $date
+                && strtoupper(trim((string) ($attendance['Is_Active'] ?? 'TRUE'))) !== 'FALSE';
+        });
     }
 
     /**
@@ -528,7 +642,11 @@ class StudentQRAttendanceService
             allowMigratedFixedScaleInteger: true
         );
         if ($coordinate === null) {
-            throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
+            throw new StudentAttendanceRejectedException(
+                'GEOFENCE_CONFIGURATION_INVALID',
+                'Presensi belum dapat diproses karena konfigurasi lokasi LPK belum valid. Silakan hubungi administrator.',
+                503
+            );
         }
 
         return $coordinate;
@@ -538,12 +656,20 @@ class StudentQRAttendanceService
     {
         $normalized = str_replace(',', '.', trim((string) $value));
         if ($normalized === '' || ! is_numeric($normalized)) {
-            throw new Exception('Konfigurasi radius geofence belum valid. Presensi ditolak.');
+            throw new StudentAttendanceRejectedException(
+                'GEOFENCE_CONFIGURATION_INVALID',
+                'Presensi belum dapat diproses karena konfigurasi lokasi LPK belum valid. Silakan hubungi administrator.',
+                503
+            );
         }
 
         $radius = (float) $normalized;
         if (! is_finite($radius) || $radius <= 0) {
-            throw new Exception('Konfigurasi radius geofence belum valid. Presensi ditolak.');
+            throw new StudentAttendanceRejectedException(
+                'GEOFENCE_CONFIGURATION_INVALID',
+                'Presensi belum dapat diproses karena konfigurasi lokasi LPK belum valid. Silakan hubungi administrator.',
+                503
+            );
         }
 
         return $radius;

@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Interfaces\Attendance\StudentAttendanceLookupInterface;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Academic\StudentQRAttendanceService;
@@ -265,6 +266,30 @@ class CriticalAttendanceIntegrityTest extends TestCase
         $this->assertCount(1, $written);
         $this->assertSame('PRESENT', $written[0]['Status']);
         $this->assertSame($written[0]['Attendance_ID'], $result['attendance_id']);
+    }
+
+    public function test_mysql_lookup_capability_avoids_loading_entire_attendance_history(): void
+    {
+        Carbon::setTestNow('2026-09-29 07:30:00');
+        $attendance = Mockery::mock(
+            AttendanceRepositoryInterface::class.', '.StudentAttendanceLookupInterface::class
+        );
+        $attendance->shouldNotReceive('fetchAll');
+        $attendance->shouldReceive('findActiveStudentClassAttendance')
+            ->once()
+            ->with('STU-H874', 'CLASS-1', '2026-09-29', 'CLASS_QR')
+            ->andReturn(null);
+        $attendance->shouldReceive('create')->once()->andReturn(true);
+        $event = Mockery::mock(EnterpriseEventService::class);
+        $event->shouldReceive('dispatch')->once();
+
+        $result = $this->service($attendance, $event)->processStudentScan(
+            $this->permanentQrUrl(),
+            -6.81234,
+            107.19451
+        );
+
+        $this->assertSame('PRESENT', $result['status']);
     }
 
     public function test_repository_write_failure_never_returns_success(): void
