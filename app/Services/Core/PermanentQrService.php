@@ -265,20 +265,17 @@ class PermanentQrService
             return ['usable' => false, 'state' => 'INACTIVE', 'message' => 'QR Presensi ini sedang nonaktif.'];
         }
 
-        try {
-            $activeFrom = $this->parseRequiredDateTime($qr['ACTIVE_FROM'] ?? null);
-            $activeUntil = $this->parseRequiredDateTime($qr['ACTIVE_UNTIL'] ?? null);
-            $this->assertValidSchedule(
-                $activeFrom->format('Y-m-d H:i:s'),
-                $activeUntil->format('Y-m-d H:i:s')
-            );
-        } catch (InvalidArgumentException) {
+        $lifecycle = $this->getLifecycleConfiguration($qr);
+        if (! $lifecycle['valid']) {
             return [
                 'usable' => false,
                 'state' => 'INVALID',
-                'message' => 'Masa berlaku QR Presensi belum dikonfigurasi dengan valid.',
+                'message' => $lifecycle['message'],
             ];
         }
+
+        $activeFrom = $lifecycle['from'];
+        $activeUntil = $lifecycle['until'];
 
         $now = $this->serverNow();
 
@@ -299,6 +296,39 @@ class PermanentQrService
         }
 
         return ['usable' => true, 'state' => 'ACTIVE', 'message' => 'QR Presensi aktif.'];
+    }
+
+    /**
+     * Use one strict parser for management, print and scan flows so MySQL
+     * DATETIME(6) values cannot be accepted by one surface and rejected by
+     * another.
+     *
+     * @return array{valid: bool, from: ?CarbonImmutable, until: ?CarbonImmutable, message: string}
+     */
+    public function getLifecycleConfiguration(array $qr): array
+    {
+        try {
+            $activeFrom = $this->parseRequiredDateTime($qr['ACTIVE_FROM'] ?? null);
+            $activeUntil = $this->parseRequiredDateTime($qr['ACTIVE_UNTIL'] ?? null);
+            $this->assertValidSchedule(
+                $activeFrom->format('Y-m-d H:i:s.u'),
+                $activeUntil->format('Y-m-d H:i:s.u')
+            );
+
+            return [
+                'valid' => true,
+                'from' => $activeFrom,
+                'until' => $activeUntil,
+                'message' => 'Masa berlaku QR Presensi valid.',
+            ];
+        } catch (InvalidArgumentException $exception) {
+            return [
+                'valid' => false,
+                'from' => null,
+                'until' => null,
+                'message' => $exception->getMessage(),
+            ];
+        }
     }
 
     public function isQrCurrentlyUsable(array $qr): bool

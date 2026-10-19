@@ -6,9 +6,11 @@ use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use App\Services\Core\RoleService;
@@ -39,6 +41,10 @@ class AttendanceRequestService
 
     protected $teacherScopeResolver;
 
+    protected $userRepo;
+
+    protected $roleRepo;
+
     public function __construct(
         AttendanceRequestRepositoryInterface $requestRepo,
         AttendanceRepositoryInterface $attendanceRepo,
@@ -48,7 +54,9 @@ class AttendanceRequestService
         ?NotificationService $notificationService = null,
         ?TeacherRepositoryInterface $teacherRepo = null,
         ?ClassRepositoryInterface $classRepo = null,
-        ?TeacherScopeResolver $teacherScopeResolver = null
+        ?TeacherScopeResolver $teacherScopeResolver = null,
+        ?UserRepositoryInterface $userRepo = null,
+        ?RoleRepositoryInterface $roleRepo = null
     ) {
         $this->requestRepo = $requestRepo;
         $this->attendanceRepo = $attendanceRepo;
@@ -59,6 +67,8 @@ class AttendanceRequestService
         $this->teacherRepo = $teacherRepo;
         $this->classRepo = $classRepo;
         $this->teacherScopeResolver = $teacherScopeResolver;
+        $this->userRepo = $userRepo;
+        $this->roleRepo = $roleRepo;
     }
 
     public function getAllPending()
@@ -193,33 +203,21 @@ class AttendanceRequestService
                 throw new Exception('Pengajuan gagal disimpan.');
             }
             $this->requestRepo->clearCache();
+            Cache::forget('dashboard_academic');
 
-            if ($this->notificationService) {
-                try {
-                    $this->notificationService->NotifyRole(
-                        'MASTER',
-                        'PENGAJUAN IZIN SISWA BARU',
-                        "Pengajuan {$insertData['Request_ID']} untuk tanggal {$insertData['Attendance_Date']} menunggu review guru.",
-                        'ATTENDANCE',
-                        'Normal',
-                        '/academic/attendance/requests/'.$insertData['Request_ID'],
-                        $this->actorId($user)
-                    );
-                } catch (\Throwable $notificationFailure) {
-                    Log::warning('Failed to notify Master about attendance request', [
-                        'request_id' => $requestId,
-                        'exception' => get_class($notificationFailure),
-                    ]);
-                }
-            }
+            $this->runPostCommitSideEffect(
+                fn () => $this->notifyNewRequestRecipients($insertData, $target, $user),
+                'notification',
+                $requestId
+            );
 
-            $this->activityLog->log(
+            $this->runPostCommitSideEffect(fn () => $this->activityLog->log(
                 'ATTENDANCE',
                 'ATTENDANCE_REQUEST_CREATED',
                 "Student {$data['Student_ID']} created request {$requestId}",
                 null,
                 ['Request_ID' => $requestId, 'Student_ID' => $data['Student_ID']]
-            );
+            ), 'activity_log', $requestId);
 
             return $result;
         });
@@ -228,6 +226,126 @@ class AttendanceRequestService
     private function normalizeDate($date): string
     {
         return Carbon::parse($date, config('app.timezone'))->toDateString();
+    }
+
+    private function notifyNewRequestRecipients(array $request, array $target, $user): void
+    {
+        if (! $this->notificationService) {
+            return;
+        }
+
+        $recipients = [];
+        foreach ($this->authorizedTeacherUserIds($target) as $userId) {
+            $recipients[strtolower($userId)] = [
+                'user_id' => $userId,
+                'kind' => 'teacher',
+                'url' => '/teacher/workspace/attendance-requests/'.$request['Request_ID'],
+            ];
+        }
+        foreach ($this->activeMasterUserIds() as $userId) {
+            $recipients[strtolower($userId)] = [
+                'user_id' => $userId,
+                'kind' => 'master',
+                'url' => '/academic/attendance/requests/'.$request['Request_ID'],
+            ];
+        }
+
+        $requestType = strtoupper(trim((string) ($request['Request_Type'] ?? 'IZIN')));
+        foreach ($recipients as $recipient) {
+            try {
+                $this->notificationService->NotifyUser(
+                    $recipient['user_id'],
+                    "PENGAJUAN {$requestType} SISWA BARU",
+                    "Pengajuan {$request['Request_ID']} untuk tanggal {$request['Attendance_Date']} menunggu review guru.",
+                    'ATTENDANCE',
+                    'Normal',
+                    $recipient['url'],
+                    $this->actorId($user)
+                );
+            } catch (\Throwable $notificationFailure) {
+                Log::warning('Failed to notify attendance request recipient', [
+                    'request_id' => $request['Request_ID'] ?? null,
+                    'recipient_type' => $recipient['kind'],
+                    'exception' => get_class($notificationFailure),
+                ]);
+            }
+        }
+    }
+
+    /** @return list<string> */
+    private function authorizedTeacherUserIds(array $target): array
+    {
+        if (! $this->teacherRepo) {
+            return [];
+        }
+
+        $teacherIds = [];
+        if (($target['Attendance_Type'] ?? '') === 'SCHEDULE' && $this->scheduleRepo) {
+            $schedule = collect($this->scheduleRepo->fetchAll())->first(
+                fn ($row) => strcasecmp(trim((string) ($row['Schedule_ID'] ?? '')), $target['Schedule_ID'] ?? '') === 0
+                    && ! $this->isInactiveMasterRow((array) $row)
+            );
+            $teacherIds[] = trim((string) ($schedule['Teacher_ID'] ?? ''));
+        } elseif ($this->classRepo) {
+            $class = collect($this->classRepo->fetchAll())->first(
+                fn ($row) => strcasecmp(trim((string) ($row['Class_ID'] ?? '')), $target['Class_ID'] ?? '') === 0
+                    && ! $this->isInactiveMasterRow((array) $row)
+            );
+            $teacherIds[] = trim((string) ($class['Homeroom_Teacher_ID'] ?? ''));
+        }
+
+        $teacherIds = array_values(array_unique(array_filter($teacherIds)));
+        if ($teacherIds === []) {
+            return [];
+        }
+
+        return collect($this->teacherRepo->fetchAll())
+            ->filter(fn ($teacher) => ! $this->isInactiveMasterRow((array) $teacher))
+            ->filter(fn ($teacher) => collect($teacherIds)->contains(
+                fn ($teacherId) => strcasecmp($teacherId, trim((string) ($teacher['Teacher_ID'] ?? ''))) === 0
+            ))
+            ->pluck('User_ID')
+            ->map(fn ($userId) => trim((string) $userId))
+            ->filter()
+            ->unique(fn ($userId) => strtolower($userId))
+            ->values()
+            ->all();
+    }
+
+    /** @return list<string> */
+    private function activeMasterUserIds(): array
+    {
+        if (! $this->userRepo || ! $this->roleRepo) {
+            return [];
+        }
+
+        $masterRoleIds = collect($this->roleRepo->fetchAll())
+            ->filter(fn ($role) => ! $this->isInactiveMasterRow((array) $role))
+            ->filter(fn ($role) => strtoupper(trim((string) ($role['Role_Name'] ?? ''))) === 'MASTER')
+            ->pluck('Role_ID')
+            ->map(fn ($roleId) => strtolower(trim((string) $roleId)))
+            ->filter()
+            ->values();
+
+        return collect($this->userRepo->fetchAll())
+            ->filter(fn ($account) => ! $this->isInactiveMasterRow((array) $account))
+            ->filter(function ($account) use ($masterRoleIds) {
+                $literalRole = strtoupper(trim((string) ($account['Role'] ?? $account['Role_Name'] ?? '')));
+                $roleId = strtolower(trim((string) ($account['Role_ID'] ?? '')));
+
+                return $literalRole === 'MASTER' || $masterRoleIds->contains($roleId);
+            })
+            ->pluck('User_ID')
+            ->map(fn ($userId) => trim((string) $userId))
+            ->filter()
+            ->unique(fn ($userId) => strtolower($userId))
+            ->values()
+            ->all();
+    }
+
+    private function isInactiveMasterRow(array $row): bool
+    {
+        return in_array(strtoupper(trim((string) ($row['Is_Active'] ?? 'TRUE'))), ['FALSE', '0', 'INACTIVE', 'DISABLED'], true);
     }
 
     public function approveRequest($requestId, $statusToApply, $notes, $user)
@@ -270,6 +388,7 @@ class AttendanceRequestService
                 throw new Exception('Status pengajuan gagal diperbarui.');
             }
             $this->requestRepo->clearCache();
+            Cache::forget('dashboard_academic');
 
             $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
 
@@ -326,6 +445,7 @@ class AttendanceRequestService
                 throw new Exception('Status pengajuan gagal diperbarui.');
             }
             $this->requestRepo->clearCache();
+            Cache::forget('dashboard_academic');
 
             $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
 

@@ -2,30 +2,38 @@
 
 namespace App\Http\Controllers\Academic;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\Attendance\AttendanceRequestService;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
-use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
-use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
-use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
-use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
-use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Helpers\AttendanceStatusHelper;
 use App\Helpers\CollectionHelper;
 use App\Helpers\StoragePathHelper;
+use App\Http\Controllers\Controller;
+use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\BatchRepositoryInterface;
+use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Interfaces\GoogleSheets\SubjectRepositoryInterface;
+use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Services\Attendance\AttendanceRequestService;
+use App\Services\Core\RoleService;
 use App\Support\Reporting\HumanReadableResolver;
+use Illuminate\Http\Request;
 
 class AttendanceRequestController extends Controller
 {
     protected $requestService;
+
     protected $studentRepo;
+
     protected $scheduleRepo;
+
     protected $batchRepo;
+
     protected $classRepo;
+
     protected $attendanceRepo;
+
     protected $subjectRepo;
+
     protected $teacherRepo;
 
     public function __construct(
@@ -59,7 +67,7 @@ class AttendanceRequestController extends Controller
         $classesById = $classes->keyBy('Class_ID');
         $schedulesById = $schedules->keyBy('Schedule_ID');
         $subjectsById = $subjects->keyBy('Subject_ID');
-        
+
         $enrichedRequests = $allRequests->map(fn ($req) => $this->enrichRequest(
             $req,
             $studentsById,
@@ -69,9 +77,11 @@ class AttendanceRequestController extends Controller
         ));
 
         // Default Filter to PENDING if not specified
-        $statusFilter = $request->query('status', 'PENDING');
+        $statusFilter = strtoupper(trim((string) $request->query('status', 'PENDING')));
         if ($statusFilter !== 'ALL') {
-            $enrichedRequests = $enrichedRequests->where('Status', $statusFilter);
+            $enrichedRequests = $enrichedRequests
+                ->where('Status_Normalized', $statusFilter)
+                ->values();
         }
 
         // Sort descending by created at
@@ -88,7 +98,7 @@ class AttendanceRequestController extends Controller
         $request = $isTeacher
             ? $this->requestService->assertTeacherCanReviewRequest($id, auth()->user())
             : $this->requestService->findById($id);
-        if (!$request) {
+        if (! $request) {
             return redirect()->route($this->indexRouteName())->with('error', 'Pengajuan tidak ditemukan.');
         }
 
@@ -105,7 +115,7 @@ class AttendanceRequestController extends Controller
             $subjects->keyBy('Subject_ID')
         );
         $existingAttendance = null;
-        if ($this->attendanceRepo && !empty($request['Attendance_ID'])) {
+        if ($this->attendanceRepo && ! empty($request['Attendance_ID'])) {
             $existingAttendance = $this->attendanceRepo->findById($request['Attendance_ID']);
         }
         $request['Existing_Attendance'] = $existingAttendance;
@@ -114,9 +124,9 @@ class AttendanceRequestController extends Controller
         $canReview = $isTeacher && ($request['Status_Normalized'] ?? '') === 'PENDING';
         $routePrefix = $isTeacher ? 'teacher.workspace.attendance-requests' : 'academic.attendance.requests';
         $backRoute = route($this->indexRouteName());
-        $evidenceRoute = $routePrefix . '.evidence';
-        $approveRoute = $routePrefix . '.approve';
-        $rejectRoute = $routePrefix . '.reject';
+        $evidenceRoute = $routePrefix.'.evidence';
+        $approveRoute = $routePrefix.'.approve';
+        $rejectRoute = $routePrefix.'.reject';
 
         return view('academic.attendance.request-show', compact(
             'request',
@@ -133,14 +143,14 @@ class AttendanceRequestController extends Controller
     {
         $request->validate([
             'Approve_As' => 'required|in:SAKIT,IZIN',
-            'Academic_Notes' => 'nullable|string|max:500'
+            'Academic_Notes' => 'nullable|string|max:500',
         ]);
 
         try {
             $this->requestService->approveRequest(
-                $id, 
-                $request->Approve_As, 
-                $request->Academic_Notes ?? '', 
+                $id,
+                $request->Approve_As,
+                $request->Academic_Notes ?? '',
                 auth()->user()
             );
 
@@ -153,13 +163,13 @@ class AttendanceRequestController extends Controller
     public function reject(Request $request, $id)
     {
         $request->validate([
-            'Academic_Notes' => 'required|string|max:500'
+            'Academic_Notes' => 'required|string|max:500',
         ]);
 
         try {
             $this->requestService->rejectRequest(
-                $id, 
-                $request->Academic_Notes, 
+                $id,
+                $request->Academic_Notes,
                 auth()->user()
             );
 
@@ -174,12 +184,12 @@ class AttendanceRequestController extends Controller
         $request = $this->isTeacherUser()
             ? $this->requestService->assertTeacherCanReviewRequest($id, auth()->user())
             : $this->requestService->findById($id);
-        if (!$request || empty($request['Evidence_URL'])) {
+        if (! $request || empty($request['Evidence_URL'])) {
             abort(404, 'Bukti tidak ditemukan.');
         }
 
         $path = StoragePathHelper::privateFileResponsePath($request['Evidence_URL']);
-        if (!$path) {
+        if (! $path) {
             abort(404, 'File bukti tidak ditemukan di server.');
         }
 
@@ -196,7 +206,7 @@ class AttendanceRequestController extends Controller
         $type = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '_', $request['Request_Type'] ?? 'bukti'));
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
-        return 'surat-' . $type . '-' . $requestId . ($extension ? '.' . $extension : '');
+        return 'surat-'.$type.'-'.$requestId.($extension ? '.'.$extension : '');
     }
 
     private function enrichRequest($request, $studentsById, $classesById, $schedulesById, $subjectsById): array
@@ -245,7 +255,7 @@ class AttendanceRequestController extends Controller
     private function currentRoleName(): string
     {
         $user = auth()->user();
-        if (!$user) {
+        if (! $user) {
             return '';
         }
 
@@ -255,7 +265,7 @@ class AttendanceRequestController extends Controller
         }
 
         try {
-            return strtoupper(trim((string) (app(\App\Services\Core\RoleService::class)->getRoleById($user->Role_ID ?? '')['Role_Name'] ?? '')));
+            return strtoupper(trim((string) (app(RoleService::class)->getRoleById($user->Role_ID ?? '')['Role_Name'] ?? '')));
         } catch (\Throwable) {
             return '';
         }
@@ -283,7 +293,7 @@ class AttendanceRequestController extends Controller
     private function reviewerName(?string $reviewedBy): string
     {
         $reviewedBy = trim((string) $reviewedBy);
-        if ($reviewedBy === '' || !$this->teacherRepo) {
+        if ($reviewedBy === '' || ! $this->teacherRepo) {
             return 'Belum direview';
         }
 

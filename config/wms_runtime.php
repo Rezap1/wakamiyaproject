@@ -28,5 +28,9 @@ return [
             'Verification_Method',
             'Device_Info',
         ],
+        'MASTER_ATTENDANCE_REQUEST' => [
+            'Class_ID',
+            'Attendance_Type',
+        ],
     ],
 ];

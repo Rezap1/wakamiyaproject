@@ -96,26 +96,11 @@
         <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             @forelse($qrCodes as $qr)
                 @php
-                    $availability = app(\App\Services\Core\PermanentQrService::class)->getAvailabilityStatus($qr);
+                    $availability = $qr['AVAILABILITY'] ?? ['state' => 'INVALID'];
+                    $lifecycle = $qr['LIFECYCLE'] ?? ['valid' => false, 'from' => null, 'until' => null, 'message' => 'Masa berlaku tidak tersedia.'];
                     $state = $availability['state'] ?? 'INVALID';
-                    $from = null;
-                    $until = null;
-                    $rawFrom = trim((string) ($qr['ACTIVE_FROM'] ?? ''));
-                    $rawUntil = trim((string) ($qr['ACTIVE_UNTIL'] ?? ''));
-                    try {
-                        $from = \Carbon\CarbonImmutable::createFromFormat('!Y-m-d H:i:s', $rawFrom, 'Asia/Jakarta');
-                        $until = \Carbon\CarbonImmutable::createFromFormat('!Y-m-d H:i:s', $rawUntil, 'Asia/Jakarta');
-                        if (! $from || ! $until
-                            || $from->format('Y-m-d H:i:s') !== $rawFrom
-                            || $until->format('Y-m-d H:i:s') !== $rawUntil
-                            || $until->lessThanOrEqualTo($from)) {
-                            $from = null;
-                            $until = null;
-                        }
-                    } catch (\Throwable) {
-                        $from = null;
-                        $until = null;
-                    }
+                    $from = $lifecycle['from'] ?? null;
+                    $until = $lifecycle['until'] ?? null;
                     $stateClasses = match ($state) {
                         'ACTIVE' => 'bg-emerald-100 text-emerald-700',
                         'UPCOMING' => 'bg-sky-100 text-sky-700',
@@ -157,7 +142,7 @@
                                     Berakhir: {{ $until->locale('id')->translatedFormat('d F Y, H:i') }} WIB
                                 </p>
                             @else
-                                <p class="mt-1 text-xs font-bold text-rose-600">Konfigurasi tidak valid</p>
+                                <p class="mt-1 text-xs font-bold text-rose-600">{{ $lifecycle['message'] ?? 'Konfigurasi tidak valid.' }}</p>
                             @endif
                         </div>
                         @if(($qr['QR_TYPE'] ?? '') === 'STUDENT')

@@ -99,6 +99,9 @@
         .status-inactive {
             background-color: #ef4444;
         }
+        .status-warning {
+            background-color: #d97706;
+        }
         .footer {
             margin-top: auto;
             padding-top: 40px;
@@ -202,10 +205,25 @@
             <img src="{{ $qrBase64 }}" alt="QR Code" class="qr-image" style="width: 220px; height: 220px; object-fit: contain;">
         </div>
 
-        @if(strtoupper($qr['STATUS'] ?? '') === 'ACTIVE')
-            <div class="status-badge">🟢 STATUS: AKTIF</div>
+        @php
+            $availability = $availability ?? ['state' => 'INVALID', 'message' => 'Konfigurasi masa berlaku tidak tersedia.'];
+            $lifecycle = $lifecycle ?? ['valid' => false, 'from' => null, 'until' => null];
+            $printState = $availability['state'] ?? 'INVALID';
+        @endphp
+        @if($printState === 'ACTIVE')
+            <div class="status-badge">STATUS: AKTIF</div>
+        @elseif($printState === 'INACTIVE')
+            <div class="status-badge status-inactive">STATUS: TIDAK AKTIF</div>
         @else
-            <div class="status-badge status-inactive">🔴 STATUS: TIDAK AKTIF</div>
+            <div class="status-badge status-warning">STATUS: {{ $printState === 'UPCOMING' ? 'BELUM BERLAKU' : ($printState === 'EXPIRED' ? 'KEDALUWARSA' : 'KONFIGURASI TIDAK VALID') }}</div>
+        @endif
+
+        @if($lifecycle['valid'] ?? false)
+            <div class="sub-instructions" style="margin-bottom: 20px;">
+                Berlaku {{ $lifecycle['from']->format('d-m-Y H:i') }} sampai {{ $lifecycle['until']->format('d-m-Y H:i') }} WIB
+            </div>
+        @else
+            <div class="sub-instructions" style="margin-bottom: 20px; color: #b91c1c;">{{ $lifecycle['message'] ?? 'Konfigurasi masa berlaku tidak valid.' }}</div>
         @endif
 
         <div class="instructions">Scan QR Code ini menggunakan akun WMS Anda.</div>

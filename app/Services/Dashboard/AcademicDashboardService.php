@@ -1,36 +1,48 @@
 <?php
+
 namespace App\Services\Dashboard;
 
 use App\Helpers\SheetValue;
 use App\Services\Academic\AssessmentService;
-use App\Services\Academic\ScoreService;
-use App\Services\Academic\ScheduleService;
-use App\Services\Academic\AttendanceService as AcademicAttendanceService;
 use App\Services\Academic\AttendanceLegacyClassifier;
-use App\Services\Core\ProgramService;
+use App\Services\Academic\AttendanceService as AcademicAttendanceService;
+use App\Services\Academic\ScheduleService;
+use App\Services\Academic\ScoreService;
+use App\Services\Attendance\AttendanceRequestService;
+use App\Services\Core\ActivityLogService;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
-use App\Services\Core\TeacherService;
-use App\Services\Core\StudentService;
-use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
-use App\Services\Attendance\AttendanceRequestService;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Core\ProgramService;
+use App\Services\Core\StudentService;
+use App\Services\Core\TeacherService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class AcademicDashboardService
 {
     protected $assessmentService;
+
     protected $scoreService;
+
     protected $programService;
+
     protected $batchService;
+
     protected $classService;
+
     protected $teacherService;
+
     protected $studentService;
+
     protected $scheduleService;
+
     protected $attendanceService;
+
     protected $attendanceRequestService;
+
     protected $activityLogService;
+
     protected $notificationService;
 
     public function __construct(
@@ -65,8 +77,8 @@ class AcademicDashboardService
     {
         // === Fetch data ONCE, reuse collections (N+1 prevention) ===
         $programs = collect($this->programService->getAllPrograms())->where('Is_Active', '!=', 'FALSE');
-        $batches  = collect($this->batchService->getAllBatches())->where('Is_Active', '!=', 'FALSE');
-        $classes  = collect($this->classService->getAllClasses())->where('Is_Active', '!=', 'FALSE');
+        $batches = collect($this->batchService->getAllBatches())->where('Is_Active', '!=', 'FALSE');
+        $classes = collect($this->classService->getAllClasses())->where('Is_Active', '!=', 'FALSE');
         $teachers = collect($this->teacherService->getAllTeachers())->where('Is_Active', '!=', 'FALSE');
         $students = collect($this->studentService->getAllStudents())
             ->filter(fn ($student) => SheetValue::isOperationalStudent((array) $student));
@@ -74,11 +86,12 @@ class AcademicDashboardService
         $assessments = collect($this->assessmentService->getAll());
         $scores = collect($this->scoreService->getAll());
         $attendances = collect($this->attendanceService->getAll());
-        $legacyClassifier = new AttendanceLegacyClassifier();
+        $legacyClassifier = new AttendanceLegacyClassifier;
         $academicAttendances = $attendances->filter(function ($attendance) use ($legacyClassifier, $classes, $schedules) {
             $classified = $legacyClassifier->classify($attendance, $classes, $schedules);
-            return !in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)
-                && !empty($attendance['Student_ID']);
+
+            return ! in_array($classified['classification'], ['EMPLOYEE', 'UNKNOWN', 'AMBIGUOUS'], true)
+                && ! empty($attendance['Student_ID']);
         })->values();
         $attendanceRequests = collect($this->attendanceRequestService->getAll());
 
@@ -102,28 +115,33 @@ class AcademicDashboardService
 
         $todayDate = date('Y-m-d');
 
-        $unplacedStudents = $students->filter(function($s) {
+        $unplacedStudents = $students->filter(function ($s) {
             return empty(trim($s['Class_ID'] ?? '')) || trim($s['Class_ID'] ?? '') === '-';
         })->count();
 
-        $attendanceToday = $academicAttendances->filter(function($a) use ($todayDate) {
+        $attendanceToday = $academicAttendances->filter(function ($a) use ($todayDate) {
             return ($a['Attendance_Date'] ?? '') === $todayDate
                 && in_array(strtoupper(trim($a['Status'] ?? '')), ['PRESENT', 'HADIR', 'LATE', 'TERLAMBAT', 'SICK', 'SAKIT', 'PERMITTED', 'IZIN', 'ABSENT', 'ALPHA', 'ALPA'], true);
         })->count();
 
         // === KPI ===
         $kpi = [
-            'programs'         => $programs->count(),
-            'batches'          => $batches->count(),
-            'classes'          => $classes->count(),
-            'teachers'         => $teachers->count(),
-            'students'         => $students->count(),
-            'attendance_rate'  => $attendanceRate . '%',
-            'average_score'    => $avgScore,
-            'passing_rate'     => $passingRate . '%',
-            'total_assessments'=> $assessments->count(),
-            'score_pending'    => $pendingScoreCount,
-            'pending_requests' => $attendanceRequests->where('Status', 'PENDING')->count(),
+            'programs' => $programs->count(),
+            'batches' => $batches->count(),
+            'classes' => $classes->count(),
+            'teachers' => $teachers->count(),
+            'students' => $students->count(),
+            'attendance_rate' => $attendanceRate.'%',
+            'average_score' => $avgScore,
+            'passing_rate' => $passingRate.'%',
+            'total_assessments' => $assessments->count(),
+            'score_pending' => $pendingScoreCount,
+            'pending_requests' => $attendanceRequests->filter(function ($request) {
+                $status = strtoupper(trim((string) ($request['Status'] ?? '')));
+                $status = str_replace([' ', '-'], '_', $status);
+
+                return in_array($status, ['', 'PENDING', 'WAITING', 'WAITING_APPROVAL', 'WAITING_REVIEW', 'SUBMITTED'], true);
+            })->count(),
             'student_unplaced' => $unplacedStudents,
             'attendance_today' => $attendanceToday,
         ];
@@ -134,10 +152,10 @@ class AcademicDashboardService
             return strtolower($s['Day'] ?? $s['Day_Of_Week'] ?? '') === strtolower($todayIndo);
         })->map(function ($s) {
             return [
-                'time'    => ($s['Start_Time'] ?? '') . ' - ' . ($s['End_Time'] ?? ''),
+                'time' => ($s['Start_Time'] ?? '').' - '.($s['End_Time'] ?? ''),
                 'subject' => $s['Subject_ID'] ?? 'Subject',
-                'room'    => $s['Room'] ?? 'Room',
-                'class'   => $s['Class_ID'] ?? '',
+                'room' => $s['Room'] ?? 'Room',
+                'class' => $s['Class_ID'] ?? '',
                 'teacher' => $s['Teacher_ID'] ?? '',
             ];
         })->values()->toArray();
@@ -148,9 +166,9 @@ class AcademicDashboardService
         // Schedule Today
         if (count($todayClasses) > 0) {
             $reminders[] = [
-                'title'       => 'Schedule Today',
-                'description' => count($todayClasses) . ' kelas terjadwal hari ini.',
-                'action_url'  => route('schedules.index'),
+                'title' => 'Schedule Today',
+                'description' => count($todayClasses).' kelas terjadwal hari ini.',
+                'action_url' => route('schedules.index'),
             ];
         }
 
@@ -165,18 +183,18 @@ class AcademicDashboardService
         $attendancePending = max(0, $todayClassIds->diff($todayAttendanceClassIds)->count());
         if ($attendancePending > 0) {
             $reminders[] = [
-                'title'       => 'Attendance Pending',
-                'description' => $attendancePending . ' sesi absensi belum diisi hari ini.',
-                'action_url'  => route('attendances.index'),
+                'title' => 'Attendance Pending',
+                'description' => $attendancePending.' sesi absensi belum diisi hari ini.',
+                'action_url' => route('attendances.index'),
             ];
         }
 
         // Score Pending
         if ($pendingScoreCount > 0) {
             $reminders[] = [
-                'title'       => 'Score Pending',
-                'description' => $pendingScoreCount . ' penilaian menunggu input nilai.',
-                'action_url'  => route('scores.index'),
+                'title' => 'Score Pending',
+                'description' => $pendingScoreCount.' penilaian menunggu input nilai.',
+                'action_url' => route('scores.index'),
             ];
         }
 
@@ -205,6 +223,7 @@ class AcademicDashboardService
             'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu',
             'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu',
         ];
+
         return $dayMap[date('l')] ?? date('l');
     }
 
@@ -247,6 +266,7 @@ class AcademicDashboardService
     {
         try {
             $logs = collect($this->activityLogService->getAllLogs());
+
             return $logs->filter(function ($log) use ($modules) {
                 return in_array(strtoupper($log['Module'] ?? ''), $modules);
             })->sortByDesc('Created_At')->take(10)->map(function ($log) {
@@ -260,13 +280,14 @@ class AcademicDashboardService
                     } else {
                         $action = str_replace('_', ' ', $log['Action'] ?? '');
                         $refId = $log['Reference_ID'] ?? '';
-                        $desc = "Aktivitas " . ucwords(strtolower($action)) . ($refId ? " pada {$refId}" : '');
+                        $desc = 'Aktivitas '.ucwords(strtolower($action)).($refId ? " pada {$refId}" : '');
                     }
                 }
+
                 return [
-                    'title'       => $log['Action'] ?? 'Aktivitas',
-                    'description' => ($log['Module'] ?? '') . ' — ' . $desc,
-                    'time'        => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
+                    'title' => $log['Action'] ?? 'Aktivitas',
+                    'description' => ($log['Module'] ?? '').' — '.$desc,
+                    'time' => isset($log['Created_At']) ? Carbon::parse($log['Created_At'])->diffForHumans() : 'Baru saja',
                 ];
             })->values()->toArray();
         } catch (\Exception $e) {

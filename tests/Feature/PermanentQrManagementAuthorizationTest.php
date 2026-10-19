@@ -8,6 +8,7 @@ use App\Services\Core\PermanentQrService;
 use App\Services\Core\RoleService;
 use App\Services\Core\SystemSettingService;
 use App\Services\HR\QRAttendanceService;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\GenericUser;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -97,6 +98,44 @@ class PermanentQrManagementAuthorizationTest extends TestCase
         ];
     }
 
+    public function test_management_page_renders_mysql_datetime_six_lifecycle_instead_of_invalid_configuration(): void
+    {
+        [$qrService, $settings] = $this->bindControllerDependencies('ROLE-MASTER', 'MASTER');
+        $qr = [
+            'QR_ID' => 'QR00001',
+            'QR_TYPE' => 'STUDENT',
+            'IDENTIFIER' => 'WMS-ATT-STU-UNCHANGED',
+            'LABEL' => 'Presensi Utama',
+            'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM' => '2026-10-01 06:15:00.000000',
+            'ACTIVE_UNTIL' => '2027-10-01 20:45:00.654321',
+            'CREATED_AT' => '2026-10-01 06:00:00.000000',
+        ];
+
+        $qrService->shouldReceive('getAllQrCodes')->once()->andReturn([$qr]);
+        $qrService->shouldReceive('getLifecycleConfiguration')->once()->with($qr)->andReturn([
+            'valid' => true,
+            'from' => CarbonImmutable::parse('2026-10-01 06:15:00.000000', 'Asia/Jakarta'),
+            'until' => CarbonImmutable::parse('2027-10-01 20:45:00.654321', 'Asia/Jakarta'),
+            'message' => 'Masa berlaku QR Presensi valid.',
+        ]);
+        $qrService->shouldReceive('getAvailabilityStatus')->once()->with($qr)->andReturn([
+            'usable' => true,
+            'state' => 'ACTIVE',
+            'message' => 'QR Presensi aktif.',
+        ]);
+        $settings->shouldReceive('get')->twice()->andReturn('06:30', '09:00');
+        $this->actingAs($this->user('USR-MASTER', 'ROLE-MASTER'));
+
+        $this->get('/attendance/qr')
+            ->assertOk()
+            ->assertDontSee('Konfigurasi tidak valid')
+            ->assertSee('value="2026-10-01"', false)
+            ->assertSee('value="06:15"', false)
+            ->assertSee('value="2027-10-01"', false)
+            ->assertSee('value="20:45"', false);
+    }
+
     public function test_invalid_student_attendance_window_is_rejected_without_any_setting_write(): void
     {
         [, $settings] = $this->bindControllerDependencies('ROLE-MASTER', 'MASTER');
@@ -116,6 +155,36 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             ->assertSessionHasErrors('attendance_settings');
     }
 
+    public function test_reversed_qr_lifecycle_is_rejected_with_clear_error_before_write(): void
+    {
+        [$qrService] = $this->bindControllerDependencies('ROLE-MASTER', 'MASTER');
+        $qrService->shouldReceive('getLifecycleConfiguration')->once()->with([
+            'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM' => '2026-10-02 09:00:00',
+            'ACTIVE_UNTIL' => '2026-10-02 08:00:00',
+        ])->andReturn([
+            'valid' => false,
+            'from' => null,
+            'until' => null,
+            'message' => 'Waktu berakhir QR harus setelah waktu mulai berlaku.',
+        ]);
+        $qrService->shouldNotReceive('getQrById');
+        $qrService->shouldNotReceive('updateAvailability');
+        $this->actingAs($this->user('USR-MASTER', 'ROLE-MASTER'));
+
+        $this->from('/attendance/qr')->patch('/attendance/qr/QR00001', [
+            'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM_DATE' => '2026-10-02',
+            'ACTIVE_FROM_TIME' => '09:00',
+            'ACTIVE_UNTIL_DATE' => '2026-10-02',
+            'ACTIVE_UNTIL_TIME' => '08:00',
+        ])
+            ->assertRedirect('/attendance/qr')
+            ->assertSessionHasErrors([
+                'ACTIVE_UNTIL_DATE' => 'Waktu berakhir QR harus setelah waktu mulai berlaku.',
+            ]);
+    }
+
     private function bindControllerDependencies(string $roleId, string $roleName): array
     {
         $roleService = Mockery::mock(RoleService::class);
@@ -127,6 +196,12 @@ class PermanentQrManagementAuthorizationTest extends TestCase
         $this->app->instance(RoleService::class, $roleService);
 
         $qrService = Mockery::mock(PermanentQrService::class);
+        $qrService->shouldReceive('getLifecycleConfiguration')->byDefault()->andReturn([
+            'valid' => true,
+            'from' => null,
+            'until' => null,
+            'message' => 'Masa berlaku QR Presensi valid.',
+        ]);
         $settingService = Mockery::mock(SystemSettingService::class);
         $this->app->instance(PermanentQrService::class, $qrService);
         $this->app->instance(SystemSettingService::class, $settingService);

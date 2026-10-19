@@ -5,9 +5,11 @@ namespace Tests\Unit;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
+use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
 use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
+use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Services\Attendance\AttendanceRequestService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
@@ -72,6 +74,86 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
             $this->assertSame([], $requestRepo->rows);
             $this->assertSame([], $attendanceRepo->rows);
         }
+    }
+
+    public function test_new_request_notifies_only_authorized_teacher_and_active_master_accounts(): void
+    {
+        $requestRepo = new H838AttendanceRequestMemoryRepository;
+        $attendanceRepo = new H838AttendanceMemoryRepository;
+        $activityLog = Mockery::mock(ActivityLogService::class);
+        $activityLog->shouldReceive('log')->zeroOrMoreTimes()->andReturn(true);
+        $notifications = Mockery::mock(NotificationService::class);
+        $notifications->shouldNotReceive('NotifyRole');
+        $notifications->shouldReceive('NotifyUser')->once()->withArgs(
+            fn ($userId, $title, $message, $type, $priority, $url) => $userId === 'USR-TCH-A'
+                && str_contains($title, 'PENGAJUAN IZIN')
+                && $url === '/teacher/workspace/attendance-requests/REQ-0000001'
+        )->andReturn(true);
+        $notifications->shouldReceive('NotifyUser')->once()->withArgs(
+            fn ($userId, $title, $message, $type, $priority, $url) => $userId === 'USR-MASTER'
+                && str_contains($title, 'PENGAJUAN IZIN')
+                && $url === '/academic/attendance/requests/REQ-0000001'
+        )->andReturn(true);
+
+        $users = Mockery::mock(UserRepositoryInterface::class);
+        $users->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['User_ID' => 'USR-MASTER', 'Role_ID' => 'ROLE-MASTER', 'Is_Active' => 'TRUE'],
+            ['User_ID' => 'USR-INACTIVE-MASTER', 'Role_ID' => 'ROLE-MASTER', 'Is_Active' => 'FALSE'],
+        ]));
+        $roles = Mockery::mock(RoleRepositoryInterface::class);
+        $roles->shouldReceive('fetchAll')->once()->andReturn(collect([
+            ['Role_ID' => 'ROLE-MASTER', 'Role_Name' => 'MASTER', 'Is_Active' => 'TRUE'],
+        ]));
+
+        $service = new AttendanceRequestService(
+            $requestRepo,
+            $attendanceRepo,
+            $activityLog,
+            new H838StudentMemoryRepository($this->students()),
+            new H838ScheduleMemoryRepository($this->schedules()),
+            $notifications,
+            new H838TeacherMemoryRepository($this->teachers()),
+            new H838ClassMemoryRepository($this->classes()),
+            null,
+            $users,
+            $roles
+        );
+
+        $this->assertTrue($service->createRequest([
+            'Attendance_ID' => 'ATT-STU-A-20260904-CLASS-CLS-A-CLASS_QR',
+            'Student_ID' => 'STU-A',
+            'Class_ID' => 'CLS-A',
+            'Schedule_ID' => '',
+            'Attendance_Type' => 'CLASS_QR',
+            'Attendance_Date' => '2026-09-04',
+            'Request_Type' => 'IZIN',
+            'Reason' => 'Keperluan keluarga',
+            'Evidence_URL' => 'attendance/evidence.jpg',
+        ], $this->studentUser('USR-STU-A')));
+
+        $this->assertSame('PENDING', $requestRepo->rows['REQ-0000001']['Status']);
+    }
+
+    public function test_notification_failure_does_not_hide_or_reject_persisted_new_request(): void
+    {
+        $notifications = Mockery::mock(NotificationService::class);
+        $notifications->shouldReceive('NotifyUser')->andThrow(new \RuntimeException('notification unavailable'));
+
+        [$service, $requestRepo] = $this->newService([], [], $notifications);
+
+        $this->assertTrue($service->createRequest([
+            'Attendance_ID' => 'ATT-STU-A-20260904-CLASS-CLS-A-CLASS_QR',
+            'Student_ID' => 'STU-A',
+            'Class_ID' => 'CLS-A',
+            'Schedule_ID' => '',
+            'Attendance_Type' => 'CLASS_QR',
+            'Attendance_Date' => '2026-09-04',
+            'Request_Type' => 'SAKIT',
+            'Reason' => 'Sakit',
+            'Evidence_URL' => 'attendance/evidence.jpg',
+        ], $this->studentUser('USR-STU-A')));
+
+        $this->assertSame('PENDING', $requestRepo->rows['REQ-0000001']['Status']);
     }
 
     public function test_teacher_only_sees_requests_inside_teaching_scope(): void
@@ -325,8 +407,8 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
     private function classes(): array
     {
         return [
-            ['Class_ID' => 'CLS-A', 'Class_Name' => 'Kelas Sakura'],
-            ['Class_ID' => 'CLS-B', 'Class_Name' => 'Kelas Fuji'],
+            ['Class_ID' => 'CLS-A', 'Class_Name' => 'Kelas Sakura', 'Homeroom_Teacher_ID' => 'TCH-A'],
+            ['Class_ID' => 'CLS-B', 'Class_Name' => 'Kelas Fuji', 'Homeroom_Teacher_ID' => 'TCH-B'],
         ];
     }
 }
