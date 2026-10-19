@@ -19,6 +19,7 @@ use Carbon\CarbonImmutable;
 use Exception;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\ViewErrorBag;
 use InvalidArgumentException;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -108,6 +109,88 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         ], array_keys($repository->lastUpdate));
         $this->assertArrayNotHasKey('IDENTIFIER', $repository->lastUpdate);
         $this->assertArrayNotHasKey('QR_TYPE', $repository->lastUpdate);
+    }
+
+    public function test_qr_lifecycle_edit_persists_per_record_after_reload_without_changing_global_window(): void
+    {
+        Carbon::setTestNow(CarbonImmutable::parse('2026-10-19 12:00:00', PermanentQrService::TIMEZONE));
+
+        $repository = new H875MultiPermanentQrRepositoryFake;
+        $activity = Mockery::mock(ActivityLogService::class);
+        $activity->shouldReceive('log')->times(3);
+        $service = new PermanentQrService($repository, $activity);
+        $this->actingAs(new GenericUser(['id' => 'USR-MASTER', 'User_ID' => 'USR-MASTER']));
+
+        $settingsRepository = new H875SystemSettingRepositoryFake;
+        $settings = new SystemSettingService($settingsRepository, new H875SystemParameterRepositoryFake);
+        $globalBefore = [
+            'start' => $settings->get(AttendanceWindowService::START_SETTING_KEY),
+            'end' => $settings->get(AttendanceWindowService::END_SETTING_KEY),
+        ];
+
+        $qrA = $service->createQr([
+            'QR_TYPE' => 'STUDENT',
+            'LABEL' => 'QR A',
+            'ACTIVE_FROM' => '2026-10-19 07:20:00',
+            'ACTIVE_UNTIL' => '2027-09-02 08:30:00',
+        ]);
+        $qrB = $service->createQr([
+            'QR_TYPE' => 'STUDENT',
+            'LABEL' => 'QR B',
+            'ACTIVE_FROM' => '2026-10-19 07:30:00',
+            'ACTIVE_UNTIL' => '2027-09-01 09:00:00',
+        ]);
+
+        $identifierA = $qrA['IDENTIFIER'];
+        $identifierB = $qrB['IDENTIFIER'];
+        $service->updateAvailability($qrA['QR_ID'], [
+            'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM' => '2026-10-19 06:17:00',
+            'ACTIVE_UNTIL' => '2027-09-02 20:43:00',
+        ]);
+
+        // Recreate the service to prove the values come back from persistent
+        // repository state instead of an in-memory return value.
+        $reloadedService = new PermanentQrService($repository, $activity);
+        $reloadedA = $reloadedService->getQrById($qrA['QR_ID']);
+        $reloadedB = $reloadedService->getQrById($qrB['QR_ID']);
+        $lifecycleA = $reloadedService->getLifecycleConfiguration($reloadedA);
+        $lifecycleB = $reloadedService->getLifecycleConfiguration($reloadedB);
+
+        $this->assertTrue($lifecycleA['valid']);
+        $this->assertSame('2026-10-19 06:17', $lifecycleA['from']->format('Y-m-d H:i'));
+        $this->assertSame('2027-09-02 20:43', $lifecycleA['until']->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-19 07:30', $lifecycleB['from']->format('Y-m-d H:i'));
+        $this->assertSame('2027-09-01 09:00', $lifecycleB['until']->format('Y-m-d H:i'));
+        $this->assertSame($identifierA, $reloadedA['IDENTIFIER']);
+        $this->assertSame($identifierB, $reloadedB['IDENTIFIER']);
+        $this->assertSame($globalBefore, [
+            'start' => $settings->get(AttendanceWindowService::START_SETTING_KEY),
+            'end' => $settings->get(AttendanceWindowService::END_SETTING_KEY),
+        ]);
+        $this->assertSame([], $settingsRepository->updatedKeys);
+
+        $qrCodes = collect([$reloadedA, $reloadedB])->map(function (array $qr) use ($reloadedService): array {
+            $qr['LIFECYCLE'] = $reloadedService->getLifecycleConfiguration($qr);
+            $qr['AVAILABILITY'] = $reloadedService->getAvailabilityStatus($qr);
+
+            return $qr;
+        });
+        $html = view('attendance.qr.index', [
+            'qrCodes' => $qrCodes,
+            'studentWindow' => [
+                ...$globalBefore,
+                'timezone' => AttendanceWindowService::TIMEZONE,
+            ],
+            'errors' => new ViewErrorBag,
+        ])->render();
+
+        $formPattern = '/<form action="'.preg_quote(route('attendance.qr.update', $qrA['QR_ID']), '/').'".*?<\/form>/s';
+        $this->assertSame(1, preg_match($formPattern, $html, $matches));
+        $this->assertStringContainsString('name="ACTIVE_FROM_TIME" value="06:17"', $matches[0]);
+        $this->assertStringContainsString('name="ACTIVE_UNTIL_TIME" value="20:43"', $matches[0]);
+        $this->assertStringNotContainsString('name="ACTIVE_FROM_TIME" value="'.$globalBefore['start'].'"', $matches[0]);
+        $this->assertStringContainsString($globalBefore['start'].'–'.$globalBefore['end'].' WIB', $html);
     }
 
     public function test_student_attendance_settings_refresh_immediately_without_late_semantics(): void
@@ -381,6 +464,86 @@ class H875PermanentQrRepositoryFake implements PermanentQrRepositoryInterface
     }
 
     public function clearCache() {}
+}
+
+class H875MultiPermanentQrRepositoryFake implements PermanentQrRepositoryInterface
+{
+    /** @var array<string, array<string, mixed>> */
+    private array $rows = [];
+
+    private int $nextId = 1;
+
+    public function fetchAll()
+    {
+        return collect(array_values($this->rows));
+    }
+
+    public function fetchActive()
+    {
+        return $this->fetchAll()->where('STATUS', 'ACTIVE')->values();
+    }
+
+    public function findByIdentifier(string $identifier)
+    {
+        return $this->fetchAll()->firstWhere('IDENTIFIER', $identifier);
+    }
+
+    public function findById(string $id)
+    {
+        return $this->rows[$id] ?? null;
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.str_pad((string) $this->nextId++, $padding, '0', STR_PAD_LEFT);
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[$data['QR_ID']] = $this->withMysqlDateTimePrecision($data);
+
+        return true;
+    }
+
+    public function update(string $id, array $data)
+    {
+        if (! isset($this->rows[$id])) {
+            return false;
+        }
+
+        $this->rows[$id] = array_merge($this->rows[$id], $this->withMysqlDateTimePrecision($data));
+
+        return true;
+    }
+
+    public function deactivate(string $id, string $actorUserId)
+    {
+        return $this->update($id, ['STATUS' => 'INACTIVE', 'UPDATED_BY' => $actorUserId]);
+    }
+
+    public function delete(string $id)
+    {
+        if (! isset($this->rows[$id])) {
+            return false;
+        }
+
+        unset($this->rows[$id]);
+
+        return true;
+    }
+
+    public function clearCache() {}
+
+    private function withMysqlDateTimePrecision(array $data): array
+    {
+        foreach (['ACTIVE_FROM', 'ACTIVE_UNTIL'] as $field) {
+            if (isset($data[$field]) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $data[$field])) {
+                $data[$field] .= '.000000';
+            }
+        }
+
+        return $data;
+    }
 }
 
 class H875SystemSettingRepositoryFake implements SystemSettingRepositoryInterface

@@ -8,6 +8,7 @@ use App\Services\Core\PermanentQrService;
 use App\Services\Core\RoleService;
 use App\Services\Core\SystemSettingService;
 use App\Services\HR\QRAttendanceService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\GenericUser;
 use Mockery;
@@ -134,6 +135,65 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             ->assertSee('value="06:15"', false)
             ->assertSee('value="2027-10-01"', false)
             ->assertSee('value="20:45"', false);
+    }
+
+    public function test_preview_print_and_pdf_keep_the_qr_identifier_and_its_own_lifecycle(): void
+    {
+        [$qrService] = $this->bindControllerDependencies('ROLE-MASTER', 'MASTER');
+        $qr = [
+            'QR_ID' => 'QR00001',
+            'QR_TYPE' => 'STUDENT',
+            'IDENTIFIER' => 'WMS-ATT-STU-UNCHANGED',
+            'LABEL' => 'Presensi Utama',
+            'STATUS' => 'ACTIVE',
+            'ACTIVE_FROM' => '2026-10-19 06:17:00.000000',
+            'ACTIVE_UNTIL' => '2027-09-02 20:43:00.000000',
+        ];
+        $lifecycle = [
+            'valid' => true,
+            'from' => CarbonImmutable::parse($qr['ACTIVE_FROM'], 'Asia/Jakarta'),
+            'until' => CarbonImmutable::parse($qr['ACTIVE_UNTIL'], 'Asia/Jakarta'),
+            'message' => 'Masa berlaku QR Presensi valid.',
+        ];
+        $availability = [
+            'usable' => true,
+            'state' => 'ACTIVE',
+            'message' => 'QR Presensi aktif.',
+        ];
+
+        $qrService->shouldReceive('getQrById')->times(3)->with('QR00001')->andReturn($qr);
+        $qrService->shouldReceive('getLifecycleConfiguration')->twice()->with($qr)->andReturn($lifecycle);
+        $qrService->shouldReceive('getAvailabilityStatus')->twice()->with($qr)->andReturn($availability);
+        $qrService->shouldReceive('getCanonicalQrUrl')->once()->with($qr)
+            ->andReturn('https://wms.test/attendance/scan/student/WMS-ATT-STU-UNCHANGED');
+
+        $activity = Mockery::mock(ActivityLogService::class);
+        $activity->shouldReceive('log')->twice();
+        $this->app->instance(ActivityLogService::class, $activity);
+
+        $pdf = Mockery::mock(\Barryvdh\DomPDF\PDF::class);
+        Pdf::shouldReceive('loadView')->once()->with('attendance.qr.print', Mockery::on(
+            fn (array $data): bool => ($data['qr']['IDENTIFIER'] ?? '') === 'WMS-ATT-STU-UNCHANGED'
+                && ($data['lifecycle']['from'] ?? null)?->format('H:i') === '06:17'
+                && ($data['lifecycle']['until'] ?? null)?->format('H:i') === '20:43'
+        ))->andReturn($pdf);
+        $pdf->shouldReceive('setPaper')->once()->with('a4', 'portrait')->andReturnSelf();
+        $pdf->shouldReceive('download')->once()->with('QR_Presensi_WMS-ATT-STU-UNCHANGED.pdf')
+            ->andReturn(response('pdf-body', 200, ['Content-Type' => 'application/pdf']));
+
+        $this->actingAs($this->user('USR-MASTER', 'ROLE-MASTER'));
+
+        $this->get('/attendance/qr/QR00001/preview')
+            ->assertOk()
+            ->assertSee(route('attendance.qr.print', 'QR00001'), false);
+        $this->get('/attendance/qr/QR00001/print')
+            ->assertOk()
+            ->assertSee('WMS-ATT-STU-UNCHANGED')
+            ->assertSee('19-10-2026 06:17')
+            ->assertSee('02-09-2027 20:43');
+        $this->get('/attendance/qr/QR00001/pdf')
+            ->assertOk()
+            ->assertSee('pdf-body');
     }
 
     public function test_invalid_student_attendance_window_is_rejected_without_any_setting_write(): void
