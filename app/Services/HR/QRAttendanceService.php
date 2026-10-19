@@ -169,6 +169,18 @@ class QRAttendanceService
             // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
             // It must not require HR to open a short-lived dynamic QR session.
             $session = $this->getPermanentEmployeeSessionContext();
+            $attendanceConfiguration = $permanentQrService->getAttendanceWindowConfiguration($qr);
+            if (! $attendanceConfiguration['valid']) {
+                throw new Exception('Konfigurasi jam absensi QR tidak valid: '.$attendanceConfiguration['message']);
+            }
+            $session['Start_Time'] = $attendanceConfiguration['start'];
+            $session['End_Time'] = $attendanceConfiguration['end'];
+            if (! $this->isSessionOpen($session)) {
+                throw new Exception(
+                    'Waktu presensi QR pegawai ditutup. Jam berlaku: '
+                    .$session['Start_Time'].'–'.$session['End_Time'].' WIB.'
+                );
+            }
             $sessionId = $session['Session_ID'];
             $nonce = 'PERM-'.Str::random(10);
 

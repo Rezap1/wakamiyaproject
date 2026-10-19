@@ -173,7 +173,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
         $attendance->shouldNotReceive('create');
         $attendance->shouldNotReceive('update');
 
-        $service = $this->service($attendance, null, 0);
+        $service = $this->service($attendance);
 
         try {
             $service->processStudentScan($this->permanentQrUrl(), -6.81234, 107.19451, 'Integrity Test');
@@ -198,7 +198,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
         $attendance->shouldReceive('create')->once()->andReturn(true);
         $event = Mockery::mock(EnterpriseEventService::class);
         $event->shouldReceive('dispatch')->once();
-        $service = $this->service($attendance, $event);
+        $service = $this->service($attendance, $event, 2);
 
         Carbon::setTestNow('2026-09-29 05:59:59');
         try {
@@ -347,7 +347,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
         $attendance->shouldNotReceive('create');
 
         $this->expectException(InvalidArgumentException::class);
-        $this->service($attendance, null, 0, $overrides)
+        $this->service($attendance, null, 1, $overrides)
             ->processStudentScan($this->permanentQrUrl(), -6.81234, 107.19451);
     }
 
@@ -388,6 +388,13 @@ class CriticalAttendanceIntegrityTest extends TestCase
                 'usable' => true,
                 'state' => 'ACTIVE',
                 'message' => 'QR aktif.',
+            ]);
+            $qr->shouldReceive('getAttendanceWindowConfiguration')->times($permanentQrCalls)->andReturn([
+                'valid' => true,
+                'start' => $settingOverrides['STUDENT_ATTENDANCE_START_TIME'] ?? '06:00',
+                'end' => $settingOverrides['STUDENT_ATTENDANCE_END_TIME'] ?? '08:30',
+                'inherited' => false,
+                'message' => 'Jam absensi tersimpan khusus untuk QR ini.',
             ]);
             $this->app->instance(PermanentQrService::class, $qr);
         }

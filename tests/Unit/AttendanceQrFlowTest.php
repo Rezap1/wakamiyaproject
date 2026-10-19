@@ -901,6 +901,104 @@ class AttendanceQrFlowTest extends TestCase
         );
     }
 
+    public function test_permanent_student_scan_uses_the_scanned_qr_window_instead_of_global_window(): void
+    {
+        Cache::flush();
+        $identifier = 'WMS-ATT-STU-EVENING1';
+        $this->bindPermanentQrService($identifier, 'STUDENT', 1, [
+            'ATTENDANCE_START_TIME' => '18:00',
+            'ATTENDANCE_END_TIME' => '21:00',
+        ]);
+
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldNotReceive('fetchAll');
+        $attendance->shouldNotReceive('create');
+        $event = Mockery::mock(EnterpriseEventService::class);
+        $event->shouldNotReceive('dispatch');
+        $service = new StudentQRAttendanceService(
+            $attendance,
+            $this->studentRepositoryForQr(),
+            $this->studentQrSettings(),
+            $event
+        );
+
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('dimulai pukul 18:00');
+        $service->processStudentScan(
+            $this->permanentQrUrl('student', $identifier),
+            -6.81234,
+            107.19451,
+            'Student Device'
+        );
+    }
+
+    public function test_permanent_employee_scan_uses_the_scanned_qr_window_instead_of_hr_global_window(): void
+    {
+        Cache::flush();
+        $this->disableEmployeeGeofence();
+        $identifier = 'WMS-ATT-EMP-DAYONLY1';
+        $this->bindPermanentQrService($identifier, 'EMPLOYEE', 1, [
+            'ATTENDANCE_START_TIME' => '07:00',
+            'ATTENDANCE_END_TIME' => '17:00',
+        ]);
+
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldNotReceive('fetchAll');
+        $attendance->shouldNotReceive('create');
+        $employees = Mockery::mock(EmployeeRepositoryInterface::class);
+        $employees->shouldNotReceive('fetchAll');
+        $event = Mockery::mock(EnterpriseEventService::class);
+        $event->shouldNotReceive('dispatch');
+        $service = new QRAttendanceService($attendance, $employees, $event);
+
+        Carbon::setTestNow('2026-08-23 20:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-EMP-A', 'User_ID' => 'USR-EMP-A', 'Role' => 'HR']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('07:00–17:00 WIB');
+        $service->processScan(
+            $this->permanentQrUrl('employee', $identifier),
+            'Employee Device',
+            -6.81234,
+            107.19451
+        );
+    }
+
+    public function test_employee_qr_rejects_unmapped_login_without_attendance_write(): void
+    {
+        Cache::flush();
+        $this->disableEmployeeGeofence();
+        $identifier = 'WMS-ATT-EMP-UNMAPPED1';
+        $this->bindPermanentQrService($identifier, 'EMPLOYEE', 1, [
+            'ATTENDANCE_START_TIME' => '07:00',
+            'ATTENDANCE_END_TIME' => '17:00',
+        ]);
+
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldNotReceive('fetchAll');
+        $attendance->shouldNotReceive('create');
+        $employees = Mockery::mock(EmployeeRepositoryInterface::class);
+        $employees->shouldReceive('fetchAll')->once()->andReturn([]);
+        $event = Mockery::mock(EnterpriseEventService::class);
+        $event->shouldNotReceive('dispatch');
+        $service = new QRAttendanceService($attendance, $employees, $event);
+
+        Carbon::setTestNow('2026-08-23 08:10:00');
+        $this->actingAs(new GenericUser(['id' => 'USR-UNMAPPED', 'User_ID' => 'USR-UNMAPPED', 'Role' => 'HR']));
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Profil pegawai Anda tidak ditemukan');
+        $service->processScan(
+            $this->permanentQrUrl('employee', $identifier),
+            'Employee Device',
+            -6.81234,
+            107.19451
+        );
+    }
+
     private function putOpenEmployeeSession(): void
     {
         Cache::forever('qr_session_QRS-TEST', [
@@ -1019,6 +1117,17 @@ class AttendanceQrFlowTest extends TestCase
         $qrService->shouldReceive('getAvailabilityStatus')
             ->times($times)
             ->andReturn(['usable' => true, 'state' => 'ACTIVE', 'message' => 'QR Presensi aktif.']);
+        $qrService->shouldReceive('getAttendanceWindowConfiguration')
+            ->times($times)
+            ->andReturnUsing(function (array $qr): array {
+                return [
+                    'valid' => true,
+                    'start' => $qr['ATTENDANCE_START_TIME'] ?? '06:00',
+                    'end' => $qr['ATTENDANCE_END_TIME'] ?? '23:00',
+                    'inherited' => false,
+                    'message' => 'Jam absensi tersimpan khusus untuk QR ini.',
+                ];
+            });
 
         $this->app->instance(PermanentQrService::class, $qrService);
     }

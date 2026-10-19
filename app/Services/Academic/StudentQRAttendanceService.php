@@ -177,14 +177,6 @@ class StudentQRAttendanceService
             );
         }
 
-        try {
-            $window = $this->attendanceWindow->resolve();
-            $this->attendanceWindow->assertOpen($window);
-        } catch (AttendanceWindowException $e) {
-            $this->logRejectedAttempt($e->reasonCode, $user, $student, 'TIME_WINDOW');
-            throw $e;
-        }
-
         if (! is_finite($userLat) || ! is_finite($userLon)
             || $userLat < -90 || $userLat > 90 || $userLon < -180 || $userLon > 180) {
             throw new StudentAttendanceRejectedException(
@@ -229,14 +221,40 @@ class StudentQRAttendanceService
                 );
             }
 
+            $attendanceConfiguration = $permanentQrService->getAttendanceWindowConfiguration($qr);
+            if (! $attendanceConfiguration['valid']) {
+                throw new AttendanceWindowException(
+                    'QR_TIME_CONFIGURATION_INVALID',
+                    'Presensi ditolak: '.$attendanceConfiguration['message']
+                );
+            }
+            try {
+                $window = $this->attendanceWindow->resolveForTimes(
+                    $attendanceConfiguration['start'],
+                    $attendanceConfiguration['end']
+                );
+                $this->attendanceWindow->assertOpen($window);
+            } catch (AttendanceWindowException $e) {
+                $this->logRejectedAttempt($e->reasonCode, $user, $student, 'QR_TIME_WINDOW');
+                throw $e;
+            }
+
             // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
             // Do not make it depend on the short-lived dynamic classroom session.
             $qrType = 'STUDENT';
-            $session = $this->permanentStudentSessionContext();
+            $session = $this->permanentStudentSessionContext($window);
             $sessionId = $session['Session_ID'];
             $nonce = 'PERM-'.Str::random(10);
 
         } else {
+            try {
+                $window = $this->attendanceWindow->resolve();
+                $this->attendanceWindow->assertOpen($window);
+            } catch (AttendanceWindowException $e) {
+                $this->logRejectedAttempt($e->reasonCode, $user, $student, 'TIME_WINDOW');
+                throw $e;
+            }
+
             // Support for Dynamic QR Code (Base64 JSON)
             $decodedJson = base64_decode($tokenString, true);
             if (! $decodedJson) {
@@ -563,9 +581,8 @@ class StudentQRAttendanceService
         return strtoupper($matches[0]);
     }
 
-    private function permanentStudentSessionContext(): array
+    private function permanentStudentSessionContext(array $window): array
     {
-        $window = $this->attendanceWindow->resolve();
         $today = $window['now']->toDateString();
 
         return [

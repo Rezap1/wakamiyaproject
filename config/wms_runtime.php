@@ -32,5 +32,9 @@ return [
             'Class_ID',
             'Attendance_Type',
         ],
+        'MASTER_PERMANENT_QR' => [
+            'ATTENDANCE_START_TIME',
+            'ATTENDANCE_END_TIME',
+        ],
     ],
 ];

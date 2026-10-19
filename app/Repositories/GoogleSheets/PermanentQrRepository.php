@@ -105,6 +105,8 @@ class PermanentQrRepository extends BaseSheetRepository implements PermanentQrRe
             'STATUS',
             'ACTIVE_FROM',
             'ACTIVE_UNTIL',
+            'ATTENDANCE_START_TIME',
+            'ATTENDANCE_END_TIME',
             'CREATED_AT',
             'CREATED_BY',
             'UPDATED_AT',

@@ -219,6 +219,7 @@
                     <x-sidebar.nav-link href="{{ route('finance.settings.index') }}" active="{{ request()->routeIs('finance.settings.*') }}" icon="cog">Pengaturan Keuangan</x-sidebar.nav-link>
                 @elseif($userRole === 'DIRECTOR')
                     <x-sidebar.nav-link href="{{ route('dashboard.director') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('announcements.index') }}" active="{{ request()->routeIs('announcements.*') }}" icon="inbox">Pengumuman</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('director.reports') }}" active="{{ request()->routeIs('director.reports*') }}" icon="chart-bar">Pusat Laporan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.monitoring') }}" icon="clock">Kehadiran Pegawai</x-sidebar.nav-link>

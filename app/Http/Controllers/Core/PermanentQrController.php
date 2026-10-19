@@ -55,8 +55,10 @@ class PermanentQrController extends Controller
             ->map(function ($qr) {
                 $lifecycle = $this->qrService->getLifecycleConfiguration($qr);
                 $availability = $this->qrService->getAvailabilityStatus($qr);
+                $attendanceWindow = $this->qrService->getAttendanceWindowConfiguration($qr);
                 $qr['LIFECYCLE'] = $lifecycle;
                 $qr['AVAILABILITY'] = $availability;
+                $qr['ATTENDANCE_WINDOW'] = $attendanceWindow;
 
                 return $qr;
             })
@@ -130,6 +132,7 @@ class PermanentQrController extends Controller
         $this->assertCanManageQr($qr);
         $lifecycle = $this->qrService->getLifecycleConfiguration($qr);
         $availability = $this->qrService->getAvailabilityStatus($qr);
+        $attendanceWindow = $this->qrService->getAttendanceWindowConfiguration($qr);
 
         $this->activityLog->log(
             'ATTENDANCE_QR',
@@ -139,7 +142,7 @@ class PermanentQrController extends Controller
             ['QR_ID' => $id, 'IDENTIFIER' => $qr['IDENTIFIER']]
         );
 
-        return view('attendance.qr.print', compact('qr', 'lifecycle', 'availability'));
+        return view('attendance.qr.print', compact('qr', 'lifecycle', 'availability', 'attendanceWindow'));
     }
 
     public function downloadPdf($id)
@@ -156,6 +159,7 @@ class PermanentQrController extends Controller
         $this->assertCanManageQr($qr);
         $lifecycle = $this->qrService->getLifecycleConfiguration($qr);
         $availability = $this->qrService->getAvailabilityStatus($qr);
+        $attendanceWindow = $this->qrService->getAttendanceWindowConfiguration($qr);
 
         $this->activityLog->log(
             'ATTENDANCE_QR',
@@ -167,7 +171,7 @@ class PermanentQrController extends Controller
 
         if (class_exists(Pdf::class)) {
             $isPdf = true;
-            $pdf = Pdf::loadView('attendance.qr.print', compact('qr', 'isPdf', 'lifecycle', 'availability'))
+            $pdf = Pdf::loadView('attendance.qr.print', compact('qr', 'isPdf', 'lifecycle', 'availability', 'attendanceWindow'))
                 ->setPaper('a4', 'portrait');
 
             return $pdf->download("QR_Presensi_{$qr['IDENTIFIER']}.pdf");
@@ -175,7 +179,7 @@ class PermanentQrController extends Controller
 
         // Fallback to print view if PDF engine not found, though EPS demands using existing.
         // The existing engine is usually mpdf or dompdf.
-        return view('attendance.qr.print', compact('qr', 'lifecycle', 'availability'));
+        return view('attendance.qr.print', compact('qr', 'lifecycle', 'availability', 'attendanceWindow'));
     }
 
     public function deactivate($id)
@@ -206,6 +210,8 @@ class PermanentQrController extends Controller
             'ACTIVE_FROM_TIME' => 'required|date_format:H:i',
             'ACTIVE_UNTIL_DATE' => 'required|date_format:Y-m-d',
             'ACTIVE_UNTIL_TIME' => 'required|date_format:H:i',
+            'ATTENDANCE_START_TIME' => 'required|date_format:H:i',
+            'ATTENDANCE_END_TIME' => 'required|date_format:H:i|after:ATTENDANCE_START_TIME',
         ]);
 
         $data = $this->mapLifecycleInputs($data);
@@ -225,7 +231,7 @@ class PermanentQrController extends Controller
         try {
             $this->qrService->updateAvailability($id, $data);
 
-            return redirect()->route('attendance.qr.index')->with('success', 'Jadwal aktif QR Presensi berhasil diperbarui.');
+            return redirect()->route('attendance.qr.index')->with('success', 'Masa berlaku, status, dan jam absensi QR berhasil diperbarui.');
         } catch (\Exception $e) {
             return redirect()->route('attendance.qr.index')->with(
                 'error',

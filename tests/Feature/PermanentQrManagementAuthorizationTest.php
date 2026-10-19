@@ -62,6 +62,8 @@ class PermanentQrManagementAuthorizationTest extends TestCase
                 'STATUS' => 'ACTIVE',
                 'ACTIVE_FROM' => '2026-10-01 06:15:00',
                 'ACTIVE_UNTIL' => '2027-10-01 20:45:00',
+                'ATTENDANCE_START_TIME' => '06:30',
+                'ATTENDANCE_END_TIME' => '09:00',
             ]);
         $this->actingAs($this->user("USR-{$roleName}", $roleId));
 
@@ -125,6 +127,13 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             'state' => 'ACTIVE',
             'message' => 'QR Presensi aktif.',
         ]);
+        $qrService->shouldReceive('getAttendanceWindowConfiguration')->once()->with($qr)->andReturn([
+            'valid' => true,
+            'start' => '06:30',
+            'end' => '09:00',
+            'inherited' => false,
+            'message' => 'Jam absensi tersimpan khusus untuk QR ini.',
+        ]);
         $settings->shouldReceive('get')->twice()->andReturn('06:30', '09:00');
         $this->actingAs($this->user('USR-MASTER', 'ROLE-MASTER'));
 
@@ -164,6 +173,13 @@ class PermanentQrManagementAuthorizationTest extends TestCase
         $qrService->shouldReceive('getQrById')->times(3)->with('QR00001')->andReturn($qr);
         $qrService->shouldReceive('getLifecycleConfiguration')->twice()->with($qr)->andReturn($lifecycle);
         $qrService->shouldReceive('getAvailabilityStatus')->twice()->with($qr)->andReturn($availability);
+        $qrService->shouldReceive('getAttendanceWindowConfiguration')->twice()->with($qr)->andReturn([
+            'valid' => true,
+            'start' => '06:30',
+            'end' => '09:00',
+            'inherited' => false,
+            'message' => 'Jam absensi tersimpan khusus untuk QR ini.',
+        ]);
         $qrService->shouldReceive('getCanonicalQrUrl')->once()->with($qr)
             ->andReturn('https://wms.test/attendance/scan/student/WMS-ATT-STU-UNCHANGED');
 
@@ -176,6 +192,8 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             fn (array $data): bool => ($data['qr']['IDENTIFIER'] ?? '') === 'WMS-ATT-STU-UNCHANGED'
                 && ($data['lifecycle']['from'] ?? null)?->format('H:i') === '06:17'
                 && ($data['lifecycle']['until'] ?? null)?->format('H:i') === '20:43'
+                && ($data['attendanceWindow']['start'] ?? null) === '06:30'
+                && ($data['attendanceWindow']['end'] ?? null) === '09:00'
         ))->andReturn($pdf);
         $pdf->shouldReceive('setPaper')->once()->with('a4', 'portrait')->andReturnSelf();
         $pdf->shouldReceive('download')->once()->with('QR_Presensi_WMS-ATT-STU-UNCHANGED.pdf')
@@ -222,6 +240,8 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             'STATUS' => 'ACTIVE',
             'ACTIVE_FROM' => '2026-10-02 09:00:00',
             'ACTIVE_UNTIL' => '2026-10-02 08:00:00',
+            'ATTENDANCE_START_TIME' => '06:30',
+            'ATTENDANCE_END_TIME' => '09:00',
         ])->andReturn([
             'valid' => false,
             'from' => null,
@@ -238,6 +258,8 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             'ACTIVE_FROM_TIME' => '09:00',
             'ACTIVE_UNTIL_DATE' => '2026-10-02',
             'ACTIVE_UNTIL_TIME' => '08:00',
+            'ATTENDANCE_START_TIME' => '06:30',
+            'ATTENDANCE_END_TIME' => '09:00',
         ])
             ->assertRedirect('/attendance/qr')
             ->assertSessionHasErrors([
@@ -280,6 +302,8 @@ class PermanentQrManagementAuthorizationTest extends TestCase
             'ACTIVE_FROM_TIME' => '06:15',
             'ACTIVE_UNTIL_DATE' => '2027-10-01',
             'ACTIVE_UNTIL_TIME' => '20:45',
+            'ATTENDANCE_START_TIME' => '06:30',
+            'ATTENDANCE_END_TIME' => '09:00',
             'IDENTIFIER' => 'FORGED-ROTATION',
             'QR_TYPE' => 'EMPLOYEE',
         ];

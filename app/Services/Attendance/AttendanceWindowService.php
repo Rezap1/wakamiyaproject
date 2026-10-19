@@ -33,12 +33,27 @@ class AttendanceWindowService
      */
     public function resolve(?CarbonInterface $serverNow = null): array
     {
+        $startValue = $this->requiredTimeSetting(self::START_SETTING_KEY, self::DEFAULT_START);
+        $endValue = $this->requiredTimeSetting(self::END_SETTING_KEY, self::DEFAULT_END);
+
+        return $this->resolveForTimes($startValue, $endValue, $serverNow);
+    }
+
+    /**
+     * Resolve a window supplied by a specific QR while preserving the same
+     * parser, timezone, inclusivity, and validation used by global settings.
+     */
+    public function resolveForTimes(
+        string $startValue,
+        string $endValue,
+        ?CarbonInterface $serverNow = null
+    ): array {
         $now = $serverNow
             ? CarbonImmutable::instance($serverNow)->setTimezone(self::TIMEZONE)
             : $this->serverNow();
 
-        $startValue = $this->requiredTimeSetting(self::START_SETTING_KEY, self::DEFAULT_START);
-        $endValue = $this->requiredTimeSetting(self::END_SETTING_KEY, self::DEFAULT_END);
+        $startValue = $this->validateTime($startValue, 'jam mulai absensi QR');
+        $endValue = $this->validateTime($endValue, 'jam selesai absensi QR');
         $start = CarbonImmutable::createFromFormat(
             '!Y-m-d H:i:s',
             $now->toDateString().' '.$startValue.':00',
@@ -107,10 +122,15 @@ class AttendanceWindowService
     private function requiredTimeSetting(string $key, string $default): string
     {
         $value = trim((string) $this->settingService->get($key, $default));
+
+        return $this->validateTime($value, "konfigurasi {$key}");
+    }
+
+    private function validateTime(string $value, string $label): string
+    {
+        $value = trim($value);
         if (! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $value)) {
-            throw new InvalidArgumentException(
-                "Konfigurasi {$key} belum valid. Presensi ditolak."
-            );
+            throw new InvalidArgumentException(ucfirst($label).' belum valid. Presensi ditolak.');
         }
 
         return $value;

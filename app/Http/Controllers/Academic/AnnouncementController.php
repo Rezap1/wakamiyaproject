@@ -266,7 +266,7 @@ class AnnouncementController extends Controller
         if (in_array($role, ['ADMINISTRATOR', 'ACADEMIC', 'MASTER'], true)) {
             return $announcements;
         }
-        abort_unless($role === 'TEACHER', 403, 'Anda tidak memiliki hak akses untuk mengelola pengumuman.');
+        abort_unless(in_array($role, ['TEACHER', 'DIRECTOR'], true), 403, 'Anda tidak memiliki hak akses untuk mengelola pengumuman.');
 
         $actorId = ActorIdentity::required();
 
@@ -286,7 +286,7 @@ class AnnouncementController extends Controller
 
     protected function authorizeTeacherOwnership(array $announcement): void
     {
-        abort_unless($this->canManage($announcement), 403, 'Guru hanya dapat mengelola pengumuman yang dibuatnya sendiri.');
+        abort_unless($this->canManage($announcement), 403, 'Anda hanya dapat mengelola pengumuman yang dibuat sendiri.');
     }
 
     protected function canManage(array $announcement): bool
@@ -295,7 +295,7 @@ class AnnouncementController extends Controller
         if (in_array($role, ['ADMINISTRATOR', 'ACADEMIC', 'MASTER'], true)) {
             return true;
         }
-        if ($role !== 'TEACHER') {
+        if (! in_array($role, ['TEACHER', 'DIRECTOR'], true)) {
             return false;
         }
         $creator = trim((string) ($announcement['Created_By'] ?? ''));

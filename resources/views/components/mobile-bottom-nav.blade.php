@@ -66,7 +66,7 @@
             ['label' => 'Persetujuan', 'route' => 'approvals.index', 'icon' => 'clipboard-list', 'active' => request()->routeIs('approvals.*')],
             ['label' => 'Kehadiran', 'route' => 'hr.attendance.monitoring', 'icon' => 'clock', 'active' => request()->routeIs('hr.attendance.monitoring')],
             ['label' => 'Laporan', 'route' => 'director.reports', 'icon' => 'chart-bar', 'active' => request()->routeIs('director.reports*')],
-            ['label' => 'Profil', 'route' => 'profile.index', 'icon' => 'user', 'active' => request()->routeIs('profile.*')],
+            ['label' => 'Pengumuman', 'route' => 'announcements.index', 'icon' => 'inbox', 'active' => request()->routeIs('announcements.*')],
         ];
     } elseif ($role === 'MASTER') {
         $items = [

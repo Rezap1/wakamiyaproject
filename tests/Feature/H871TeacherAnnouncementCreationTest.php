@@ -202,7 +202,37 @@ class H871TeacherAnnouncementCreationTest extends TestCase
 
     public static function deniedCreatorRoles(): array
     {
-        return [['STUDENT'], ['FINANCE'], ['HR'], ['MARKETING'], ['DIRECTOR']];
+        return [['STUDENT'], ['FINANCE'], ['HR'], ['MARKETING']];
+    }
+
+    public function test_director_can_create_and_manage_only_own_announcements(): void
+    {
+        $this->announcements->rows = [
+            $this->row('ANC-OTHER', 'USR-TEACHER-A', 'Milik Guru'),
+            $this->row('ANC-DIRECTOR', 'USR-DIRECTOR', 'Milik Direktur'),
+        ];
+        $this->actingAsRole('DIRECTOR', 'USR-DIRECTOR');
+
+        $this->get(route('announcements.create'))->assertOk()->assertSee('Buat Pengumuman Baru');
+        $this->get(route('announcements.index'))
+            ->assertOk()
+            ->assertSee('Milik Direktur')
+            ->assertDontSee('Milik Guru');
+        $this->post(route('announcements.store'), $this->payload('Arahan Direktur') + [
+            'Created_By' => 'USR-MASTER',
+        ])->assertRedirect(route('announcements.index'));
+        $this->post(route('announcements.store'), $this->payload('Draf Direktur', 'ALL_STUDENTS', null, [
+            'Status' => 'DRAFT',
+        ]))->assertRedirect(route('announcements.index'));
+
+        $created = $this->announcements->rows[2];
+        $this->assertSame('USR-DIRECTOR', $created['Created_By']);
+        $this->assertSame('PUBLISHED', $created['Status']);
+        $this->assertSame('USR-DIRECTOR', $this->announcements->rows[3]['Created_By']);
+        $this->assertSame('DRAFT', $this->announcements->rows[3]['Status']);
+        $this->get(route('announcements.edit', 'ANC-OTHER'))->assertForbidden();
+        $this->delete(route('announcements.destroy', 'ANC-OTHER'))->assertForbidden();
+        $this->assertSame('TRUE', $this->announcements->rows[0]['Is_Active']);
     }
 
     public function test_administrator_retains_global_management_authority(): void
@@ -227,6 +257,17 @@ class H871TeacherAnnouncementCreationTest extends TestCase
         $this->assertStringContainsString(route('announcements.index'), $drawer);
         $this->assertStringContainsString('grid-cols-1 sm:grid-cols-2', $create);
         $this->assertStringContainsString('px-6 md:px-12', $create);
+    }
+
+    public function test_director_navigation_exposes_only_the_shared_announcement_manager_link(): void
+    {
+        $bottom = view('components.mobile-bottom-nav', ['userRole' => 'DIRECTOR'])->render();
+        $drawer = view('components.dashboard.sidebar', ['userRole' => 'DIRECTOR'])->render();
+
+        $this->assertStringContainsString(route('announcements.index'), $bottom);
+        $this->assertStringContainsString(route('announcements.index'), $drawer);
+        $this->assertStringNotContainsString(route('students.index'), $drawer);
+        $this->assertStringNotContainsString(route('classes.index'), $drawer);
     }
 
     public function test_student_dashboard_keeps_shared_three_announcement_limit_and_single_section(): void

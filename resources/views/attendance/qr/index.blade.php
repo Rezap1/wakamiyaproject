@@ -12,7 +12,7 @@
 <div class="mx-auto max-w-7xl min-w-0 space-y-6 overflow-x-clip px-0">
     <x-page-header
         title="Manajemen QR Presensi Permanen"
-        description="Kelola masa berlaku QR dan jam absensi harian sebagai dua aturan yang terpisah."
+        description="Kelola masa berlaku, status, dan jam absensi khusus pada setiap QR."
         :breadcrumbs="['Dasbor' => route('dashboard.administrator'), 'QR Presensi' => '#']"
     />
 
@@ -29,7 +29,7 @@
     <section class="rounded-2xl border border-sky-200 bg-white shadow-sm" aria-labelledby="student-attendance-settings-title">
         <div class="border-b border-sky-100 bg-sky-50/70 p-4 sm:p-6">
             <h2 id="student-attendance-settings-title" class="text-base font-black text-slate-900">Pengaturan Absensi Siswa</h2>
-            <p class="mt-1 text-xs leading-relaxed text-slate-600">Jam ini berlaku setiap hari untuk QR siswa dinamis maupun permanen. Masa berlaku QR diatur terpisah pada kartu QR.</p>
+            <p class="mt-1 text-xs leading-relaxed text-slate-600">Jam global tetap dipakai oleh QR dinamis, menjadi nilai awal saat QR siswa baru dibuat, dan menjadi fallback aman untuk QR lama yang belum memiliki jam tersimpan.</p>
         </div>
         <form action="{{ route('attendance.qr.student-settings.update') }}" method="POST" class="grid min-w-0 grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
             @csrf
@@ -101,6 +101,7 @@
                     $state = $availability['state'] ?? 'INVALID';
                     $from = $lifecycle['from'] ?? null;
                     $until = $lifecycle['until'] ?? null;
+                    $attendanceWindow = $qr['ATTENDANCE_WINDOW'] ?? ['valid' => false, 'start' => null, 'end' => null, 'inherited' => false, 'message' => 'Jam absensi tidak tersedia.'];
                     $stateClasses = match ($state) {
                         'ACTIVE' => 'bg-emerald-100 text-emerald-700',
                         'UPCOMING' => 'bg-sky-100 text-sky-700',
@@ -145,15 +146,20 @@
                                 <p class="mt-1 text-xs font-bold text-rose-600">{{ $lifecycle['message'] ?? 'Konfigurasi tidak valid.' }}</p>
                             @endif
                         </div>
-                        @if(($qr['QR_TYPE'] ?? '') === 'STUDENT')
-                            <div class="rounded-xl border border-sky-100 bg-sky-50 p-3">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-sky-600">Jam Absensi Siswa</p>
-                                <p class="mt-1 text-sm font-black text-sky-900">{{ $studentWindowStart }}–{{ $studentWindowEnd }} WIB</p>
-                            </div>
-                        @endif
+                        <div class="rounded-xl border border-sky-100 bg-sky-50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-sky-600">Jam Absensi QR Ini</p>
+                            @if($attendanceWindow['valid'] ?? false)
+                                <p class="mt-1 text-sm font-black text-sky-900">{{ $attendanceWindow['start'] }}–{{ $attendanceWindow['end'] }} WIB</p>
+                                @if($attendanceWindow['inherited'] ?? false)
+                                    <p class="mt-1 text-[10px] font-semibold text-amber-700">Fallback global untuk QR lama; simpan form di bawah untuk menetapkan nilai khusus.</p>
+                                @endif
+                            @else
+                                <p class="mt-1 text-xs font-bold text-rose-700">{{ $attendanceWindow['message'] ?? 'Konfigurasi jam tidak valid.' }}</p>
+                            @endif
+                        </div>
 
                         <details class="group rounded-xl border border-slate-200 bg-white">
-                            <summary class="cursor-pointer list-none rounded-xl px-3 py-3 text-xs font-black text-slate-700 hover:bg-slate-50">Edit masa berlaku dan status</summary>
+                            <summary class="cursor-pointer list-none rounded-xl px-3 py-3 text-xs font-black text-slate-700 hover:bg-slate-50">Edit masa berlaku, status, dan jam absensi</summary>
                             <form action="{{ route('attendance.qr.update', $qr['QR_ID']) }}" method="POST" class="grid min-w-0 grid-cols-1 gap-3 border-t border-slate-100 p-3 sm:grid-cols-2">
                                 @csrf
                                 @method('PATCH')
@@ -179,6 +185,14 @@
                                 <div class="min-w-0">
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">Jam Berakhir</label>
                                     <input type="time" name="ACTIVE_UNTIL_TIME" value="{{ $until?->format('H:i') }}" required class="w-full min-w-0 rounded-lg border-slate-300 text-xs">
+                                </div>
+                                <div class="min-w-0">
+                                    <label class="mb-1 block text-[11px] font-bold text-slate-600">Jam Mulai Absensi QR</label>
+                                    <input type="time" name="ATTENDANCE_START_TIME" value="{{ $attendanceWindow['start'] ?? '' }}" required class="w-full min-w-0 rounded-lg border-slate-300 text-xs">
+                                </div>
+                                <div class="min-w-0">
+                                    <label class="mb-1 block text-[11px] font-bold text-slate-600">Jam Selesai Absensi QR</label>
+                                    <input type="time" name="ATTENDANCE_END_TIME" value="{{ $attendanceWindow['end'] ?? '' }}" required class="w-full min-w-0 rounded-lg border-slate-300 text-xs">
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 sm:col-span-2">
                                     <button type="submit" class="min-h-[44px] rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Simpan</button>

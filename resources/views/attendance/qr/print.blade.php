@@ -226,6 +226,15 @@
             <div class="sub-instructions" style="margin-bottom: 20px; color: #b91c1c;">{{ $lifecycle['message'] ?? 'Konfigurasi masa berlaku tidak valid.' }}</div>
         @endif
 
+        @php $attendanceWindow = $attendanceWindow ?? $qrService->getAttendanceWindowConfiguration($qr); @endphp
+        @if($attendanceWindow['valid'] ?? false)
+            <div class="sub-instructions" style="margin-bottom: 20px; font-weight: bold; color: #0f172a;">
+                Jam absensi QR: {{ $attendanceWindow['start'] }}–{{ $attendanceWindow['end'] }} WIB
+            </div>
+        @else
+            <div class="sub-instructions" style="margin-bottom: 20px; color: #b91c1c;">{{ $attendanceWindow['message'] ?? 'Konfigurasi jam absensi QR tidak valid.' }}</div>
+        @endif
+
         <div class="instructions">Scan QR Code ini menggunakan akun WMS Anda.</div>
         <div class="sub-instructions">Pastikan GPS aktif & Anda berada di area LPK.</div>
 

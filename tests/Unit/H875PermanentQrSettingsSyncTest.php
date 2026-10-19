@@ -105,24 +105,25 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertSame('WMS-ATT-STU-UNCHANGED', $updated['IDENTIFIER']);
         $this->assertSame($beforeUrl, $service->getCanonicalQrUrl($updated));
         $this->assertSame([
-            'STATUS', 'ACTIVE_FROM', 'ACTIVE_UNTIL', 'UPDATED_AT', 'UPDATED_BY', 'DEACTIVATED_AT',
+            'STATUS', 'ACTIVE_FROM', 'ACTIVE_UNTIL', 'ATTENDANCE_START_TIME', 'ATTENDANCE_END_TIME',
+            'UPDATED_AT', 'UPDATED_BY', 'DEACTIVATED_AT',
         ], array_keys($repository->lastUpdate));
         $this->assertArrayNotHasKey('IDENTIFIER', $repository->lastUpdate);
         $this->assertArrayNotHasKey('QR_TYPE', $repository->lastUpdate);
     }
 
-    public function test_qr_lifecycle_edit_persists_per_record_after_reload_without_changing_global_window(): void
+    public function test_each_qr_attendance_window_persists_independently_without_changing_global_window(): void
     {
         Carbon::setTestNow(CarbonImmutable::parse('2026-10-19 12:00:00', PermanentQrService::TIMEZONE));
 
         $repository = new H875MultiPermanentQrRepositoryFake;
         $activity = Mockery::mock(ActivityLogService::class);
-        $activity->shouldReceive('log')->times(3);
-        $service = new PermanentQrService($repository, $activity);
+        $activity->shouldReceive('log')->times(4);
         $this->actingAs(new GenericUser(['id' => 'USR-MASTER', 'User_ID' => 'USR-MASTER']));
 
         $settingsRepository = new H875SystemSettingRepositoryFake;
         $settings = new SystemSettingService($settingsRepository, new H875SystemParameterRepositoryFake);
+        $service = new PermanentQrService($repository, $activity, $settings);
         $globalBefore = [
             'start' => $settings->get(AttendanceWindowService::START_SETTING_KEY),
             'end' => $settings->get(AttendanceWindowService::END_SETTING_KEY),
@@ -130,15 +131,27 @@ class H875PermanentQrSettingsSyncTest extends TestCase
 
         $qrA = $service->createQr([
             'QR_TYPE' => 'STUDENT',
-            'LABEL' => 'QR A',
+            'LABEL' => 'QR Siswa Reguler',
             'ACTIVE_FROM' => '2026-10-19 07:20:00',
             'ACTIVE_UNTIL' => '2027-09-02 08:30:00',
+            'ATTENDANCE_START_TIME' => '06:15',
+            'ATTENDANCE_END_TIME' => '09:15',
         ]);
         $qrB = $service->createQr([
             'QR_TYPE' => 'STUDENT',
-            'LABEL' => 'QR B',
+            'LABEL' => 'QR Siswa Kelas Karyawan',
             'ACTIVE_FROM' => '2026-10-19 07:30:00',
             'ACTIVE_UNTIL' => '2027-09-01 09:00:00',
+            'ATTENDANCE_START_TIME' => '17:30',
+            'ATTENDANCE_END_TIME' => '21:00',
+        ]);
+        $qrC = $service->createQr([
+            'QR_TYPE' => 'EMPLOYEE',
+            'LABEL' => 'QR Pegawai',
+            'ACTIVE_FROM' => '2026-10-19 07:00:00',
+            'ACTIVE_UNTIL' => '2027-09-01 17:00:00',
+            'ATTENDANCE_START_TIME' => '07:00',
+            'ATTENDANCE_END_TIME' => '17:00',
         ]);
 
         $identifierA = $qrA['IDENTIFIER'];
@@ -147,13 +160,16 @@ class H875PermanentQrSettingsSyncTest extends TestCase
             'STATUS' => 'ACTIVE',
             'ACTIVE_FROM' => '2026-10-19 06:17:00',
             'ACTIVE_UNTIL' => '2027-09-02 20:43:00',
+            'ATTENDANCE_START_TIME' => '05:45',
+            'ATTENDANCE_END_TIME' => '09:45',
         ]);
 
         // Recreate the service to prove the values come back from persistent
         // repository state instead of an in-memory return value.
-        $reloadedService = new PermanentQrService($repository, $activity);
+        $reloadedService = new PermanentQrService($repository, $activity, $settings);
         $reloadedA = $reloadedService->getQrById($qrA['QR_ID']);
         $reloadedB = $reloadedService->getQrById($qrB['QR_ID']);
+        $reloadedC = $reloadedService->getQrById($qrC['QR_ID']);
         $lifecycleA = $reloadedService->getLifecycleConfiguration($reloadedA);
         $lifecycleB = $reloadedService->getLifecycleConfiguration($reloadedB);
 
@@ -164,15 +180,28 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertSame('2027-09-01 09:00', $lifecycleB['until']->format('Y-m-d H:i'));
         $this->assertSame($identifierA, $reloadedA['IDENTIFIER']);
         $this->assertSame($identifierB, $reloadedB['IDENTIFIER']);
+        $this->assertSame(['05:45', '09:45'], array_values(array_intersect_key(
+            $reloadedService->getAttendanceWindowConfiguration($reloadedA),
+            ['start' => true, 'end' => true]
+        )));
+        $this->assertSame(['17:30', '21:00'], array_values(array_intersect_key(
+            $reloadedService->getAttendanceWindowConfiguration($reloadedB),
+            ['start' => true, 'end' => true]
+        )));
+        $this->assertSame(['07:00', '17:00'], array_values(array_intersect_key(
+            $reloadedService->getAttendanceWindowConfiguration($reloadedC),
+            ['start' => true, 'end' => true]
+        )));
         $this->assertSame($globalBefore, [
             'start' => $settings->get(AttendanceWindowService::START_SETTING_KEY),
             'end' => $settings->get(AttendanceWindowService::END_SETTING_KEY),
         ]);
         $this->assertSame([], $settingsRepository->updatedKeys);
 
-        $qrCodes = collect([$reloadedA, $reloadedB])->map(function (array $qr) use ($reloadedService): array {
+        $qrCodes = collect([$reloadedA, $reloadedB, $reloadedC])->map(function (array $qr) use ($reloadedService): array {
             $qr['LIFECYCLE'] = $reloadedService->getLifecycleConfiguration($qr);
             $qr['AVAILABILITY'] = $reloadedService->getAvailabilityStatus($qr);
+            $qr['ATTENDANCE_WINDOW'] = $reloadedService->getAttendanceWindowConfiguration($qr);
 
             return $qr;
         });
@@ -189,6 +218,8 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertSame(1, preg_match($formPattern, $html, $matches));
         $this->assertStringContainsString('name="ACTIVE_FROM_TIME" value="06:17"', $matches[0]);
         $this->assertStringContainsString('name="ACTIVE_UNTIL_TIME" value="20:43"', $matches[0]);
+        $this->assertStringContainsString('name="ATTENDANCE_START_TIME" value="05:45"', $matches[0]);
+        $this->assertStringContainsString('name="ATTENDANCE_END_TIME" value="09:45"', $matches[0]);
         $this->assertStringNotContainsString('name="ACTIVE_FROM_TIME" value="'.$globalBefore['start'].'"', $matches[0]);
         $this->assertStringContainsString($globalBefore['start'].'–'.$globalBefore['end'].' WIB', $html);
     }
@@ -230,6 +261,37 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertSame(['STUDENT_ATTENDANCE_START_TIME', 'STUDENT_ATTENDANCE_END_TIME'], $settingsRepository->updatedKeys);
     }
 
+    public function test_new_qr_snapshots_global_default_and_old_qr_uses_global_fallback(): void
+    {
+        Carbon::setTestNow('2026-10-19 12:00:00');
+        $settingsRepository = new H875SystemSettingRepositoryFake;
+        $settings = new SystemSettingService($settingsRepository, new H875SystemParameterRepositoryFake);
+        $repository = new H875MultiPermanentQrRepositoryFake;
+        $activity = Mockery::mock(ActivityLogService::class);
+        $activity->shouldReceive('log')->once();
+        $service = new PermanentQrService($repository, $activity, $settings);
+        $this->actingAs(new GenericUser(['id' => 'USR-MASTER', 'User_ID' => 'USR-MASTER']));
+
+        $created = $service->createQr([
+            'QR_TYPE' => 'STUDENT',
+            'LABEL' => 'QR Default Snapshot',
+            'ACTIVE_FROM' => '2026-10-19 06:00:00',
+            'ACTIVE_UNTIL' => '2027-10-19 18:00:00',
+        ]);
+        $this->assertSame(['06:00', '08:30'], [
+            $created['ATTENDANCE_START_TIME'], $created['ATTENDANCE_END_TIME'],
+        ]);
+
+        $settings->set(AttendanceWindowService::START_SETTING_KEY, '07:00', 'USR-MASTER');
+        $settings->set(AttendanceWindowService::END_SETTING_KEY, '10:00', 'USR-MASTER');
+        $settings->clearCache();
+
+        $stored = $service->getAttendanceWindowConfiguration($service->getQrById($created['QR_ID']));
+        $legacy = $service->getAttendanceWindowConfiguration(['QR_TYPE' => 'STUDENT']);
+        $this->assertSame(['06:00', '08:30', false], [$stored['start'], $stored['end'], $stored['inherited']]);
+        $this->assertSame(['07:00', '10:00', true], [$legacy['start'], $legacy['end'], $legacy['inherited']]);
+    }
+
     public function test_valid_qr_and_valid_daily_window_creates_present_once(): void
     {
         Carbon::setTestNow('2026-10-01 07:00:00');
@@ -264,19 +326,15 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         );
     }
 
-    public function test_valid_qr_outside_daily_window_is_rejected_before_qr_or_attendance_write(): void
+    public function test_valid_qr_outside_its_own_window_is_rejected_before_attendance_write(): void
     {
         Carbon::setTestNow('2026-10-01 05:59:59');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldNotReceive('fetchAll');
         $attendance->shouldNotReceive('create');
 
-        $qr = Mockery::mock(PermanentQrService::class);
-        $qr->shouldNotReceive('getQrByIdentifier');
-        $this->app->instance(PermanentQrService::class, $qr);
-
         $this->expectException(AttendanceWindowException::class);
-        $this->studentService($attendance, null)->processStudentScan(
+        $this->studentService($attendance, true, false)->processStudentScan(
             'https://wms.test/attendance/scan/student/WMS-ATT-STU-UNCHANGED',
             -6.81234,
             107.19451
@@ -335,7 +393,8 @@ class H875PermanentQrSettingsSyncTest extends TestCase
 
     private function studentService(
         AttendanceRepositoryInterface $attendance,
-        ?bool $qrUsable
+        ?bool $qrUsable,
+        bool $expectEvent = true
     ): StudentQRAttendanceService {
         $this->actingAs(new GenericUser([
             'id' => 'USR-STUDENT',
@@ -371,12 +430,23 @@ class H875PermanentQrSettingsSyncTest extends TestCase
             $qr->shouldReceive('getAvailabilityStatus')->once()->andReturn($qrUsable
                 ? ['usable' => true, 'state' => 'ACTIVE', 'message' => 'QR aktif.']
                 : ['usable' => false, 'state' => 'EXPIRED', 'message' => 'QR kedaluwarsa.']);
+            if ($qrUsable) {
+                $qr->shouldReceive('getAttendanceWindowConfiguration')->once()->andReturn([
+                    'valid' => true,
+                    'start' => '06:00',
+                    'end' => '08:30',
+                    'inherited' => false,
+                    'message' => 'Jam absensi tersimpan khusus untuk QR ini.',
+                ]);
+            }
             $this->app->instance(PermanentQrService::class, $qr);
         }
 
         $event = Mockery::mock(EnterpriseEventService::class);
-        if ($qrUsable === true) {
+        if ($qrUsable === true && $expectEvent) {
             $event->shouldReceive('dispatch')->once();
+        } else {
+            $event->shouldNotReceive('dispatch');
         }
 
         return new StudentQRAttendanceService($attendance, $student, $settings, $event);
@@ -392,6 +462,8 @@ class H875PermanentQrSettingsSyncTest extends TestCase
             'STATUS' => 'ACTIVE',
             'ACTIVE_FROM' => '2026-10-01 06:00:00',
             'ACTIVE_UNTIL' => '2027-10-01 20:45:00',
+            'ATTENDANCE_START_TIME' => '06:00',
+            'ATTENDANCE_END_TIME' => '08:30',
             'CREATED_AT' => '2026-09-01 10:00:00',
             'CREATED_BY' => 'USR-ADMIN',
             'UPDATED_AT' => '2026-09-01 10:00:00',
@@ -539,6 +611,11 @@ class H875MultiPermanentQrRepositoryFake implements PermanentQrRepositoryInterfa
         foreach (['ACTIVE_FROM', 'ACTIVE_UNTIL'] as $field) {
             if (isset($data[$field]) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $data[$field])) {
                 $data[$field] .= '.000000';
+            }
+        }
+        foreach (['ATTENDANCE_START_TIME', 'ATTENDANCE_END_TIME'] as $field) {
+            if (isset($data[$field]) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $data[$field])) {
+                $data[$field] .= ':00';
             }
         }
 

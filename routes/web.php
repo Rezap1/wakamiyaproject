@@ -19,8 +19,8 @@ use App\Http\Controllers\Academic\SubjectController;
 use App\Http\Controllers\Academic\TeacherWorkspaceController;
 use App\Http\Controllers\Admin\StickerAdminController;
 use App\Http\Controllers\Core\AcademicDashboardController;
-use App\Http\Controllers\Core\AgendaController;
 use App\Http\Controllers\Core\ActivityController;
+use App\Http\Controllers\Core\AgendaController;
 use App\Http\Controllers\Core\AnnouncementFeedController;
 use App\Http\Controllers\Core\ApprovalController;
 use App\Http\Controllers\Core\AuditLogController;
@@ -625,9 +625,9 @@ Route::middleware('auth')->group(function () {
         }
     });
 
-    // Shared announcement engine: existing Academic/Administrator/Master access,
-    // extended to Teacher without exposing any other academic management module.
-    Route::prefix('academic/announcements')->name('announcements.')->middleware('role:ACADEMIC,ADMINISTRATOR,TEACHER')->group(function () {
+    // Shared announcement engine. Teacher and Director access is intentionally
+    // limited to announcements created by the authenticated actor.
+    Route::prefix('academic/announcements')->name('announcements.')->middleware('role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR')->group(function () {
         $controller = AnnouncementController::class;
         Route::get('/preview-pdf', [$controller, 'previewPdf'])->name('preview-pdf');
         Route::get('/export-pdf', [$controller, 'exportPdf'])->name('export-pdf');
