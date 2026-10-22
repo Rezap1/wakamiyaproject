@@ -6,7 +6,7 @@
     title="Dashboard Kehadiran" 
     description="Pantau dan kelola kehadiran per kelas dan daftar siswa."
     :breadcrumbs="['Dashboard' => route('dashboard'), 'Kehadiran' => route('attendances.index')]"
-    add-action="{{ route('attendances.create') }}"
+    :add-action="strtoupper(trim($userRole ?? '')) === 'MASTER' ? route('attendances.manual.create') : null"
     add-text="Catat Kehadiran"
 >
     @php

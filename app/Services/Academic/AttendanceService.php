@@ -301,7 +301,8 @@ class AttendanceService
         string $classId,
         string $attendanceDate,
         array $students,
-        string $actorId
+        string $actorId,
+        ?callable $preflight = null
     ): int {
         $classId = trim($classId);
         $attendanceDate = trim($attendanceDate);
@@ -313,8 +314,8 @@ class AttendanceService
         $normalized = collect($students)->map(function (array $student): array {
             $studentId = trim((string) ($student['Student_ID'] ?? ''));
             $status = AttendanceStatusHelper::normalize($student['Status'] ?? '', '');
-            if ($studentId === '' || ! in_array($status, ['PRESENT', 'LATE', 'SICK', 'PERMITTED', 'ABSENT'], true)) {
-                throw new Exception('Data siswa atau status absensi manual tidak valid.');
+            if ($studentId === '' || $status !== 'PRESENT') {
+                throw new Exception('Absensi manual MASTER hanya dapat mencatat status Hadir.');
             }
 
             return [
@@ -331,8 +332,12 @@ class AttendanceService
         $lockKey = 'manual_attendance_batch_'.sha1("{$classId}|{$attendanceDate}");
 
         try {
-            $count = Cache::lock($lockKey, 30)->block(5, function () use ($normalized, $classId, $attendanceDate, $actorId): int {
-                return $this->runtimeTransaction(function () use ($normalized, $classId, $attendanceDate, $actorId): int {
+            $count = Cache::lock($lockKey, 30)->block(5, function () use ($normalized, $classId, $attendanceDate, $actorId, $preflight): int {
+                return $this->runtimeTransaction(function () use ($normalized, $classId, $attendanceDate, $actorId, $preflight): int {
+                    if ($preflight !== null) {
+                        $preflight();
+                    }
+
                     $existingStudentIds = collect($this->repository->fetchAll())
                         ->filter(fn (array $attendance): bool => $this->isActiveStudentClassAttendance(
                             $attendance,
@@ -398,6 +403,8 @@ class AttendanceService
             throw new Exception('Absensi kelas sedang diproses oleh permintaan lain. Silakan muat ulang.', 0, $exception);
         }
 
+        $this->repository->clearCache();
+
         try {
             $this->enterpriseEvent->dispatch(
                 'ACADEMIC',
@@ -427,12 +434,50 @@ class AttendanceService
             : $callback();
     }
 
-    public function update($id, array $data)
+    public function update($id, array $data, string $actorId)
     {
+        $existing = $this->repository->findById((string) $id);
+        if (! $existing) {
+            throw new Exception('Data absensi yang akan dikoreksi tidak ditemukan.');
+        }
+
         $data = $this->normalizeAttendanceData($data, false);
+        $reason = trim((string) ($data['Notes'] ?? ''));
+        if (mb_strlen($reason) < 5 || trim($actorId) === '') {
+            throw new Exception('Alasan koreksi dan identitas pencatat wajib tersedia.');
+        }
+
         $data['Updated_At'] = now()->toDateTimeString();
-        $result = $this->repository->update($id, $data);
+        $data['Updated_By'] = trim($actorId);
+        $result = $this->repository->update((string) $id, $data);
+        if ($result === false || $result === null) {
+            throw new Exception('Koreksi absensi gagal disimpan.');
+        }
         $this->repository->clearCache();
+
+        try {
+            $this->enterpriseEvent->dispatchAudit(
+                'ACADEMIC',
+                'UPDATE',
+                'ATTENDANCE_CORRECTION',
+                (string) $id,
+                $actorId,
+                ['ACADEMIC', 'ADMINISTRATOR'],
+                [],
+                [
+                    'Attendance_ID' => (string) $id,
+                    'Previous_Status' => AttendanceStatusHelper::normalize($existing['Status'] ?? '', ''),
+                    'New_Status' => AttendanceStatusHelper::normalize($data['Status'] ?? $existing['Status'] ?? '', ''),
+                    'Reason' => $reason,
+                ]
+            );
+        } catch (\Throwable $failure) {
+            Log::error('Attendance correction audit event failed', [
+                'attendance_id' => (string) $id,
+                'actor_id' => trim($actorId),
+                'exception_class' => $failure::class,
+            ]);
+        }
 
         return $result;
     }

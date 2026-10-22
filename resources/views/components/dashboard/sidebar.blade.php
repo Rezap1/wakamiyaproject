@@ -31,6 +31,7 @@
             ['label' => 'Mata Pelajaran', 'route' => 'subjects.index', 'active_route' => 'subjects.*', 'icon' => 'library'],
             ['label' => 'Jadwal Kelas', 'route' => 'schedules.index', 'active_route' => 'schedules.*', 'icon' => 'calendar'],
             ['label' => 'Presensi Akademik', 'route' => 'attendances.index', 'active_route' => 'attendances.*', 'icon' => 'clock'],
+            ['label' => 'Absensi Manual', 'route' => 'attendances.manual.create', 'active_route' => 'attendances.manual.*', 'icon' => 'clipboard-check'],
             ['label' => 'Laporan Absensi', 'route' => 'attendance.reports.index', 'active_route' => 'attendance.reports.*', 'icon' => 'chart-bar'],
             ['label' => 'Tinjau Pengajuan', 'route' => 'academic.attendance.requests.index', 'active_route' => 'academic.attendance.requests.*', 'icon' => 'clipboard-check'],
         ]],

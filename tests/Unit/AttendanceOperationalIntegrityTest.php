@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Academic\AttendanceService;
@@ -11,7 +12,9 @@ use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\PermanentQrService;
 use App\Services\Core\SystemSettingService;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Mockery;
 use Tests\TestCase;
 
@@ -26,6 +29,7 @@ class AttendanceOperationalIntegrityTest extends TestCase
             && ($row['Created_By'] ?? '') === 'USR-MASTER'
             && str_starts_with((string) ($row['Attendance_ID'] ?? ''), 'ATT-MAN-')
         ))->andReturn(true);
+        $repository->shouldReceive('clearCache')->once();
 
         $events = Mockery::mock(EnterpriseEventService::class);
         $events->shouldReceive('dispatch')->once();
@@ -33,7 +37,7 @@ class AttendanceOperationalIntegrityTest extends TestCase
 
         $count = $service->recordManualBatch('CLS-A', '2026-10-22', [
             ['Student_ID' => 'STU-A', 'Status' => 'Hadir'],
-            ['Student_ID' => 'STU-B', 'Status' => 'Izin', 'Notes' => 'Disetujui MASTER'],
+            ['Student_ID' => 'STU-B', 'Status' => 'PRESENT', 'Notes' => 'QR siswa tidak terbaca'],
         ], 'USR-MASTER');
 
         $this->assertSame(2, $count);
@@ -54,7 +58,23 @@ class AttendanceOperationalIntegrityTest extends TestCase
         $this->expectExceptionMessage('sudah memiliki status');
 
         (new AttendanceService($repository, $events))->recordManualBatch('CLS-A', '2026-10-22', [
-            ['Student_ID' => 'STU-A', 'Status' => 'Alpha'],
+            ['Student_ID' => 'STU-A', 'Status' => 'Hadir'],
+        ], 'USR-MASTER');
+    }
+
+    public function test_manual_master_batch_rejects_non_present_status_at_service_boundary(): void
+    {
+        $repository = Mockery::mock(AttendanceRepositoryInterface::class);
+        $repository->shouldNotReceive('fetchAll');
+        $repository->shouldNotReceive('create');
+        $events = Mockery::mock(EnterpriseEventService::class);
+        $events->shouldNotReceive('dispatch');
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('hanya dapat mencatat status Hadir');
+
+        (new AttendanceService($repository, $events))->recordManualBatch('CLS-A', '2026-10-22', [
+            ['Student_ID' => 'STU-A', 'Status' => 'Izin'],
         ], 'USR-MASTER');
     }
 
@@ -77,6 +97,57 @@ class AttendanceOperationalIntegrityTest extends TestCase
         $this->assertSame('TOO_EARLY', $result['state']);
         $this->assertSame('10:00', $result['cutoff']);
         $this->assertSame(0, $result['created']);
+    }
+
+    public function test_official_attendance_correction_requires_reason_and_records_actor_audit(): void
+    {
+        $repository = Mockery::mock(AttendanceRepositoryInterface::class);
+        $repository->shouldReceive('findById')->with('ATT-1')->once()->andReturn([
+            'Attendance_ID' => 'ATT-1',
+            'Status' => 'PRESENT',
+        ]);
+        $repository->shouldReceive('update')->once()->with('ATT-1', Mockery::on(
+            fn (array $data): bool => $data['Status'] === 'SICK'
+                && $data['Notes'] === 'Koreksi berdasarkan approval resmi.'
+                && $data['Updated_By'] === 'USR-MASTER'
+                && trim((string) $data['Updated_At']) !== ''
+        ))->andReturn(true);
+        $repository->shouldReceive('clearCache')->once();
+        $events = Mockery::mock(EnterpriseEventService::class);
+        $events->shouldReceive('dispatchAudit')->once()->with(
+            'ACADEMIC',
+            'UPDATE',
+            'ATTENDANCE_CORRECTION',
+            'ATT-1',
+            'USR-MASTER',
+            ['ACADEMIC', 'ADMINISTRATOR'],
+            [],
+            Mockery::on(fn (array $metadata): bool => $metadata['Previous_Status'] === 'PRESENT'
+                && $metadata['New_Status'] === 'SICK')
+        );
+
+        $result = (new AttendanceService($repository, $events))->update('ATT-1', [
+            'Status' => 'SICK',
+            'Notes' => 'Koreksi berdasarkan approval resmi.',
+        ], 'USR-MASTER');
+
+        $this->assertTrue($result);
+    }
+
+    public function test_official_attendance_correction_without_reason_is_rejected(): void
+    {
+        $repository = Mockery::mock(AttendanceRepositoryInterface::class);
+        $repository->shouldReceive('findById')->once()->andReturn([
+            'Attendance_ID' => 'ATT-1',
+            'Status' => 'PRESENT',
+        ]);
+        $repository->shouldNotReceive('update');
+        $events = Mockery::mock(EnterpriseEventService::class);
+        $events->shouldNotReceive('dispatchAudit');
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Alasan koreksi');
+        (new AttendanceService($repository, $events))->update('ATT-1', ['Status' => 'SICK'], 'USR-MASTER');
     }
 
     public function test_automatic_absence_preserves_every_existing_legal_status_and_is_idempotent(): void
@@ -127,9 +198,117 @@ class AttendanceOperationalIntegrityTest extends TestCase
         $this->assertSame([], $rows->getArrayCopy());
     }
 
-    /** @return array{0:AutomaticStudentAbsenceService,1:\ArrayObject} */
-    private function automaticService(array $initialRows, array $students, array $qrs = [], string $qrEnd = '08:30'): array
+    public function test_automatic_absence_respects_approved_request_even_if_legacy_official_row_is_missing(): void
     {
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $attendance->shouldNotReceive('create');
+        $students = Mockery::mock(StudentRepositoryInterface::class);
+        $students->shouldReceive('fetchAll')->once()->andReturn(collect([$this->student('STU-A')]));
+        $qrs = Mockery::mock(PermanentQrRepositoryInterface::class);
+        $qrs->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $requests = Mockery::mock(AttendanceRequestRepositoryInterface::class);
+        $requests->shouldReceive('fetchAll')->once()->andReturn(collect([[
+            'Request_ID' => 'REQ-A',
+            'Student_ID' => 'STU-A',
+            'Class_ID' => 'CLS-A',
+            'Schedule_ID' => '',
+            'Attendance_Type' => 'CLASS_QR',
+            'Attendance_Date' => '2026-10-22',
+            'Status' => 'APPROVED',
+        ]]));
+        $settings = Mockery::mock(SystemSettingService::class);
+        $settings->shouldReceive('get')->andReturnUsing(fn (string $key, $default = null) => match ($key) {
+            'STUDENT_ATTENDANCE_START_TIME' => '06:00',
+            'STUDENT_ATTENDANCE_END_TIME' => '08:30',
+            default => $default,
+        });
+
+        $service = new AutomaticStudentAbsenceService(
+            $attendance,
+            $students,
+            $qrs,
+            $settings,
+            Mockery::mock(PermanentQrService::class),
+            $requests
+        );
+        $result = $service->run(CarbonImmutable::parse('2026-10-22 09:00:00', 'Asia/Jakarta'));
+
+        $this->assertSame(0, $result['created']);
+        $this->assertSame(1, $result['skipped']);
+    }
+
+    public function test_pending_permission_remains_pending_and_follows_documented_absent_until_approved_policy(): void
+    {
+        $pending = [
+            'Request_ID' => 'REQ-PENDING',
+            'Student_ID' => 'STU-A',
+            'Class_ID' => 'CLS-A',
+            'Schedule_ID' => '',
+            'Attendance_Type' => 'CLASS_QR',
+            'Attendance_Date' => '2026-10-22',
+            'Status' => 'PENDING',
+        ];
+        [$service, $rows] = $this->automaticService(
+            [],
+            [$this->student('STU-A')],
+            requests: [$pending]
+        );
+
+        $result = $service->run(CarbonImmutable::parse('2026-10-22 09:00:00', 'Asia/Jakarta'));
+
+        $this->assertSame(1, $result['created']);
+        $this->assertSame('ABSENT', $rows[0]['Status']);
+        $this->assertSame('PENDING', $pending['Status']);
+    }
+
+    public function test_automatic_absence_failure_returns_traceable_run_id_and_can_be_retried_by_date(): void
+    {
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $attendance->shouldReceive('create')->once()->andReturn(false);
+        $studentRepository = Mockery::mock(StudentRepositoryInterface::class);
+        $studentRepository->shouldReceive('fetchAll')->once()->andReturn(collect([$this->student('STU-A')]));
+        $qrRepository = Mockery::mock(PermanentQrRepositoryInterface::class);
+        $qrRepository->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $requestRepository = Mockery::mock(AttendanceRequestRepositoryInterface::class);
+        $requestRepository->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $settings = Mockery::mock(SystemSettingService::class);
+        $settings->shouldReceive('get')->andReturnUsing(fn (string $key, $default = null) => match ($key) {
+            'STUDENT_ATTENDANCE_START_TIME' => '06:00',
+            'STUDENT_ATTENDANCE_END_TIME' => '08:30',
+            default => $default,
+        });
+        $qrService = Mockery::mock(PermanentQrService::class);
+
+        $this->app->instance(AttendanceRepositoryInterface::class, $attendance);
+        $this->app->instance(StudentRepositoryInterface::class, $studentRepository);
+        $this->app->instance(PermanentQrRepositoryInterface::class, $qrRepository);
+        $this->app->instance(AttendanceRequestRepositoryInterface::class, $requestRepository);
+        $this->app->instance(SystemSettingService::class, $settings);
+        $this->app->instance(PermanentQrService::class, $qrService);
+        Log::spy();
+
+        $exitCode = Artisan::call('attendance:mark-absent', ['--date' => '2026-10-22']);
+
+        $this->assertSame(1, $exitCode);
+        $this->assertMatchesRegularExpression('/Kode laporan: ALP-[A-Z0-9]{10}/', Artisan::output());
+        Log::shouldHaveReceived('error')->once()->with(
+            'Automatic student absence run failed',
+            Mockery::on(fn (array $context): bool => str_starts_with($context['run_id'], 'ALP-')
+                && $context['target_date'] === '2026-10-22'
+                && $context['exception_class'] === \RuntimeException::class)
+        );
+    }
+
+    /** @return array{0:AutomaticStudentAbsenceService,1:\ArrayObject} */
+    private function automaticService(
+        array $initialRows,
+        array $students,
+        array $qrs = [],
+        string $qrEnd = '08:30',
+        array $requests = []
+    ): array {
         $rows = new \ArrayObject($initialRows);
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldReceive('fetchAll')->andReturnUsing(fn () => collect($rows->getArrayCopy()));
@@ -143,6 +322,8 @@ class AttendanceOperationalIntegrityTest extends TestCase
         $studentRepository->shouldReceive('fetchAll')->andReturn(collect($students));
         $qrRepository = Mockery::mock(PermanentQrRepositoryInterface::class);
         $qrRepository->shouldReceive('fetchAll')->andReturn(collect($qrs));
+        $requestRepository = Mockery::mock(AttendanceRequestRepositoryInterface::class);
+        $requestRepository->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect($requests));
 
         $settings = Mockery::mock(SystemSettingService::class);
         $settings->shouldReceive('get')->andReturnUsing(fn (string $key, $default = null) => match ($key) {
@@ -173,7 +354,8 @@ class AttendanceOperationalIntegrityTest extends TestCase
             $studentRepository,
             $qrRepository,
             $settings,
-            $qrService
+            $qrService,
+            $requestRepository
         ), $rows];
     }
 

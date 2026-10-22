@@ -595,6 +595,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/update', [AcademicSettingsController::class, 'update'])->name('update');
     });
 
+    Route::prefix('academic/attendances/manual')
+        ->name('attendances.manual.')
+        ->middleware('role:MASTER')
+        ->group(function () {
+            Route::get('/', [AttendanceController::class, 'manualCreate'])->name('create');
+            Route::get('/roster', [AttendanceController::class, 'manualRoster'])->name('roster');
+            Route::post('/', [AttendanceController::class, 'manualStore'])->name('store');
+        });
+
     Route::prefix('academic')->middleware('role:ACADEMIC,ADMINISTRATOR')->group(function () {
         $academicControllers = [
             'batches' => BatchController::class,
@@ -607,7 +616,7 @@ Route::middleware('auth')->group(function () {
         ];
 
         foreach ($academicControllers as $prefix => $controller) {
-            Route::prefix($prefix)->name($prefix.'.')->group(function () use ($controller) {
+            Route::prefix($prefix)->name($prefix.'.')->group(function () use ($controller, $prefix) {
                 Route::get('/preview-pdf', [$controller, 'previewPdf'])->name('preview-pdf');
                 Route::get('/export-pdf', [$controller, 'exportPdf'])->name('export-pdf');
                 Route::get('/export-excel', [$controller, 'exportExcel'])->name('export-excel');
@@ -615,8 +624,10 @@ Route::middleware('auth')->group(function () {
                 Route::get('/print', [$controller, 'print'])->name('print');
 
                 Route::get('/', [$controller, 'index'])->name('index');
-                Route::get('/create', [$controller, 'create'])->name('create');
-                Route::post('/', [$controller, 'store'])->name('store');
+                if ($prefix !== 'attendances') {
+                    Route::get('/create', [$controller, 'create'])->name('create');
+                    Route::post('/', [$controller, 'store'])->name('store');
+                }
                 Route::get('/{id}', [$controller, 'show'])->name('show');
                 Route::get('/{id}/edit', [$controller, 'edit'])->name('edit');
                 Route::put('/{id}', [$controller, 'update'])->name('update');

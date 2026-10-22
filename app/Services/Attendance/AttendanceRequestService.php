@@ -11,6 +11,7 @@ use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
 use App\Services\Core\RoleService;
@@ -366,7 +367,9 @@ class AttendanceRequestService
                     throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
                 }
 
-                $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+                $this->runtimeTransaction(
+                    fn () => $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance)
+                );
 
                 return true;
             }
@@ -383,14 +386,16 @@ class AttendanceRequestService
                 'Updated_At' => now()->toDateTimeString(),
             ];
 
-            $updated = $this->requestRepo->update($requestId, $updateData);
-            if ($updated === false) {
-                throw new Exception('Status pengajuan gagal diperbarui.');
-            }
-            $this->requestRepo->clearCache();
-            Cache::forget('dashboard_academic');
+            $this->runtimeTransaction(function () use ($requestId, $updateData, $request, $target, $statusToApply, $existingAttendance): void {
+                $updated = $this->requestRepo->update($requestId, $updateData);
+                if ($updated === false) {
+                    throw new Exception('Status pengajuan gagal diperbarui.');
+                }
+                $this->requestRepo->clearCache();
+                Cache::forget('dashboard_academic');
 
-            $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+                $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+            });
 
             $this->runPostCommitSideEffect(
                 fn () => $this->notifyStudentDecision($request, 'APPROVED', $statusToApply, (string) $notes, $user),
@@ -423,7 +428,9 @@ class AttendanceRequestService
             $existingAttendance = $this->resolveOfficialAttendance($request, $target);
 
             if ($currentStatus === 'REJECTED') {
-                $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+                $this->runtimeTransaction(
+                    fn () => $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance)
+                );
 
                 return true;
             }
@@ -440,14 +447,16 @@ class AttendanceRequestService
                 'Updated_At' => now()->toDateTimeString(),
             ];
 
-            $updated = $this->requestRepo->update($requestId, $updateData);
-            if ($updated === false) {
-                throw new Exception('Status pengajuan gagal diperbarui.');
-            }
-            $this->requestRepo->clearCache();
-            Cache::forget('dashboard_academic');
+            $this->runtimeTransaction(function () use ($requestId, $updateData, $request, $target, $existingAttendance): void {
+                $updated = $this->requestRepo->update($requestId, $updateData);
+                if ($updated === false) {
+                    throw new Exception('Status pengajuan gagal diperbarui.');
+                }
+                $this->requestRepo->clearCache();
+                Cache::forget('dashboard_academic');
 
-            $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+                $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+            });
 
             $this->runPostCommitSideEffect(
                 fn () => $this->notifyStudentDecision($request, 'REJECTED', 'ALPA', (string) $notes, $user),
@@ -594,6 +603,13 @@ class AttendanceRequestService
                 // Official attendance is already durable; preserve success.
             }
         }
+    }
+
+    private function runtimeTransaction(callable $callback)
+    {
+        return $this->requestRepo instanceof BaseMySqlRepository
+            ? $this->requestRepo->transaction($callback)
+            : $callback();
     }
 
     private function resolveOfficialAttendance(array $request, array $target): ?array

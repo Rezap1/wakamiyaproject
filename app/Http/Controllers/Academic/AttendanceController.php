@@ -6,7 +6,7 @@ use App\Helpers\AttendanceStatusHelper;
 use App\Helpers\CollectionHelper;
 use App\Helpers\ReportHelper;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreAttendanceRequest;
+use App\Http\Requests\StoreMasterManualAttendanceRequest;
 use App\Http\Requests\UpdateAttendanceRequest;
 use App\Interfaces\GoogleSheets\ClassRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
@@ -20,11 +20,13 @@ use App\Repositories\GoogleSheets\ScheduleRepository;
 use App\Repositories\GoogleSheets\StudentRepository;
 use App\Services\Academic\AttendanceLegacyClassifier;
 use App\Services\Academic\AttendanceService;
+use App\Services\Attendance\MasterManualAttendanceService;
 use App\Support\Presentation\IndonesianPresentation;
 use App\Support\Reporting\HumanReadableResolver;
 use App\Traits\Exportable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
@@ -101,8 +103,10 @@ class AttendanceController extends Controller
 
     protected $attendanceService;
 
-    public function __construct(AttendanceService $attendanceService)
-    {
+    public function __construct(
+        AttendanceService $attendanceService,
+        private MasterManualAttendanceService $masterManualAttendance
+    ) {
         $this->attendanceService = $attendanceService;
     }
 
@@ -252,73 +256,58 @@ class AttendanceController extends Controller
         ];
     }
 
-    public function create()
+    public function manualCreate()
     {
         try {
-            $classRepo = app(ClassRepositoryInterface::class);
-            $allClasses = $classRepo->fetchAll();
+            return view('academic.attendances.manual', $this->masterManualAttendance->options());
+        } catch (\Throwable $failure) {
+            \Log::error('Manual MASTER attendance options could not be loaded', [
+                'exception_class' => $failure::class,
+            ]);
 
-            $classes = $allClasses->filter(function ($c) {
-                $isActive = strtoupper(trim($c['Is_Active'] ?? ''));
-
-                return $isActive === 'TRUE' || $isActive === '';
-            })->values();
-
-            // Build classOptions in controller to avoid any Blade issues
-            $classOptions = [];
-            foreach ($classes as $c) {
-                $cid = trim((string) ($c['Class_ID'] ?? ''));
-                if ($cid !== '') {
-                    $classOptions[$cid] = ($c['Class_Name'] ?? $cid).(! empty($c['Class_Code']) ? ' ('.$c['Class_Code'].')' : '');
-                }
-            }
-
-            return view('academic.attendances.create', ['classes' => $classes, 'classOptions' => $classOptions]);
-        } catch (\Exception $e) {
-            \Log::error('AttendanceController@create error: '.$e->getMessage());
-
-            return view('academic.attendances.create', ['classes' => collect([]), 'classOptions' => []]);
+            return view('academic.attendances.manual', ['batches' => [], 'classes' => []])
+                ->withErrors(['error' => 'Daftar batch dan kelas belum dapat dimuat.']);
         }
     }
 
-    public function store(StoreAttendanceRequest $request)
+    public function manualRoster(Request $request)
     {
         try {
-            $students = $request->input('students', []);
-            $classId = $request->input('Class_ID');
-            $date = $request->input('Attendance_Date');
-            $studentRepo = app(StudentRepositoryInterface::class);
-            $validStudentIds = collect($studentRepo->fetchAll())
-                ->filter(function ($student) use ($classId) {
-                    return ($student['Class_ID'] ?? '') === $classId
-                        && strtoupper(trim($student['Is_Active'] ?? 'TRUE')) !== 'FALSE';
-                })
-                ->pluck('Student_ID')
-                ->filter()
-                ->values()
-                ->all();
+            $request->validate([
+                'batch_id' => ['required', 'string', 'max:191'],
+                'class_id' => ['required', 'string', 'max:191'],
+                'attendance_date' => ['required', 'date_format:Y-m-d'],
+            ]);
 
-            // Validate the entire batch before the transactional write.
-            foreach ($students as $student) {
-                if (! isset($student['Student_ID'], $student['Status'])
-                    || ! in_array($student['Student_ID'], $validStudentIds, true)) {
-                    return back()
-                        ->withErrors(['error' => 'Data siswa tidak valid untuk kelas yang dipilih.'])
-                        ->withInput();
-                }
-            }
+            return response()->json($this->masterManualAttendance->roster(
+                (string) $request->query('batch_id'),
+                (string) $request->query('class_id'),
+                (string) $request->query('attendance_date')
+            ));
+        } catch (ValidationException $failure) {
+            throw $failure;
+        } catch (\Throwable $failure) {
+            return response()->json(['message' => $this->safeExceptionMessage($failure)], 422);
+        }
+    }
 
+    public function manualStore(StoreMasterManualAttendanceRequest $request)
+    {
+        try {
             $actorId = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
-            $count = $this->attendanceService->recordManualBatch(
-                (string) $classId,
-                (string) $date,
-                $students,
+            $count = $this->masterManualAttendance->record(
+                (string) $request->input('Batch_ID'),
+                (string) $request->input('Class_ID'),
+                (string) $request->input('Attendance_Date'),
+                $request->input('Student_IDs', []),
+                (string) $request->input('Manual_Reason'),
                 $actorId
             );
 
-            return redirect()->route('attendances.index')->with('success', "Kehadiran $count siswa berhasil dicatat.");
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => $this->safeExceptionMessage($e)])->withInput();
+            return redirect()->route('attendances.manual.create')
+                ->with('success', "Kehadiran manual {$count} siswa berhasil dicatat dan diaudit.");
+        } catch (\Throwable $failure) {
+            return back()->withErrors(['error' => $this->safeExceptionMessage($failure)])->withInput();
         }
     }
 
@@ -367,9 +356,10 @@ class AttendanceController extends Controller
 
     public function update(UpdateAttendanceRequest $request, $id)
     {
-        $this->attendanceService->update($id, $request->validated());
+        $actorId = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
+        $this->attendanceService->update($id, $request->validated(), $actorId);
 
-        return redirect()->route('attendances.index')->with('success', 'Attendance Updated.');
+        return redirect()->route('attendances.index')->with('success', 'Koreksi absensi berhasil disimpan dan diaudit.');
     }
 
     public function exportCSV()

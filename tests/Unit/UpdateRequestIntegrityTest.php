@@ -114,6 +114,7 @@ class UpdateRequestIntegrityTest extends TestCase
             'Status' => 'PRESENT',
             'Check_In_Time' => '08:00',
             'Check_Out_Time' => '16:00',
+            'Notes' => 'Koreksi resmi oleh petugas berwenang.',
         ], 'ATT-001');
 
         $validated = $this->assertValid($request);
@@ -162,11 +163,11 @@ class UpdateRequestIntegrityTest extends TestCase
     }
 
     /**
-     * @param class-string<FormRequest> $requestClass
+     * @param  class-string<FormRequest>  $requestClass
      */
     private function makeUpdateRequest(string $requestClass, array $payload, string $id): FormRequest
     {
-        $request = $requestClass::create('/test/' . $id, 'PUT', $payload);
+        $request = $requestClass::create('/test/'.$id, 'PUT', $payload);
         $request->setContainer($this->app);
 
         $route = new Route(['PUT'], '/test/{id}', []);

@@ -27,7 +27,15 @@ class UpdateAttendanceRequest extends FormRequest
             'Status' => 'nullable|in:Hadir,Terlambat,Sakit,Izin,Alpha,PRESENT,LATE,SICK,PERMITTED,ABSENT',
             'Check_In_Time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
             'Check_Out_Time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
-            'Notes' => 'nullable|string|max:1000',
+            'Notes' => 'required|string|min:5|max:1000',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'Notes.required' => 'Alasan koreksi absensi wajib diisi.',
+            'Notes.min' => 'Alasan koreksi absensi minimal 5 karakter.',
         ];
     }
 }

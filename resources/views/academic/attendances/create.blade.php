@@ -9,7 +9,7 @@
 
 <div class="max-w-5xl mx-auto space-y-6" x-data="bulkAttendanceForm()">
     <x-universal.form 
-        action="{{ route('attendances.store') }}" 
+        action="{{ route('attendances.manual.store') }}"
         method="POST"
         title="Absensi Kelas" 
         description="Catat kehadiran seluruh siswa di kelas Anda untuk hari ini."

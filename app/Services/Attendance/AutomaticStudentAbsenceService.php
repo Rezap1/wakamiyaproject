@@ -4,6 +4,7 @@ namespace App\Services\Attendance;
 
 use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
+use App\Interfaces\GoogleSheets\AttendanceRequestRepositoryInterface;
 use App\Interfaces\GoogleSheets\PermanentQrRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Repositories\MySql\BaseMySqlRepository;
@@ -22,6 +23,7 @@ final class AutomaticStudentAbsenceService
         private PermanentQrRepositoryInterface $permanentQrRepository,
         private SystemSettingService $settingService,
         private PermanentQrService $permanentQrService,
+        private ?AttendanceRequestRepositoryInterface $requestRepository = null,
     ) {}
 
     /**
@@ -56,6 +58,18 @@ final class AutomaticStudentAbsenceService
                     ->mapWithKeys(fn (array $row): array => [
                         strtolower(trim((string) ($row['Student_ID'] ?? ''))) => true,
                     ]);
+                if ($this->requestRepository) {
+                    collect($this->requestRepository->fetchAll())
+                        ->filter(fn (array $row): bool => trim((string) ($row['Attendance_Date'] ?? '')) === $targetDate
+                            && strtoupper(trim((string) ($row['Status'] ?? ''))) === 'APPROVED'
+                            && $this->requestAttendanceType($row) === 'CLASS_QR')
+                        ->each(function (array $row) use ($existing): void {
+                            $studentId = strtolower(trim((string) ($row['Student_ID'] ?? '')));
+                            if ($studentId !== '') {
+                                $existing->put($studentId, true);
+                            }
+                        });
+                }
 
                 $eligible = collect($this->studentRepository->fetchAll())
                     ->filter(fn (array $student): bool => $this->isEligible($student))
@@ -176,6 +190,16 @@ final class AutomaticStudentAbsenceService
         }
 
         return $parsed->toDateString();
+    }
+
+    private function requestAttendanceType(array $row): string
+    {
+        $type = strtoupper(trim((string) ($row['Attendance_Type'] ?? '')));
+        if ($type === '') {
+            return trim((string) ($row['Schedule_ID'] ?? '')) === '' ? 'CLASS_QR' : 'SCHEDULE';
+        }
+
+        return $type === 'CLASS_MANUAL' ? 'CLASS_QR' : $type;
     }
 
     private function result(string $date, string $cutoff, int $created, int $skipped, bool $dryRun, string $state): array
