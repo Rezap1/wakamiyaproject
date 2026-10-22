@@ -7,6 +7,7 @@ use App\Helpers\SheetValue;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreClassRequest;
 use App\Http\Requests\UpdateClassRequest;
+use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
 use App\Services\Core\ProgramService;
@@ -15,6 +16,7 @@ use App\Services\Core\StudentService;
 use App\Services\Core\TeacherService;
 use App\Support\Academic\TeacherScopeResolver;
 use App\Traits\Exportable;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -326,10 +328,41 @@ class ClassController extends Controller
             }
 
             $students = $studentService->getAllStudents();
+            $attendanceDate = trim((string) request()->query('attendance_date', ''));
+            $alreadyRecorded = collect();
+            if ($attendanceDate !== '') {
+                try {
+                    $parsedDate = CarbonImmutable::createFromFormat('!Y-m-d', $attendanceDate, 'Asia/Jakarta');
+                    if (! $parsedDate || $parsedDate->format('Y-m-d') !== $attendanceDate) {
+                        return response()->json(['error' => 'Tanggal absensi tidak valid.'], 422);
+                    }
+                    $attendanceDate = $parsedDate->toDateString();
+                } catch (\Throwable) {
+                    return response()->json(['error' => 'Tanggal absensi tidak valid.'], 422);
+                }
+
+                $alreadyRecorded = collect(app(AttendanceRepositoryInterface::class)->fetchAll())
+                    ->filter(function (array $attendance) use ($requestedClassId, $attendanceDate): bool {
+                        $classId = SheetValue::id($attendance['Class_ID'] ?? '');
+                        $legacyScope = SheetValue::id($attendance['Schedule_ID'] ?? '');
+
+                        return trim((string) ($attendance['Student_ID'] ?? '')) !== ''
+                            && trim((string) ($attendance['Attendance_Date'] ?? '')) === $attendanceDate
+                            && strtoupper(trim((string) ($attendance['Is_Active'] ?? 'TRUE'))) !== 'FALSE'
+                            && ($classId === $requestedClassId || ($classId === '' && $legacyScope === $requestedClassId));
+                    })
+                    ->pluck('Student_ID')
+                    ->map(fn ($studentId): string => SheetValue::id($studentId))
+                    ->filter()
+                    ->unique();
+            }
             $classStudents = $students
                 ->filter(fn ($student) => SheetValue::isActive($student))
-                ->filter(function ($student) use ($requestedClassId, $allowedStudentIds) {
+                ->filter(function ($student) use ($requestedClassId, $allowedStudentIds, $alreadyRecorded) {
                     $studentId = SheetValue::id($student['Student_ID'] ?? '');
+                    if ($alreadyRecorded->contains($studentId)) {
+                        return false;
+                    }
                     if (is_array($allowedStudentIds)) {
                         return in_array($studentId, $allowedStudentIds, true);
                     }

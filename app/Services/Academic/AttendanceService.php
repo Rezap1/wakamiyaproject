@@ -2,14 +2,17 @@
 
 namespace App\Services\Academic;
 
+use App\Exceptions\DuplicatePrimaryKeyException;
 use App\Helpers\AttendanceStatusHelper;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Core\EnterpriseEventService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class AttendanceService
 {
@@ -288,6 +291,135 @@ class AttendanceService
         });
     }
 
+    /**
+     * Record a MASTER fallback batch without changing any attendance that is
+     * already official for the same student, class and date.
+     *
+     * @param  list<array{Student_ID:string,Status:string,Notes?:string}>  $students
+     */
+    public function recordManualBatch(
+        string $classId,
+        string $attendanceDate,
+        array $students,
+        string $actorId
+    ): int {
+        $classId = trim($classId);
+        $attendanceDate = trim($attendanceDate);
+        $actorId = trim($actorId);
+        if ($classId === '' || $attendanceDate === '' || $actorId === '') {
+            throw new Exception('Kelas, tanggal, dan identitas pencatat wajib tersedia.');
+        }
+
+        $normalized = collect($students)->map(function (array $student): array {
+            $studentId = trim((string) ($student['Student_ID'] ?? ''));
+            $status = AttendanceStatusHelper::normalize($student['Status'] ?? '', '');
+            if ($studentId === '' || ! in_array($status, ['PRESENT', 'LATE', 'SICK', 'PERMITTED', 'ABSENT'], true)) {
+                throw new Exception('Data siswa atau status absensi manual tidak valid.');
+            }
+
+            return [
+                'Student_ID' => $studentId,
+                'Status' => $status,
+                'Notes' => trim((string) ($student['Notes'] ?? '')),
+            ];
+        })->values();
+
+        if ($normalized->isEmpty() || $normalized->pluck('Student_ID')->unique()->count() !== $normalized->count()) {
+            throw new Exception('Daftar absensi manual kosong atau memuat siswa ganda.');
+        }
+
+        $lockKey = 'manual_attendance_batch_'.sha1("{$classId}|{$attendanceDate}");
+
+        try {
+            $count = Cache::lock($lockKey, 30)->block(5, function () use ($normalized, $classId, $attendanceDate, $actorId): int {
+                return $this->runtimeTransaction(function () use ($normalized, $classId, $attendanceDate, $actorId): int {
+                    $existingStudentIds = collect($this->repository->fetchAll())
+                        ->filter(fn (array $attendance): bool => $this->isActiveStudentClassAttendance(
+                            $attendance,
+                            $classId,
+                            $attendanceDate
+                        ))
+                        ->pluck('Student_ID')
+                        ->map(fn ($studentId): string => trim((string) $studentId))
+                        ->filter()
+                        ->unique()
+                        ->values();
+
+                    $conflicts = $normalized->pluck('Student_ID')->intersect($existingStudentIds)->values();
+                    if ($conflicts->isNotEmpty()) {
+                        throw new Exception(
+                            'Absensi manual dibatalkan karena ada siswa yang sudah memiliki status pada tanggal tersebut.'
+                        );
+                    }
+
+                    $now = now('Asia/Jakarta');
+                    foreach ($normalized as $student) {
+                        $studentId = $student['Student_ID'];
+                        $status = $student['Status'];
+                        $record = [
+                            'Attendance_ID' => 'ATT-MAN-'.strtoupper(substr(hash('sha256', "{$studentId}|{$attendanceDate}|{$classId}|CLASS_DAILY"), 0, 20)),
+                            'Student_ID' => $studentId,
+                            'Class_ID' => $classId,
+                            'Schedule_ID' => '',
+                            // Manual MASTER is a fallback writer for the same
+                            // daily class session as QR, not a parallel status.
+                            'Attendance_Type' => 'CLASS_QR',
+                            'Attendance_Date' => $attendanceDate,
+                            'Status' => $status,
+                            'Check_In_Time' => AttendanceStatusHelper::isPresentLike($status) ? $now->format('H:i:s') : '',
+                            'Check_Out_Time' => '',
+                            'Verification_Method' => 'MASTER_MANUAL',
+                            'Notes' => $student['Notes'],
+                            'Is_Active' => 'TRUE',
+                            'Created_By' => $actorId,
+                            'Updated_By' => $actorId,
+                            'Created_At' => $now->toDateTimeString(),
+                            'Updated_At' => $now->toDateTimeString(),
+                        ];
+
+                        try {
+                            $created = $this->repository->create($record);
+                        } catch (DuplicatePrimaryKeyException $exception) {
+                            throw new Exception(
+                                'Absensi manual berkonflik dengan permintaan lain yang baru diproses. Muat ulang daftar siswa.',
+                                0,
+                                $exception
+                            );
+                        }
+                        if ($created === false || $created === null) {
+                            throw new Exception('Absensi manual gagal disimpan. Tidak ada perubahan parsial yang dipertahankan.');
+                        }
+                    }
+
+                    return $normalized->count();
+                });
+            });
+        } catch (LockTimeoutException $exception) {
+            throw new Exception('Absensi kelas sedang diproses oleh permintaan lain. Silakan muat ulang.', 0, $exception);
+        }
+
+        try {
+            $this->enterpriseEvent->dispatch(
+                'ACADEMIC',
+                'CREATE',
+                'MANUAL_ATTENDANCE_BATCH',
+                $classId.'|'.$attendanceDate,
+                $actorId,
+                ['ACADEMIC', 'ADMINISTRATOR'],
+                $normalized->pluck('Student_ID')->all(),
+                ['Class_ID' => $classId, 'Attendance_Date' => $attendanceDate, 'Count' => $count]
+            );
+        } catch (\Throwable $failure) {
+            Log::error('Manual attendance post-commit event failed', [
+                'class_id' => $classId,
+                'attendance_date' => $attendanceDate,
+                'exception_class' => $failure::class,
+            ]);
+        }
+
+        return $count;
+    }
+
     private function runtimeTransaction(callable $callback)
     {
         return $this->repository instanceof BaseMySqlRepository
@@ -365,5 +497,19 @@ class AttendanceService
                 || ($scheduleId !== '' && $existingSchedule === $scheduleId)
                 || ($classId === '' && $scheduleId === '');
         });
+    }
+
+    private function isActiveStudentClassAttendance(array $attendance, string $classId, string $date): bool
+    {
+        if (trim((string) ($attendance['Student_ID'] ?? '')) === ''
+            || trim((string) ($attendance['Attendance_Date'] ?? '')) !== $date
+            || strtoupper(trim((string) ($attendance['Is_Active'] ?? 'TRUE'))) === 'FALSE') {
+            return false;
+        }
+
+        $storedClassId = trim((string) ($attendance['Class_ID'] ?? ''));
+        $legacyScope = trim((string) ($attendance['Schedule_ID'] ?? ''));
+
+        return $storedClassId === $classId || ($storedClassId === '' && $legacyScope === $classId);
     }
 }

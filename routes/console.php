@@ -18,3 +18,7 @@ Schedule::command('quiz:cleanup')
     ->dailyAt('02:45')
     ->timezone('Asia/Jakarta')
     ->withoutOverlapping();
+Schedule::command('attendance:mark-absent')
+    ->everyTenMinutes()
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();

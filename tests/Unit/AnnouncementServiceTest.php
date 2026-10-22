@@ -111,6 +111,7 @@ class AnnouncementServiceTest extends TestCase
 
     public function test_authenticated_creator_cannot_be_forged_and_google_payload_is_canonical(): void
     {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-08 08:00:00', 'Asia/Jakarta'));
         $this->actingAs(new GenericUser(['id' => 'USR-TEACHER-A', 'User_ID' => 'USR-TEACHER-A']));
         $repo = new InMemoryAnnouncementRepository;
         $service = $this->service($repo);

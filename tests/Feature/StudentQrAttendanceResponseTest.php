@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class StudentQrAttendanceResponseTest extends TestCase
@@ -47,15 +48,23 @@ class StudentQrAttendanceResponseTest extends TestCase
             ->once()
             ->andThrow(new StudentAttendanceRejectedException($reasonCode, $message, $httpStatus));
 
-        $this->postJson(route('attendances.student.scan'), $this->validPayload())
-            ->assertStatus($httpStatus)
-            ->assertJson([
-                'success' => false,
-                'status' => 'rejected',
-                'reason_code' => $reasonCode,
-                'message' => $message,
-                'data' => null,
-            ]);
+        $response = $this->postJson(route('attendances.student.scan'), $this->validPayload())
+            ->assertStatus($httpStatus);
+
+        $expectedMessage = $httpStatus >= 500
+            ? $message.' Kode laporan: '.$response->json('report_id').'.'
+            : $message;
+        $response->assertJson([
+            'success' => false,
+            'status' => 'rejected',
+            'reason_code' => $reasonCode,
+            'message' => $expectedMessage,
+            'data' => null,
+        ]);
+        if ($httpStatus >= 500) {
+            $this->assertMatchesRegularExpression('/^SQR-[A-Z0-9]{10}$/', $response->json('report_id'));
+            $response->assertHeader('X-Request-ID', $response->json('report_id'));
+        }
     }
 
     public static function knownRejectionProvider(): array
@@ -179,6 +188,22 @@ class StudentQrAttendanceResponseTest extends TestCase
         $this->postJson(route('attendances.student.scan'), $this->validPayload())
             ->assertUnauthorized()
             ->assertJsonPath('reason_code', 'AUTHENTICATION_REQUIRED');
+    }
+
+    public function test_prepared_csrf_http_exception_gets_structured_rejection_instead_of_report_id(): void
+    {
+        $roleService = Mockery::mock(RoleService::class);
+        $roleService->shouldReceive('getRoleById')
+            ->once()
+            ->andThrow(new HttpException(419, 'CSRF token mismatch.'));
+        $this->app->instance(RoleService::class, $roleService);
+        $this->actingAs($this->user('USR-STUDENT', 'ROLE-STUDENT'));
+
+        $this->postJson(route('attendances.student.scan'), $this->validPayload())
+            ->assertStatus(419)
+            ->assertJsonPath('status', 'rejected')
+            ->assertJsonPath('reason_code', 'CSRF_TOKEN_INVALID')
+            ->assertJsonMissingPath('report_id');
     }
 
     public function test_scanner_frontend_reads_http_error_body_and_reason_code(): void

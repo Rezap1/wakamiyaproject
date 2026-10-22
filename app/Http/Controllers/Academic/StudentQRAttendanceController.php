@@ -7,9 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Academic\StudentQRAttendanceService;
 use App\Services\Attendance\AttendanceWindowException;
+use App\Support\Attendance\StudentAttendanceIncident;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StudentQRAttendanceController extends Controller
@@ -103,26 +103,39 @@ class StudentQRAttendanceController extends Controller
                 'data' => null,
             ], 422);
         } catch (StudentAttendanceRejectedException $e) {
+            $reportId = null;
+            if ($e->httpStatus >= 500) {
+                $reportId = StudentAttendanceIncident::report(
+                    $request,
+                    $e,
+                    'Student QR attendance operational failure'
+                );
+            }
+
             Log::warning('Student QR attendance rejected', [
                 'reason_code' => $e->reasonCode,
                 'user_id' => auth()->user()?->User_ID,
+                'report_id' => $reportId,
             ]);
 
             return response()->json([
                 'success' => false,
                 'status' => 'rejected',
                 'reason_code' => $e->reasonCode,
-                'message' => $e->userMessage,
-                'data' => $e->data ?: null,
-            ], $e->httpStatus);
-        } catch (\Throwable $e) {
-            $reportId = 'SQR-'.strtoupper(Str::random(10));
-            Log::error('Unexpected student QR attendance failure', [
+                'message' => $reportId
+                    ? $e->userMessage." Kode laporan: {$reportId}."
+                    : $e->userMessage,
                 'report_id' => $reportId,
-                'user_id' => auth()->user()?->User_ID,
-                'exception_class' => $e::class,
-                'exception' => $e,
-            ]);
+                'data' => $e->data ?: null,
+            ], $e->httpStatus)->withHeaders(array_filter([
+                'X-Request-ID' => $reportId,
+            ]));
+        } catch (\Throwable $e) {
+            $reportId = StudentAttendanceIncident::report(
+                $request,
+                $e,
+                'Unexpected student QR attendance failure'
+            );
 
             return response()->json([
                 'success' => false,
@@ -131,7 +144,7 @@ class StudentQRAttendanceController extends Controller
                 'message' => "Presensi belum dapat diproses karena terjadi gangguan sistem. Silakan coba kembali nanti atau hubungi administrator dengan menyebutkan kode laporan {$reportId}.",
                 'report_id' => $reportId,
                 'data' => null,
-            ], 500);
+            ], 500)->header('X-Request-ID', $reportId);
         }
     }
 

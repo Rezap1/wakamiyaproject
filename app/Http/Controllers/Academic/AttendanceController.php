@@ -298,9 +298,7 @@ class AttendanceController extends Controller
                 ->values()
                 ->all();
 
-            // Validate the entire batch before the first non-transactional
-            // Sheets write. A bad row later in the payload must not produce a
-            // rejected response after earlier students were already persisted.
+            // Validate the entire batch before the transactional write.
             foreach ($students as $student) {
                 if (! isset($student['Student_ID'], $student['Status'])
                     || ! in_array($student['Student_ID'], $validStudentIds, true)) {
@@ -310,22 +308,13 @@ class AttendanceController extends Controller
                 }
             }
 
-            $count = 0;
-            foreach ($students as $student) {
-                if (isset($student['Student_ID']) && isset($student['Status'])) {
-                    $attendanceData = [
-                        'Student_ID' => $student['Student_ID'],
-                        'Status' => $student['Status'],
-                        'Attendance_Date' => $date,
-                        'Class_ID' => $classId,
-                        'Schedule_ID' => $classId, // Legacy compatibility for historical rows that used the class as schedule scope.
-                        'Teacher_ID' => auth()->user()->Employee_ID ?? auth()->user()->User_ID,
-                        'Notes' => $student['Notes'] ?? '',
-                    ];
-                    $this->attendanceService->markAttendance($attendanceData);
-                    $count++;
-                }
-            }
+            $actorId = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
+            $count = $this->attendanceService->recordManualBatch(
+                (string) $classId,
+                (string) $date,
+                $students,
+                $actorId
+            );
 
             return redirect()->route('attendances.index')->with('success', "Kehadiran $count siswa berhasil dicatat.");
         } catch (\Exception $e) {

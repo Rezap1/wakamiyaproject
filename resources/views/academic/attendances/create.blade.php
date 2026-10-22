@@ -48,13 +48,19 @@
                     </select>
                 </div>
                 
-                <x-universal.input 
-                    name="Attendance_Date" 
-                    label="Tanggal Absensi *" 
-                    type="date"
-                    :required="true"
-                    value="{{ date('Y-m-d') }}"
-                />
+                <div class="mb-4">
+                    <label for="Attendance_Date" class="block text-[13px] font-bold text-slate-700 mb-1.5">Tanggal Absensi *</label>
+                    <input
+                        id="Attendance_Date"
+                        name="Attendance_Date"
+                        type="date"
+                        value="{{ old('Attendance_Date', date('Y-m-d')) }}"
+                        x-model="attendanceDate"
+                        @change="fetchStudents"
+                        required
+                        class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    >
+                </div>
             </div>
             
             <div x-show="isLoading" class="py-8 flex justify-center">
@@ -141,6 +147,7 @@
     function bulkAttendanceForm() {
         return {
             classId: '',
+            attendanceDate: @js(old('Attendance_Date', date('Y-m-d'))),
             students: [],
             isLoading: false,
 
@@ -152,7 +159,8 @@
                 
                 this.isLoading = true;
                 
-                fetch(`/api/classes/${this.classId}/students`, {
+                const query = new URLSearchParams({ attendance_date: this.attendanceDate });
+                fetch(`/api/classes/${this.classId}/students?${query.toString()}`, {
                     headers: { 'Accept': 'application/json' },
                 })
                     .then(response => {

@@ -3,6 +3,7 @@
 namespace App\Services\HR;
 
 use App\Exceptions\DuplicatePrimaryKeyException;
+use App\Exceptions\EmployeeAttendanceRejectedException;
 use App\Interfaces\GoogleSheets\AttendanceRepositoryInterface;
 use App\Interfaces\GoogleSheets\EmployeeRepositoryInterface;
 use App\Repositories\MySql\BaseMySqlRepository;
@@ -13,6 +14,7 @@ use App\Services\Core\SystemSettingService;
 use App\Support\CoordinateNormalizer;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -149,7 +151,7 @@ class QRAttendanceService
     {
         // 1. Decode Payload & Identify QR Type
         if ($this->extractPermanentQrIdentifier($tokenString, 'STU')) {
-            throw new Exception('Akses Ditolak: QR Code ini khusus untuk Presensi Siswa.');
+            throw new EmployeeAttendanceRejectedException('WRONG_QR_TYPE', 'Presensi ditolak: QR Code ini khusus untuk Presensi Siswa.');
         }
 
         $permanentIdentifier = $this->extractPermanentQrIdentifier($tokenString, 'EMP');
@@ -158,12 +160,12 @@ class QRAttendanceService
             $qr = $permanentQrService->getQrByIdentifier($permanentIdentifier);
 
             if (! $qr || strtoupper(trim((string) ($qr['QR_TYPE'] ?? ''))) !== 'EMPLOYEE' || strtoupper(trim((string) ($qr['STATUS'] ?? ''))) !== 'ACTIVE') {
-                throw new Exception('QR Code Permanen tidak valid atau sudah tidak aktif.');
+                throw new EmployeeAttendanceRejectedException('QR_INVALID', 'Presensi ditolak: QR permanen tidak valid atau sudah tidak aktif.');
             }
 
             $availability = $permanentQrService->getAvailabilityStatus($qr);
             if (! $availability['usable']) {
-                throw new Exception($availability['message']);
+                throw new EmployeeAttendanceRejectedException('QR_UNAVAILABLE', 'Presensi ditolak: '.trim((string) $availability['message']));
             }
 
             // Permanent Admin QR validity is controlled by MASTER_PERMANENT_QR.
@@ -171,13 +173,14 @@ class QRAttendanceService
             $session = $this->getPermanentEmployeeSessionContext();
             $attendanceConfiguration = $permanentQrService->getAttendanceWindowConfiguration($qr);
             if (! $attendanceConfiguration['valid']) {
-                throw new Exception('Konfigurasi jam absensi QR tidak valid: '.$attendanceConfiguration['message']);
+                throw new EmployeeAttendanceRejectedException('QR_TIME_CONFIGURATION_INVALID', 'Presensi ditolak: '.$attendanceConfiguration['message'], 503);
             }
             $session['Start_Time'] = $attendanceConfiguration['start'];
             $session['End_Time'] = $attendanceConfiguration['end'];
             if (! $this->isSessionOpen($session)) {
-                throw new Exception(
-                    'Waktu presensi QR pegawai ditutup. Jam berlaku: '
+                throw new EmployeeAttendanceRejectedException(
+                    'QR_WINDOW_CLOSED',
+                    'Presensi ditolak: waktu presensi QR pegawai ditutup. Jam berlaku: '
                     .$session['Start_Time'].'–'.$session['End_Time'].' WIB.'
                 );
             }
@@ -187,12 +190,12 @@ class QRAttendanceService
         } else {
             $decodedJson = base64_decode($tokenString, true);
             if (! $decodedJson) {
-                throw new Exception('Payload QR Code tidak valid.');
+                throw new EmployeeAttendanceRejectedException('QR_INVALID', 'Presensi ditolak: payload QR tidak valid.');
             }
 
             $payload = json_decode($decodedJson, true);
             if (! is_array($payload) || empty($payload['session_id']) || empty($payload['expires_at']) || empty($payload['nonce']) || empty($payload['sig'])) {
-                throw new Exception('Format data Token QR Code tidak valid.');
+                throw new EmployeeAttendanceRejectedException('QR_INVALID', 'Presensi ditolak: format token QR tidak valid.');
             }
 
             $qrType = $payload['qr_type'] ?? 'EMPLOYEE';
@@ -203,17 +206,17 @@ class QRAttendanceService
 
             // Strict QR Type Check
             if (strtoupper($qrType) === 'STUDENT') {
-                throw new Exception('Akses Ditolak: QR Code ini khusus untuk Presensi Siswa.');
+                throw new EmployeeAttendanceRejectedException('WRONG_QR_TYPE', 'Presensi ditolak: QR Code ini khusus untuk Presensi Siswa.');
             }
 
             // 2. Security Validation: Expiration TTL Check
             if ($expiresAt < now()->timestamp) {
-                throw new Exception('Token QR Code telah kadaluarsa. Mohon pindai ulang Token QR terbaru di layar.');
+                throw new EmployeeAttendanceRejectedException('QR_EXPIRED', 'Presensi ditolak: Token QR Code telah kadaluarsa. Pindai QR terbaru.');
             }
 
             // 3. Security Validation: Single-use Nonce Replay Check
             if (! Cache::has("qr_nonce_{$nonce}")) {
-                throw new Exception('Token QR Code telah digunakan atau tidak valid. Silakan pindai QR terbaru.');
+                throw new EmployeeAttendanceRejectedException('QR_EXPIRED', 'Presensi ditolak: token QR tidak lagi berlaku. Pindai QR terbaru.');
             }
 
             // 4. Security Validation: HMAC Signature Verification
@@ -222,21 +225,21 @@ class QRAttendanceService
             if (! hash_equals($expectedSig, $sig)) {
                 $expectedSigWithType = hash_hmac('sha256', "{$qrType}|{$sessionId}|{$expiresAt}|{$nonce}", $signingKey);
                 if (! hash_equals($expectedSigWithType, $sig)) {
-                    throw new Exception('Tanda tangan digital QR Code tidak valid atau telah dimanipulasi.');
+                    throw new EmployeeAttendanceRejectedException('QR_INVALID', 'Presensi ditolak: tanda tangan digital QR tidak valid.');
                 }
             }
 
             // 5. Security Validation: Session Active Check
             $session = $this->getSession($sessionId);
             if (! $this->isSessionOpen($session)) {
-                throw new Exception("Sesi kehadiran QR #{$sessionId} telah ditutup atau tidak aktif.");
+                throw new EmployeeAttendanceRejectedException('QR_SESSION_INACTIVE', 'Presensi ditolak: sesi QR telah ditutup atau tidak aktif.');
             }
         }
 
         // 6. Security Validation: Server-side Authenticated Employee Resolution (NO CLIENT IDOR TRUST)
         $user = auth()->user();
         if (! $user) {
-            throw new Exception('Sesi pengguna tidak valid. Silakan login kembali.');
+            throw new EmployeeAttendanceRejectedException('AUTHENTICATION_REQUIRED', 'Presensi ditolak: sesi Anda sudah berakhir. Silakan login kembali.', 401);
         }
 
         $roleName = strtoupper(trim((string) ($user->Role ?? session('role', ''))));
@@ -247,14 +250,14 @@ class QRAttendanceService
         }
 
         if ($roleName === 'STUDENT' || str_contains($roleName, 'STUDENT')) {
-            throw new Exception('Akses Ditolak: Hanya Pegawai/Guru yang dapat melakukan presensi HR.');
+            throw new EmployeeAttendanceRejectedException('ACCESS_DENIED', 'Presensi ditolak: hanya pegawai atau guru yang dapat melakukan presensi HR.', 403);
         }
 
         // GPS and the configured geofence are mandatory for every employee QR scan.
         $settingService = app(SystemSettingService::class);
         if ($userLat === null || $userLon === null || ! is_finite($userLat) || ! is_finite($userLon)
             || $userLat < -90 || $userLat > 90 || $userLon < -180 || $userLon > 180) {
-            throw new Exception('GPS wajib aktif dan koordinat lokasi harus valid untuk presensi QR pegawai.');
+            throw new EmployeeAttendanceRejectedException('GPS_INVALID', 'Presensi ditolak: GPS wajib aktif dan koordinat harus valid.');
         }
 
         $lpkLat = $this->parseRequiredCoordinate($settingService->get('LPK_LATITUDE', null), -90, 90, 'latitude');
@@ -264,12 +267,17 @@ class QRAttendanceService
         );
         $distance = $this->calculateDistance($userLat, $userLon, $lpkLat, $lpkLon);
         if ($distance > $maxRadius) {
-            throw new Exception("Anda berada di luar area LPK. Jarak Anda: {$distance} meter. Maksimal jarak yang diizinkan: {$maxRadius} meter.");
+            throw new EmployeeAttendanceRejectedException(
+                'OUTSIDE_GEOFENCE',
+                "Presensi ditolak: Anda berada di luar area LPK (jarak {$distance} meter; batas {$maxRadius} meter).",
+                422,
+                ['distance_meters' => $distance, 'max_radius_meters' => $maxRadius]
+            );
         }
 
         $employee = $this->resolveEmployeeForUser($user);
         if (! $employee || strtoupper(trim($employee['Is_Active'] ?? 'TRUE')) === 'FALSE') {
-            throw new Exception('Akses Ditolak: Profil pegawai Anda tidak ditemukan atau sedang tidak aktif.');
+            throw new EmployeeAttendanceRejectedException('EMPLOYEE_PROFILE_INVALID', 'Presensi ditolak: Profil pegawai Anda tidak ditemukan atau sedang tidak aktif.');
         }
 
         $employeeId = $employee['Employee_ID'];
@@ -277,111 +285,121 @@ class QRAttendanceService
         // 7. Atomic Concurrency Lock & Duplicate Check
         $lockKey = "qr_scan_{$sessionId}_{$employeeId}";
 
-        return Cache::lock($lockKey, 10)->block(3, function () use ($sessionId, $session, $user, $employee, $employeeId, $deviceInfo, $distance) {
-            return $this->runtimeTransaction(function () use ($sessionId, $session, $user, $employee, $employeeId, $deviceInfo, $distance): array {
-                // Check Duplicate Attendance for this Employee in this Session
-                $allAttendances = collect($this->attendanceRepository->fetchAll());
-                $existing = $allAttendances->first(function ($att) use ($sessionId, $employeeId) {
-                    return ($att['Employee_ID'] ?? '') === $employeeId &&
-                           ($att['Session_ID'] ?? '') === $sessionId &&
-                           strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
-                });
+        try {
+            return Cache::lock($lockKey, 10)->block(3, function () use ($sessionId, $session, $user, $employee, $employeeId, $deviceInfo, $distance) {
+                return $this->runtimeTransaction(function () use ($sessionId, $session, $user, $employee, $employeeId, $deviceInfo, $distance): array {
+                    // Check Duplicate Attendance for this Employee in this Session
+                    $allAttendances = collect($this->attendanceRepository->fetchAll());
+                    $existing = $allAttendances->first(function ($att) use ($sessionId, $employeeId) {
+                        return ($att['Employee_ID'] ?? '') === $employeeId &&
+                               ($att['Session_ID'] ?? '') === $sessionId &&
+                               strtoupper(trim($att['Is_Active'] ?? 'TRUE')) !== 'FALSE';
+                    });
 
-                if ($existing) {
-                    throw new Exception("Presensi gagal: Anda ({$employee['Full_Name']}) sudah melakukan presensi untuk sesi ini.");
-                }
+                    if ($existing) {
+                        throw new EmployeeAttendanceRejectedException('ALREADY_ATTENDED', 'Presensi tidak dicatat ulang karena Anda sudah melakukan presensi untuk sesi ini.', 409);
+                    }
 
-                // Consume Nonce immediately to prevent replay
-                // Cache::forget("qr_nonce_{$nonce}"); // REMOVED TO ALLOW MULTI-USER QR
+                    // Consume Nonce immediately to prevent replay
+                    // Cache::forget("qr_nonce_{$nonce}"); // REMOVED TO ALLOW MULTI-USER QR
 
-                // 8. Server-side Time Rules (Asia/Jakarta)
-                $nowCarbon = now();
-                $currentTimeStr = $nowCarbon->format('H:i:s');
-                $startTimeStr = $session['Start_Time'] ?? '08:00';
+                    // 8. Server-side Time Rules (Asia/Jakarta)
+                    $nowCarbon = now();
+                    $currentTimeStr = $nowCarbon->format('H:i:s');
+                    $startTimeStr = $session['Start_Time'] ?? '08:00';
 
-                $settingService = app(SystemSettingService::class);
-                // Read the current policy at decision time so HR setting changes
-                // apply to the next scan without rebuilding the session.
-                $gracePeriod = (int) $settingService->get(
-                    'LATE_TOLERANCE_MINUTES',
-                    $session['Grace_Period'] ?? 30
-                );
-
-                $startAt = Carbon::parse(($session['Date'] ?? now()->toDateString()).' '.$startTimeStr);
-                $lateThreshold = $startAt->copy()->addMinutes($gracePeriod);
-                $isLate = $nowCarbon->gt($lateThreshold);
-                $status = $isLate ? 'LATE' : 'PRESENT';
-                $lateMinutes = $isLate ? (int) max(1, $startAt->diffInMinutes($nowCarbon)) : 0;
-
-                // 9. Persistence
-                $attendanceId = 'ATT-EQR-'.strtoupper(substr(hash('sha256', "{$employeeId}|{$sessionId}"), 0, 20));
-                $record = [
-                    'Attendance_ID' => $attendanceId,
-                    'Employee_ID' => $employeeId,
-                    'User_ID' => $user->User_ID,
-                    'Session_ID' => $sessionId,
-                    'Attendance_Date' => now()->toDateString(),
-                    'Check_In_Time' => $currentTimeStr,
-                    'Status' => $status,
-                    'Late_Minutes' => $lateMinutes,
-                    'Verification_Method' => 'EMPLOYEE_GEO_QR',
-                    'Device_Info' => $deviceInfo ?? request()->header('User-Agent', 'Mobile Scanner'),
-                    'Is_Active' => 'TRUE',
-                    'Created_At' => now()->toDateTimeString(),
-                ];
-
-                try {
-                    $res = $this->attendanceRepository->create($record);
-                } catch (DuplicatePrimaryKeyException $e) {
-                    throw new Exception("Presensi gagal: Anda ({$employee['Full_Name']}) sudah melakukan presensi untuk sesi ini.", 0, $e);
-                }
-                if ($res === false || $res === null) {
-                    throw new Exception('Presensi pegawai gagal disimpan ke penyimpanan.');
-                }
-
-                try {
-                    Cache::forget("employee_attendance_{$employeeId}");
-                    Cache::forget('hr_dashboard');
-                } catch (\Throwable $cacheFailure) {
-                    $this->logPostCommitFailure($attendanceId, $cacheFailure, 'cache');
-                }
-
-                // 10. Unified Event Dispatch
-                try {
-                    $this->enterpriseEvent->dispatch(
-                        'HR',
-                        'CREATE',
-                        'ATTENDANCE',
-                        $attendanceId,
-                        $user->User_ID ?? auth()->id(),
-                        ['HR', 'ADMINISTRATOR'],
-                        [$employeeId],
-                        [
-                            'Employee_Name' => $employee['Full_Name'] ?? $employeeId,
-                            'Status' => $status,
-                            'Late_Minutes' => $lateMinutes,
-                            'Check_In_Time' => $currentTimeStr,
-                        ]
+                    $settingService = app(SystemSettingService::class);
+                    // Read the current policy at decision time so HR setting changes
+                    // apply to the next scan without rebuilding the session.
+                    $gracePeriod = (int) $settingService->get(
+                        'LATE_TOLERANCE_MINUTES',
+                        $session['Grace_Period'] ?? 30
                     );
-                } catch (\Throwable $eventFailure) {
-                    $this->logPostCommitFailure($attendanceId, $eventFailure, 'event');
-                }
 
-                return [
-                    'attendance' => $record,
-                    'employee' => [
-                        'id' => $employeeId,
-                        'name' => $employee['Full_Name'] ?? $employeeId,
-                    ],
-                    'action' => 'CHECK_IN',
-                    'status' => $status,
-                    'late_minutes' => $lateMinutes,
-                    'check_in_time' => $currentTimeStr,
-                    'check_out_time' => null,
-                    'distance_meters' => $distance,
-                ];
-            }, [[$this->employeeRepository, (string) $employeeId]]);
-        });
+                    $startAt = Carbon::parse(($session['Date'] ?? now()->toDateString()).' '.$startTimeStr);
+                    $lateThreshold = $startAt->copy()->addMinutes($gracePeriod);
+                    $isLate = $nowCarbon->gt($lateThreshold);
+                    $status = $isLate ? 'LATE' : 'PRESENT';
+                    $lateMinutes = $isLate ? (int) max(1, $startAt->diffInMinutes($nowCarbon)) : 0;
+
+                    // 9. Persistence
+                    $attendanceId = 'ATT-EQR-'.strtoupper(substr(hash('sha256', "{$employeeId}|{$sessionId}"), 0, 20));
+                    $record = [
+                        'Attendance_ID' => $attendanceId,
+                        'Employee_ID' => $employeeId,
+                        'User_ID' => $user->User_ID,
+                        'Session_ID' => $sessionId,
+                        'Attendance_Date' => now()->toDateString(),
+                        'Check_In_Time' => $currentTimeStr,
+                        'Status' => $status,
+                        'Late_Minutes' => $lateMinutes,
+                        'Verification_Method' => 'EMPLOYEE_GEO_QR',
+                        'Device_Info' => $deviceInfo ?? request()->header('User-Agent', 'Mobile Scanner'),
+                        'Is_Active' => 'TRUE',
+                        'Created_At' => now()->toDateTimeString(),
+                    ];
+
+                    try {
+                        $res = $this->attendanceRepository->create($record);
+                    } catch (DuplicatePrimaryKeyException $e) {
+                        throw new EmployeeAttendanceRejectedException('ALREADY_ATTENDED', 'Presensi tidak dicatat ulang karena Anda sudah melakukan presensi untuk sesi ini.', 409, [], $e);
+                    }
+                    if ($res === false || $res === null) {
+                        throw new \RuntimeException('Attendance repository returned an empty employee QR write result.');
+                    }
+
+                    try {
+                        Cache::forget("employee_attendance_{$employeeId}");
+                        Cache::forget('hr_dashboard');
+                    } catch (\Throwable $cacheFailure) {
+                        $this->logPostCommitFailure($attendanceId, $cacheFailure, 'cache');
+                    }
+
+                    // 10. Unified Event Dispatch
+                    try {
+                        $this->enterpriseEvent->dispatch(
+                            'HR',
+                            'CREATE',
+                            'ATTENDANCE',
+                            $attendanceId,
+                            $user->User_ID ?? auth()->id(),
+                            ['HR', 'ADMINISTRATOR'],
+                            [$employeeId],
+                            [
+                                'Employee_Name' => $employee['Full_Name'] ?? $employeeId,
+                                'Status' => $status,
+                                'Late_Minutes' => $lateMinutes,
+                                'Check_In_Time' => $currentTimeStr,
+                            ]
+                        );
+                    } catch (\Throwable $eventFailure) {
+                        $this->logPostCommitFailure($attendanceId, $eventFailure, 'event');
+                    }
+
+                    return [
+                        'attendance' => $record,
+                        'employee' => [
+                            'id' => $employeeId,
+                            'name' => $employee['Full_Name'] ?? $employeeId,
+                        ],
+                        'action' => 'CHECK_IN',
+                        'status' => $status,
+                        'late_minutes' => $lateMinutes,
+                        'check_in_time' => $currentTimeStr,
+                        'check_out_time' => null,
+                        'distance_meters' => $distance,
+                    ];
+                }, [[$this->employeeRepository, (string) $employeeId]]);
+            });
+        } catch (LockTimeoutException $exception) {
+            throw new EmployeeAttendanceRejectedException(
+                'ATTENDANCE_BUSY',
+                'Presensi sedang diproses dari permintaan sebelumnya. Tunggu sebentar lalu coba lagi.',
+                409,
+                [],
+                $exception
+            );
+        }
     }
 
     /** @param list<array{0: object, 1: string}> $locks */
@@ -640,7 +658,7 @@ class QRAttendanceService
             allowMigratedFixedScaleInteger: true
         );
         if ($coordinate === null) {
-            throw new Exception("Konfigurasi {$label} lokasi LPK belum valid. Presensi ditolak.");
+            throw new EmployeeAttendanceRejectedException('GEOFENCE_CONFIGURATION_INVALID', "Presensi belum dapat diproses karena konfigurasi {$label} lokasi LPK belum valid.", 503);
         }
 
         return $coordinate;
@@ -650,12 +668,12 @@ class QRAttendanceService
     {
         $normalized = str_replace(',', '.', trim((string) $value));
         if ($normalized === '' || ! is_numeric($normalized)) {
-            throw new Exception('Konfigurasi radius geofence belum valid. Presensi ditolak.');
+            throw new EmployeeAttendanceRejectedException('GEOFENCE_CONFIGURATION_INVALID', 'Presensi belum dapat diproses karena konfigurasi radius geofence belum valid.', 503);
         }
 
         $radius = (float) $normalized;
         if (! is_finite($radius) || $radius <= 0) {
-            throw new Exception('Konfigurasi radius geofence belum valid. Presensi ditolak.');
+            throw new EmployeeAttendanceRejectedException('GEOFENCE_CONFIGURATION_INVALID', 'Presensi belum dapat diproses karena konfigurasi radius geofence belum valid.', 503);
         }
 
         return $radius;

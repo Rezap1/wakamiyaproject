@@ -29,7 +29,8 @@ class StoreAttendanceRequest extends FormRequest
             'students' => 'required|array',
             'students.*.Student_ID' => 'required|string',
             'students.*.Status' => 'required|in:Hadir,Terlambat,Sakit,Izin,Alpha,PRESENT,LATE,SICK,PERMITTED,ABSENT',
-        
+            'students.*.Notes' => 'nullable|string|max:500',
+
             //
         ];
     }

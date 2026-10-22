@@ -4,6 +4,8 @@ use App\Http\Middleware\AgendaAccess;
 use App\Http\Middleware\ProtectMassAssignment;
 use App\Http\Middleware\RoleMiddleware;
 use App\Http\Middleware\ShareUserRole;
+use App\Support\Attendance\EmployeeAttendanceIncident;
+use App\Support\Attendance\StudentAttendanceIncident;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -11,8 +13,6 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -35,9 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $isStudentAttendanceApi = static fn (Request $request): bool => $request->is('attendance/student/scan') && $request->expectsJson();
+        $isEmployeeAttendanceApi = static fn (Request $request): bool => $request->is('hr/attendance/qr/scan') && $request->expectsJson();
 
-        $exceptions->render(function (AuthenticationException $exception, Request $request) use ($isStudentAttendanceApi) {
-            if (! $isStudentAttendanceApi($request)) {
+        $exceptions->render(function (AuthenticationException $exception, Request $request) use ($isStudentAttendanceApi, $isEmployeeAttendanceApi) {
+            if (! $isStudentAttendanceApi($request) && ! $isEmployeeAttendanceApi($request)) {
                 return null;
             }
 
@@ -50,8 +51,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 401);
         });
 
-        $exceptions->render(function (TokenMismatchException $exception, Request $request) use ($isStudentAttendanceApi) {
-            if (! $isStudentAttendanceApi($request)) {
+        $exceptions->render(function (TokenMismatchException $exception, Request $request) use ($isStudentAttendanceApi, $isEmployeeAttendanceApi) {
+            if (! $isStudentAttendanceApi($request) && ! $isEmployeeAttendanceApi($request)) {
                 return null;
             }
 
@@ -64,8 +65,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 419);
         });
 
-        $exceptions->render(function (ThrottleRequestsException $exception, Request $request) use ($isStudentAttendanceApi) {
-            if (! $isStudentAttendanceApi($request)) {
+        $exceptions->render(function (ThrottleRequestsException $exception, Request $request) use ($isStudentAttendanceApi, $isEmployeeAttendanceApi) {
+            if (! $isStudentAttendanceApi($request) && ! $isEmployeeAttendanceApi($request)) {
                 return null;
             }
 
@@ -83,6 +84,16 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
+            if ($exception instanceof HttpExceptionInterface && $exception->getStatusCode() === 419) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 'rejected',
+                    'reason_code' => 'CSRF_TOKEN_INVALID',
+                    'message' => 'Presensi ditolak: sesi halaman sudah kedaluwarsa. Muat ulang halaman lalu coba lagi.',
+                    'data' => null,
+                ], 419);
+            }
+
             if ($exception instanceof HttpExceptionInterface && $exception->getStatusCode() === 403) {
                 return response()->json([
                     'success' => false,
@@ -93,13 +104,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 403);
             }
 
-            $reportId = 'SQR-'.strtoupper(Str::random(10));
-            Log::error('Unexpected student QR attendance middleware failure', [
-                'report_id' => $reportId,
-                'user_id' => auth()->user()?->User_ID,
-                'exception_class' => $exception::class,
-                'exception' => $exception,
-            ]);
+            $reportId = StudentAttendanceIncident::report(
+                $request,
+                $exception,
+                'Unexpected student QR attendance middleware failure'
+            );
 
             return response()->json([
                 'success' => false,
@@ -108,6 +117,47 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => "Presensi belum dapat diproses karena terjadi gangguan sistem. Silakan coba kembali nanti atau hubungi administrator dengan menyebutkan kode laporan {$reportId}.",
                 'report_id' => $reportId,
                 'data' => null,
-            ], 500);
+            ], 500)->header('X-Request-ID', $reportId);
+        });
+
+        $exceptions->render(function (Throwable $exception, Request $request) use ($isEmployeeAttendanceApi) {
+            if (! $isEmployeeAttendanceApi($request)) {
+                return null;
+            }
+
+            if ($exception instanceof HttpExceptionInterface && $exception->getStatusCode() === 419) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 'rejected',
+                    'reason_code' => 'CSRF_TOKEN_INVALID',
+                    'message' => 'Presensi ditolak: sesi halaman sudah kedaluwarsa. Muat ulang halaman lalu coba lagi.',
+                    'data' => null,
+                ], 419);
+            }
+
+            if ($exception instanceof HttpExceptionInterface && $exception->getStatusCode() === 403) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 'rejected',
+                    'reason_code' => 'ACCESS_DENIED',
+                    'message' => 'Presensi ditolak: akun Anda tidak memiliki akses untuk presensi pegawai.',
+                    'data' => null,
+                ], 403);
+            }
+
+            $reportId = EmployeeAttendanceIncident::report(
+                $request,
+                $exception,
+                'Unexpected employee QR attendance middleware failure'
+            );
+
+            return response()->json([
+                'success' => false,
+                'status' => 'error',
+                'reason_code' => 'SYSTEM_ERROR',
+                'message' => "Presensi belum dapat diproses karena terjadi gangguan sistem. Kode laporan: {$reportId}.",
+                'report_id' => $reportId,
+                'data' => null,
+            ], 500)->header('X-Request-ID', $reportId);
         });
     })->create();
