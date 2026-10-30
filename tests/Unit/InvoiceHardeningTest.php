@@ -9,10 +9,14 @@ use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Repositories\GoogleSheets\BaseSheetRepository;
+use App\Repositories\GoogleSheets\InvoiceRepository;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Finance\InvoiceService;
+use App\Support\Migration\WmsMigrationManifest;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Mockery;
 use Tests\TestCase;
 
@@ -193,6 +197,21 @@ class InvoiceHardeningTest extends TestCase
         $this->assertSame(250.0, (float) $invoice['Parsed_Line_Items'][0]['subtotal']);
     }
 
+    public function test_mysql_json_object_key_reordering_is_not_treated_as_data_corruption(): void
+    {
+        $repo = new FreshIntegrityInvoiceRepository(reorderJsonKeys: true);
+        $service = $this->makeService($repo);
+
+        $invoice = $service->create([
+            'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU001', 'Category' => 'Medical',
+            'Due_Date' => now()->addDays(14)->format('Y-m-d'),
+            'items' => [['description' => 'Medical', 'qty' => 2, 'unit_price' => 125]],
+        ]);
+
+        $this->assertSame(250.0, (float) $invoice['Amount']);
+        $this->assertCount(1, $repo->createdRows());
+    }
+
     public function test_invoice_line_items_loss_after_persistence_fails_closed(): void
     {
         $repo = new FreshIntegrityInvoiceRepository(true);
@@ -204,6 +223,47 @@ class InvoiceHardeningTest extends TestCase
             'Due_Date' => now()->addDays(14)->format('Y-m-d'),
             'items' => [['description' => 'Medical', 'qty' => 1, 'unit_price' => 100]],
         ]);
+    }
+
+    public function test_mysql_invoice_integrity_failure_rolls_back_inserted_row(): void
+    {
+        $createdTable = false;
+        if (! Schema::hasTable('FINANCE_INVOICE')) {
+            Schema::create('FINANCE_INVOICE', function ($table): void {
+                foreach (WmsMigrationManifest::contracts()['FINANCE_INVOICE']['headers'] as $column) {
+                    if ($column === 'Invoice_ID') {
+                        $table->string($column)->primary();
+                    } else {
+                        $table->text($column)->nullable();
+                    }
+                }
+            });
+            $createdTable = true;
+        }
+
+        try {
+            $service = $this->makeService(new CorruptingFreshInvoiceRepository);
+
+            try {
+                $service->create([
+                    'Invoice_Type' => 'STUDENT', 'Student_ID' => 'STU001', 'Category' => 'Medical',
+                    'Due_Date' => now()->addDays(14)->format('Y-m-d'),
+                    'items' => [['description' => 'Medical', 'qty' => 1, 'unit_price' => 100]],
+                ]);
+                $this->fail('Integrity failure should abort invoice creation.');
+            } catch (FinancialIntegrityException) {
+                $this->addToAssertionCount(1);
+            }
+
+            $this->assertSame(0, DB::table('FINANCE_INVOICE')
+                ->where('Student_ID', 'STU001')
+                ->where('Category', 'Medical')
+                ->count());
+        } finally {
+            if ($createdTable) {
+                Schema::drop('FINANCE_INVOICE');
+            }
+        }
     }
 
     private function makeService(InvoiceRepositoryInterface $repo, ?EnterpriseEventService $events = null): InvoiceService
@@ -295,7 +355,10 @@ class FreshIntegrityInvoiceRepository implements InvoiceRepositoryInterface
 
     private array $rows = [];
 
-    public function __construct(private bool $dropLineItems = false) {}
+    public function __construct(
+        private bool $dropLineItems = false,
+        private bool $reorderJsonKeys = false,
+    ) {}
 
     public function getAll()
     {
@@ -319,9 +382,24 @@ class FreshIntegrityInvoiceRepository implements InvoiceRepositoryInterface
         if ($this->dropLineItems) {
             unset($data['Line_Items']);
         }
+        if ($this->reorderJsonKeys && isset($data['Line_Items'])) {
+            $items = json_decode((string) $data['Line_Items'], true);
+            foreach ($items as &$item) {
+                if (is_array($item)) {
+                    krsort($item);
+                }
+            }
+            unset($item);
+            $data['Line_Items'] = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
         $this->rows[] = $data;
 
         return true;
+    }
+
+    public function createdRows(): array
+    {
+        return $this->rows;
     }
 
     public function update($id, array $data)
@@ -335,6 +413,19 @@ class FreshIntegrityInvoiceRepository implements InvoiceRepositoryInterface
     }
 
     public function clearCache() {}
+}
+
+class CorruptingFreshInvoiceRepository extends InvoiceRepository
+{
+    public function findByIdFresh($id)
+    {
+        $row = parent::findByIdFresh($id);
+        if (is_array($row)) {
+            unset($row['Line_Items']);
+        }
+
+        return $row;
+    }
 }
 
 class HardeningSheetRepository extends BaseSheetRepository

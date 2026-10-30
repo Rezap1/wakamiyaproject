@@ -10,9 +10,11 @@ use App\Interfaces\GoogleSheets\ScheduleRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Attendance\AttendanceRequestService;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\NotificationService;
+use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Mockery;
@@ -318,6 +320,42 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
         $service->approveRequest('REQ-A', 'IZIN', 'Nope', $this->teacherUser('USR-TCH-B'));
     }
 
+    public function test_database_row_lock_prevents_stale_pending_request_from_overwriting_approved_status(): void
+    {
+        $requestRepo = new H838LockedAttendanceRequestRepository(
+            current: $this->request(['Status' => 'APPROVED']),
+            stale: $this->request(['Status' => 'PENDING']),
+        );
+        $attendanceRepo = new H838AttendanceMemoryRepository([
+            'ATT-A' => $this->attendance(['Status' => 'IZIN']),
+        ]);
+        $activityLog = Mockery::mock(ActivityLogService::class);
+        $activityLog->shouldNotReceive('log');
+        $service = new AttendanceRequestService(
+            $requestRepo,
+            $attendanceRepo,
+            $activityLog,
+            new H838StudentMemoryRepository($this->students()),
+            new H838ScheduleMemoryRepository($this->schedules()),
+            null,
+            new H838TeacherMemoryRepository($this->teachers()),
+            new H838ClassMemoryRepository($this->classes())
+        );
+
+        try {
+            $service->rejectRequest('REQ-A', 'Stale conflicting click', $this->teacherUser('USR-TCH-A'));
+            $this->fail('A stale pending snapshot must not overwrite an approved request.');
+        } catch (\Exception $exception) {
+            $this->assertStringContainsString('sudah disetujui', $exception->getMessage());
+        }
+
+        $this->assertSame(1, $requestRepo->lockCount);
+        $this->assertSame(1, $requestRepo->transactionCount);
+        $this->assertSame([], $requestRepo->updates);
+        $this->assertSame('APPROVED', $requestRepo->rows['REQ-A']['Status']);
+        $this->assertSame('IZIN', $attendanceRepo->rows['ATT-A']['Status']);
+    }
+
     private function newService(array $requests = [], array $attendances = [], ?NotificationService $notifications = null): array
     {
         $requestRepo = new H838AttendanceRequestMemoryRepository($requests);
@@ -470,6 +508,76 @@ final class H838AttendanceRequestMemoryRepository implements AttendanceRequestRe
     public function generateNewId(string $prefix, int $padding = 6): string
     {
         return $prefix.'-'.str_pad((string) $this->counter++, $padding, '0', STR_PAD_LEFT);
+    }
+}
+
+final class H838LockedAttendanceRequestRepository extends BaseMySqlRepository implements AttendanceRequestRepositoryInterface
+{
+    public array $rows;
+
+    public array $updates = [];
+
+    public int $lockCount = 0;
+
+    public int $transactionCount = 0;
+
+    public function __construct(private array $stale, array $current)
+    {
+        $this->rows = [$current['Request_ID'] => $current];
+    }
+
+    public function transaction(Closure $callback)
+    {
+        $this->transactionCount++;
+
+        return $callback();
+    }
+
+    public function lockById($id)
+    {
+        $this->lockCount++;
+
+        return $this->rows[$id] ?? null;
+    }
+
+    public function fetchAll()
+    {
+        return collect(array_values($this->rows));
+    }
+
+    public function findById(string $id)
+    {
+        return $id === ($this->stale['Request_ID'] ?? null) ? $this->stale : null;
+    }
+
+    public function findByStudent(string $studentId)
+    {
+        return collect($this->rows)->where('Student_ID', $studentId)->values();
+    }
+
+    public function create(array $data)
+    {
+        $this->rows[$data['Request_ID']] = $data;
+
+        return true;
+    }
+
+    public function update($id, array $data)
+    {
+        $this->updates[] = [$id, $data];
+        $this->rows[$id] = array_merge($this->rows[$id], $data);
+
+        return true;
+    }
+
+    public function clearCache()
+    {
+        return true;
+    }
+
+    public function generateNewId(string $prefix, int $padding = 6): string
+    {
+        return $prefix.'-'.str_pad('1', $padding, '0', STR_PAD_LEFT);
     }
 }
 

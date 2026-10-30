@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\Controller;
+use App\Services\Academic\StudentQRAttendanceService;
+use App\Services\HR\QRAttendanceService;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -49,6 +51,26 @@ class ReleaseGateHardeningTest extends TestCase
         $this->assertStringNotContainsString('secret.json', $message);
     }
 
+    public function test_default_production_failure_message_has_a_safe_correlation_id(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        config(['app.debug' => false]);
+
+        $controller = new class extends Controller
+        {
+            public function present(\Throwable $exception): string
+            {
+                return $this->safeExceptionMessage($exception);
+            }
+        };
+
+        $message = $controller->present(new \RuntimeException('SQLSTATE secret detail'));
+
+        $this->assertMatchesRegularExpression('/Kode laporan: WMS-[A-Z0-9]{10}\./', $message);
+        $this->assertStringNotContainsString('SQLSTATE', $message);
+        $this->assertStringNotContainsString('secret detail', $message);
+    }
+
     public function test_controllers_do_not_send_raw_exception_messages_to_browser(): void
     {
         $violations = [];
@@ -56,18 +78,18 @@ class ReleaseGateHardeningTest extends TestCase
         $files = new \RecursiveIteratorIterator($directory);
 
         foreach ($files as $file) {
-            if (!$file->isFile() || $file->getExtension() !== 'php' || $file->getFilename() === 'Controller.php') {
+            if (! $file->isFile() || $file->getExtension() !== 'php' || $file->getFilename() === 'Controller.php') {
                 continue;
             }
 
             foreach (file($file->getPathname()) as $lineNumber => $line) {
-                if (str_contains($line, 'getMessage()') && !str_contains($line, 'Log::')) {
-                    $violations[] = $file->getPathname() . ':' . ($lineNumber + 1);
+                if (str_contains($line, 'getMessage()') && ! str_contains($line, 'Log::')) {
+                    $violations[] = $file->getPathname().':'.($lineNumber + 1);
                 }
             }
         }
 
-        $this->assertSame([], $violations, 'Raw exception messages found: ' . implode(', ', $violations));
+        $this->assertSame([], $violations, 'Raw exception messages found: '.implode(', ', $violations));
     }
 
     public function test_permanent_scanner_uses_ssot_radius_before_rendering_it(): void
@@ -88,8 +110,8 @@ class ReleaseGateHardeningTest extends TestCase
         config(['app.key' => null]);
 
         foreach ([
-            \App\Services\HR\QRAttendanceService::class,
-            \App\Services\Academic\StudentQRAttendanceService::class,
+            QRAttendanceService::class,
+            StudentQRAttendanceService::class,
         ] as $serviceClass) {
             $reflection = new \ReflectionClass($serviceClass);
             $service = $reflection->newInstanceWithoutConstructor();

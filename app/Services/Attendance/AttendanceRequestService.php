@@ -110,12 +110,17 @@ class AttendanceRequestService
             throw new Exception('Pengajuan tidak ditemukan.');
         }
 
+        $this->assertTeacherCanReviewRow($request, $user);
+
+        return $request;
+    }
+
+    private function assertTeacherCanReviewRow(array $request, $user): void
+    {
         $scope = $this->teacherScopeForUser($user);
         if (! $this->requestAllowedForTeacherFromSnapshot($request, $scope)) {
             throw new AuthorizationException('Anda tidak memiliki akses untuk memproses pengajuan ini.');
         }
-
-        return $request;
     }
 
     public function createRequest(array $data, $user)
@@ -357,36 +362,34 @@ class AttendanceRequestService
         }
 
         return Cache::lock('attendance_request_status_'.md5((string) $requestId), 15)->block(10, function () use ($requestId, $statusToApply, $notes, $user) {
-            $request = $this->assertTeacherCanReviewRequest($requestId, $user);
-            $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
-            $target = $this->resolveRequestTarget($request);
-            $existingAttendance = $this->resolveOfficialAttendance($request, $target);
+            $decision = $this->runtimeTransaction(function () use ($requestId, $statusToApply, $notes, $user): array {
+                $request = $this->lockedReviewableRequest($requestId, $user);
+                $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
+                $target = $this->resolveRequestTarget($request);
+                $existingAttendance = $this->lockedOfficialAttendance($request, $target);
 
-            if ($currentStatus === 'APPROVED') {
-                if ($existingAttendance && ! $this->attendanceStatusMatches($existingAttendance['Status'] ?? '', $statusToApply)) {
-                    throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
+                if ($currentStatus === 'APPROVED') {
+                    if ($existingAttendance && ! $this->attendanceStatusMatches($existingAttendance['Status'] ?? '', $statusToApply)) {
+                        throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
+                    }
+
+                    $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+
+                    return ['changed' => false, 'request' => $request];
                 }
 
-                $this->runtimeTransaction(
-                    fn () => $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance)
-                );
+                if ($currentStatus === 'REJECTED') {
+                    throw new Exception('Pengajuan sudah ditolak sebelumnya.');
+                }
 
-                return true;
-            }
+                $updateData = [
+                    'Status' => 'APPROVED',
+                    'Academic_Notes' => $notes,
+                    'Reviewed_By' => $this->actorId($user),
+                    'Reviewed_At' => now()->toDateTimeString(),
+                    'Updated_At' => now()->toDateTimeString(),
+                ];
 
-            if ($currentStatus === 'REJECTED') {
-                throw new Exception('Pengajuan sudah ditolak sebelumnya.');
-            }
-
-            $updateData = [
-                'Status' => 'APPROVED',
-                'Academic_Notes' => $notes,
-                'Reviewed_By' => $this->actorId($user),
-                'Reviewed_At' => now()->toDateTimeString(),
-                'Updated_At' => now()->toDateTimeString(),
-            ];
-
-            $this->runtimeTransaction(function () use ($requestId, $updateData, $request, $target, $statusToApply, $existingAttendance): void {
                 $updated = $this->requestRepo->update($requestId, $updateData);
                 if ($updated === false) {
                     throw new Exception('Status pengajuan gagal diperbarui.');
@@ -395,8 +398,14 @@ class AttendanceRequestService
                 Cache::forget('dashboard_academic');
 
                 $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
+
+                return ['changed' => true, 'request' => $request];
             });
 
+            if (! $decision['changed']) {
+                return true;
+            }
+            $request = $decision['request'];
             $this->runPostCommitSideEffect(
                 fn () => $this->notifyStudentDecision($request, 'APPROVED', $statusToApply, (string) $notes, $user),
                 'notification',
@@ -422,32 +431,30 @@ class AttendanceRequestService
         }
 
         return Cache::lock('attendance_request_status_'.md5((string) $requestId), 15)->block(10, function () use ($requestId, $notes, $user) {
-            $request = $this->assertTeacherCanReviewRequest($requestId, $user);
-            $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
-            $target = $this->resolveRequestTarget($request);
-            $existingAttendance = $this->resolveOfficialAttendance($request, $target);
+            $decision = $this->runtimeTransaction(function () use ($requestId, $notes, $user): array {
+                $request = $this->lockedReviewableRequest($requestId, $user);
+                $currentStatus = $this->canonicalRequestStatus($request['Status'] ?? '');
+                $target = $this->resolveRequestTarget($request);
+                $existingAttendance = $this->lockedOfficialAttendance($request, $target);
 
-            if ($currentStatus === 'REJECTED') {
-                $this->runtimeTransaction(
-                    fn () => $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance)
-                );
+                if ($currentStatus === 'REJECTED') {
+                    $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
 
-                return true;
-            }
+                    return ['changed' => false, 'request' => $request];
+                }
 
-            if ($currentStatus === 'APPROVED') {
-                throw new Exception('Pengajuan sudah disetujui sebelumnya.');
-            }
+                if ($currentStatus === 'APPROVED') {
+                    throw new Exception('Pengajuan sudah disetujui sebelumnya.');
+                }
 
-            $updateData = [
-                'Status' => 'REJECTED',
-                'Academic_Notes' => $notes,
-                'Reviewed_By' => $this->actorId($user),
-                'Reviewed_At' => now()->toDateTimeString(),
-                'Updated_At' => now()->toDateTimeString(),
-            ];
+                $updateData = [
+                    'Status' => 'REJECTED',
+                    'Academic_Notes' => $notes,
+                    'Reviewed_By' => $this->actorId($user),
+                    'Reviewed_At' => now()->toDateTimeString(),
+                    'Updated_At' => now()->toDateTimeString(),
+                ];
 
-            $this->runtimeTransaction(function () use ($requestId, $updateData, $request, $target, $existingAttendance): void {
                 $updated = $this->requestRepo->update($requestId, $updateData);
                 if ($updated === false) {
                     throw new Exception('Status pengajuan gagal diperbarui.');
@@ -456,8 +463,14 @@ class AttendanceRequestService
                 Cache::forget('dashboard_academic');
 
                 $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
+
+                return ['changed' => true, 'request' => $request];
             });
 
+            if (! $decision['changed']) {
+                return true;
+            }
+            $request = $decision['request'];
             $this->runPostCommitSideEffect(
                 fn () => $this->notifyStudentDecision($request, 'REJECTED', 'ALPA', (string) $notes, $user),
                 'notification',
@@ -610,6 +623,30 @@ class AttendanceRequestService
         return $this->requestRepo instanceof BaseMySqlRepository
             ? $this->requestRepo->transaction($callback)
             : $callback();
+    }
+
+    private function lockedReviewableRequest($requestId, $user): array
+    {
+        $request = $this->requestRepo instanceof BaseMySqlRepository
+            ? $this->requestRepo->lockById((string) $requestId)
+            : $this->requestRepo->findById((string) $requestId);
+        if (! $request) {
+            throw new Exception('Pengajuan tidak ditemukan.');
+        }
+
+        $this->assertTeacherCanReviewRow($request, $user);
+
+        return $request;
+    }
+
+    private function lockedOfficialAttendance(array $request, array $target): ?array
+    {
+        $attendance = $this->resolveOfficialAttendance($request, $target);
+        if (! $attendance || ! $this->attendanceRepo instanceof BaseMySqlRepository) {
+            return $attendance;
+        }
+
+        return $this->attendanceRepo->lockById((string) $attendance['Attendance_ID']) ?? $attendance;
     }
 
     private function resolveOfficialAttendance(array $request, array $target): ?array

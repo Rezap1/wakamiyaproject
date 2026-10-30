@@ -11,6 +11,7 @@ use App\Interfaces\GoogleSheets\InvoiceRepositoryInterface;
 use App\Interfaces\GoogleSheets\PaymentRepositoryInterface;
 use App\Interfaces\GoogleSheets\ProgramRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Repositories\MySql\BaseMySqlRepository;
 use App\Services\Core\EnterpriseEventService;
 use App\Services\Core\RoleService;
 use App\Services\Core\SystemSettingService;
@@ -974,21 +975,15 @@ class InvoiceService
                     $data['Is_Active'] = 'TRUE';
 
                     try {
-                        $result = $this->repository->create($data);
+                        $result = $this->runtimeTransaction(
+                            fn () => $this->persistAndVerifyInvoice($data)
+                        );
                         if (! $result) {
                             throw new Exception("Gagal menyimpan invoice {$data['Invoice_ID']}.");
                         }
 
-                        // The append response is not authoritative.  Google
-                        // Sheets may accept a row while silently dropping a
-                        // field when headers drift.  Concrete production
-                        // repositories expose findByIdFresh(); verify the
-                        // canonical line items and amount from that fresh row
-                        // before reporting invoice creation success.
-                        if (method_exists($this->repository, 'findByIdFresh')) {
-                            $persisted = $this->repository->findByIdFresh($data['Invoice_ID']);
-                            $this->assertPersistedInvoiceIntegrity($persisted, $data);
-                            $data = array_merge($data, (array) $persisted);
+                        if (is_array($result)) {
+                            $data = $result;
                         }
 
                         return $data;
@@ -1063,13 +1058,62 @@ class InvoiceService
         if (is_string($expectedItems)) {
             $expectedItems = json_decode($expectedItems, true);
         }
-        if (! is_array($expectedItems) || $rawItems !== $expectedItems) {
+        if (! is_array($expectedItems)
+            || $this->canonicalJsonValue($rawItems) !== $this->canonicalJsonValue($expectedItems)) {
             throw new FinancialIntegrityException('Line_Items invoice berubah atau tidak konsisten setelah persistence.');
         }
 
         if (! Money::equal($persisted['Amount'] ?? null, $expected['Amount'] ?? null)) {
             throw new FinancialIntegrityException('Amount invoice berubah atau tidak konsisten setelah persistence.');
         }
+    }
+
+    /**
+     * Persist and verify in one database transaction. A failed authoritative
+     * read must not leave an invoice row behind while the browser receives an
+     * error response.
+     */
+    private function persistAndVerifyInvoice(array $data): array|bool
+    {
+        $created = $this->repository->create($data);
+        if (! $created) {
+            return false;
+        }
+        if (! method_exists($this->repository, 'findByIdFresh')) {
+            return $data;
+        }
+
+        $persisted = $this->repository->findByIdFresh($data['Invoice_ID']);
+        $this->assertPersistedInvoiceIntegrity($persisted, $data);
+
+        return array_merge($data, (array) $persisted);
+    }
+
+    private function runtimeTransaction(callable $callback): mixed
+    {
+        return $this->repository instanceof BaseMySqlRepository
+            ? $this->repository->transaction($callback)
+            : $callback();
+    }
+
+    /**
+     * MySQL JSON columns may return object keys in a different order from the
+     * input JSON. Object-key order is not data, while list order remains part
+     * of the invoice contract.
+     */
+    private function canonicalJsonValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(fn ($item) => $this->canonicalJsonValue($item), $value);
+        }
+
+        ksort($value);
+
+        return array_map(fn ($item) => $this->canonicalJsonValue($item), $value);
     }
 
     private function completeInvoiceCreation(array $data, ?string $idempotencyCacheKey, string $fingerprint, string $actorId, string $requestId, bool $dispatchSideEffects = true): array
