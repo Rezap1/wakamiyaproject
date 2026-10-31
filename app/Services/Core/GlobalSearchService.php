@@ -255,6 +255,7 @@ class GlobalSearchService
 
         try {
             $scope = app(TeacherScopeResolver::class)->resolveForTeacherId((string) $teacherId);
+            $scope['actor_user_id'] = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
             $schedules = collect($scope['schedules'] ?? collect());
             $classIds = $scope['teaching_class_ids'] ?? [];
             $students = collect($scope['students'] ?? collect())

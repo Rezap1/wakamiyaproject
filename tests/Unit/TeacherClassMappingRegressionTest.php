@@ -58,20 +58,14 @@ class TeacherClassMappingRegressionTest extends TestCase
             ['Class_ID' => 'CLS-C', 'Class_Name' => 'Kelas C Stale', 'Homeroom_Teacher_ID' => 'TCH-OTHER', 'Is_Active' => 'TRUE'],
         ]));
         $schedules = Mockery::mock(ScheduleService::class);
-        $schedules->shouldReceive('getAll')->once()->andReturn(collect([
-            ['Schedule_ID' => 'SCH-C-STALE', 'Teacher_ID' => 'TCH-A', 'Class_ID' => 'CLS-C', 'Subject_ID' => 'SUB-C', 'Is_Active' => 'TRUE'],
-            ['Schedule_ID' => 'SCH-A', 'Teacher_ID' => 'TCH-A', 'Class_ID' => 'CLS-A', 'Subject_ID' => 'SUB-A', 'Is_Active' => 'TRUE'],
-        ]));
+        $schedules->shouldNotReceive('getAll');
         $students = Mockery::mock(StudentService::class);
         $students->shouldReceive('getAllStudents')->once()->andReturn(collect([
             ['Student_ID' => 'STU-A', 'Full_Name' => 'Siswa Alpha', 'Class_ID' => 'CLS-A'],
             ['Student_ID' => 'STU-C', 'Full_Name' => 'Siswa C', 'Class_ID' => 'CLS-C'],
         ]));
         $subjects = Mockery::mock(SubjectService::class);
-        $subjects->shouldReceive('getAll')->once()->andReturn(collect([
-            ['Subject_ID' => 'SUB-A', 'Subject_Name' => 'Bahasa Jepang'],
-            ['Subject_ID' => 'SUB-C', 'Subject_Name' => 'Stale Subject'],
-        ]));
+        $subjects->shouldNotReceive('getAll');
         $assessmentConfigs = Mockery::mock(AssessmentConfigService::class);
         $assessmentConfigs->shouldReceive('getActiveCategories')->once()->andReturn([]);
 
@@ -93,7 +87,8 @@ class TeacherClassMappingRegressionTest extends TestCase
         $view = $controller->scoresCreate();
 
         $this->assertSame(['CLS-A'], $view->getData()['classes']->pluck('Class_ID')->all());
-        $this->assertSame(['SCH-A'], $view->getData()['schedules']->pluck('Schedule_ID')->all());
+        $this->assertArrayNotHasKey('schedules', $view->getData());
+        $this->assertArrayNotHasKey('studentsBySchedule', $view->getData());
         $this->assertSame(['STU-A'], $view->getData()['students']->pluck('Student_ID')->all());
         $html = $view->with('errors', new ViewErrorBag)->render();
         $this->assertStringContainsString('Kelas Alpha', $html);

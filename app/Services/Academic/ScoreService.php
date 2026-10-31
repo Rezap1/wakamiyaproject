@@ -47,6 +47,12 @@ class ScoreService
 
         return $scores->map(function ($item) {
             $item['Parsed_Details'] = $this->parseEvaluationDetails($item);
+            if (trim((string) ($item['Assessment_Date'] ?? '')) === '') {
+                $item['Assessment_Date'] = $item['Parsed_Details']['assessment_date'] ?? null;
+            }
+            if (trim((string) ($item['Class_ID'] ?? '')) === '') {
+                $item['Class_ID'] = $item['Parsed_Details']['class_id'] ?? null;
+            }
 
             return $item;
         });
@@ -57,6 +63,12 @@ class ScoreService
         $score = $this->repository->findById($id);
         if ($score) {
             $score['Parsed_Details'] = $this->parseEvaluationDetails($score);
+            if (trim((string) ($score['Assessment_Date'] ?? '')) === '') {
+                $score['Assessment_Date'] = $score['Parsed_Details']['assessment_date'] ?? null;
+            }
+            if (trim((string) ($score['Class_ID'] ?? '')) === '') {
+                $score['Class_ID'] = $score['Parsed_Details']['class_id'] ?? null;
+            }
         }
 
         return $score;
@@ -102,9 +114,17 @@ class ScoreService
         $details = ['category' => strtolower($category)];
         $notes = $data['Notes'] ?? $data['Remarks'] ?? '';
         $details['notes'] = $notes;
+        $assessmentDate = trim((string) ($data['Assessment_Date'] ?? $data['Date'] ?? ''));
+        if ($assessmentDate !== '') {
+            $details['assessment_date'] = $assessmentDate;
+        }
+        $classId = trim((string) ($data['Class_ID'] ?? ''));
+        if ($classId !== '') {
+            $details['class_id'] = $classId;
+        }
 
         $reservedKeys = [
-            '_token', 'Student_ID', 'Assessment_Category', 'Date', 'Notes', 'Remarks',
+            '_token', 'Student_ID', 'Assessment_Category', 'Date', 'Notes', 'Remarks', 'Created_By',
             '_method', 'Score_ID', 'Score_Value', 'Score', 'Subject_ID', 'Assessment_ID', 'Assignment_ID', 'Schedule_ID', 'Class_ID', 'Assessment_Date', 'Teacher_ID', 'Parsed_Details',
             'Evaluation_Details', 'Grade', 'Status', 'Created_At', 'Updated_At', 'Is_Active', 'Date',
         ];
@@ -125,7 +145,7 @@ class ScoreService
             $configuredAspects = $this->assessmentConfigService->getAspects($category);
             if (! empty($configuredAspects)) {
                 $aspectPayload = collect($details)
-                    ->except(['category', 'notes', 'subject_id'])
+                    ->except(['category', 'notes', 'subject_id', 'assessment_date', 'class_id'])
                     ->toArray();
                 if (! $this->assessmentConfigService->validateAspectPayload($category, $aspectPayload)) {
                     throw new Exception('Aspek penilaian tidak valid atau belum lengkap.');
@@ -141,7 +161,7 @@ class ScoreService
             $scoreVal = (float) $data['Score'];
         }
 
-        if ($isNumericCategory || ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes'])))) {
+        if ($isNumericCategory || ($category === 'GENERAL' && empty(array_diff(array_keys($details), ['category', 'notes', 'assessment_date', 'class_id'])))) {
             $rawScore = $data['Score_Value'] ?? $data['Score'] ?? null;
             if ($rawScore === null || $rawScore === '') {
                 throw new Exception($category === 'UJIAN_BAB' ? 'Nilai Ujian Bab harus berupa angka.' : 'Nilai harus berupa angka.');
@@ -448,13 +468,15 @@ class ScoreService
     {
         $scope ??= $this->getTeacherScoreScope($teacherId);
         $studentId = trim((string) ($score['Student_ID'] ?? ''));
-        if ($studentId === '' || ! in_array($studentId, $scope['teaching_student_ids'] ?? [], true)) {
+        if ($studentId === '') {
             return false;
         }
 
         $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? ''));
         if ($scoreTeacherId !== '') {
-            return $scoreTeacherId === trim($teacherId);
+            return $scoreTeacherId === trim($teacherId)
+                && (in_array($studentId, $scope['teaching_student_ids'] ?? [], true)
+                    || in_array($studentId, $scope['managed_student_ids'] ?? [], true));
         }
 
         // MASTER_SCORE has no durable Teacher_ID/Assessment_ID columns. A
@@ -468,8 +490,26 @@ class ScoreService
         }
 
         $assessmentId = trim((string) ($score['Assessment_ID'] ?? $score['Assignment_ID'] ?? ''));
+        if ($assessmentId !== '') {
+            return in_array($studentId, $scope['teaching_student_ids'] ?? [], true)
+                && in_array($assessmentId, $scope['assessment_ids'] ?? [], true);
+        }
 
-        return $assessmentId !== '' && in_array($assessmentId, $scope['assessment_ids'], true);
+        // New class-based scores have no schedule or assessment link. Keep
+        // them visible only to the authenticated creator while the student
+        // remains in one of that teacher's explicitly managed classes.
+        $createdBy = trim((string) ($score['Created_By'] ?? ''));
+        $actorUserId = trim((string) ($scope['actor_user_id'] ?? ''));
+        $scoreClassId = trim((string) ($score['Class_ID'] ?? data_get($score, 'Parsed_Details.class_id', '')));
+        $studentIsManagedInClass = $scoreClassId === ''
+            ? in_array($studentId, $scope['managed_student_ids'] ?? [], true)
+            : in_array($scoreClassId, $scope['managed_class_ids'] ?? [], true)
+                && in_array($studentId, $scope['managed_students_by_class'][$scoreClassId] ?? [], true);
+
+        return $createdBy !== ''
+            && $actorUserId !== ''
+            && $createdBy === $actorUserId
+            && $studentIsManagedInClass;
     }
 
     public function isStudentInSchedule(string $studentId, string $scheduleId, ?array $scope = null): bool

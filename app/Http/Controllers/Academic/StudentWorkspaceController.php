@@ -278,7 +278,7 @@ class StudentWorkspaceController extends Controller
         $rows = [];
 
         foreach ($scores as $s) {
-            $date = $this->formatCsvDate($s['Created_At'] ?? $s['Assessment_Date'] ?? null);
+            $date = $this->formatCsvDate($s['Assessment_Date'] ?? $s['Created_At'] ?? null);
             $category = strtoupper(trim((string) ($s['Assessment_Category'] ?? '')));
             $categoryLabel = $this->assessmentConfigService->categoryLabel($category);
             $assessmentId = trim((string) ($s['Assessment_ID'] ?? ''));
@@ -305,7 +305,7 @@ class StudentWorkspaceController extends Controller
                 $summaryArr = [];
                 if (is_array($details)) {
                     foreach ($details as $key => $val) {
-                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) continue;
+                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id', 'assessment_date', 'class_id'], true)) continue;
                         $label = $aspectMap[$key] ?? ucwords(str_replace('_', ' ', $key));
                         $summaryArr[] = "$label: $val";
                     }

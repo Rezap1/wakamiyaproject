@@ -62,7 +62,7 @@ class TeacherDataScopeHardeningTest extends TestCase
         $this->assertCount(2, $labels->unique());
     }
 
-    public function test_teacher_score_form_starts_with_schedule_first_student_dropdown(): void
+    public function test_teacher_score_form_selects_student_from_authorized_class_without_schedule(): void
     {
         $html = view('academic.teacher.scores-create', [
             'classes' => collect([]),
@@ -70,22 +70,15 @@ class TeacherDataScopeHardeningTest extends TestCase
                 ['Student_ID' => 'STU-A', 'Full_Name' => 'Andi', 'Class_ID' => 'CLS-A', 'Class_Name' => 'Kelas A'],
                 ['Student_ID' => 'STU-B', 'Full_Name' => 'Budi', 'Class_ID' => 'CLS-B', 'Class_Name' => 'Kelas B'],
             ]),
-            'schedules' => collect([
-                ['Schedule_ID' => 'SCH-A-MON', 'Class_ID' => 'CLS-A', 'Subject_ID' => 'SUB-BAHASA', 'label' => 'Bahasa - Kelas A | Senin, 07:30 - 09:00'],
-                ['Schedule_ID' => 'SCH-B-TUE', 'Class_ID' => 'CLS-B', 'Subject_ID' => 'SUB-BAHASA', 'label' => 'Bahasa - Kelas B | Selasa, 07:30 - 09:00'],
-            ]),
             'studentsByClass' => ['CLS-A' => ['STU-A'], 'CLS-B' => ['STU-B']],
-            'studentsBySchedule' => ['SCH-A-MON' => ['STU-A'], 'SCH-B-TUE' => ['STU-B']],
             'teacherId' => 'TCH-A',
             'assessmentConfigs' => [],
         ])->render();
 
-        $this->assertStringContainsString('Pilih jadwal terlebih dahulu', $html);
-        $this->assertStringContainsString('studentsBySchedule', $html);
-        $this->assertStringContainsString('selectedStudent = \'\'', $html);
-        $this->assertStringContainsString('Bahasa - Kelas A | Senin, 07:30 - 09:00', $html);
-        $this->assertStringContainsString('Bahasa - Kelas B | Selasa, 07:30 - 09:00', $html);
-        $this->assertStringNotContainsString('<option value="STU-A"', $html);
+        $this->assertStringContainsString('Pilih kelas terlebih dahulu', $html);
+        $this->assertStringContainsString('studentsByClass', $html);
+        $this->assertStringNotContainsString('Schedule_ID', $html);
+        $this->assertStringNotContainsString('studentsBySchedule', $html);
     }
 
     private function resolver(): TeacherScopeResolver

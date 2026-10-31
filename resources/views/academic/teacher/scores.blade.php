@@ -159,7 +159,7 @@
                     $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
                     $hasAspectDetails = false;
                     foreach ($details as $key => $value) {
-                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                        if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id', 'assessment_date'], true)) {
                             continue;
                         }
                         if (isset($aspectMap[$key])) {
@@ -254,7 +254,7 @@
                             $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
                             $hasAspectDetails = false;
                             foreach ($details as $key => $value) {
-                                if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                                if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id', 'assessment_date'], true)) {
                                     continue;
                                 }
                                 if (isset($aspectMap[$key])) {

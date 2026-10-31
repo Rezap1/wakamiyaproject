@@ -42,6 +42,40 @@ class TeacherScoreIntegrityTest extends TestCase
         $this->assertTrue($service->validateAspectPayload('language', ['speaking' => '4', 'writing' => '3']));
     }
 
+    public function test_assessment_date_metadata_does_not_change_configured_aspect_validation(): void
+    {
+        $repository = Mockery::mock(AssessmentConfigRepositoryInterface::class);
+        $repository->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn([
+            ['Category_ID' => 'LANGUAGE', 'Category_Name' => 'Language', 'Is_Active' => 'TRUE', 'Aspects_JSON' => json_encode([
+                ['id' => 'speaking', 'label' => 'Speaking'],
+                ['id' => 'writing', 'label' => 'Writing'],
+            ])],
+        ]);
+        $assessmentConfig = new AssessmentConfigService($repository);
+        $scoreService = new ScoreService(
+            Mockery::mock(ScoreRepositoryInterface::class),
+            Mockery::mock(EnterpriseEventService::class),
+            Mockery::mock(AssessmentRepositoryInterface::class),
+            Mockery::mock(StudentRepositoryInterface::class),
+            $assessmentConfig
+        );
+
+        $result = $scoreService->processEvaluationDetails([
+            'Assessment_Category' => 'LANGUAGE',
+            'Assessment_Date' => '2026-10-31',
+            'Class_ID' => 'CLS-A',
+            'speaking' => '5',
+            'writing' => '4',
+        ]);
+        $details = json_decode($result['evaluation_details'], true);
+
+        $this->assertNull($result['score_value']);
+        $this->assertSame('2026-10-31', $details['assessment_date']);
+        $this->assertSame('CLS-A', $details['class_id']);
+        $this->assertSame(5, $details['speaking']);
+        $this->assertSame(4, $details['writing']);
+    }
+
     public function test_teacher_score_scope_requires_owned_schedule_class_student_and_assessment(): void
     {
         $schedule = Mockery::mock(ScheduleRepositoryInterface::class);
@@ -95,6 +129,116 @@ class TeacherScoreIntegrityTest extends TestCase
         $this->assertFalse($scoreService->isScoreInTeacherScope(['Assessment_ID' => 'ASM-B', 'Student_ID' => 'STU-A'], 'TCH-A', $scope));
         $this->assertTrue($scoreService->isStudentInSchedule('STU-A', 'SCH-A', $scope));
         $this->assertFalse($scoreService->isStudentInSchedule('STU-B', 'SCH-A', $scope));
+    }
+
+    public function test_unscheduled_score_scope_requires_managed_student_and_same_creator(): void
+    {
+        $service = new ScoreService(
+            Mockery::mock(ScoreRepositoryInterface::class),
+            Mockery::mock(EnterpriseEventService::class),
+            Mockery::mock(AssessmentRepositoryInterface::class),
+            Mockery::mock(StudentRepositoryInterface::class)
+        );
+        $scope = [
+            'managed_class_ids' => ['CLS-A'],
+            'managed_student_ids' => ['STU-A'],
+            'managed_students_by_class' => ['CLS-A' => ['STU-A']],
+            'teaching_student_ids' => [],
+            'schedule_ids' => [],
+            'assessment_ids' => [],
+            'actor_user_id' => 'USR-A',
+        ];
+
+        $this->assertTrue($service->isScoreInTeacherScope([
+            'Student_ID' => 'STU-A', 'Schedule_ID' => null, 'Created_By' => 'USR-A',
+        ], 'TCH-A', $scope));
+        $this->assertFalse($service->isScoreInTeacherScope([
+            'Student_ID' => 'STU-B', 'Schedule_ID' => null, 'Created_By' => 'USR-A',
+        ], 'TCH-A', $scope));
+        $this->assertFalse($service->isScoreInTeacherScope([
+            'Student_ID' => 'STU-A', 'Schedule_ID' => null, 'Created_By' => 'USR-B',
+        ], 'TCH-A', $scope));
+    }
+
+    public function test_unscheduled_score_persists_score_creator_and_assessment_date(): void
+    {
+        $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A']));
+        $repository = new class implements ScoreRepositoryInterface
+        {
+            public array $rows = [];
+
+            public function fetchAll()
+            {
+                return collect(array_values($this->rows));
+            }
+
+            public function findById(string $id)
+            {
+                return $this->rows[$id] ?? null;
+            }
+
+            public function findByIdFresh(string $id)
+            {
+                return $this->rows[$id] ?? null;
+            }
+
+            public function generateNewId(string $prefix, int $padding = 6): string
+            {
+                return 'SCR-TEST';
+            }
+
+            public function create(array $data)
+            {
+                $this->rows[$data['Score_ID']] = $data;
+
+                return true;
+            }
+
+            public function update(string $id, array $data)
+            {
+                $this->rows[$id] = array_merge($this->rows[$id] ?? [], $data);
+
+                return true;
+            }
+
+            public function softDelete(string $id)
+            {
+                return true;
+            }
+
+            public function clearCache() {}
+        };
+        $student = Mockery::mock(StudentRepositoryInterface::class);
+        $student->shouldReceive('findById')->once()->with('STU-A')->andReturn(['Student_ID' => 'STU-A']);
+        $events = Mockery::mock(EnterpriseEventService::class);
+        $events->shouldReceive('dispatch')->once();
+        $service = new ScoreService(
+            $repository,
+            $events,
+            Mockery::mock(AssessmentRepositoryInterface::class),
+            $student
+        );
+
+        $service->create([
+            'Score_ID' => 'SCR-123e4567-e89b-12d3-a456-426614174000',
+            'Student_ID' => 'STU-A',
+            'Schedule_ID' => null,
+            'Created_By' => 'USR-A',
+            'Assessment_Category' => 'GENERAL',
+            'Class_ID' => 'CLS-A',
+            'Assessment_Date' => '2026-10-31',
+            'Score' => 88,
+        ]);
+
+        $persisted = $repository->rows['SCR-123e4567-e89b-12d3-a456-426614174000'];
+        $details = json_decode($persisted['Evaluation_Details'], true);
+        $this->assertNull($persisted['Schedule_ID']);
+        $this->assertSame('USR-A', $persisted['Created_By']);
+        $this->assertSame('2026-10-31', $details['assessment_date']);
+        $this->assertSame('CLS-A', $details['class_id']);
+        $this->assertSame(88.0, (float) $persisted['Score']);
+        $this->assertSame('2026-10-31', $service->getAll()->first()['Assessment_Date']);
+        $this->assertSame('CLS-A', $service->getAll()->first()['Class_ID']);
     }
 
     public function test_score_create_fails_closed_when_fresh_readback_is_missing(): void

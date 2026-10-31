@@ -45,7 +45,7 @@
                 $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
                 $hasAspectDetails = false;
                 foreach ($details as $key => $val) {
-                    if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id'], true)) {
+                    if (in_array(strtolower((string) $key), ['category', 'notes', 'subject_id', 'assessment_date', 'class_id'], true)) {
                         continue;
                     }
                     if (isset($aspectMap[$key])) {
@@ -58,7 +58,7 @@
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <h4 class="font-bold text-slate-800 text-base">Penilaian {{ $catLabel }}</h4>
-                        <p class="text-xs text-slate-500">{{ date('d F Y', strtotime($score['Created_At'] ?? now())) }}</p>
+                        <p class="text-xs text-slate-500">{{ date('d F Y', strtotime($score['Assessment_Date'] ?? $score['Created_At'] ?? now())) }}</p>
                     </div>
                 </div>
 

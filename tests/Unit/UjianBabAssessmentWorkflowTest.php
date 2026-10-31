@@ -245,30 +245,29 @@ class UjianBabAssessmentWorkflowTest extends TestCase
         $this->assertSame(80.0, $view->getData()['progress']['gpa']);
     }
 
-    public function test_teacher_can_create_ujian_bab_with_server_resolved_schedule_identity(): void
+    public function test_teacher_can_create_ujian_bab_without_a_teaching_schedule(): void
     {
         $this->actingAs(new GenericUser(['id' => 'USR-T', 'User_ID' => 'USR-T', 'Role' => 'TEACHER']));
         $scope = $this->teacherScope();
 
         $scoreService = Mockery::mock(ScoreService::class);
         $scoreService->shouldReceive('getTeacherScoreScope')->once()->with('TCH-A')->andReturn($scope);
-        $scoreService->shouldReceive('isStudentInSchedule')->once()->with('STU-A', 'SCH-A', $scope)->andReturn(true);
+        $scoreService->shouldReceive('isStudentInSchedule')->never();
         $scoreService->shouldReceive('create')->once()->with(Mockery::on(function (array $data): bool {
             return $data['Teacher_ID'] === 'TCH-A'
                 && $data['Student_ID'] === 'STU-A'
-                && $data['Schedule_ID'] === 'SCH-A'
+                && $data['Schedule_ID'] === null
+                && $data['Created_By'] === 'USR-T'
                 && $data['Class_ID'] === 'CLS-A'
-                && $data['Subject_ID'] === 'SUB-A'
                 && $data['Assessment_Category'] === 'UJIAN_BAB'
-                && $data['Score'] === '100';
+                && $data['Score'] === '100'
+                && $data['Assessment_Date'] === '2026-09-08';
         }))->andReturn(['Score_ID' => 'SCR-UJIAN']);
 
         $controller = $this->teacherController($scoreService, $this->scheduleService(), $this->assessmentConfigService());
         $response = $controller->scoresStore(Request::create('/teacher/scores', 'POST', [
             'Student_ID' => 'STU-A',
-            'Schedule_ID' => 'SCH-A',
-            'Class_ID' => 'FORGED-CLASS',
-            'Subject_ID' => 'FORGED-SUBJECT',
+            'Class_ID' => 'CLS-A',
             'Assessment_Category' => 'UJIAN_BAB',
             'Date' => '2026-09-08',
             'Score' => '100',
@@ -295,7 +294,8 @@ class UjianBabAssessmentWorkflowTest extends TestCase
         $scoreService = Mockery::mock(ScoreService::class);
         $scoreService->shouldReceive('getById')->once()->with('SCR-UJIAN')->andReturn($existing);
         $scoreService->shouldReceive('getTeacherScoreScope')->once()->with('TCH-A')->andReturn($scope);
-        $scoreService->shouldReceive('isScoreInTeacherScope')->once()->with($existing, 'TCH-A', $scope)->andReturn(true);
+        $scoreService->shouldReceive('isScoreInTeacherScope')->once()->with($existing, 'TCH-A', Mockery::on(fn (array $resolved): bool => ($resolved['actor_user_id'] ?? '') === 'USR-T'
+        ))->andReturn(true);
         $scoreService->shouldReceive('update')->once()->with('SCR-UJIAN', Mockery::on(function (array $data): bool {
             return $data['Student_ID'] === 'STU-A'
                 && $data['Teacher_ID'] === 'TCH-A'
@@ -320,13 +320,12 @@ class UjianBabAssessmentWorkflowTest extends TestCase
         $this->assertSame(302, $response->getStatusCode());
     }
 
-    public function test_teacher_cannot_create_ujian_bab_for_foreign_schedule(): void
+    public function test_teacher_cannot_create_ujian_bab_for_foreign_class_or_student(): void
     {
         $this->actingAs(new GenericUser(['id' => 'USR-T', 'User_ID' => 'USR-T', 'Role' => 'TEACHER']));
 
         $scoreService = Mockery::mock(ScoreService::class);
         $scoreService->shouldReceive('getTeacherScoreScope')->once()->with('TCH-A')->andReturn($this->teacherScope());
-        $scoreService->shouldReceive('isStudentInSchedule')->never();
         $scoreService->shouldReceive('create')->never();
 
         $controller = $this->teacherController($scoreService, $this->scheduleService(), $this->assessmentConfigService());
@@ -335,8 +334,8 @@ class UjianBabAssessmentWorkflowTest extends TestCase
         $this->expectExceptionMessage('scope pengajaran');
 
         $controller->scoresStore(Request::create('/teacher/scores', 'POST', [
-            'Student_ID' => 'STU-A',
-            'Schedule_ID' => 'SCH-FOREIGN',
+            'Student_ID' => 'STU-B',
+            'Class_ID' => 'CLS-A',
             'Assessment_Category' => 'UJIAN_BAB',
             'Date' => '2026-09-08',
             'Score' => '75',
@@ -427,7 +426,9 @@ class UjianBabAssessmentWorkflowTest extends TestCase
             ]))->getMock(),
             Mockery::mock(ClassService::class),
             $scheduleService,
-            Mockery::mock(StudentService::class),
+            Mockery::mock(StudentService::class)->shouldReceive('getAllStudents')->zeroOrMoreTimes()->andReturn(collect([
+                ['Student_ID' => 'STU-A', 'Class_ID' => 'CLS-A'],
+            ]))->getMock(),
             Mockery::mock(AttendanceService::class),
             Mockery::mock(AttendanceRequestService::class),
             Mockery::mock(SubjectService::class),
