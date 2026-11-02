@@ -496,7 +496,7 @@
                             date: now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
                             time: (isCheckOut ? data.data.check_out_time : data.data.check_in_time) || now.toLocaleTimeString('id-ID'),
                             distance: (data.data.distance_meters || this.haversine(this.coords.lat, this.coords.lon, this.lpkLat, this.lpkLon)).toFixed(1).replace('.', ','),
-                            statusLabel: isCheckOut ? 'KELUAR' : 'HADIR',
+                            statusLabel: isCheckOut ? 'KELUAR' : (data.data.status === 'LATE' ? 'TERLAMBAT' : 'HADIR'),
                             message: data.message
                         };
                         this.viewState = 'SUCCESS';

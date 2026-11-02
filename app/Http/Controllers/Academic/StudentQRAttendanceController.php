@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Academic;
 
 use App\Exceptions\StudentAttendanceRejectedException;
+use App\Helpers\AttendanceStatusHelper;
 use App\Http\Controllers\Controller;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Services\Academic\StudentQRAttendanceService;
@@ -70,7 +71,7 @@ class StudentQRAttendanceController extends Controller
             $result = $this->studentQrService->processStudentScan($token, $latitude, $longitude, $deviceInfo);
 
             $isCheckOut = ($result['action'] ?? 'CHECK_IN') === 'CHECK_OUT';
-            $statusLabel = 'Hadir';
+            $statusLabel = AttendanceStatusHelper::label($result['status'] ?? 'PRESENT');
 
             return response()->json([
                 'success' => true,

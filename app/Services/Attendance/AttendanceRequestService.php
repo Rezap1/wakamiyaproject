@@ -156,60 +156,80 @@ class AttendanceRequestService
         ]));
 
         return Cache::lock($createLockKey, 15)->block(10, function () use ($data, $target, $user) {
-            $existing = $this->getStudentRequests($data['Student_ID'])->first(function ($item) use ($data, $target) {
-                if (($item['Student_ID'] ?? '') !== ($data['Student_ID'] ?? '')
-                    || ($item['Attendance_Date'] ?? '') !== ($data['Attendance_Date'] ?? '')) {
-                    return false;
+            $created = $this->runtimeTransaction(function () use ($data, $target, $user): array {
+                // Serialize submissions across PHP workers and cache stores.
+                // Acquire the student row before the first duplicate snapshot.
+                if ($this->studentRepo instanceof BaseMySqlRepository) {
+                    $student = $this->studentRepo->lockById($data['Student_ID']);
+                    if (! $student || trim((string) ($student['Class_ID'] ?? '')) !== $target['Class_ID']
+                        || trim((string) ($student['User_ID'] ?? '')) !== $this->actorId($user)) {
+                        throw new Exception('Identitas atau kelas siswa berubah. Muat ulang pengajuan.');
+                    }
                 }
 
-                try {
-                    $itemTarget = $this->normalizeTarget($item, false);
-                } catch (\Throwable) {
-                    return false;
+                $existing = $this->getStudentRequests($data['Student_ID'])->first(function ($item) use ($data, $target) {
+                    if (! $this->isActiveDuplicateStatus($item['Status'] ?? '')) {
+                        return false;
+                    }
+                    if (($item['Student_ID'] ?? '') !== ($data['Student_ID'] ?? '')
+                        || ($item['Attendance_Date'] ?? '') !== ($data['Attendance_Date'] ?? '')) {
+                        return false;
+                    }
+
+                    try {
+                        $itemTarget = $this->normalizeTarget($item, false);
+                    } catch (\Throwable) {
+                        return false;
+                    }
+
+                    return $itemTarget['Attendance_Type'] === $target['Attendance_Type']
+                        && ($target['Attendance_Type'] === 'CLASS_QR'
+                            ? (($itemTarget['Class_ID'] ?? '') === ''
+                                || ($itemTarget['Class_ID'] ?? '') === ($target['Class_ID'] ?? ''))
+                            : ($itemTarget['Schedule_ID'] ?? '') === ($target['Schedule_ID'] ?? ''));
+                });
+
+                if ($existing && $this->isActiveDuplicateStatus($existing['Status'] ?? '')) {
+                    throw new Exception('Anda sudah memiliki pengajuan aktif untuk presensi ini.');
                 }
 
-                return $itemTarget['Attendance_Type'] === $target['Attendance_Type']
-                    && ($target['Attendance_Type'] === 'CLASS_QR'
-                        ? (($itemTarget['Class_ID'] ?? '') === ''
-                            || ($itemTarget['Class_ID'] ?? '') === ($target['Class_ID'] ?? ''))
-                        : ($itemTarget['Schedule_ID'] ?? '') === ($target['Schedule_ID'] ?? ''));
+                $requestType = strtoupper(trim((string) ($data['Request_Type'] ?? '')));
+                if (! in_array($requestType, ['SAKIT', 'IZIN'], true)) {
+                    throw new Exception('Tipe pengajuan harus SAKIT atau IZIN.');
+                }
+
+                $requestId = $this->requestRepo->generateNewId('REQ', 7);
+                $insertData = [
+                    'Request_ID' => $requestId,
+                    'Attendance_ID' => $data['Attendance_ID'],
+                    'Student_ID' => $data['Student_ID'],
+                    'Class_ID' => $target['Class_ID'],
+                    'Schedule_ID' => $target['Schedule_ID'],
+                    'Attendance_Type' => $target['Attendance_Type'],
+                    'Attendance_Date' => $data['Attendance_Date'],
+                    'Request_Type' => $requestType,
+                    'Reason' => $data['Reason'],
+                    'Evidence_URL' => $data['Evidence_URL'],
+                    'Status' => 'PENDING',
+                    'Academic_Notes' => '',
+                    'Reviewed_By' => '',
+                    'Reviewed_At' => '',
+                    'Created_At' => now()->toDateTimeString(),
+                    'Updated_At' => now()->toDateTimeString(),
+                ];
+
+                $result = $this->requestRepo->create($insertData);
+                if ($result === false) {
+                    throw new Exception('Pengajuan gagal disimpan.');
+                }
+                $this->requestRepo->clearCache();
+                Cache::forget('dashboard_academic');
+
+                return ['result' => $result, 'data' => $insertData];
             });
-
-            if ($existing && $this->isActiveDuplicateStatus($existing['Status'] ?? '')) {
-                throw new Exception('Anda sudah memiliki pengajuan aktif untuk presensi ini.');
-            }
-
-            $requestType = strtoupper(trim((string) ($data['Request_Type'] ?? '')));
-            if (! in_array($requestType, ['SAKIT', 'IZIN'], true)) {
-                throw new Exception('Tipe pengajuan harus SAKIT atau IZIN.');
-            }
-
-            $requestId = $this->requestRepo->generateNewId('REQ', 7);
-            $insertData = [
-                'Request_ID' => $requestId,
-                'Attendance_ID' => $data['Attendance_ID'],
-                'Student_ID' => $data['Student_ID'],
-                'Class_ID' => $target['Class_ID'],
-                'Schedule_ID' => $target['Schedule_ID'],
-                'Attendance_Type' => $target['Attendance_Type'],
-                'Attendance_Date' => $data['Attendance_Date'],
-                'Request_Type' => $requestType,
-                'Reason' => $data['Reason'],
-                'Evidence_URL' => $data['Evidence_URL'],
-                'Status' => 'PENDING',
-                'Academic_Notes' => '',
-                'Reviewed_By' => '',
-                'Reviewed_At' => '',
-                'Created_At' => now()->toDateTimeString(),
-                'Updated_At' => now()->toDateTimeString(),
-            ];
-
-            $result = $this->requestRepo->create($insertData);
-            if ($result === false) {
-                throw new Exception('Pengajuan gagal disimpan.');
-            }
-            $this->requestRepo->clearCache();
-            Cache::forget('dashboard_academic');
+            $result = $created['result'];
+            $insertData = $created['data'];
+            $requestId = $insertData['Request_ID'];
 
             $this->runPostCommitSideEffect(
                 fn () => $this->notifyNewRequestRecipients($insertData, $target, $user),
@@ -373,8 +393,7 @@ class AttendanceRequestService
                         throw new Exception('Pengajuan sudah disetujui dengan status presensi berbeda.');
                     }
 
-                    $this->syncOfficialAttendance($request, $target, $statusToApply, $existingAttendance);
-
+                    // A retry is not an audited correction or historical repair.
                     return ['changed' => false, 'request' => $request];
                 }
 
@@ -438,8 +457,7 @@ class AttendanceRequestService
                 $existingAttendance = $this->lockedOfficialAttendance($request, $target);
 
                 if ($currentStatus === 'REJECTED') {
-                    $this->syncOfficialAttendance($request, $target, 'ALPA', $existingAttendance);
-
+                    // Preserve any official correction made after this decision.
                     return ['changed' => false, 'request' => $request];
                 }
 
@@ -758,7 +776,8 @@ class AttendanceRequestService
             ->pluck('Class_ID')
             ->filter()
             ->unique();
-        $classIds = $scheduleClassIds->intersect($activeClassIds)->filter()->unique()->values();
+        $managedClassIds = \App\Support\Academic\TeacherClassAssignmentResolver::managedClassIds($classes, $teacherId);
+        $classIds = $scheduleClassIds->merge($managedClassIds)->intersect($activeClassIds)->filter()->unique()->values();
         $studentsByClass = [];
         foreach ($students as $student) {
             $classId = trim((string) ($student['Class_ID'] ?? ''));

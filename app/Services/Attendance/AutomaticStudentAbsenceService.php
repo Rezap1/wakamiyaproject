@@ -158,7 +158,9 @@ final class AutomaticStudentAbsenceService
                 continue;
             }
 
-            $latest = max($latest, (string) $window['end']);
+            $effective = (new AttendanceWindowService($this->settingService))
+                ->resolveForTimes($window['start'], $window['end'], $dayStart);
+            $latest = max($latest, $effective['end_label']);
         }
 
         return $latest;

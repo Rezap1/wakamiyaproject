@@ -7,6 +7,9 @@
     $studentWindowEnd = old('WORK_END_TIME', $studentWindow['end'] ?? '');
     $studentWindowValid = preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $studentWindowStart)
         && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $studentWindowEnd);
+    if ($studentWindowValid && $studentWindowStart < '23:00') {
+        $studentWindowEnd = \Carbon\CarbonImmutable::createFromFormat('!H:i', $studentWindowStart)->addHour()->format('H:i');
+    }
 @endphp
 
 <div class="mx-auto max-w-7xl min-w-0 space-y-6 overflow-x-clip px-0">
@@ -28,6 +31,7 @@
 
     <section class="rounded-2xl border border-sky-200 bg-white shadow-sm" aria-labelledby="student-attendance-settings-title">
         <div class="border-b border-sky-100 bg-sky-50/70 p-4 sm:p-6">
+            <p class="p-2 text-xs font-semibold text-sky-800">Sesi siswa berlangsung satu jam sejak jam mulai. Mulai menit ke-30 hingga menit ke-60, kehadiran dicatat sebagai Terlambat.</p>
             <h2 id="student-attendance-settings-title" class="text-base font-black text-slate-900">Pengaturan Absensi Siswa</h2>
             <p class="mt-1 text-xs leading-relaxed text-slate-600">Jam global tetap dipakai oleh QR dinamis, menjadi nilai awal saat QR siswa baru dibuat, dan menjadi fallback aman untuk QR lama yang belum memiliki jam tersimpan.</p>
         </div>
@@ -39,7 +43,7 @@
             </div>
             <div class="min-w-0">
                 <label for="WORK_END_TIME" class="mb-1 block text-xs font-bold text-slate-700">Jam Tutup Absensi Siswa</label>
-                <input id="WORK_END_TIME" type="time" name="WORK_END_TIME" value="{{ $studentWindowEnd }}" required class="w-full min-w-0 rounded-xl border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
+                <input id="WORK_END_TIME" type="time" name="WORK_END_TIME" value="{{ $studentWindowEnd }}" readonly required class="w-full min-w-0 rounded-xl border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
             </div>
             <button type="submit" class="min-h-[44px] w-full rounded-xl bg-sky-600 px-5 py-2.5 text-xs font-black text-white transition-colors hover:bg-sky-700 lg:w-auto">Simpan Pengaturan</button>
             <p class="text-xs font-semibold text-slate-500 sm:col-span-2 lg:col-span-3">
@@ -102,6 +106,7 @@
                     $from = $lifecycle['from'] ?? null;
                     $until = $lifecycle['until'] ?? null;
                     $attendanceWindow = $qr['ATTENDANCE_WINDOW'] ?? ['valid' => false, 'start' => null, 'end' => null, 'inherited' => false, 'message' => 'Jam absensi tidak tersedia.'];
+                    $attendanceWindow['end'] = $attendanceWindow['effective_end'] ?? $attendanceWindow['end'];
                     $stateClasses = match ($state) {
                         'ACTIVE' => 'bg-emerald-100 text-emerald-700',
                         'UPCOMING' => 'bg-sky-100 text-sky-700',
@@ -160,7 +165,7 @@
 
                         <details class="group rounded-xl border border-slate-200 bg-white">
                             <summary class="cursor-pointer list-none rounded-xl px-3 py-3 text-xs font-black text-slate-700 hover:bg-slate-50">Edit masa berlaku, status, dan jam absensi</summary>
-                            <form action="{{ route('attendance.qr.update', $qr['QR_ID']) }}" method="POST" class="grid min-w-0 grid-cols-1 gap-3 border-t border-slate-100 p-3 sm:grid-cols-2">
+                            <form action="{{ route('attendance.qr.update', $qr['QR_ID']) }}" method="POST" data-student-session="{{ ($qr['QR_TYPE'] ?? '') === 'STUDENT' ? 'true' : 'false' }}" class="grid min-w-0 grid-cols-1 gap-3 border-t border-slate-100 p-3 sm:grid-cols-2">
                                 @csrf
                                 @method('PATCH')
                                 <div class="min-w-0 sm:col-span-2">
@@ -192,7 +197,7 @@
                                 </div>
                                 <div class="min-w-0">
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">Jam Selesai Absensi QR</label>
-                                    <input type="time" name="ATTENDANCE_END_TIME" value="{{ $attendanceWindow['end'] ?? '' }}" required class="w-full min-w-0 rounded-lg border-slate-300 text-xs">
+                                    <input type="time" name="ATTENDANCE_END_TIME" value="{{ $attendanceWindow['end'] ?? '' }}" @readonly(($qr['QR_TYPE'] ?? '') === 'STUDENT') required class="w-full min-w-0 rounded-lg border-slate-300 text-xs">
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 sm:col-span-2">
                                     <button type="submit" class="min-h-[44px] rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Simpan</button>
@@ -215,4 +220,21 @@
     </section>
 </div>
 
+<script>
+    function syncStudentSessionEnd(start, end) {
+        if (!start || !end) return;
+        const sync = () => {
+            if (!/^\d{2}:\d{2}$/.test(start.value)) return;
+            const [hours, minutes] = start.value.split(':').map(Number);
+            start.setCustomValidity(hours >= 23 ? 'Sesi satu jam harus selesai pada hari yang sama.' : '');
+            if (hours < 23) end.value = String(hours + 1).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+        };
+        start.addEventListener('change', sync);
+        sync();
+    }
+    syncStudentSessionEnd(document.getElementById('WORK_START_TIME'), document.getElementById('WORK_END_TIME'));
+    document.querySelectorAll('form[data-student-session="true"]').forEach(form => {
+        syncStudentSessionEnd(form.elements.ATTENDANCE_START_TIME, form.elements.ATTENDANCE_END_TIME);
+    });
+</script>
 @endsection

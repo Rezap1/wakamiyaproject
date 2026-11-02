@@ -37,6 +37,66 @@ class StudentQrAttendanceResponseTest extends TestCase
             ->assertJsonPath('data.status', 'PRESENT');
     }
 
+    public function test_late_response_displays_the_official_late_status(): void
+    {
+        $this->actingAsStudent();
+        $this->mockScannerService()->shouldReceive('processStudentScan')->once()->andReturn([
+            'action' => 'CHECK_IN', 'status' => 'LATE', 'late_minutes' => 10,
+        ]);
+        $this->postJson(route('attendances.student.scan'), $this->validPayload())
+            ->assertOk()->assertJsonPath('data.status', 'LATE')
+            ->assertJsonPath('message', 'Check-In Berhasil Dicatat! (Terlambat)');
+    }
+
+    public function test_permanent_student_qr_response_uses_official_late_label(): void
+    {
+        $this->actingAsStudent();
+        $qr = Mockery::mock(\App\Services\Core\PermanentQrService::class);
+        $qr->shouldReceive('getQrByIdentifier')->once()->andReturn(['QR_TYPE' => 'STUDENT']);
+        $qr->shouldReceive('getAvailabilityStatus')->once()->andReturn(['usable' => true]);
+        $this->app->instance(\App\Services\Core\PermanentQrService::class, $qr);
+        $this->mockScannerService()->shouldReceive('processStudentScan')->once()->andReturn([
+            'status' => 'LATE', 'distance_meters' => 1,
+        ]);
+        $this->postJson(route('attendance.scan.verify', ['type' => 'student', 'identifier' => 'WMS-ATT-STU-TEST']), ['lat' => -6.8, 'lon' => 107.1])
+            ->assertOk()->assertJsonPath('message', 'Presensi siswa berhasil dicatat sebagai terlambat.')
+            ->assertJsonPath('data.status', 'LATE');
+    }
+
+    #[DataProvider('permanentFailureProvider')]
+    public function test_permanent_qr_failure_returns_a_traceable_report(\Throwable $failure): void
+    {
+        config(['app.debug' => false]);
+        $this->actingAsStudent();
+        Log::spy();
+        $qr = Mockery::mock(\App\Services\Core\PermanentQrService::class);
+        $qr->shouldReceive('getQrByIdentifier')->once()->andReturn(['QR_TYPE' => 'STUDENT']);
+        $qr->shouldReceive('getAvailabilityStatus')->once()->andReturn(['usable' => true]);
+        $this->app->instance(\App\Services\Core\PermanentQrService::class, $qr);
+        $this->mockScannerService()->shouldReceive('processStudentScan')->once()->andThrow($failure);
+
+        $response = $this->postJson(route('attendance.scan.verify', [
+            'type' => 'student', 'identifier' => 'WMS-ATT-STU-TEST',
+        ]), ['lat' => -6.8, 'lon' => 107.1]);
+
+        $response->assertStatus(500);
+        $this->assertMatchesRegularExpression('/^WMS-[A-Z0-9]{10}$/', (string) $response->json('report_id'));
+        $response->assertHeader('X-Request-ID', $response->json('report_id'));
+        $this->assertStringNotContainsString('private infrastructure detail', $response->getContent());
+        Log::shouldHaveReceived('error')->once()->with('Handled application failure', Mockery::on(
+            fn (array $context): bool => $context['report_id'] === $response->json('report_id')
+                && $context['exception'] === $failure
+        ));
+    }
+
+    public static function permanentFailureProvider(): array
+    {
+        return [
+            'exception' => [new RuntimeException('private infrastructure detail')],
+            'error' => [new \Error('private infrastructure detail')],
+        ];
+    }
+
     #[DataProvider('knownRejectionProvider')]
     public function test_known_rejection_returns_exact_reason_and_message(
         string $reasonCode,

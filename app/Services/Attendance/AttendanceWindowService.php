@@ -17,7 +17,11 @@ class AttendanceWindowService
 
     public const DEFAULT_START = '06:00';
 
-    public const DEFAULT_END = '08:30';
+    public const DEFAULT_END = '07:00';
+
+    public const SESSION_MINUTES = 60;
+
+    public const LATE_AFTER_MINUTES = 30;
 
     public function __construct(private SystemSettingService $settingService) {}
 
@@ -71,6 +75,14 @@ class AttendanceWindowService
             );
         }
 
+        // Existing saved closing times remain intact. The student session now
+        // lasts exactly one hour from its configured start (WIB).
+        $end = $start->addMinutes(self::SESSION_MINUTES);
+        if ($end->toDateString() !== $start->toDateString()) {
+            throw new InvalidArgumentException('Sesi absensi siswa satu jam harus selesai pada hari yang sama.');
+        }
+        $endValue = $end->format('H:i');
+
         return [
             'now' => $now,
             'start' => $start,
@@ -104,7 +116,7 @@ class AttendanceWindowService
 
     /**
      * Classify a student scan only after the operational gate has passed.
-     * Student QR attendance has no late state: every accepted scan is present.
+     * The second half of the one-hour student session is late.
      *
      * @param  array{now: CarbonImmutable, start: CarbonImmutable, end: CarbonImmutable, start_label: string, end_label: string}  $window
      * @return array{status: string, late_minutes: int}
@@ -113,9 +125,11 @@ class AttendanceWindowService
     {
         $this->assertOpen($window);
 
+        $elapsedMinutes = (int) $window['start']->diffInMinutes($window['now']);
+
         return [
-            'status' => 'PRESENT',
-            'late_minutes' => 0,
+            'status' => $elapsedMinutes >= self::LATE_AFTER_MINUTES ? 'LATE' : 'PRESENT',
+            'late_minutes' => max(0, $elapsedMinutes - self::LATE_AFTER_MINUTES),
         ];
     }
 

@@ -155,7 +155,9 @@ class AttendanceRequestController extends Controller
             );
 
             return redirect()->route($this->indexRouteName())->with('success', 'Pengajuan berhasil disetujui.');
-        } catch (\Exception $e) {
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
@@ -174,7 +176,9 @@ class AttendanceRequestController extends Controller
             );
 
             return redirect()->route($this->indexRouteName())->with('success', 'Pengajuan berhasil ditolak.');
-        } catch (\Exception $e) {
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
             return back()->with('error', $this->safeExceptionMessage($e));
         }
     }
