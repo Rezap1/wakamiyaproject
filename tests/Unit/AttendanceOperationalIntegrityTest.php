@@ -89,13 +89,14 @@ class AttendanceOperationalIntegrityTest extends TestCase
                 'ACTIVE_FROM' => '2026-10-01 00:00:00',
                 'ACTIVE_UNTIL' => '2026-10-31 23:59:59',
             ]],
-            qrEnd: '10:00'
+            qrEnd: '10:00',
+            qrStart: '08:00'
         );
 
         $result = $service->run(CarbonImmutable::parse('2026-10-22 09:00:00', 'Asia/Jakarta'));
 
         $this->assertSame('TOO_EARLY', $result['state']);
-        $this->assertSame('10:00', $result['cutoff']);
+        $this->assertSame('09:00', $result['cutoff']);
         $this->assertSame(0, $result['created']);
     }
 
@@ -307,7 +308,8 @@ class AttendanceOperationalIntegrityTest extends TestCase
         array $students,
         array $qrs = [],
         string $qrEnd = '08:30',
-        array $requests = []
+        array $requests = [],
+        string $qrStart = '06:00'
     ): array {
         $rows = new \ArrayObject($initialRows);
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
@@ -342,7 +344,7 @@ class AttendanceOperationalIntegrityTest extends TestCase
             ]);
             $qrService->shouldReceive('getAttendanceWindowConfiguration')->andReturn([
                 'valid' => true,
-                'start' => '06:00',
+                'start' => $qrStart,
                 'end' => $qrEnd,
                 'inherited' => false,
                 'message' => 'ok',

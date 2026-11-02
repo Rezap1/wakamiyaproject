@@ -163,6 +163,22 @@ class MasterManualAttendanceTest extends TestCase
         ])->assertSessionHasErrors('Status');
     }
 
+    public function test_valid_master_submission_reaches_service_through_mass_assignment_middleware(): void
+    {
+        $this->actingAsRole('MASTER');
+        $writer = Mockery::mock(AttendanceService::class);
+        $writer->shouldReceive('recordManualBatch')->once()->andReturn(1);
+        $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
+        $attendance->shouldReceive('fetchAll')->once()->andReturn(collect());
+        $service = $this->service([], [$this->student('STU-1')], [], $attendance, $writer);
+        $this->app->instance(MasterManualAttendanceService::class, $service);
+        $this->post(route('attendances.manual.store'), [
+            'Batch_ID' => 'BAT-A', 'Class_ID' => 'CLS-A', 'Attendance_Date' => '2026-10-22',
+            'Attendance_Type' => 'CLASS_QR', 'Manual_Reason' => 'QR tidak terbaca.',
+            'Student_IDs' => ['STU-1'], 'Status' => 'PRESENT',
+        ])->assertSessionHasNoErrors()->assertSessionHas('success');
+    }
+
     public function test_master_roster_endpoint_filters_on_backend(): void
     {
         $this->actingAsRole('MASTER');

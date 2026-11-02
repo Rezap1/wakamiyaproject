@@ -371,18 +371,18 @@ class PermanentQrController extends Controller
         $lon = (float) $request->lon;
         $deviceInfo = $request->header('User-Agent');
 
-        $qr = $this->qrService->getQrByIdentifier($identifier);
-
-        if (! $qr || strtoupper($qr['QR_TYPE']) !== strtoupper($type)) {
-            return response()->json(['status' => 'error', 'message' => 'QR tidak valid atau tidak aktif.']);
-        }
-
-        $availability = $this->qrService->getAvailabilityStatus($qr);
-        if (! $availability['usable']) {
-            return response()->json(['status' => 'error', 'message' => $availability['message']]);
-        }
-
         try {
+            $qr = $this->qrService->getQrByIdentifier($identifier);
+
+            if (! $qr || strtoupper($qr['QR_TYPE']) !== strtoupper($type)) {
+                return response()->json(['status' => 'error', 'message' => 'QR tidak valid atau tidak aktif.']);
+            }
+
+            $availability = $this->qrService->getAvailabilityStatus($qr);
+            if (! $availability['usable']) {
+                return response()->json(['status' => 'error', 'message' => $availability['message']]);
+            }
+
             $typeUpper = strtoupper($type);
 
             // Check Geofence Coordinates
@@ -395,7 +395,7 @@ class PermanentQrController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'Presensi siswa berhasil dicatat sebagai hadir.',
+                    'message' => 'Presensi siswa berhasil dicatat sebagai '.strtolower(\App\Helpers\AttendanceStatusHelper::label($result['status'] ?? 'PRESENT')).'.',
                     'distance' => $result['distance_meters'] ?? null,
                     'data' => $result,
                 ]);
@@ -411,11 +411,23 @@ class PermanentQrController extends Controller
                 ]);
             }
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            $message = $this->safeExceptionMessage($e);
+            $reportId = $request->attributes->get('wms_report_id');
+            $httpStatus = 422;
+            if (strtoupper($type) === 'STUDENT') {
+                $httpStatus = match (true) {
+                    $e instanceof \App\Exceptions\StudentAttendanceRejectedException => $e->httpStatus,
+                    $e instanceof \App\Services\Attendance\AttendanceWindowException => 422,
+                    default => 500,
+                };
+            }
+
             return response()->json([
                 'status' => 'error',
-                'message' => $this->safeExceptionMessage($e, 'Presensi QR tidak dapat diproses.'),
-            ], 422);
+                'message' => $message,
+                'report_id' => $reportId,
+            ], $httpStatus)->header('X-Request-ID', $reportId);
         }
     }
 

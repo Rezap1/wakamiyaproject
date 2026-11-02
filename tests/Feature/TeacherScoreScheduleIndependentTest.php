@@ -165,7 +165,7 @@ class TeacherScoreScheduleIndependentTest extends TestCase
         $this->get(route('teacher.workspace.scores'))
             ->assertOk()
             ->assertSee('Siswa Scope')
-            ->assertSee('31 Oct 2026')
+            ->assertSee('31 Okt 2026')
             ->assertSee('88')
             ->assertSee('assessment');
     }

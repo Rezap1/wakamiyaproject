@@ -387,7 +387,7 @@ class AttendanceQrFlowTest extends TestCase
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $this->expectException(Exception::class);
@@ -423,7 +423,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
         request()->merge([
             'Student_ID' => 'ATTACKER-STUDENT',
@@ -490,7 +490,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         foreach ($students as $student) {
             $this->actingAs(new GenericUser([
                 'id' => $student['User_ID'],
@@ -544,7 +544,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         foreach ($students as $student) {
             $this->actingAs(new GenericUser([
                 'id' => $student['User_ID'],
@@ -599,7 +599,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-A', 'User_ID' => 'USR-A', 'Role' => 'STUDENT']));
         $service->processStudentScan($this->permanentQrUrl('student', $identifier), -6.81234, 107.19451, 'Device A');
 
@@ -624,7 +624,7 @@ class AttendanceQrFlowTest extends TestCase
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         try {
@@ -660,7 +660,7 @@ class AttendanceQrFlowTest extends TestCase
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-UNMAPPED', 'User_ID' => 'USR-UNMAPPED', 'Role' => 'STUDENT']));
 
         try {
@@ -699,7 +699,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:16:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $result = $service->processStudentScan($this->studentToken(), -6.81234, 107.19451, 'Student Device');
@@ -728,7 +728,7 @@ class AttendanceQrFlowTest extends TestCase
             $enterpriseEvent
         );
 
-        Carbon::setTestNow('2026-08-23 08:16:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $result = $service->processStudentScan($this->studentToken(), -6.812391, 107.194458, 'Student Device');
@@ -754,7 +754,7 @@ class AttendanceQrFlowTest extends TestCase
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $this->expectException(Exception::class);
@@ -887,7 +887,7 @@ class AttendanceQrFlowTest extends TestCase
             Mockery::mock(EnterpriseEventService::class)
         );
 
-        Carbon::setTestNow('2026-08-23 20:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-EMP-A', 'User_ID' => 'USR-EMP-A', 'Role' => 'HR']));
 
         $this->expectException(Exception::class);
@@ -922,7 +922,7 @@ class AttendanceQrFlowTest extends TestCase
             $event
         );
 
-        Carbon::setTestNow('2026-08-23 08:10:00');
+        Carbon::setTestNow('2026-08-23 06:15:00');
         $this->actingAs(new GenericUser(['id' => 'USR-STU', 'User_ID' => 'USR-STU', 'Role' => 'STUDENT']));
 
         $this->expectException(Exception::class);

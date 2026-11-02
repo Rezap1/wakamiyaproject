@@ -398,7 +398,7 @@ class StudentQRAttendanceService
 
         try {
             return Cache::lock($lockKey, 10)->block(3, function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window) {
-                return $this->runtimeTransaction(function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window): array {
+                $result = $this->runtimeTransaction(function () use ($student, $studentId, $batchId, $classId, $user, $distance, $deviceInfo, $window): array {
                     // Check Duplicate Attendance for this Student today
                     $todayStr = $window['now']->toDateString();
                     $existing = $this->findExistingAttendance($studentId, $classId, $todayStr);
@@ -457,28 +457,6 @@ class StudentQRAttendanceService
                         );
                     }
 
-                    // Notifications are post-commit side effects. Their failure must
-                    // never turn a durable attendance write into a rejected response.
-                    try {
-                        $this->enterpriseEvent->dispatch(
-                            'ACADEMIC',
-                            'CREATE',
-                            'STUDENT_ATTENDANCE',
-                            $attendanceId,
-                            $user->User_ID,
-                            ['STUDENT', 'TEACHER', 'ACADEMIC'],
-                            [$studentId],
-                            [
-                                'Student_Name' => $student['Full_Name'] ?? $studentId,
-                                'Batch_ID' => $batchId,
-                                'Status' => $status,
-                                'Distance_Meters' => $distance,
-                            ]
-                        );
-                    } catch (\Throwable $eventFailure) {
-                        $this->logPostCommitFailure($attendanceId, $eventFailure);
-                    }
-
                     return [
                         'attendance_id' => $attendanceId,
                         'student_name' => $student['Full_Name'] ?? $studentId,
@@ -490,6 +468,30 @@ class StudentQRAttendanceService
                         'distance_meters' => $distance,
                     ];
                 }, [[$this->studentRepository, $studentId]]);
+
+                // Dispatch only after the transaction (including COMMIT) succeeds.
+                // A failed notification must not turn durable attendance into an error.
+                try {
+                    $this->enterpriseEvent->dispatch(
+                        'ACADEMIC',
+                        'CREATE',
+                        'STUDENT_ATTENDANCE',
+                        $result['attendance_id'],
+                        $user->User_ID,
+                        ['STUDENT', 'TEACHER', 'ACADEMIC'],
+                        [$studentId],
+                        [
+                            'Student_Name' => $student['Full_Name'] ?? $studentId,
+                            'Batch_ID' => $batchId,
+                            'Status' => $result['status'],
+                            'Distance_Meters' => $distance,
+                        ]
+                    );
+                } catch (\Throwable $eventFailure) {
+                    $this->logPostCommitFailure($result['attendance_id'], $eventFailure);
+                }
+
+                return $result;
             });
         } catch (LockTimeoutException $e) {
             throw new StudentAttendanceRejectedException(

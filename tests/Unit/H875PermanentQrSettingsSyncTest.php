@@ -219,12 +219,12 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertStringContainsString('name="ACTIVE_FROM_TIME" value="06:17"', $matches[0]);
         $this->assertStringContainsString('name="ACTIVE_UNTIL_TIME" value="20:43"', $matches[0]);
         $this->assertStringContainsString('name="ATTENDANCE_START_TIME" value="05:45"', $matches[0]);
-        $this->assertStringContainsString('name="ATTENDANCE_END_TIME" value="09:45"', $matches[0]);
+        $this->assertStringContainsString('name="ATTENDANCE_END_TIME" value="06:45"', $matches[0]);
         $this->assertStringNotContainsString('name="ACTIVE_FROM_TIME" value="'.$globalBefore['start'].'"', $matches[0]);
-        $this->assertStringContainsString($globalBefore['start'].'–'.$globalBefore['end'].' WIB', $html);
+        $this->assertStringContainsString($globalBefore['start'].'–'.'07:00 WIB', $html);
     }
 
-    public function test_student_attendance_settings_refresh_immediately_without_late_semantics(): void
+    public function test_student_attendance_settings_refresh_with_one_hour_session(): void
     {
         $settingsRepository = new H875SystemSettingRepositoryFake;
         $service = new SystemSettingService($settingsRepository, new H875SystemParameterRepositoryFake);
@@ -243,12 +243,12 @@ class H875PermanentQrSettingsSyncTest extends TestCase
         $this->assertSame('09:00', $service->get('STUDENT_ATTENDANCE_END_TIME'));
 
         $windowService = new AttendanceWindowService($service);
-        foreach (['06:30:00', '08:45:00', '09:00:00'] as $time) {
+        foreach (['06:30:00', '06:45:00', '06:59:59'] as $time) {
             $window = $windowService->resolve(CarbonImmutable::parse("2026-10-01 {$time}", 'Asia/Jakarta'));
             $this->assertSame('PRESENT', $windowService->resolveStudentStatus($window)['status']);
         }
 
-        foreach (['06:29:59', '09:00:01'] as $time) {
+        foreach (['06:29:59', '07:30:01', '09:00:01'] as $time) {
             $window = $windowService->resolve(CarbonImmutable::parse("2026-10-01 {$time}", 'Asia/Jakarta'));
             try {
                 $windowService->assertOpen($window);
@@ -294,7 +294,7 @@ class H875PermanentQrSettingsSyncTest extends TestCase
 
     public function test_valid_qr_and_valid_daily_window_creates_present_once(): void
     {
-        Carbon::setTestNow('2026-10-01 07:00:00');
+        Carbon::setTestNow('2026-10-01 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldReceive('fetchAll')->once()->andReturn([]);
         $attendance->shouldReceive('create')->once()->with(Mockery::on(

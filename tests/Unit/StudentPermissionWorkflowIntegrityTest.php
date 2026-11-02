@@ -356,6 +356,63 @@ class StudentPermissionWorkflowIntegrityTest extends TestCase
         $this->assertSame('IZIN', $attendanceRepo->rows['ATT-A']['Status']);
     }
 
+    public function test_rejected_history_cannot_hide_a_newer_active_duplicate(): void
+    {
+        [$service, $requests] = $this->newService([
+            $this->request(['Request_ID' => 'REQ-OLD', 'Status' => 'REJECTED']),
+            $this->request(['Request_ID' => 'REQ-NEW', 'Status' => 'PENDING']),
+        ]);
+
+        try {
+            $service->createRequest($this->request(), $this->studentUser('USR-STU-A'));
+            $this->fail('The newer pending request must prevent another submission.');
+        } catch (\Exception $failure) {
+            $this->assertStringContainsString('pengajuan aktif', $failure->getMessage());
+        }
+        $this->assertCount(2, $requests->rows);
+    }
+
+    public function test_replaying_rejection_preserves_later_official_correction(): void
+    {
+        [$service, $requests, $attendance] = $this->newService([
+            $this->request(['Status' => 'REJECTED']),
+        ], ['ATT-A' => $this->attendance(['Status' => 'PRESENT'])]);
+
+        $this->assertTrue($service->rejectRequest('REQ-A', 'Repeated click', $this->teacherUser('USR-TCH-A')));
+        $this->assertSame('PRESENT', $attendance->rows['ATT-A']['Status']);
+        $this->assertSame([], $attendance->updates);
+        $this->assertSame([], $requests->updates);
+    }
+
+    public function test_replaying_historical_approval_does_not_recreate_missing_attendance(): void
+    {
+        [$service, $requests, $attendance] = $this->newService([
+            $this->request(['Status' => 'APPROVED']),
+        ]);
+
+        $this->assertTrue($service->approveRequest('REQ-A', 'IZIN', 'Repeated click', $this->teacherUser('USR-TCH-A')));
+        $this->assertSame(0, $attendance->createCount);
+        $this->assertSame([], $requests->updates);
+    }
+
+    public function test_homeroom_teacher_can_review_class_request_without_schedule(): void
+    {
+        $requests = new H838AttendanceRequestMemoryRepository([$this->request()]);
+        $attendance = new H838AttendanceMemoryRepository;
+        $log = Mockery::mock(ActivityLogService::class);
+        $log->shouldReceive('log')->andReturn(true);
+        $service = new AttendanceRequestService(
+            $requests, $attendance, $log,
+            new H838StudentMemoryRepository($this->students()),
+            new H838ScheduleMemoryRepository([]), null,
+            new H838TeacherMemoryRepository($this->teachers()),
+            new H838ClassMemoryRepository($this->classes())
+        );
+        $this->assertTrue($service->approveRequest('REQ-A', 'IZIN', 'Wali kelas', $this->teacherUser('USR-TCH-A')));
+        $this->assertSame('APPROVED', $requests->rows['REQ-A']['Status']);
+        $this->assertSame('IZIN', $attendance->rows['ATT-A']['Status']);
+    }
+
     private function newService(array $requests = [], array $attendances = [], ?NotificationService $notifications = null): array
     {
         $requestRepo = new H838AttendanceRequestMemoryRepository($requests);

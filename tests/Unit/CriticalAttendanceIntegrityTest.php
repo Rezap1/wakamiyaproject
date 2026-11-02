@@ -57,50 +57,35 @@ class CriticalAttendanceIntegrityTest extends TestCase
     public static function attendanceBoundaryProvider(): array
     {
         return [
-            '05:00 rejected' => ['05:00:00', false, null, 'TOO_EARLY'],
-            'one second before start rejected' => ['05:59:59', false, null, 'TOO_EARLY'],
-            'start inclusive' => ['06:00:00', true, 'PRESENT', null],
-            '06:15 present' => ['06:15:00', true, 'PRESENT', null],
-            '06:30 present' => ['06:30:00', true, 'PRESENT', null],
-            '06:30:01 present' => ['06:30:01', true, 'PRESENT', null],
-            '07:00 present' => ['07:00:00', true, 'PRESENT', null],
-            '07:20 present' => ['07:20:00', true, 'PRESENT', null],
-            '07:50 present' => ['07:50:00', true, 'PRESENT', null],
-            '08:00 present' => ['08:00:00', true, 'PRESENT', null],
-            'one second before end present' => ['08:29:59', true, 'PRESENT', null],
-            'end inclusive present' => ['08:30:00', true, 'PRESENT', null],
-            'one second after end rejected' => ['08:30:01', false, null, 'TOO_LATE'],
-            '09:00 rejected' => ['09:00:00', false, null, 'TOO_LATE'],
-            '23:00 rejected' => ['23:00:00', false, null, 'TOO_LATE'],
+            'before opening' => ['05:59:59', false, null, 'TOO_EARLY'],
+            'opening' => ['06:00:00', true, 'PRESENT', null],
+            'before minute 30' => ['06:29:59', true, 'PRESENT', null],
+            'minute 30' => ['06:30:00', true, 'LATE', null],
+            'after minute 30' => ['06:30:01', true, 'LATE', null],
+            'minute 59' => ['06:59:59', true, 'LATE', null],
+            'minute 60 inclusive' => ['07:00:00', true, 'LATE', null],
+            'after minute 60' => ['07:00:01', false, null, 'TOO_LATE'],
+            'legacy closing time cannot extend session' => ['08:30:00', false, null, 'TOO_LATE'],
         ];
     }
 
-    #[DataProvider('studentPresentTimeProvider')]
-    public function test_student_attendance_never_generates_late_inside_valid_window(string $time): void
+    #[DataProvider('studentStatusTimeProvider')]
+    public function test_student_attendance_classifies_late_from_minute_thirty(string $time, string $status, int $lateMinutes): void
     {
-        $windowService = new AttendanceWindowService($this->settings([
-            'LATE_TOLERANCE_MINUTES' => 'malformed-but-student-irrelevant',
-        ]));
-        $window = $windowService->resolve(
-            CarbonImmutable::parse("2026-09-29 {$time}", AttendanceWindowService::TIMEZONE)
-        );
-
-        $windowService->assertOpen($window);
+        $windowService = new AttendanceWindowService($this->settings());
+        $window = $windowService->resolve(CarbonImmutable::parse("2026-09-29 {$time}", AttendanceWindowService::TIMEZONE));
         $decision = $windowService->resolveStudentStatus($window);
-
-        $this->assertSame('PRESENT', $decision['status']);
-        $this->assertSame(0, $decision['late_minutes']);
+        $this->assertSame($status, $decision['status']);
+        $this->assertSame($lateMinutes, $decision['late_minutes']);
+        $this->assertSame('07:00', $window['end_label']);
     }
 
-    public static function studentPresentTimeProvider(): array
+    public static function studentStatusTimeProvider(): array
     {
         return [
-            '06:00' => ['06:00:00'],
-            '06:31' => ['06:31:00'],
-            '07:00' => ['07:00:00'],
-            '07:30' => ['07:30:00'],
-            '08:00' => ['08:00:00'],
-            '08:30' => ['08:30:00'],
+            ['06:00:00', 'PRESENT', 0], ['06:29:59', 'PRESENT', 0],
+            ['06:30:00', 'LATE', 0], ['06:31:00', 'LATE', 1],
+            ['06:59:59', 'LATE', 29], ['07:00:00', 'LATE', 30],
         ];
     }
 
@@ -128,11 +113,11 @@ class CriticalAttendanceIntegrityTest extends TestCase
             '23:00 UTC previous date opens at 06:00 WIB' => [
                 '2026-09-28 23:00:00', '2026-09-29 06:00:00 WIB', true,
             ],
-            '01:30 UTC closes at 08:30 WIB' => [
-                '2026-09-29 01:30:00', '2026-09-29 08:30:00 WIB', true,
+            '00:00 UTC closes at 07:00 WIB' => [
+                '2026-09-29 00:00:00', '2026-09-29 07:00:00 WIB', true,
             ],
-            '01:30:01 UTC is after close' => [
-                '2026-09-29 01:30:01', '2026-09-29 08:30:01 WIB', false,
+            '00:00:01 UTC is after close' => [
+                '2026-09-29 00:00:01', '2026-09-29 07:00:01 WIB', false,
             ],
         ];
     }
@@ -187,7 +172,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
     {
         return [
             'too early' => ['05:59:59', 'Absensi dimulai pukul 06:00'],
-            'too late' => ['08:30:01', 'berakhir pada pukul 08:30'],
+            'too late' => ['07:00:01', 'berakhir pada pukul 07:00'],
         ];
     }
 
@@ -208,7 +193,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
             $this->assertSame('TOO_EARLY', $e->reasonCode);
         }
 
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $result = $service->processStudentScan($this->permanentQrUrl(), -6.81234, 107.19451);
 
         $this->assertSame('PRESENT', $result['status']);
@@ -216,7 +201,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_dynamic_qr_expired_inside_window_is_zero_write(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldNotReceive('fetchAll');
         $attendance->shouldNotReceive('create');
@@ -230,7 +215,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_invalid_dynamic_qr_inside_window_is_zero_write(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldNotReceive('fetchAll');
         $attendance->shouldNotReceive('create');
@@ -242,7 +227,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_post_commit_event_failure_cannot_turn_success_into_rejection(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $written = [];
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldReceive('fetchAll')->once()->andReturn([]);
@@ -270,7 +255,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_mysql_lookup_capability_avoids_loading_entire_attendance_history(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(
             AttendanceRepositoryInterface::class.', '.StudentAttendanceLookupInterface::class
         );
@@ -294,7 +279,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_repository_write_failure_never_returns_success(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldReceive('fetchAll')->once()->andReturn([]);
         $attendance->shouldReceive('create')->once()->andThrow(new RuntimeException('Sheets unavailable'));
@@ -306,7 +291,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
 
     public function test_repository_primary_key_barrier_prevents_concurrent_duplicate(): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldReceive('fetchAll')->once()->andReturn([]);
         $attendance->shouldReceive('create')->once()->andThrow(new DuplicatePrimaryKeyException('duplicate'));
@@ -341,7 +326,7 @@ class CriticalAttendanceIntegrityTest extends TestCase
     #[DataProvider('invalidConfigurationProvider')]
     public function test_invalid_attendance_configuration_fails_closed(array $overrides): void
     {
-        Carbon::setTestNow('2026-09-29 07:30:00');
+        Carbon::setTestNow('2026-09-29 06:15:00');
         $attendance = Mockery::mock(AttendanceRepositoryInterface::class);
         $attendance->shouldNotReceive('fetchAll');
         $attendance->shouldNotReceive('create');
@@ -358,8 +343,33 @@ class CriticalAttendanceIntegrityTest extends TestCase
             'missing end' => [['STUDENT_ATTENDANCE_END_TIME' => '']],
             'malformed start' => [['STUDENT_ATTENDANCE_START_TIME' => '6:00']],
             'same boundary' => [['STUDENT_ATTENDANCE_END_TIME' => '06:00']],
+            'one hour crosses midnight' => [['STUDENT_ATTENDANCE_START_TIME' => '23:15', 'STUDENT_ATTENDANCE_END_TIME' => '23:59']],
             'overnight unsupported' => [['STUDENT_ATTENDANCE_START_TIME' => '22:00', 'STUDENT_ATTENDANCE_END_TIME' => '06:00']],
         ];
+    }
+
+    public function test_qr_event_is_not_dispatched_if_transaction_commit_fails(): void
+    {
+        Carbon::setTestNow('2026-09-29 06:15:00');
+        $attendance = Mockery::mock(\App\Repositories\GoogleSheets\AttendanceRepository::class);
+        $attendance->shouldReceive('findActiveStudentClassAttendance')->once()->andReturnNull();
+        $attendance->shouldReceive('create')->once()->andReturn(true);
+        $attendance->shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
+            $callback();
+            throw new RuntimeException('Injected commit failure');
+        });
+        $dispatched = 0;
+        $event = Mockery::mock(EnterpriseEventService::class);
+        $event->shouldReceive('dispatch')->andReturnUsing(function () use (&$dispatched) {
+            $dispatched++;
+        });
+        try {
+            $this->service($attendance, $event)->processStudentScan($this->permanentQrUrl(), -6.81234, 107.19451);
+            $this->fail('Commit failure must propagate.');
+        } catch (RuntimeException $failure) {
+            $this->assertSame('Injected commit failure', $failure->getMessage());
+        }
+        $this->assertSame(0, $dispatched, 'Notification must wait for a successful commit.');
     }
 
     private function service(

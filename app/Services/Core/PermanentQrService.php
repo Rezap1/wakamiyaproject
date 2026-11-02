@@ -370,10 +370,17 @@ class PermanentQrService
 
             $this->assertValidAttendanceWindow($start, $end);
 
+            $effectiveEnd = $end;
+            if (strtoupper(trim((string) ($qr['QR_TYPE'] ?? ''))) === 'STUDENT') {
+                $effectiveEnd = (new AttendanceWindowService($this->settingService ?? app(SystemSettingService::class)))
+                    ->resolveForTimes($start, $end)['end_label'];
+            }
+
             return [
                 'valid' => true,
                 'start' => $start,
                 'end' => $end,
+                'effective_end' => $effectiveEnd,
                 'inherited' => $inherited,
                 'message' => $inherited
                     ? 'Menggunakan fallback pengaturan global karena QR lama belum memiliki jam tersimpan.'

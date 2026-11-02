@@ -59,6 +59,12 @@ class ProtectMassAssignment
 
         // Remove these fields from the request if they exist
         foreach ($protectedFields as $field) {
+            // The MASTER manual form validates Status as PRESENT only.
+            // Audit and approval fields remain protected on this endpoint.
+            if ($field === 'Status' && $request->routeIs('attendances.manual.store')) {
+                continue;
+            }
+
             if ($request->has($field)) {
                 $request->request->remove($field);
             }
