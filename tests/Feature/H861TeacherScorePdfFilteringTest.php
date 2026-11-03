@@ -180,7 +180,12 @@ class H861TeacherScorePdfFilteringTest extends TestCase
             ->assertSee('name="mode"', false)
             ->assertSee('name="student_id"', false)
             ->assertSee('name="class_id"', false)
-            ->assertSee('name="date"', false)
+            ->assertSee('name="date_from"', false)
+            ->assertSee('name="date_to"', false)
+            ->assertSee('Tanggal Mulai')
+            ->assertSee('Tanggal Selesai')
+            ->assertSee('grid grid-cols-1 gap-4 sm:grid-cols-2', false)
+            ->assertDontSee('name="date"', false)
             ->assertSee('Aiko Tanaka')
             ->assertSee('Kelas Sakura')
             ->assertDontSee('Siswa Asing')
@@ -224,38 +229,65 @@ class H861TeacherScorePdfFilteringTest extends TestCase
 
     public function test_student_pdf_is_filtered_across_dates_and_has_safe_human_filename(): void
     {
-        $response = $this->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'student', 'student_id' => 'STU-A']));
+        $response = $this->get(route('teacher.workspace.reports.scores-pdf', [
+            'mode' => 'student',
+            'student_id' => 'STU-A',
+            'date_from' => '2026-09-10',
+            'date_to' => '2026-09-11',
+        ]));
 
         $response->assertOk();
-        $this->assertStringContainsString('LAPORAN-NILAI-Aiko-Tanaka-20260912.pdf', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('LAPORAN-NILAI-Aiko-Tanaka-20260910-20260911.pdf', (string) $response->headers->get('Content-Disposition'));
         $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
-    public function test_class_pdf_requires_a_date_and_has_safe_human_filename(): void
+    public function test_class_pdf_requires_a_valid_date_range_and_has_safe_human_filename(): void
     {
         $this->from(route('teacher.workspace.scores'))
             ->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'class', 'class_id' => 'CLS-B']))
             ->assertRedirect(route('teacher.workspace.scores'))
-            ->assertSessionHasErrors(['date' => 'Tanggal wajib dipilih untuk laporan nilai satu kelas.']);
+            ->assertSessionHasErrors([
+                'date_from' => 'Tanggal Mulai wajib dipilih.',
+                'date_to' => 'Tanggal Selesai wajib dipilih.',
+            ]);
 
-        $response = $this->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'class', 'class_id' => 'CLS-B', 'date' => '2026-09-11']));
+        $this->from(route('teacher.workspace.scores'))
+            ->get(route('teacher.workspace.reports.scores-pdf', [
+                'mode' => 'class',
+                'class_id' => 'CLS-B',
+                'date_from' => '2026-09-12',
+                'date_to' => '2026-09-11',
+            ]))
+            ->assertSessionHasErrors(['date_to' => 'Tanggal Selesai tidak boleh sebelum Tanggal Mulai.']);
+
+        $response = $this->get(route('teacher.workspace.reports.scores-pdf', [
+            'mode' => 'class',
+            'class_id' => 'CLS-B',
+            'date_from' => '2026-09-11',
+            'date_to' => '2026-09-11',
+        ]));
         $response->assertOk();
-        $this->assertStringContainsString('LAPORAN-NILAI-Kelas-Fuji-20260911.pdf', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('LAPORAN-NILAI-Kelas-Fuji-20260911-20260911.pdf', (string) $response->headers->get('Content-Disposition'));
     }
 
     public function test_student_mode_requires_student_and_rejects_forged_or_foreign_ids(): void
     {
         $this->from(route('teacher.workspace.scores'))
-            ->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'student']))
+            ->get(route('teacher.workspace.reports.scores-pdf', [
+                'mode' => 'student',
+                'date_from' => '2026-09-10',
+                'date_to' => '2026-09-11',
+            ]))
             ->assertSessionHasErrors(['student_id' => 'Siswa wajib dipilih untuk laporan nilai per siswa.']);
 
-        $this->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'student', 'student_id' => 'STU-FORGED']))->assertForbidden();
-        $this->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'student', 'student_id' => 'STU-F']))->assertForbidden();
+        $query = ['mode' => 'student', 'date_from' => '2026-09-10', 'date_to' => '2026-09-11'];
+        $this->get(route('teacher.workspace.reports.scores-pdf', $query + ['student_id' => 'STU-FORGED']))->assertForbidden();
+        $this->get(route('teacher.workspace.reports.scores-pdf', $query + ['student_id' => 'STU-F']))->assertForbidden();
     }
 
     public function test_class_mode_rejects_forged_and_other_teacher_classes(): void
     {
-        $query = ['mode' => 'class', 'date' => '2026-09-11'];
+        $query = ['mode' => 'class', 'date_from' => '2026-09-10', 'date_to' => '2026-09-11'];
         $this->get(route('teacher.workspace.reports.scores-pdf', $query + ['class_id' => 'CLS-FORGED']))->assertForbidden();
         $this->get(route('teacher.workspace.reports.scores-pdf', $query + ['class_id' => 'CLS-C']))->assertForbidden();
     }
@@ -263,17 +295,32 @@ class H861TeacherScorePdfFilteringTest extends TestCase
     public function test_unknown_mode_and_cross_mode_parameters_fail_closed(): void
     {
         $this->from(route('teacher.workspace.scores'))
-            ->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'all']))
+            ->get(route('teacher.workspace.reports.scores-pdf', [
+                'mode' => 'all',
+                'date_from' => '2026-09-10',
+                'date_to' => '2026-09-11',
+            ]))
             ->assertSessionHasErrors(['mode' => 'Jenis laporan tidak valid.']);
 
         $this->from(route('teacher.workspace.scores'))
-            ->get(route('teacher.workspace.reports.scores-pdf', ['mode' => 'student', 'student_id' => 'STU-A', 'date' => '2026-09-11']))
-            ->assertSessionHasErrors('date');
+            ->get(route('teacher.workspace.reports.scores-pdf', [
+                'mode' => 'student',
+                'student_id' => 'STU-A',
+                'class_id' => 'CLS-A',
+                'date_from' => '2026-09-10',
+                'date_to' => '2026-09-11',
+            ]))
+            ->assertSessionHasErrors('class_id');
     }
 
     public function test_student_print_includes_all_own_dates_and_excludes_other_or_cross_scope_scores(): void
     {
-        $this->get(route('teacher.workspace.reports.scores-print', ['mode' => 'student', 'student_id' => 'STU-A']))
+        $this->get(route('teacher.workspace.reports.scores-print', [
+            'mode' => 'student',
+            'student_id' => 'STU-A',
+            'date_from' => '2026-09-10',
+            'date_to' => '2026-09-11',
+        ]))
             ->assertOk()
             ->assertSee('Aiko Tanaka')
             ->assertSee('Ujian Bab 5')
@@ -281,6 +328,8 @@ class H861TeacherScorePdfFilteringTest extends TestCase
             ->assertSee('Ujian Bab')
             ->assertSee('Baik')
             ->assertSee('Ruang Lingkup Guru')
+            ->assertSee('Periode Nilai')
+            ->assertSee('10 September 2026 s.d. 11 September 2026')
             ->assertSee('Kelas Sakura | Bahasa Jepang')
             ->assertDontSee('Latihan Aljabar')
             ->assertDontSee('JANGAN-BOCOR-CROSS')
@@ -289,11 +338,33 @@ class H861TeacherScorePdfFilteringTest extends TestCase
             ->assertDontSee('Evaluation_Details');
     }
 
+    public function test_student_print_excludes_scores_outside_the_inclusive_period(): void
+    {
+        $this->get(route('teacher.workspace.reports.scores-print', [
+            'mode' => 'student',
+            'student_id' => 'STU-A',
+            'date_from' => '2026-09-11',
+            'date_to' => '2026-09-11',
+        ]))
+            ->assertOk()
+            ->assertSee('Ujian Bab 5')
+            ->assertSee('11 Sep 2026')
+            ->assertDontSee('Percakapan Lama')
+            ->assertDontSee('10 Sep 2026');
+    }
+
     public function test_class_print_uses_exact_date_and_shows_roster_member_without_score(): void
     {
-        $this->get(route('teacher.workspace.reports.scores-print', ['mode' => 'class', 'class_id' => 'CLS-B', 'date' => '2026-09-11']))
+        $this->get(route('teacher.workspace.reports.scores-print', [
+            'mode' => 'class',
+            'class_id' => 'CLS-B',
+            'date_from' => '2026-09-11',
+            'date_to' => '2026-09-11',
+        ]))
             ->assertOk()
             ->assertSee('Kelas Fuji')
+            ->assertSee('Periode Nilai')
+            ->assertSee('11 September 2026 s.d. 11 September 2026')
             ->assertSee('11 Sep 2026')
             ->assertSee('Beni Fuji')
             ->assertSee('Citra Fuji')
@@ -305,11 +376,21 @@ class H861TeacherScorePdfFilteringTest extends TestCase
 
     public function test_mode_specific_empty_states_are_exact(): void
     {
-        $this->get(route('teacher.workspace.reports.scores-print', ['mode' => 'student', 'student_id' => 'STU-EMPTY']))
-            ->assertOk()->assertSee('Belum ada data nilai untuk siswa ini.');
+        $this->get(route('teacher.workspace.reports.scores-print', [
+            'mode' => 'student',
+            'student_id' => 'STU-EMPTY',
+            'date_from' => '2026-09-10',
+            'date_to' => '2026-09-11',
+        ]))
+            ->assertOk()->assertSee('Belum ada data nilai untuk siswa ini pada periode yang dipilih.');
 
-        $this->get(route('teacher.workspace.reports.scores-print', ['mode' => 'class', 'class_id' => 'CLS-B', 'date' => '2026-09-09']))
-            ->assertOk()->assertSee('Belum ada data nilai pada tanggal yang dipilih.');
+        $this->get(route('teacher.workspace.reports.scores-print', [
+            'mode' => 'class',
+            'class_id' => 'CLS-B',
+            'date_from' => '2026-09-08',
+            'date_to' => '2026-09-09',
+        ]))
+            ->assertOk()->assertSee('Belum ada data nilai untuk kelas ini pada periode yang dipilih.');
     }
 
     private function mockService(string $class, array $methodReturns)

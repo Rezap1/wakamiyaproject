@@ -50,12 +50,15 @@
             <td><strong>Nama Siswa</strong><br>{{ data_get($selectedStudent ?? [], 'student_name', '-') }}</td>
             <td><strong>ID Siswa</strong><br>{{ data_get($selectedStudent ?? [], 'student_id', '-') }}</td>
         </tr>
-        <tr><td colspan="3"><strong>Ruang Lingkup Guru</strong><br>{{ $teachingScopeLabel ?? '-' }}</td></tr>
+        <tr>
+            <td><strong>Periode Nilai</strong><br>{{ $periodLabel ?? '-' }}</td>
+            <td colspan="2"><strong>Ruang Lingkup Guru</strong><br>{{ $teachingScopeLabel ?? '-' }}</td>
+        </tr>
     @elseif(($reportMode ?? '') === 'class')
         <tr>
             <td><strong>Nama Guru</strong><br>{{ $teacherName ?? '-' }}</td>
             <td><strong>Kelas</strong><br>{{ $selectedClassName ?? '-' }}</td>
-            <td><strong>Tanggal Nilai</strong><br>{{ \App\Helpers\DateHelper::format($reportDate ?? null, 'd F Y') }}</td>
+            <td><strong>Periode Nilai</strong><br>{{ $periodLabel ?? '-' }}</td>
         </tr>
         <tr>
             <td><strong>Jumlah Siswa</strong><br>{{ $studentCount ?? $groups->count() }}</td>

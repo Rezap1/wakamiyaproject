@@ -331,7 +331,8 @@ class TeacherWorkspaceController extends Controller
             'mode' => ['required', 'string', 'in:student,class'],
             'student_id' => ['nullable', 'string', 'required_if:mode,student', 'prohibited_unless:mode,student'],
             'class_id' => ['nullable', 'string', 'required_if:mode,class', 'prohibited_unless:mode,class'],
-            'date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,class', 'prohibited_unless:mode,class'],
+            'date_from' => ['required', 'date_format:Y-m-d'],
+            'date_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:date_from'],
         ], [
             'mode.required' => 'Jenis laporan wajib dipilih.',
             'mode.in' => 'Jenis laporan tidak valid.',
@@ -339,9 +340,11 @@ class TeacherWorkspaceController extends Controller
             'student_id.prohibited_unless' => 'Siswa hanya boleh dipilih untuk laporan nilai per siswa.',
             'class_id.required_if' => 'Kelas wajib dipilih untuk laporan nilai satu kelas.',
             'class_id.prohibited_unless' => 'Kelas hanya boleh dipilih untuk laporan nilai satu kelas.',
-            'date.required_if' => 'Tanggal wajib dipilih untuk laporan nilai satu kelas.',
-            'date.date_format' => 'Format tanggal laporan harus YYYY-MM-DD.',
-            'date.prohibited_unless' => 'Tanggal hanya boleh dipilih untuk laporan nilai satu kelas.',
+            'date_from.required' => 'Tanggal Mulai wajib dipilih.',
+            'date_from.date_format' => 'Tanggal Mulai harus menggunakan format tanggal yang valid.',
+            'date_to.required' => 'Tanggal Selesai wajib dipilih.',
+            'date_to.date_format' => 'Tanggal Selesai harus menggunakan format tanggal yang valid.',
+            'date_to.after_or_equal' => 'Tanggal Selesai tidak boleh sebelum Tanggal Mulai.',
         ]);
 
         $teacherId = $this->verifyTeacherAccess();
@@ -349,7 +352,8 @@ class TeacherWorkspaceController extends Controller
         $mode = $filters['mode'];
         $studentId = trim((string) ($filters['student_id'] ?? ''));
         $classId = trim((string) ($filters['class_id'] ?? ''));
-        $reportDate = trim((string) ($filters['date'] ?? ''));
+        $dateFrom = trim((string) $filters['date_from']);
+        $dateTo = trim((string) $filters['date_to']);
 
         if ($mode === 'student' && ! in_array($studentId, $scope['managed_student_ids'] ?? [], true)) {
             abort(403, 'Siswa berada di luar ruang lingkup pengajaran Anda.');
@@ -369,14 +373,14 @@ class TeacherWorkspaceController extends Controller
 
         $scores = $this->teacherScopedScores($teacherId, $scope)
             ->filter(fn ($score) => $this->scoreBelongsToResolvedScope((array) $score, $scope, $schedulesById))
-            ->filter(function ($score) use ($mode, $studentId, $classId, $reportDate, $schedulesById, $scope) {
+            ->filter(function ($score) use ($mode, $studentId, $classId, $schedulesById, $scope) {
                 if ($mode === 'student') {
                     return trim((string) ($score['Student_ID'] ?? '')) === $studentId;
                 }
 
-                return $this->scoreClassId((array) $score, $schedulesById, $scope) === $classId
-                    && $this->scoreReportDate((array) $score) === $reportDate;
+                return $this->scoreClassId((array) $score, $schedulesById, $scope) === $classId;
             });
+        $scores = ScoreDateResolver::filter($scores, $dateFrom, $dateTo);
 
         $rows = $scores->map(function ($score) use ($classesById, $subjectsById, $schedulesById, $studentsById, $assessmentsById, $assignmentsById) {
             $schedule = (array) $schedulesById->get(trim((string) ($score['Schedule_ID'] ?? '')), []);
@@ -439,16 +443,18 @@ class TeacherWorkspaceController extends Controller
             ->filter()->unique()->implode(', ');
         $teachingScopeLabel = 'Kelas: '.($authorizedClassLabels ?: '-')
             .' | Mata pelajaran: '.($authorizedSubjectLabels ?: '-');
+        $periodLabel = DateHelper::format($dateFrom, 'd F Y').' s.d. '.DateHelper::format($dateTo, 'd F Y');
+        $filenamePeriod = str_replace('-', '', $dateFrom).'-'.str_replace('-', '', $dateTo);
         $title = $mode === 'student' ? 'Laporan Nilai Siswa' : 'Laporan Nilai Kelas';
         $filename = $mode === 'student'
-            ? 'LAPORAN-NILAI-'.($selectedStudent['student_name'] ?? $studentId).'-'.now()->format('Ymd')
-            : 'LAPORAN-NILAI-'.$selectedClassName.'-'.str_replace('-', '', $reportDate);
+            ? 'LAPORAN-NILAI-'.($selectedStudent['student_name'] ?? $studentId).'-'.$filenamePeriod
+            : 'LAPORAN-NILAI-'.$selectedClassName.'-'.$filenamePeriod;
         $emptyMessage = $mode === 'student'
-            ? 'Belum ada data nilai untuk siswa ini.'
-            : 'Belum ada data nilai pada tanggal yang dipilih.';
+            ? 'Belum ada data nilai untuk siswa ini pada periode yang dipilih.'
+            : 'Belum ada data nilai untuk kelas ini pada periode yang dipilih.';
         $scopeLabel = $mode === 'student'
-            ? 'Siswa: '.($selectedStudent['student_name'] ?? $studentId)
-            : 'Kelas: '.$selectedClassName.' | Tanggal: '.DateHelper::format($reportDate, 'd F Y');
+            ? 'Siswa: '.($selectedStudent['student_name'] ?? $studentId).' | Periode: '.$periodLabel
+            : 'Kelas: '.$selectedClassName.' | Periode: '.$periodLabel;
 
         return ReportHelper::export($format, $title, $rows, [
             'filename' => $filename,
@@ -458,7 +464,9 @@ class TeacherWorkspaceController extends Controller
             'reportMode' => $mode,
             'selectedStudent' => $selectedStudent,
             'selectedClassName' => $selectedClassName,
-            'reportDate' => $reportDate,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'periodLabel' => $periodLabel,
             'studentCount' => $studentGroups->count(),
             'studentGroups' => $studentGroups,
             'emptyMessage' => $emptyMessage,

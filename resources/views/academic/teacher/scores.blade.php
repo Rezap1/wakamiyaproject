@@ -75,9 +75,9 @@
         <div id="score-pdf-filter" class="p-5 border-b border-slate-200 bg-red-50/40" x-data="{ reportMode: @js(old('mode', 'student')) }">
             <div class="max-w-4xl">
                 <h4 class="text-base font-extrabold text-slate-900">Unduh laporan nilai PDF</h4>
-                <p class="mt-1 text-sm text-slate-600">Pilih satu siswa untuk seluruh riwayat nilainya, atau satu kelas pada tanggal tertentu.</p>
+                <p class="mt-1 text-sm text-slate-600">Pilih satu siswa atau satu kelas, lalu tentukan rentang tanggal nilai yang akan ditampilkan.</p>
 
-                @if(isset($errors) && $errors->hasAny(['mode', 'student_id', 'class_id', 'date']))
+                @if(isset($errors) && $errors->hasAny(['mode', 'student_id', 'class_id', 'date_from', 'date_to']))
                     <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
                         {{ $errors->first() }}
                     </div>
@@ -110,19 +110,24 @@
                         </select>
                     </div>
 
-                    <div x-show="reportMode === 'class'" x-cloak class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div x-show="reportMode === 'class'" x-cloak>
+                        <label for="report_class_id" class="block text-sm font-bold text-slate-700">Kelas</label>
+                        <select id="report_class_id" name="class_id" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                            <option value="">Pilih kelas</option>
+                            @foreach($reportClasses ?? [] as $class)
+                                <option value="{{ $class['Class_ID'] }}" @selected(old('class_id') === $class['Class_ID'])>{{ $class['Class_Name'] }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                            <label for="report_class_id" class="block text-sm font-bold text-slate-700">Kelas</label>
-                            <select id="report_class_id" name="class_id" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
-                                <option value="">Pilih kelas</option>
-                                @foreach($reportClasses ?? [] as $class)
-                                    <option value="{{ $class['Class_ID'] }}" @selected(old('class_id') === $class['Class_ID'])>{{ $class['Class_Name'] }}</option>
-                                @endforeach
-                            </select>
+                            <label for="report_date_from" class="block text-sm font-bold text-slate-700">Tanggal Mulai</label>
+                            <input id="report_date_from" type="date" name="date_from" value="{{ old('date_from') }}" required class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                         </div>
                         <div>
-                            <label for="report_date" class="block text-sm font-bold text-slate-700">Tanggal nilai</label>
-                            <input id="report_date" type="date" name="date" value="{{ old('date') }}" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                            <label for="report_date_to" class="block text-sm font-bold text-slate-700">Tanggal Selesai</label>
+                            <input id="report_date_to" type="date" name="date_to" value="{{ old('date_to') }}" required class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                         </div>
                     </div>
 
