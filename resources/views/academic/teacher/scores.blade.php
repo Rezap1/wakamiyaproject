@@ -153,7 +153,7 @@
                     $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $category === 'UJIAN_BAB';
                     $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
                     $details = is_array($details) ? $details : [];
-                    $scoreValue = $score['Score'] ?? $score['Score_Value'] ?? '-';
+                    $scoreValue = \App\Support\Academic\ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null);
                     $notes = trim((string) ($details['notes'] ?? ''));
                     $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
                     $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();
@@ -248,7 +248,7 @@
                             $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $category === 'UJIAN_BAB';
                             $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
                             $details = is_array($details) ? $details : [];
-                            $scoreValue = $score['Score'] ?? $score['Score_Value'] ?? '-';
+                            $scoreValue = \App\Support\Academic\ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null);
                             $notes = trim((string) ($details['notes'] ?? ''));
                             $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
                             $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();

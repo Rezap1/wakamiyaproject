@@ -108,7 +108,7 @@
                         @foreach($scores as $score)
                             <div class="flex items-center justify-between gap-3 border border-slate-100 bg-slate-50 p-2.5 text-xs">
                                 <span class="truncate font-semibold text-slate-700">{{ $score['Subject_Name'] ?? $score['Subject_ID'] ?? 'Mata pelajaran' }}</span>
-                                <span class="font-black text-indigo-700">{{ $score['Score'] ?? $score['Grade'] ?? '-' }}</span>
+                                <span class="font-black text-indigo-700">{{ array_key_exists('Score', $score) ? \App\Support\Academic\ScoreValueFormatter::format($score['Score']) : ($score['Grade'] ?? '-') }}</span>
                             </div>
                         @endforeach
                     </div>

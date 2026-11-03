@@ -3,6 +3,7 @@
 @section('content')
 @php
     $rawScore = $score['Score_Value'] ?? ($score['Score'] ?? 0);
+    $displayScore = \App\Support\Academic\ScoreValueFormatter::format($rawScore, '0');
     $result = \App\Helpers\GradeHelper::calculate($rawScore);
     $statusText = $result['pass'] ? 'PASS (LULUS)' : 'FAIL (TIDAK LULUS)';
     $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
@@ -16,7 +17,7 @@
         <x-slot:actions><x-universal.action-button action="edit" url="{{ route('scores.edit', $score['Score_ID']) }}" /><x-universal.action-button action="delete" url="{{ route('scores.destroy', $score['Score_ID']) }}" /></x-slot:actions>
         <x-slot:information>
             <div class="space-y-8">
-                <div class="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white"><span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kategori Assessment</span><h2 class="mt-1 text-xl font-bold">{{ $categoryLabel }}</h2><p class="mt-1 text-xs text-slate-400">Tanggal: {{ !empty($score['Created_At']) ? \App\Helpers\DateHelper::format($score['Created_At'], 'd M Y') : '-' }}</p><p class="mt-4 text-4xl font-black">{{ $rawScore }} <span class="text-sm font-normal text-slate-400">/ 100</span></p></div>
+                <div class="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white"><span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kategori Assessment</span><h2 class="mt-1 text-xl font-bold">{{ $categoryLabel }}</h2><p class="mt-1 text-xs text-slate-400">Tanggal: {{ \App\Helpers\DateHelper::format(\App\Support\Academic\ScoreDateResolver::value($score), 'd M Y') }}</p><p class="mt-4 text-4xl font-black">{{ $displayScore }} <span class="text-sm font-normal text-slate-400">/ 100</span></p></div>
                 <div>
                     <h3 class="mb-4 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Rincian Metrik Evaluasi</h3>
                     @php $rendered = 0; @endphp

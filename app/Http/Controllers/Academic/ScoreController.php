@@ -3,19 +3,27 @@
 namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Services\Academic\ScoreService;
+use App\Support\Academic\ScoreDateResolver;
+use App\Support\Academic\ScoreValueFormatter;
 use App\Support\Reporting\HumanReadableResolver;
+use Illuminate\Http\Request;
 
 class ScoreController extends Controller
 {
     use \App\Traits\Exportable;
 
-    protected $exportDateField = 'Created_At';
+    protected $exportDateField = '_Assessment_Date';
 
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
-        $scores = $this->scoreService->getAll();
+        $dateFilters = $this->validatedDateFilters($request);
+        $scores = $this->scoreService->getAll()
+            ->map(function ($score) {
+                $score['_Assessment_Date'] = ScoreDateResolver::value((array) $score);
+
+                return $score;
+            });
         $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         if ($request->filled('search')) {
             $search = strtolower($request->search);
@@ -27,6 +35,15 @@ class ScoreController extends Controller
                        str_contains($categoryLabel, $search);
             })->values();
         }
+
+        if ($request->filled('category')) {
+            $category = strtoupper((string) $request->input('category'));
+            $scores = $scores->filter(fn ($score) => strtoupper((string) ($score['Assessment_Category'] ?? '')) === $category)->values();
+        }
+
+        $scores = ScoreDateResolver::filter($scores, $dateFilters['date_from'] ?? null, $dateFilters['date_to'] ?? null)
+            ->sortByDesc(fn ($score) => ($score['_Assessment_Date'] ?? '').'|'.($score['Created_At'] ?? ''))
+            ->values();
         
         $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
         $students = $studentRepo->fetchAll()->keyBy('Student_ID');
@@ -69,14 +86,17 @@ class ScoreController extends Controller
                     HumanReadableResolver::studentName($row['Student_ID'] ?? '', $students),
                     $categoryLabel,
                     $assessmentTitle,
-                    $row['Score'] ?? $row['Score_Value'] ?? '-',
+                    ScoreValueFormatter::format($row['Score'] ?? $row['Score_Value'] ?? null),
                     $row['Grade'] ?? '-',
                     $row['Status'] ?? '-',
                     $metricSummary
                 ];
             },
             'isLandscape' => true,
-            'summary' => '<tr><td>Total Data Nilai</td><td>: '.$scores->count().'</td></tr>'
+            'summary' => '<tr><td>Total Data Nilai</td><td>: '.$scores->count().'</td></tr>',
+            'metadata' => array_filter([
+                'scopeLabel' => $this->scorePeriodLabel($dateFilters, $request),
+            ]),
         ];
     }
 
@@ -102,6 +122,7 @@ class ScoreController extends Controller
 
     public function index(Request $request)
     {
+        $dateFilters = $this->validatedDateFilters($request);
         $scores = $this->scoreService->getAll();
         
         $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
@@ -123,6 +144,7 @@ class ScoreController extends Controller
             $item['Assessment_Title'] = $asmTitle;
             $item['Assessment_Category'] = strtoupper($item['Assessment_Category'] ?? 'GENERAL');
             $item['Assessment_Category_Label'] = $assessmentConfigService->categoryLabel($item['Assessment_Category'] ?? '');
+            $item['_Assessment_Date'] = ScoreDateResolver::value((array) $item);
             
             return $item;
         });
@@ -134,8 +156,15 @@ class ScoreController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->input('search');
-            $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Assessment_Title', 'Assessment_Category', 'Assessment_Category_Label', 'Score_Value']);
+            $scores = \App\Helpers\CollectionHelper::search($scores, $search, ['Score_ID', 'Student_Name', 'Student_ID', 'Assessment_ID', 'Assessment_Title', 'Assessment_Category', 'Assessment_Category_Label', 'Score', 'Score_Value']);
         }
+
+        $scores = ScoreDateResolver::filter($scores, $dateFilters['date_from'] ?? null, $dateFilters['date_to'] ?? null);
+
+        $sortDirection = $request->input('sort', 'desc');
+        abort_unless(in_array($sortDirection, ['asc', 'desc'], true), 422, 'Urutan data nilai tidak valid.');
+        $sortCallback = fn ($score) => ($score['_Assessment_Date'] ?? '').'|'.($score['Created_At'] ?? '');
+        $scores = ($sortDirection === 'asc' ? $scores->sortBy($sortCallback) : $scores->sortByDesc($sortCallback))->values();
 
         $scoreGroups = $scores
             ->groupBy(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? 'GENERAL'))))
@@ -158,6 +187,47 @@ class ScoreController extends Controller
         $assessmentConfigs = collect($assessmentConfigService->getActiveCategories())->keyBy('Category_ID')->toArray();
         
         return view('academic.scores.index', compact('scores', 'scoreGroups', 'assessmentConfigs'));
+    }
+
+    private function validatedDateFilters(Request $request): array
+    {
+        $dateToRules = ['nullable', 'date_format:Y-m-d'];
+        if ($request->filled('date_from')) {
+            $dateToRules[] = 'after_or_equal:date_from';
+        }
+
+        return $request->validate([
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => $dateToRules,
+            'start_date' => ['nullable', 'date_format:Y-m-d', 'required_if:export_filter,range'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'required_if:export_filter,range', 'after_or_equal:start_date'],
+        ], [
+            'date_from.date_format' => 'Tanggal Mulai harus menggunakan format tanggal yang valid.',
+            'date_to.date_format' => 'Tanggal Selesai harus menggunakan format tanggal yang valid.',
+            'date_to.after_or_equal' => 'Tanggal Selesai tidak boleh sebelum Tanggal Mulai.',
+            'start_date.required_if' => 'Tanggal Mulai ekspor wajib dipilih.',
+            'end_date.required_if' => 'Tanggal Selesai ekspor wajib dipilih.',
+            'end_date.after_or_equal' => 'Tanggal Selesai ekspor tidak boleh sebelum Tanggal Mulai.',
+        ]);
+    }
+
+    private function scorePeriodLabel(array $filters, Request $request): ?string
+    {
+        $usesExportRange = $request->input('export_filter') === 'range';
+        $from = $usesExportRange ? ($filters['start_date'] ?? null) : ($filters['date_from'] ?? null);
+        $to = $usesExportRange ? ($filters['end_date'] ?? null) : ($filters['date_to'] ?? null);
+        if (! $from && ! $to) {
+            return null;
+        }
+
+        if ($from && $to) {
+            return 'Periode penilaian: '.\App\Helpers\DateHelper::format($from, 'd F Y')
+                .' s.d. '.\App\Helpers\DateHelper::format($to, 'd F Y');
+        }
+
+        return $from
+            ? 'Periode penilaian: mulai '.\App\Helpers\DateHelper::format($from, 'd F Y')
+            : 'Periode penilaian: sampai '.\App\Helpers\DateHelper::format($to, 'd F Y');
     }
 
     public function create(
@@ -341,7 +411,7 @@ class ScoreController extends Controller
                 HumanReadableResolver::studentName($s['Student_ID'] ?? '', $studentsById),
                 $categoryLabel,
                 $assessmentTitle,
-                $s['Score'] ?? $s['Score_Value'] ?? '',
+                ScoreValueFormatter::format($s['Score'] ?? $s['Score_Value'] ?? null, ''),
                 $s['Grade'] ?? '',
                 $s['Status'] ?? '',
                 $summary,

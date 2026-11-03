@@ -7,7 +7,7 @@
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
     <div class="bg-white p-4 rounded-xl shadow border-l-4 border-blue-500">
         <h4 class="text-sm text-gray-500 font-bold">Rata-Rata Nilai</h4>
-        <p class="text-2xl font-black text-blue-700">{{ is_numeric($progress['gpa']) ? $progress['gpa'] : 'N/A' }}</p>
+        <p class="text-2xl font-black text-blue-700">{{ is_numeric($progress['gpa']) ? \App\Support\Academic\ScoreValueFormatter::format($progress['gpa']) : 'N/A' }}</p>
     </div>
     <div class="bg-white p-4 rounded-xl shadow border-l-4 border-green-500">
         <h4 class="text-sm text-gray-500 font-bold">Kehadiran</h4>
@@ -39,7 +39,7 @@
                 $isNumeric = in_array($type, ['NUMERIC', 'NUMBER', 'SCORE', 'NUMERIC_0_100', '0-100'], true) || $catRaw === 'UJIAN_BAB';
                 $details = json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
                 $details = is_array($details) ? $details : [];
-                $scoreVal = $score['Score'] ?? $score['Score_Value'] ?? 0;
+                $scoreVal = \App\Support\Academic\ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null, '0');
                 $notes = trim((string) ($details['notes'] ?? ''));
                 $aspects = $config && !empty($config['Aspects_JSON']) ? json_decode($config['Aspects_JSON'], true) : [];
                 $aspectMap = collect(is_array($aspects) ? $aspects : [])->pluck('label', 'id')->toArray();

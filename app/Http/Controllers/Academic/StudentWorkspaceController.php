@@ -1,18 +1,19 @@
 <?php
 namespace App\Http\Controllers\Academic;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
-use App\Services\Academic\ScheduleService;
-use App\Services\Academic\SubjectService;
-use App\Services\Academic\ScoreService;
-use App\Services\Academic\AttendanceService;
-use App\Services\Attendance\AttendanceRequestService;
-use App\Services\Academic\AssessmentConfigService;
-use App\Helpers\ReportHelper;
 use App\Helpers\AttendanceStatusHelper;
+use App\Helpers\ReportHelper;
+use App\Http\Controllers\Controller;
+use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
+use App\Services\Academic\AssessmentConfigService;
+use App\Services\Academic\AttendanceService;
+use App\Services\Academic\ScheduleService;
+use App\Services\Academic\ScoreService;
+use App\Services\Academic\SubjectService;
+use App\Services\Attendance\AttendanceRequestService;
+use App\Support\Academic\ScoreValueFormatter;
 use App\Support\Reporting\HumanReadableResolver;
+use Illuminate\Http\Request;
 
 class StudentWorkspaceController extends Controller
 {
@@ -257,7 +258,7 @@ class StudentWorkspaceController extends Controller
                 'student' => $student,
                 'scopeLabel' => 'Siswa terautentikasi',
                 'averageScore' => $numericScores->isNotEmpty()
-                    ? round($numericScores->avg(fn ($score) => (float) ($score['Score'] ?? $score['Score_Value'] ?? 0)), 1)
+                    ? ScoreValueFormatter::format(round($numericScores->avg(fn ($score) => (float) ($score['Score'] ?? $score['Score_Value'] ?? 0)), 1))
                     : null,
             ]
         );
@@ -289,7 +290,7 @@ class StudentWorkspaceController extends Controller
 
             $detailsRaw = $s['Evaluation_Details'] ?? null;
             if ($this->assessmentConfigService->isNumericCategory($s['Assessment_Category'] ?? '')) {
-                $hasil = $s['Score'] ?? $s['Score_Value'] ?? '-';
+                $hasil = ScoreValueFormatter::format($s['Score'] ?? $s['Score_Value'] ?? null);
                 if (!empty($detailsRaw)) {
                     $details = json_decode($detailsRaw, true);
                     if (is_array($details) && !empty($details['notes'])) {
@@ -312,7 +313,7 @@ class StudentWorkspaceController extends Controller
                 }
                 $hasil = implode("; ", $summaryArr);
             } else {
-                $hasil = $s['Score'] ?? $s['Score_Value'] ?? '-';
+                $hasil = ScoreValueFormatter::format($s['Score'] ?? $s['Score_Value'] ?? null);
             }
 
             $rows[] = [$date, $categoryLabel, $assessment, $hasil];

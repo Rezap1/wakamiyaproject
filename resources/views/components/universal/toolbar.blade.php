@@ -1,46 +1,75 @@
-@props(['searchUrl' => '', 'filters' => [], 'exportUrl' => null, 'refreshUrl' => null])
+@props([
+    'searchUrl' => '',
+    'filters' => [],
+    'exportUrl' => null,
+    'refreshUrl' => null,
+    'showDateFilter' => true,
+    'showStatusFilter' => true,
+    'showSortFilter' => true,
+    'dateFilterLabels' => false,
+    'dateAutoSubmit' => true,
+    'showFilterButtons' => false,
+])
 
 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 min-w-0 max-w-full">
     <form action="{{ $searchUrl }}" method="GET" class="flex min-w-0 flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
         <div class="flex-1 min-w-0 flex flex-col md:flex-row md:flex-wrap gap-4 w-full">
             <!-- Search -->
-            <div class="w-full md:max-w-xs relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <div class="w-full md:max-w-xs">
+                @if($dateFilterLabels)<span class="mb-1 block text-xs font-bold text-slate-600">Pencarian</span>@endif
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari..." class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-emerald-500 focus:border-emerald-500 block pl-10 p-2.5 transition-colors">
                 </div>
-                <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari..." class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-emerald-500 focus:border-emerald-500 block pl-10 p-2.5 transition-colors">
             </div>
 
             <!-- Custom Filters -->
             {{ $slot }}
 
+            @if($showDateFilter)
             <!-- Date Range Filter -->
-            <div class="flex min-w-0 items-center gap-1.5 w-full md:w-auto">
-                <input type="date" name="date_from" value="{{ request('date_from') }}" 
+            <div class="grid min-w-0 grid-cols-1 gap-2 w-full sm:grid-cols-2 md:w-auto">
+                <label class="min-w-0 text-xs font-bold text-slate-600">
+                @if($dateFilterLabels)<span class="mb-1 block">Tanggal Mulai</span>@endif
+                <input type="date" name="date_from" value="{{ request('date_from') }}"
                     class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors"
-                    onchange="this.form.submit()" title="Dari tanggal">
-                <span class="text-slate-400 text-xs font-bold shrink-0">—</span>
-                <input type="date" name="date_to" value="{{ request('date_to') }}" 
+                    @if($dateAutoSubmit) onchange="this.form.submit()" @endif title="Tanggal Mulai">
+                </label>
+                <label class="min-w-0 text-xs font-bold text-slate-600">
+                @if($dateFilterLabels)<span class="mb-1 block">Tanggal Selesai</span>@endif
+                <input type="date" name="date_to" value="{{ request('date_to') }}"
                     class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors"
-                    onchange="this.form.submit()" title="Sampai tanggal">
+                    @if($dateAutoSubmit) onchange="this.form.submit()" @endif title="Tanggal Selesai">
+                </label>
             </div>
+            @endif
 
             <!-- Status Filter -->
-            <div class="w-full md:w-auto">
+            @if($showStatusFilter)<div class="w-full md:w-auto">
                 <select name="status" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
                     <option value="all" {{ request('status') === 'all' ? 'selected' : '' }}>Semua Status</option>
                     <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Aktif / Disetujui</option>
                     <option value="inactive" {{ request('status') === 'inactive' ? 'selected' : '' }}>Tidak Aktif / Dibatalkan</option>
                 </select>
-            </div>
+            </div>@endif
             
             <!-- Sort Filter -->
-            <div class="w-full md:w-auto">
-                <select name="sort" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
+            @if($showSortFilter)<div class="w-full md:w-auto">
+                @if($dateFilterLabels)<label class="mb-1 block text-xs font-bold text-slate-600" for="toolbar-sort">Urutan</label>@endif
+                <select id="toolbar-sort" name="sort" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
                     <option value="desc" {{ request('sort', 'desc') === 'desc' ? 'selected' : '' }}>Terbaru</option>
                     <option value="asc" {{ request('sort') === 'asc' ? 'selected' : '' }}>Terlama</option>
                 </select>
-            </div>
+            </div>@endif
+
+            @if($showFilterButtons)
+                <div class="flex w-full items-end gap-2 md:w-auto">
+                    <button type="submit" class="min-h-11 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Terapkan Filter</button>
+                    <a href="{{ $searchUrl }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Reset Filter</a>
+                </div>
+            @endif
             
             <button type="submit" class="hidden">Cari</button>
         </div>
@@ -59,7 +88,7 @@
                 </a>
             @endif
             
-            @if(request()->anyFilled(['search', 'status', 'date_from', 'date_to']) || collect(request()->all())->except(['page'])->isNotEmpty())
+            @if(!$showFilterButtons && (request()->anyFilled(['search', 'status', 'date_from', 'date_to']) || collect(request()->all())->except(['page'])->isNotEmpty()))
                 <a href="{{ $searchUrl }}" class="flex items-center justify-center p-2.5 text-red-500 bg-white border border-red-200 rounded-xl hover:bg-red-50 focus:ring-2 focus:ring-red-500 transition-colors shadow-sm" title="Reset Filter">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </a>

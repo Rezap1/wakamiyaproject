@@ -37,7 +37,7 @@
 
             <div x-show="isNumeric" class="border-t border-slate-100 pt-5" style="display: none;">
                 <label class="mb-1.5 block text-sm font-bold text-slate-700"><span x-text="numericLabel">Nilai Ujian Bab</span> <span class="text-rose-600" aria-hidden="true">*</span></label>
-                <input name="Score" type="number" min="0" max="100" step="0.01" value="{{ old('Score', old('Score_Value', $score['Score'] ?? ($score['Score_Value'] ?? ''))) }}" x-bind:required="isNumeric" class="w-full rounded-xl border-slate-200 bg-slate-50 text-lg font-bold">
+                <input name="Score" type="number" min="0" max="100" step="0.01" value="{{ old('Score', old('Score_Value', \App\Support\Academic\ScoreValueFormatter::forInput($score['Score'] ?? ($score['Score_Value'] ?? null)))) }}" x-bind:required="isNumeric" class="w-full rounded-xl border-slate-200 bg-slate-50 text-lg font-bold">
             </div>
 
             <div class="space-y-4 border-t border-slate-100 pt-5">

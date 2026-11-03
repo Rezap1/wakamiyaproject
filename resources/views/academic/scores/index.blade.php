@@ -1,9 +1,9 @@
 @extends('layouts.app')
-@section('header', 'Manajemen Rapor & Evaluasi Nilai')
+@section('header', 'Rekap Nilai & Evaluasi')
 @section('content')
 
 <x-universal.index-layout 
-    title="Data Nilai & Evaluasi Siswa" 
+    title="Rekap Nilai & Evaluasi Siswa"
     description="Pantau nilai akademik umum, evaluasi olahraga, dan rubrik kemampuan bahasa secara terpadu."
     :breadcrumbs="['Dasbor' => route('dashboard'), 'Akademik' => '#', 'Nilai' => route('scores.index')]"
     add-action="{{ route('scores.create') }}"
@@ -13,13 +13,23 @@
         <x-universal.multi-export route-prefix="scores" />
     </x-slot:headerActions>
     <x-slot:toolbar>
+        @if($errors->has('date_from') || $errors->has('date_to'))
+            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
+                {{ $errors->first('date_from') ?: $errors->first('date_to') }}
+            </div>
+        @endif
         <x-universal.toolbar 
             search-url="{{ route('scores.index') }}" 
             refresh-url="{{ route('scores.index') }}"
-            export-url="{{ route('scores.export-pdf') }}"
+            export-url="{{ route('scores.export-pdf', request()->except('page')) }}"
+            :show-status-filter="false"
+            :date-filter-labels="true"
+            :date-auto-submit="false"
+            :show-filter-buttons="true"
         >
             <div class="w-full md:w-auto">
-                <select name="category" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors" onchange="this.form.submit()">
+                <label class="mb-1 block text-xs font-bold text-slate-600" for="score-category">Kategori</label>
+                <select id="score-category" name="category" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors">
                     <option value="">Semua Kategori Penilaian</option>
                     @foreach($assessmentConfigs as $config)
                         <option value="{{ $config['Category_ID'] }}" {{ request('category') == $config['Category_ID'] ? 'selected' : '' }}>{{ $config['Category_Name'] }}</option>
@@ -27,6 +37,14 @@
                 </select>
             </div>
         </x-universal.toolbar>
+        @if(request()->filled('date_from') || request()->filled('date_to'))
+            <p class="-mt-3 mb-5 text-xs font-semibold text-slate-500">
+                Periode penilaian:
+                {{ request()->filled('date_from') ? \App\Helpers\DateHelper::format(request('date_from'), 'd F Y') : 'awal data' }}
+                s.d.
+                {{ request()->filled('date_to') ? \App\Helpers\DateHelper::format(request('date_to'), 'd F Y') : 'akhir data' }}
+            </p>
+        @endif
     </x-slot:toolbar>
 
     @if(($scoreGroups ?? collect())->count() > 0)
@@ -36,7 +54,7 @@
                     <summary class="cursor-pointer list-none p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
                         <div>
                             <h3 class="text-sm font-black text-slate-800">{{ $group['title'] }}</h3>
-                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} nilai @if($group['average'] !== null) | Rata-rata {{ $group['average'] }} @endif</p>
+                            <p class="text-xs font-medium text-slate-500 mt-0.5">{{ $group['total'] }} nilai @if($group['average'] !== null) | Rata-rata {{ \App\Support\Academic\ScoreValueFormatter::format($group['average']) }} @endif</p>
                         </div>
                         <span class="text-slate-400 group-open:rotate-180 transition-transform">v</span>
                     </summary>
@@ -47,7 +65,7 @@
                                     <p class="text-sm font-bold text-slate-800 truncate">{{ $score['Student_Display'] ?? 'Data siswa tidak ditemukan' }}</p>
                                     <p class="text-[11px] text-slate-500">{{ $score['Assessment_Title'] ?? 'Penilaian tidak ditemukan' }}</p>
                                 </div>
-                                <span class="text-sm font-black text-slate-800 shrink-0">{{ $score['Score'] ?? $score['Score_Value'] ?? '-' }}</span>
+                                <span class="text-sm font-black text-slate-800 shrink-0">{{ \App\Support\Academic\ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null) }}</span>
                             </a>
                         @endforeach
                     </div>
@@ -68,9 +86,9 @@
 
         @foreach($scores as $item)
             @php
-                $val = $item['Score'] ?? $item['Score_Value'] ?? 0;
-                $val = is_numeric($val) ? (float) $val : 0;
-                $result = \App\Helpers\GradeHelper::calculate($val);
+                $rawVal = $item['Score'] ?? $item['Score_Value'] ?? 0;
+                $result = \App\Helpers\GradeHelper::calculate(is_numeric($rawVal) ? (float) $rawVal : 0);
+                $val = \App\Support\Academic\ScoreValueFormatter::format($rawVal, '0');
                 $category = strtoupper($item['Assessment_Category'] ?? 'GENERAL');
                 $categoryLabel = $item['Assessment_Category_Label'] ?? $category;
                 $details = $item['Parsed_Details'] ?? [];

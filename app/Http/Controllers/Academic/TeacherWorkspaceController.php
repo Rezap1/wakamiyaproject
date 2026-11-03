@@ -20,6 +20,8 @@ use App\Services\Core\BatchService;
 use App\Services\Core\ClassService;
 use App\Services\Core\StudentService;
 use App\Services\Core\TeacherService;
+use App\Support\Academic\ScoreDateResolver;
+use App\Support\Academic\ScoreValueFormatter;
 use App\Support\Academic\TeacherScopeResolver;
 use App\Support\Reporting\HumanReadableResolver;
 use Illuminate\Http\Request;
@@ -398,7 +400,7 @@ class TeacherWorkspaceController extends Controller
                 'subject_name' => HumanReadableResolver::subjectName($subjectId, $subjectsById),
                 'category' => $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
                 'title' => $title,
-                'score' => $score['Score'] ?? $score['Score_Value'] ?? '-',
+                'score' => ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null),
                 'grade' => trim((string) ($score['Grade'] ?? '')) ?: '-',
                 'status' => $this->scoreStatusLabel($score['Status'] ?? ''),
                 'detail_lines' => $this->scoreDetailLines($details),
@@ -551,7 +553,7 @@ class TeacherWorkspaceController extends Controller
                     HumanReadableResolver::studentName($score['Student_ID'] ?? '', $studentsById),
                     $this->assessmentConfigService->categoryLabel($score['Assessment_Category'] ?? ''),
                     $title,
-                    $score['Score'] ?? $score['Score_Value'] ?? '-',
+                    ScoreValueFormatter::format($score['Score'] ?? $score['Score_Value'] ?? null),
                     $score['Grade'] ?? '-',
                     $score['Status'] ?? '-',
                     $summary,
@@ -657,9 +659,7 @@ class TeacherWorkspaceController extends Controller
 
     private function scoreReportDate(array $score): string
     {
-        $date = DateHelper::parse($score['Assessment_Date'] ?? $score['Date'] ?? $score['Created_At'] ?? null);
-
-        return $date?->format('Y-m-d') ?? '';
+        return ScoreDateResolver::value($score) ?? '';
     }
 
     private function scoreStatusLabel($status): string
@@ -831,10 +831,7 @@ class TeacherWorkspaceController extends Controller
             $subjectId = trim((string) ($score['Subject_ID'] ?? $schedule['Subject_ID'] ?? $details['subject_id'] ?? ''));
             $category = strtoupper(trim((string) ($score['Assessment_Category'] ?? '')));
             $config = $assessmentConfigs[$category] ?? null;
-            $date = trim((string) ($score['Assessment_Date'] ?? $score['Date'] ?? ''));
-            if ($date === '') {
-                $date = substr((string) ($score['Created_At'] ?? ''), 0, 10);
-            }
+            $date = ScoreDateResolver::value((array) $score) ?? '';
 
             $score['Student_Name'] = $student
                 ? ($student['Full_Name'] ?? $student['Username'] ?? 'Data siswa tidak ditemukan')
