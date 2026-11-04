@@ -135,6 +135,7 @@ class TeacherScopeResolver
 
         $scope = [
             'teacher_id' => $teacherId,
+            'teacher_user_id' => trim((string) ($teacher['User_ID'] ?? '')),
             'schedule_ids' => $scheduleIds,
             'class_ids' => $classIds,
             'managed_class_ids' => $classIds,
@@ -195,6 +196,7 @@ class TeacherScopeResolver
     {
         return [
             'teacher_id' => '',
+            'teacher_user_id' => '',
             'schedule_ids' => [],
             'class_ids' => [],
             'managed_class_ids' => [],

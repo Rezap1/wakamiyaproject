@@ -28,7 +28,10 @@ final class ScoreDateResolver
                 continue;
             }
 
-            return DateHelper::parse($candidate)?->timezone(config('app.timezone'))->format('Y-m-d');
+            $resolved = DateHelper::parse($candidate);
+            if ($resolved !== null) {
+                return $resolved->timezone(config('app.timezone'))->format('Y-m-d');
+            }
         }
 
         return DateHelper::parse($score['Created_At'] ?? null)?->timezone(config('app.timezone'))->format('Y-m-d');

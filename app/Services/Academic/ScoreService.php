@@ -490,26 +490,51 @@ class ScoreService
         }
 
         $assessmentId = trim((string) ($score['Assessment_ID'] ?? $score['Assignment_ID'] ?? ''));
-        if ($assessmentId !== '') {
-            return in_array($studentId, $scope['teaching_student_ids'] ?? [], true)
-                && in_array($assessmentId, $scope['assessment_ids'] ?? [], true);
+        if ($assessmentId !== ''
+            && in_array($studentId, $scope['teaching_student_ids'] ?? [], true)
+            && in_array($assessmentId, $scope['assessment_ids'] ?? [], true)) {
+            return true;
         }
 
-        // New class-based scores have no schedule or assessment link. Keep
-        // them visible only to the authenticated creator while the student
-        // remains in one of that teacher's explicitly managed classes.
+        // A legacy/class-based score can carry an Assignment_ID without a
+        // Schedule_ID. If that legacy link is not part of the teaching scope,
+        // fall back to the durable homeroom + student + creator relationship
+        // instead of rejecting the row solely because Assignment_ID exists.
         $createdBy = trim((string) ($score['Created_By'] ?? ''));
         $actorUserId = trim((string) ($scope['actor_user_id'] ?? ''));
-        $scoreClassId = trim((string) ($score['Class_ID'] ?? data_get($score, 'Parsed_Details.class_id', '')));
-        $studentIsManagedInClass = $scoreClassId === ''
-            ? in_array($studentId, $scope['managed_student_ids'] ?? [], true)
-            : in_array($scoreClassId, $scope['managed_class_ids'] ?? [], true)
-                && in_array($studentId, $scope['managed_students_by_class'][$scoreClassId] ?? [], true);
-
-        return $createdBy !== ''
+        $teacherUserId = trim((string) ($scope['teacher_user_id'] ?? $actorUserId));
+        $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? data_get($score, 'Parsed_Details.teacher_id', '')));
+        $scoreClassId = $this->scoreClassId($score, $scope);
+        $studentIsManagedInClass = $scoreClassId !== ''
+            && in_array($scoreClassId, $scope['managed_class_ids'] ?? [], true)
+            && in_array($studentId, $scope['managed_students_by_class'][$scoreClassId] ?? [], true);
+        $creatorMatchesTeacher = $createdBy !== ''
             && $actorUserId !== ''
-            && $createdBy === $actorUserId
-            && $studentIsManagedInClass;
+            && $teacherUserId !== ''
+            && $actorUserId === $teacherUserId
+            && $createdBy === $teacherUserId;
+        $teacherMetadataMatches = $scoreTeacherId !== ''
+            && $scoreTeacherId === trim($teacherId);
+
+        return $studentIsManagedInClass
+            && ($creatorMatchesTeacher || $teacherMetadataMatches);
+    }
+
+    private function scoreClassId(array $score, array $scope): string
+    {
+        $details = is_array($score['Parsed_Details'] ?? null)
+            ? $score['Parsed_Details']
+            : $this->parseEvaluationDetails($score);
+        $explicitClassId = trim((string) ($score['Class_ID'] ?? $details['class_id'] ?? ''));
+        if ($explicitClassId !== '') {
+            return $explicitClassId;
+        }
+
+        $studentId = trim((string) ($score['Student_ID'] ?? ''));
+        $student = collect($scope['students'] ?? [])
+            ->first(fn ($row) => trim((string) data_get($row, 'Student_ID')) === $studentId);
+
+        return trim((string) data_get($student, 'Class_ID', ''));
     }
 
     public function isStudentInSchedule(string $studentId, string $scheduleId, ?array $scope = null): bool

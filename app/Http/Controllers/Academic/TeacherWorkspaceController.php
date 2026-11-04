@@ -106,6 +106,7 @@ class TeacherWorkspaceController extends Controller
     {
         $scope = $this->scoreService->getTeacherScoreScope($teacherId);
         $scope['actor_user_id'] = trim((string) (auth()->user()->User_ID ?? auth()->id() ?? ''));
+        $scope['teacher_id'] = trim((string) ($scope['teacher_id'] ?? $teacherId));
 
         return $scope;
     }
@@ -640,29 +641,18 @@ class TeacherWorkspaceController extends Controller
             }
         } else {
             $assessmentId = trim((string) ($score['Assessment_ID'] ?? $score['Assignment_ID'] ?? ''));
-            if ($assessmentId !== '') {
-                if (! in_array($studentId, $scope['teaching_student_ids'] ?? [], true)
-                    || ! in_array($assessmentId, $scope['assessment_ids'] ?? [], true)) {
-                    return false;
-                }
-            } else {
-                $createdBy = trim((string) ($score['Created_By'] ?? ''));
-                $actorUserId = trim((string) ($scope['actor_user_id'] ?? ''));
-                $scoreClassId = trim((string) ($score['Class_ID'] ?? data_get($score, 'Parsed_Details.class_id', '')));
-                $managedClassId = collect($scope['managed_students_by_class'] ?? [])
-                    ->filter(fn ($studentIds, $classId) => in_array($studentId, $studentIds, true)
-                        && ($scoreClassId === '' || (string) $classId === $scoreClassId))
-                    ->keys()
-                    ->first();
-                if ($createdBy === '' || $actorUserId === '' || $createdBy !== $actorUserId
-                    || ! in_array($studentId, $scope['managed_student_ids'] ?? [], true)
-                    || ! in_array((string) $managedClassId, $scope['managed_class_ids'] ?? [], true)) {
-                    return false;
-                }
-                $classId = (string) $managedClassId;
+            $classId = $this->scoreClassId($score, $schedulesById, $scope);
+            $assessmentOwned = $assessmentId !== ''
+                && in_array($assessmentId, $scope['assessment_ids'] ?? [], true)
+                && in_array($classId, $scope['teaching_class_ids'] ?? [], true)
+                && in_array($studentId, data_get($scope, 'teaching_students_by_class.'.$classId, []), true);
+            if ($assessmentOwned) {
+                $subjectId = trim((string) ($score['Subject_ID'] ?? ''));
 
-                return $classId !== '';
+                return $subjectId === '' || in_array($subjectId, $scope['subject_ids'] ?? [], true);
             }
+
+            return $this->unscheduledScoreBelongsToManagedClass($score, $scope, $schedulesById);
         }
 
         $classId = trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? ''));
@@ -675,9 +665,44 @@ class TeacherWorkspaceController extends Controller
     private function scoreClassId(array $score, $schedulesById, array $scope = []): string
     {
         $schedule = (array) $schedulesById->get(trim((string) ($score['Schedule_ID'] ?? '')), []);
+        $details = is_array($score['Parsed_Details'] ?? null)
+            ? $score['Parsed_Details']
+            : json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
+        $details = is_array($details) ? $details : [];
         $student = collect($scope['students'] ?? [])->firstWhere('Student_ID', (string) ($score['Student_ID'] ?? ''));
 
-        return trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? $student['Class_ID'] ?? ''));
+        return trim((string) ($schedule['Class_ID'] ?? $score['Class_ID'] ?? $details['class_id'] ?? $student['Class_ID'] ?? ''));
+    }
+
+    private function unscheduledScoreBelongsToManagedClass(array $score, array $scope, $schedulesById): bool
+    {
+        $studentId = trim((string) ($score['Student_ID'] ?? ''));
+        $classId = $this->scoreClassId($score, $schedulesById, $scope);
+        if ($studentId === '' || $classId === ''
+            || ! in_array($classId, $scope['managed_class_ids'] ?? [], true)
+            || ! in_array($studentId, data_get($scope, 'managed_students_by_class.'.$classId, []), true)) {
+            return false;
+        }
+
+        $details = is_array($score['Parsed_Details'] ?? null)
+            ? $score['Parsed_Details']
+            : json_decode((string) ($score['Evaluation_Details'] ?? ''), true);
+        $details = is_array($details) ? $details : [];
+        $teacherId = trim((string) ($scope['teacher_id'] ?? ''));
+        $scoreTeacherId = trim((string) ($score['Teacher_ID'] ?? $details['teacher_id'] ?? ''));
+        $createdBy = trim((string) ($score['Created_By'] ?? ''));
+        $actorUserId = trim((string) ($scope['actor_user_id'] ?? ''));
+        $teacherUserId = trim((string) ($scope['teacher_user_id'] ?? $actorUserId));
+        $creatorMatchesTeacher = $createdBy !== ''
+            && $actorUserId !== ''
+            && $teacherUserId !== ''
+            && $actorUserId === $teacherUserId
+            && $createdBy === $teacherUserId;
+        $teacherMetadataMatches = $scoreTeacherId !== ''
+            && $teacherId !== ''
+            && $scoreTeacherId === $teacherId;
+
+        return $creatorMatchesTeacher || $teacherMetadataMatches;
     }
 
     private function scoreReportDate(array $score): string

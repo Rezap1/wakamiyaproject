@@ -140,9 +140,15 @@ class TeacherScoreIntegrityTest extends TestCase
             Mockery::mock(StudentRepositoryInterface::class)
         );
         $scope = [
+            'teacher_id' => 'TCH-A',
+            'teacher_user_id' => 'USR-A',
             'managed_class_ids' => ['CLS-A'],
             'managed_student_ids' => ['STU-A'],
             'managed_students_by_class' => ['CLS-A' => ['STU-A']],
+            'students' => [
+                ['Student_ID' => 'STU-A', 'Class_ID' => 'CLS-A'],
+                ['Student_ID' => 'STU-B', 'Class_ID' => 'CLS-B'],
+            ],
             'teaching_student_ids' => [],
             'schedule_ids' => [],
             'assessment_ids' => [],
@@ -152,11 +158,17 @@ class TeacherScoreIntegrityTest extends TestCase
         $this->assertTrue($service->isScoreInTeacherScope([
             'Student_ID' => 'STU-A', 'Schedule_ID' => null, 'Created_By' => 'USR-A',
         ], 'TCH-A', $scope));
+        $this->assertTrue($service->isScoreInTeacherScope([
+            'Student_ID' => 'STU-A', 'Schedule_ID' => null, 'Assignment_ID' => 'ASG-LEGACY', 'Created_By' => 'USR-A',
+        ], 'TCH-A', $scope));
         $this->assertFalse($service->isScoreInTeacherScope([
             'Student_ID' => 'STU-B', 'Schedule_ID' => null, 'Created_By' => 'USR-A',
         ], 'TCH-A', $scope));
         $this->assertFalse($service->isScoreInTeacherScope([
             'Student_ID' => 'STU-A', 'Schedule_ID' => null, 'Created_By' => 'USR-B',
+        ], 'TCH-A', $scope));
+        $this->assertFalse($service->isScoreInTeacherScope([
+            'Student_ID' => 'STU-A', 'Class_ID' => 'CLS-B', 'Schedule_ID' => null, 'Created_By' => 'USR-A',
         ], 'TCH-A', $scope));
     }
 

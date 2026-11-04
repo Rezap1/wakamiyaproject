@@ -20,13 +20,13 @@ class ScoreDateResolverTest extends TestCase
         ]));
     }
 
-    public function test_it_uses_created_at_only_when_a_dedicated_date_is_absent(): void
+    public function test_it_uses_created_at_when_a_dedicated_date_is_absent_or_invalid(): void
     {
         $this->assertSame('2026-11-05', ScoreDateResolver::value([
             'Created_At' => '2026-11-05 08:00:00',
         ]));
 
-        $this->assertNull(ScoreDateResolver::value([
+        $this->assertSame('2026-11-05', ScoreDateResolver::value([
             'Assessment_Date' => 'not-a-date',
             'Created_At' => '2026-11-05 08:00:00',
         ]));
