@@ -72,10 +72,10 @@
             </div>
         </div>
 
-        <div id="score-pdf-filter" class="p-5 border-b border-slate-200 bg-red-50/40" x-data="{ reportMode: @js(old('mode', 'student')) }">
+        <div id="score-pdf-filter" class="p-5 border-b border-slate-200 bg-red-50/40" x-data="{ reportMode: @js(old('mode', 'student')), allPeriods: @js((bool) old('all_periods', true)), dateFrom: @js(old('date_from', '')), dateTo: @js(old('date_to', '')), entityLabel: '' }">
             <div class="max-w-4xl">
                 <h4 class="text-base font-extrabold text-slate-900">Unduh laporan nilai PDF</h4>
-                <p class="mt-1 text-sm text-slate-600">Pilih satu siswa atau satu kelas, lalu tentukan rentang tanggal nilai yang akan ditampilkan.</p>
+                <p class="mt-1 text-sm text-slate-600">Pilih satu siswa atau satu kelas. Gunakan Semua Periode untuk menyertakan nilai historis. Filter kategori dan mata pelajaran mengikuti halaman ini.</p>
 
                 @if(isset($errors) && $errors->hasAny(['mode', 'student_id', 'class_id', 'date_from', 'date_to']))
                     <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
@@ -84,15 +84,17 @@
                 @endif
 
                 <form method="GET" action="{{ route('teacher.workspace.reports.scores-pdf') }}" class="mt-4 space-y-4">
+                    <input type="hidden" name="category" value="{{ $selectedCategory ?? 'all' }}">
+                    <input type="hidden" name="subject" value="{{ $selectedSubject ?? '' }}">
                     <fieldset>
                         <legend class="text-sm font-bold text-slate-700">Jenis laporan</legend>
                         <div class="mt-2 flex flex-wrap gap-4">
                             <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <input type="radio" name="mode" value="student" x-model="reportMode" required @checked(old('mode', 'student') === 'student') class="text-red-600 focus:ring-red-500">
+                                <input type="radio" name="mode" value="student" x-model="reportMode" @change="entityLabel = $refs.reportStudent.selectedOptions[0].text" required @checked(old('mode', 'student') === 'student') class="text-red-600 focus:ring-red-500">
                                 Satu siswa
                             </label>
                             <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <input type="radio" name="mode" value="class" x-model="reportMode" required @checked(old('mode') === 'class') class="text-red-600 focus:ring-red-500">
+                                <input type="radio" name="mode" value="class" x-model="reportMode" @change="entityLabel = $refs.reportClass.selectedOptions[0].text" required @checked(old('mode') === 'class') class="text-red-600 focus:ring-red-500">
                                 Satu kelas
                             </label>
                         </div>
@@ -100,7 +102,7 @@
 
                     <div x-show="reportMode === 'student'" x-cloak>
                         <label for="report_student_id" class="block text-sm font-bold text-slate-700">Siswa</label>
-                        <select id="report_student_id" name="student_id" :disabled="reportMode !== 'student'" :required="reportMode === 'student'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                        <select id="report_student_id" x-ref="reportStudent" name="student_id" @change="entityLabel = $event.target.selectedOptions[0].text" :disabled="reportMode !== 'student'" :required="reportMode === 'student'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                             <option value="">Pilih siswa</option>
                             @foreach($reportStudents ?? [] as $student)
                                 <option value="{{ $student['Student_ID'] }}" @selected(old('student_id') === $student['Student_ID'])>
@@ -112,7 +114,7 @@
 
                     <div x-show="reportMode === 'class'" x-cloak>
                         <label for="report_class_id" class="block text-sm font-bold text-slate-700">Kelas</label>
-                        <select id="report_class_id" name="class_id" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                        <select id="report_class_id" x-ref="reportClass" name="class_id" @change="entityLabel = $event.target.selectedOptions[0].text" :disabled="reportMode !== 'class'" :required="reportMode === 'class'" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                             <option value="">Pilih kelas</option>
                             @foreach($reportClasses ?? [] as $class)
                                 <option value="{{ $class['Class_ID'] }}" @selected(old('class_id') === $class['Class_ID'])>{{ $class['Class_Name'] }}</option>
@@ -120,18 +122,23 @@
                         </select>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label class="flex min-h-11 items-center gap-2 text-sm font-bold text-slate-700">
+                        <input type="checkbox" name="all_periods" value="1" x-model="allPeriods" @checked(old('all_periods', true))>
+                        Semua Periode
+                    </label>
+                    <div x-show="!allPeriods" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label for="report_date_from" class="block text-sm font-bold text-slate-700">Tanggal Mulai</label>
-                            <input id="report_date_from" type="date" name="date_from" value="{{ old('date_from') }}" required class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                            <input id="report_date_from" type="date" name="date_from" x-model="dateFrom" :disabled="allPeriods" :required="!allPeriods" :max="dateTo" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                         </div>
                         <div>
                             <label for="report_date_to" class="block text-sm font-bold text-slate-700">Tanggal Selesai</label>
-                            <input id="report_date_to" type="date" name="date_to" value="{{ old('date_to') }}" required class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
+                            <input id="report_date_to" type="date" name="date_to" x-model="dateTo" :disabled="allPeriods" :required="!allPeriods" :min="dateFrom" class="mt-1 block w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500">
                         </div>
                     </div>
 
-                    <button type="submit" class="inline-flex items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
+                    <p class="break-words rounded-xl bg-white p-3 text-sm text-slate-700" aria-live="polite" x-text="(reportMode === 'student' ? 'Satu siswa' : 'Satu kelas') + ': ' + entityLabel + ' | ' + (allPeriods ? 'Semua Periode' : dateFrom + ' s.d. ' + dateTo)"></p>
+                    <button type="submit" class="inline-flex min-h-11 items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
                         Unduh PDF sesuai filter
                     </button>
                 </form>

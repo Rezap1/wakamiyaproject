@@ -24,7 +24,7 @@ class ScheduleController extends Controller
 {
     use Exportable;
 
-    protected $exportDateField = 'Schedule_Date';
+    protected $exportDateField = 'Created_At';
 
     protected function getExportConfig(Request $request)
     {
@@ -43,8 +43,10 @@ class ScheduleController extends Controller
 
         return [
             'moduleName' => 'Jadwal (Schedule)',
+            'paginate' => false,
             'data' => collect(array_values($schedules->toArray())),
             'pdfView' => 'pdf.generic_table',
+            'metadata' => ['filterLabel' => 'Filter tanggal berdasarkan tanggal pembuatan jadwal berulang'],
             'headers' => ['Kelas', 'Mata Pelajaran', 'Guru', 'Hari', 'Jam'],
             'mapRow' => function ($row) use ($classesById, $subjectsById, $teachersById) {
 

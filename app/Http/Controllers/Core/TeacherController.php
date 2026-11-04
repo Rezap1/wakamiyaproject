@@ -25,46 +25,7 @@ class TeacherController extends Controller
     protected function getExportConfig(Request $request)
     {
 
-        $teachers = $this->teacherService->getAllTeachers();
-        $employees = $this->employeeService->getAllEmployees();
-        $departments = $this->departmentService->getAllDepartments();
-        $positions = $this->positionService->getAllPositions();
-        $users = $this->userService->getAllUsers();
-
-        $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
-            $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
-            if ($user) {
-                $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
-                $teacher['Email'] = $user['Email'] ?? '-';
-                $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
-                $emp = collect($employees)->firstWhere('Employee_ID', $empId);
-            } else {
-                $emp = null;
-            }
-
-            if ($emp) {
-                $dept = collect($departments)->firstWhere('Department_ID', $emp['Department_ID']);
-                $pos = collect($positions)->firstWhere('Position_ID', $emp['Position_ID']);
-                $teacher['Department_Name'] = $dept ? $dept['Department_Name'] : '-';
-                $teacher['Position_Name'] = $pos ? $pos['Position_Name'] : '-';
-            } else {
-                $teacher['Department_Name'] = '-';
-                $teacher['Position_Name'] = '-';
-            }
-
-            return $teacher;
-        });
-
-        $search = $request->input('search');
-        if (! empty($search)) {
-            $teachers = CollectionHelper::search($teachers, $search, ['NUPTK', 'Full_Name', 'Department_Name', 'Position_Name']);
-        }
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if ($status !== 'all') {
-                $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
-            }
-        }
+        $teachers = $this->filteredTeachers($request);
 
         return [
             'moduleName' => 'Pengajar (Teacher)',
@@ -111,67 +72,74 @@ class TeacherController extends Controller
         $this->userService = $userService;
     }
 
+    private function filteredTeachers(Request $request)
+    {
+        $teachers = $this->teacherService->getAllTeachers();
+        $employees = $this->employeeService->getAllEmployees();
+        $departments = $this->departmentService->getAllDepartments();
+        $positions = $this->positionService->getAllPositions();
+
+        $users = $this->userService->getAllUsers();
+
+        // Map names for display
+        $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
+            $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
+
+            if ($user) {
+                $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
+                $teacher['Email'] = $user['Email'] ?? '-';
+                $teacher['Phone_Number'] = $user['Phone_Number'] ?? '-';
+
+                // Try to find Employee if User has Employee_ID, or just fallback
+                $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
+                $emp = $employees->firstWhere('Employee_ID', $empId);
+            } else {
+                $emp = null;
+            }
+
+            if ($emp) {
+                $teacher['Employee_Number'] = $emp['Employee_Number'];
+
+                $dept = $departments->firstWhere('Department_ID', $emp['Department_ID']);
+                $pos = $positions->firstWhere('Position_ID', $emp['Position_ID']);
+
+                $teacher['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
+                $teacher['Position_Name'] = $pos ? $pos['Position_Name'] : 'Tidak Diketahui';
+            } else {
+                $teacher['Employee_Number'] = '-';
+                $teacher['Department_Name'] = '-';
+                $teacher['Position_Name'] = '-';
+            }
+
+            return $teacher;
+        });
+
+        $search = $request->input('search');
+        if (! empty($search)) {
+            $teachers = CollectionHelper::search($teachers, $search, ['Teacher_ID', 'Employee_ID', 'NUPTK', 'Full_Name', 'Email', 'Phone_Number', 'Employee_Number', 'Department_Name', 'Position_Name']);
+        }
+
+        if ($request->filled('teaching')) {
+            $teaching = $request->input('teaching');
+            if ($teaching !== 'all') {
+                $teachers = $teachers->where('Teaching_Status', $teaching);
+            }
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status !== 'all') {
+                $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
+            }
+        }
+
+        return $teachers;
+    }
+
     public function index(Request $request)
     {
         try {
-            $teachers = $this->teacherService->getAllTeachers();
-            $employees = $this->employeeService->getAllEmployees();
-            $departments = $this->departmentService->getAllDepartments();
-            $positions = $this->positionService->getAllPositions();
-
-            $users = $this->userService->getAllUsers();
-
-            // Map names for display
-            $teachers = $teachers->map(function ($teacher) use ($users, $employees, $departments, $positions) {
-                $user = collect($users)->firstWhere('User_ID', $teacher['User_ID'] ?? '');
-
-                if ($user) {
-                    $teacher['Full_Name'] = $user['Full_Name'] ?? '-';
-                    $teacher['Email'] = $user['Email'] ?? '-';
-                    $teacher['Phone_Number'] = $user['Phone_Number'] ?? '-';
-
-                    // Try to find Employee if User has Employee_ID, or just fallback
-                    $empId = $user['Employee_ID'] ?? $teacher['Employee_ID'] ?? null;
-                    $emp = $employees->firstWhere('Employee_ID', $empId);
-                } else {
-                    $emp = null;
-                }
-
-                if ($emp) {
-                    $teacher['Employee_Number'] = $emp['Employee_Number'];
-
-                    $dept = $departments->firstWhere('Department_ID', $emp['Department_ID']);
-                    $pos = $positions->firstWhere('Position_ID', $emp['Position_ID']);
-
-                    $teacher['Department_Name'] = $dept ? $dept['Department_Name'] : 'Tidak Diketahui';
-                    $teacher['Position_Name'] = $pos ? $pos['Position_Name'] : 'Tidak Diketahui';
-                } else {
-                    $teacher['Employee_Number'] = '-';
-                    $teacher['Department_Name'] = '-';
-                    $teacher['Position_Name'] = '-';
-                }
-
-                return $teacher;
-            });
-
-            $search = $request->input('search');
-            if (! empty($search)) {
-                $teachers = CollectionHelper::search($teachers, $search, ['Teacher_ID', 'Employee_ID', 'NUPTK', 'Full_Name', 'Email', 'Phone_Number', 'Employee_Number', 'Department_Name', 'Position_Name']);
-            }
-
-            if ($request->filled('teaching')) {
-                $teaching = $request->input('teaching');
-                if ($teaching !== 'all') {
-                    $teachers = $teachers->where('Teaching_Status', $teaching);
-                }
-            }
-
-            if ($request->filled('status')) {
-                $status = $request->input('status');
-                if ($status !== 'all') {
-                    $teachers = $teachers->where('Is_Active', $status === 'active' ? 'TRUE' : 'FALSE');
-                }
-            }
+            $teachers = $this->filteredTeachers($request);
 
             // Pagination
             $teachersPaginated = CollectionHelper::paginate($teachers, 10)->withQueryString();

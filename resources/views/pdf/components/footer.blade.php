@@ -58,7 +58,7 @@
                         </div>
                         @if(!empty($qrCodeSvg))
                             <div style="margin: 0 auto; display: inline-block;">
-                                {!! $qrCodeSvg !!}
+                                <img src="data:image/svg+xml;base64,{{ base64_encode((string) $qrCodeSvg) }}" width="90" height="90" alt="QR verifikasi dokumen">
                             </div>
                         @elseif(!empty($verificationUrl))
                             <div style="font-size: 8px; color: #2563eb; font-weight: bold; word-break: break-all; margin: 4px 0;">

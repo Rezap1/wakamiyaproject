@@ -16,13 +16,11 @@ class PayrollController extends Controller
 {
     use \App\Traits\Exportable;
 
-    protected $exportDateField = 'Payroll_Period';
+    protected $exportDateField = 'Created_At';
 
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
-        $payrolls = $this->payrollService->getAll()->filter(function ($item) {
-            return ($item['Status'] ?? '') !== 'Cancelled';
-        });
+        $payrolls = $this->filteredPayrolls($request);
 
         if ($request->filled('date_from') && $request->filled('date_to')) {
             $dateFrom = \Carbon\Carbon::parse($request->input('date_from'))->startOfDay();
@@ -48,9 +46,9 @@ class PayrollController extends Controller
             'headers' => ['No. Payroll', 'Pegawai', 'Periode', 'Gaji Pokok', 'Potongan', 'Gaji Bersih', 'Status'],
             'mapRow' => function($row) use ($employeesById) {
                 return [
-                    $row['Payroll_Number'] ?? '-',
+                    $row['Payroll_Number'] ?? $row['Payroll_ID'] ?? '-',
                     HumanReadableResolver::employeeName($row['Employee_ID'] ?? '', $employeesById),
-                    $row['Payroll_Period'] ?? '-',
+                    $row['Payroll_Period'] ?? $row['Period'] ?? '-',
                     'Rp ' . number_format((float)($row['Base_Salary'] ?? 0), 0, ',', '.'),
                     'Rp ' . number_format((float)($row['Total_Deductions'] ?? 0), 0, ',', '.'),
                     'Rp ' . number_format((float)($row['Net_Salary'] ?? 0), 0, ',', '.'),
@@ -69,7 +67,7 @@ class PayrollController extends Controller
         $this->payrollService = $payrollService;
     }
 
-    public function index(Request $request)
+    private function filteredPayrolls(Request $request)
     {
         $payrolls = $this->payrollService->getAll()->filter(function ($item) {
             return ($item['Status'] ?? '') !== 'Cancelled';
@@ -96,6 +94,14 @@ class PayrollController extends Controller
                        stripos($empName, $search) !== false;
             });
         }
+
+        return $payrolls;
+    }
+
+    public function index(Request $request)
+    {
+        $payrolls = $this->filteredPayrolls($request);
+        $search = $request->input('search');
 
         $payrolls = $payrolls->map(function($p) {
             $p['Employee_Name'] = UserResolverHelper::getName($p['Employee_ID'] ?? '');

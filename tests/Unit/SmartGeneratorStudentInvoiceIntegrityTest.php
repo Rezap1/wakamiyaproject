@@ -49,7 +49,7 @@ class SmartGeneratorStudentInvoiceIntegrityTest extends TestCase
         $userRepository->shouldNotReceive('findById');
         $this->app->instance(UserRepositoryInterface::class, $userRepository);
 
-        $controller = new SmartGeneratorController(Mockery::mock(SystemSettingService::class), $invoiceService);
+        $controller = new SmartGeneratorController(Mockery::mock(SystemSettingService::class, ['getCompanyProfile' => []]), $invoiceService);
         $request = Request::create('/finance/smart-generator/pdf', 'POST', [
             'source_type' => 'student_invoice',
             'source_id' => 'INV-STU-001',
@@ -79,7 +79,7 @@ class SmartGeneratorStudentInvoiceIntegrityTest extends TestCase
     public function test_manual_document_images_reject_path_traversal_and_non_image_data_uris(): void
     {
         $controller = new SmartGeneratorController(
-            Mockery::mock(SystemSettingService::class),
+            Mockery::mock(SystemSettingService::class, ['getCompanyProfile' => []]),
             Mockery::mock(InvoiceService::class)
         );
 

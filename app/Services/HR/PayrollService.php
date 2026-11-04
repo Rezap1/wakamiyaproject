@@ -190,9 +190,9 @@ class PayrollService
 
         if ($status === 'Approved') {
             $data['Approved_By'] = $actorId;
-            $data['Approved_Date'] = now()->toDateTimeString();
+            $data['Approved_Date'] = now()->toDateString();
         } elseif ($status === 'Paid') {
-            $data['Paid_Date'] = now()->toDateTimeString();
+            $data['Paid_Date'] = now()->toDateString();
             if ($paymentProof) $data['Payment_Proof'] = $paymentProof;
             if ($notes) $data['Notes'] = $notes;
         }
@@ -247,13 +247,12 @@ class PayrollService
             // Generate Official PDF Payslip
             try {
                 $docAutomation = app(\App\Services\Core\DocumentAutomationService::class);
-                $employee = $this->employeeRepo->findById($payroll['Employee_ID'] ?? '') ?? [];
                 
                 $generatedDocument = $docAutomation->generateDocument(
                     'Payroll',
                     'Payroll',
                     $id,
-                    ['payroll' => $persistedPayroll, 'employee' => $employee],
+                    $this->buildPayslipDocumentData($persistedPayroll),
                     'pdf.official_payslip',
                     $actorId
                 );
@@ -326,6 +325,12 @@ class PayrollService
             }
         }
 
+        return $this->buildPayslipDocumentData($payroll);
+    }
+
+    private function buildPayslipDocumentData(array $payroll): array
+    {
+        $payrollId = $payroll['Payroll_ID'];
         $employee = $this->employeeRepo->findById($payroll['Employee_ID'] ?? '') ?? [];
 
         // Parse Details
@@ -354,12 +359,7 @@ class PayrollService
         }
 
         return [
-            'company' => [
-                'name' => 'WAKAMIYA MANAGEMENT SYSTEM',
-                'tagline' => 'Enterprise ERP & Human Resource Engine',
-                'address' => 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930',
-                'contact' => 'Telp: (021) 8000-9999 | Email: hr@wakamiya.ac.id'
-            ],
+            'company' => app(\App\Services\Core\SystemSettingService::class)->getCompanyProfile()['company'] ?? [],
             'payroll' => $payroll,
             'details' => $details,
             'employee' => $employee,

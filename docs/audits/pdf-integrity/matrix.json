@@ -1,0 +1,1442 @@
+[
+  {
+    "module": "Core",
+    "name": "Daftar users",
+    "route": "users.export-pdf",
+    "uri": "users/export-pdf",
+    "controller": "Core\\UserController@exportPdf",
+    "source": "MASTER_USER + MASTER_ROLE",
+    "filter": "search, role, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 3,
+    "pdf_records": 3,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "users",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Audit Operator"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar departments",
+    "route": "departments.export-pdf",
+    "uri": "departments/export-pdf",
+    "controller": "Core\\DepartmentController@exportPdf",
+    "source": "MASTER_DEPARTMENT + MASTER_EMPLOYEE",
+    "filter": "search, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "departments",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Departemen Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar positions",
+    "route": "positions.export-pdf",
+    "uri": "positions/export-pdf",
+    "controller": "Core\\PositionController@exportPdf",
+    "source": "MASTER_POSITION + MASTER_DEPARTMENT",
+    "filter": "search, department, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "positions",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Posisi Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar employees",
+    "route": "employees.export-pdf",
+    "uri": "employees/export-pdf",
+    "controller": "Core\\EmployeeController@exportPdf",
+    "source": "MASTER_EMPLOYEE + MASTER_USER + department/position",
+    "filter": "search, department, position, status, date_from/to (Join_Date/Created_At); export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "employees",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Guru Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar teachers",
+    "route": "teachers.export-pdf",
+    "uri": "teachers/export-pdf",
+    "controller": "Core\\TeacherController@exportPdf",
+    "source": "MASTER_TEACHER + MASTER_USER + MASTER_EMPLOYEE",
+    "filter": "search, teaching, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "teachers",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Guru Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar programs",
+    "route": "programs.export-pdf",
+    "uri": "programs/export-pdf",
+    "controller": "Core\\ProgramController@exportPdf",
+    "source": "MASTER_PROGRAM",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "programs",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Program Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar students",
+    "route": "students.export-pdf",
+    "uri": "students/export-pdf",
+    "controller": "Core\\StudentController@exportPdf",
+    "source": "MASTER_STUDENT + program/batch/class",
+    "filter": "search, program, batch, class, status, registration date; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "students",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar companies",
+    "route": "companies.export-pdf",
+    "uri": "companies/export-pdf",
+    "controller": "Core\\CompanyController@exportPdf",
+    "source": "MASTER_COMPANY",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "companies",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Perusahaan Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar modules",
+    "route": "modules.export-pdf",
+    "uri": "modules/export-pdf",
+    "controller": "Core\\ModuleController@exportPdf",
+    "source": "MASTER_MODULE",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "modules",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Modul Audit"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Daftar accounts",
+    "route": "accounts.export-pdf",
+    "uri": "finance/accounts/export-pdf",
+    "controller": "Finance\\AccountController@exportPdf",
+    "source": "MASTER_ACCOUNT",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "accounts",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Bank Audit"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Daftar transactions",
+    "route": "transactions.export-pdf",
+    "uri": "finance/transactions/export-pdf",
+    "controller": "Finance\\TransactionController@exportPdf",
+    "source": "FINANCE_TRANSACTION + account/source repositories",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 4,
+    "pdf_records": 4,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nominal baris 100.000; 500.000; 1.250.000; 1.500.000",
+    "pdf_totals": "Nominal baris 100.000; 500.000; 1.250.000; 1.500.000",
+    "status": "PASS fixture",
+    "evidence": "transactions",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Bank Audit",
+      "100.000",
+      "500.000",
+      "1.250.000",
+      "1.500.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Daftar invoices",
+    "route": "invoices.export-pdf",
+    "uri": "finance/invoices/export-pdf",
+    "controller": "Finance\\InvoiceController@exportPdf",
+    "source": "FINANCE_INVOICE + FINANCE_PAYMENT + payer",
+    "filter": "search/payer, type, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Tagihan 2.000.000; sisa 1.500.000",
+    "pdf_totals": "Tagihan 2.000.000; sisa 1.500.000",
+    "status": "PASS fixture",
+    "evidence": "invoices",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "INV-AUDIT",
+      "2.000.000",
+      "1.500.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Daftar payments",
+    "route": "payments.export-pdf",
+    "uri": "finance/payments/export-pdf",
+    "controller": "Finance\\PaymentController@exportPdf",
+    "source": "FINANCE_PAYMENT + invoice/payer",
+    "filter": "search/payer, payment date; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "payments",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Daftar payrolls",
+    "route": "payrolls.export-pdf",
+    "uri": "hr/payrolls/export-pdf",
+    "controller": "Hr\\PayrollController@exportPdf",
+    "source": "MASTER_PAYROLL + MASTER_EMPLOYEE",
+    "filter": "search/employee, date, role scope; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Pokok 3.000.000; potongan 100.000; net 3.100.000",
+    "pdf_totals": "Pokok 3.000.000; potongan 100.000; net 3.100.000",
+    "status": "PASS fixture",
+    "evidence": "payrolls",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit",
+      "3.000.000",
+      "100.000",
+      "3.100.000"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Daftar hr.leaves",
+    "route": "hr.leaves.export-pdf",
+    "uri": "hr/leaves/export-pdf",
+    "controller": "Hr\\LeaveController@exportPdf",
+    "source": "MASTER_LEAVE + MASTER_EMPLOYEE",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "hr.leaves",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Daftar hr.overtimes",
+    "route": "hr.overtimes.export-pdf",
+    "uri": "hr/overtimes/export-pdf",
+    "controller": "Hr\\OvertimeController@exportPdf",
+    "source": "MASTER_OVERTIME + MASTER_EMPLOYEE",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "hr.overtimes",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar audit",
+    "route": "audit.export-pdf",
+    "uri": "audit/export-pdf",
+    "controller": "Core\\AuditLogController@exportPdf",
+    "source": "MASTER_AUDIT_LOG + MASTER_USER",
+    "filter": "all history; current_page = latest 100; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "audit",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "READ AUDIT"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar batches",
+    "route": "batches.export-pdf",
+    "uri": "academic/batches/export-pdf",
+    "controller": "Academic\\BatchController@exportPdf",
+    "source": "MASTER_BATCH + MASTER_PROGRAM",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "batches",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Angkatan Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar classes",
+    "route": "classes.export-pdf",
+    "uri": "academic/classes/export-pdf",
+    "controller": "Academic\\ClassController@exportPdf",
+    "source": "MASTER_CLASS + batch/program/teacher",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "classes",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Kelas Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar assessments",
+    "route": "assessments.export-pdf",
+    "uri": "academic/assessments/export-pdf",
+    "controller": "Academic\\AssessmentController@exportPdf",
+    "source": "ASSESSMENTS + class/subject/teacher",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "assessments",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Evaluasi Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar scores",
+    "route": "scores.export-pdf",
+    "uri": "academic/scores/export-pdf",
+    "controller": "Academic\\ScoreController@exportPdf",
+    "source": "MASTER_SCORE + student/assessment/assignment",
+    "filter": "search/name, category, business assessment date; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nilai 88,5",
+    "pdf_totals": "Nilai 88,5",
+    "status": "PASS fixture",
+    "evidence": "scores",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "88,5"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar subjects",
+    "route": "subjects.export-pdf",
+    "uri": "academic/subjects/export-pdf",
+    "controller": "Academic\\SubjectController@exportPdf",
+    "source": "MASTER_SUBJECT + MASTER_PROGRAM",
+    "filter": "search, status; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "subjects",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Bahasa Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar assignments",
+    "route": "assignments.export-pdf",
+    "uri": "academic/assignments/export-pdf",
+    "controller": "Academic\\AssignmentController@exportPdf",
+    "source": "MASTER_ASSIGNMENT + class/subject/teacher",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "assignments",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Tugas Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar notifications",
+    "route": "notifications.export-pdf",
+    "uri": "notifications/export-pdf",
+    "controller": "Core\\NotificationController@exportPdf",
+    "source": "MASTER_NOTIFICATION (current user)",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "notifications",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Notifikasi Audit"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "Daftar activity",
+    "route": "activity.export-pdf",
+    "uri": "activity/export-pdf",
+    "controller": "Core\\ActivityController@exportPdf",
+    "source": "MASTER_AUDIT_LOG (role/user scope)",
+    "filter": "keyword, module, role/user; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "activity",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "READ AUDIT"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Daftar announcements",
+    "route": "announcements.export-pdf",
+    "uri": "academic/announcements/export-pdf",
+    "controller": "Academic\\AnnouncementController@exportPdf",
+    "source": "MASTER_ANNOUNCEMENT (managed visibility)",
+    "filter": "search/status sesuai controller; export all/today/range/current_page; sort/orientation",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "announcements",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pengumuman Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Jadwal",
+    "route": "schedules.export-pdf",
+    "uri": "academic/schedules/export-pdf",
+    "controller": "Academic\\ScheduleController@exportPdf",
+    "source": "MASTER_SCHEDULE + class/subject/teacher",
+    "filter": "search; creation date (recurring schedule); unpaginated",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "schedules",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Kelas Audit",
+      "Bahasa Audit",
+      "Guru Audit"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Invoice resmi",
+    "route": "invoices.pdf",
+    "uri": "finance/invoices/{id}/pdf",
+    "controller": "Finance\\InvoiceController@downloadInvoicePdf",
+    "source": "FINANCE_INVOICE + FINANCE_PAYMENT + student",
+    "filter": "INV-AUDIT",
+    "template": "pdf.official_invoice",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "2.000.000 / paid 500.000 / remaining 1.500.000",
+    "pdf_totals": "2.000.000 / paid 500.000 / remaining 1.500.000",
+    "status": "PASS fixture",
+    "evidence": "invoices-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "INV-AUDIT",
+      "Siswa Audit",
+      "2.000.000",
+      "500.000",
+      "1.500.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Bukti pembayaran",
+    "route": "payments.receipt",
+    "uri": "finance/payments/{id}/receipt",
+    "controller": "Finance\\PaymentController@downloadReceiptPdf",
+    "source": "FINANCE_PAYMENT + invoice + receiving account",
+    "filter": "PAY-AUDIT",
+    "template": "pdf.official_receipt",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "payments-receipt-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "PAY-AUDIT",
+      "Siswa Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Slip gaji",
+    "route": "payrolls.pdf",
+    "uri": "hr/payrolls/{id}/pdf",
+    "controller": "Hr\\PayrollController@downloadPayslipPdf",
+    "source": "MASTER_PAYROLL + MASTER_EMPLOYEE",
+    "filter": "PRL-AUDIT; HR/Finance scope",
+    "template": "pdf.official_payslip",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "3.000.000 + 200.000 - 100.000 = 3.100.000",
+    "pdf_totals": "3.000.000 + 200.000 - 100.000 = 3.100.000",
+    "status": "PASS fixture",
+    "evidence": "payrolls-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit",
+      "3.000.000",
+      "200.000",
+      "100.000",
+      "3.100.000"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Persetujuan cuti",
+    "route": "leaves.pdf",
+    "uri": "hr/leaves/{id}/pdf",
+    "controller": "\\Hr\\LeaveController@downloadLeavePdf",
+    "source": "MASTER_LEAVE + employee",
+    "filter": "LEV-AUDIT",
+    "template": "pdf.official_leave_approval",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Durasi 2 hari",
+    "pdf_totals": "Durasi 2 hari",
+    "status": "PASS fixture",
+    "evidence": "leaves-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit",
+      "CUTI-AUDIT",
+      "2 Hari"
+    ]
+  },
+  {
+    "module": "Hr",
+    "name": "Persetujuan lembur",
+    "route": "overtimes.pdf",
+    "uri": "hr/overtimes/{id}/pdf",
+    "controller": "\\Hr\\OvertimeController@downloadOvertimePdf",
+    "source": "MASTER_OVERTIME + employee",
+    "filter": "OVT-AUDIT",
+    "template": "pdf.official_overtime_approval",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "2 jam x 25.000 = 50.000",
+    "pdf_totals": "2 jam x 25.000 = 50.000",
+    "status": "PASS fixture",
+    "evidence": "overtimes-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit",
+      "LEMBUR-AUDIT",
+      "50.000"
+    ]
+  },
+  {
+    "module": "Student",
+    "name": "Invoice siswa",
+    "route": "student.billing.invoice-pdf",
+    "uri": "student/billing/{id}/pdf",
+    "controller": "Finance\\StudentBillingController@downloadInvoicePdf",
+    "source": "FINANCE_INVOICE + payment + authenticated student",
+    "filter": "own invoice INV-AUDIT",
+    "template": "pdf.official_invoice",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "2.000.000 / remaining 1.500.000",
+    "pdf_totals": "2.000.000 / remaining 1.500.000",
+    "status": "PASS fixture",
+    "evidence": "student-billing-invoice-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "2.000.000",
+      "1.500.000"
+    ]
+  },
+  {
+    "module": "Student",
+    "name": "Bukti pembayaran siswa",
+    "route": "student.billing.payment-receipt",
+    "uri": "student/billing/payments/{id}/receipt",
+    "controller": "Finance\\PaymentController@downloadReceiptPdf",
+    "source": "FINANCE_PAYMENT + authenticated student",
+    "filter": "own payment PAY-AUDIT",
+    "template": "pdf.official_receipt",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "student-billing-payment-receipt-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Presensi Academic",
+    "route": "attendances.export-pdf",
+    "uri": "academic/attendances/export-pdf",
+    "controller": "Academic\\AttendanceController@exportPdf",
+    "source": "MASTER_ATTENDANCE + class roster",
+    "filter": "date, class, status, search",
+    "template": "pdf.academic_attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "attendances-export-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit",
+      "Hadir",
+      "08:00"
+    ]
+  },
+  {
+    "module": "Teacher",
+    "name": "Presensi Teacher",
+    "route": "teacher.workspace.reports.attendances-pdf",
+    "uri": "teacher/workspace/reports/attendances.pdf",
+    "controller": "Academic\\TeacherWorkspaceController@exportAttendancesPdf",
+    "source": "MASTER_ATTENDANCE + authorized managed roster",
+    "filter": "teacher class/date scope",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "teacher-workspace-reports-attendances-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit",
+      "Hadir"
+    ]
+  },
+  {
+    "module": "Student",
+    "name": "Presensi Student",
+    "route": "student.export-attendances-pdf",
+    "uri": "student/export-attendances-pdf",
+    "controller": "Academic\\StudentWorkspaceController@exportAttendancesPdf",
+    "source": "MASTER_ATTENDANCE + authenticated student",
+    "filter": "own student",
+    "template": "pdf.student_attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "student-export-attendances-pdf-detail",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Hadir"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Presensi harian",
+    "route": "attendance.reports.pdf",
+    "uri": "attendance/reports/pdf",
+    "controller": "Academic\\AttendanceReportController@pdf",
+    "source": "MASTER_ATTENDANCE + class/student roster",
+    "filter": "report_type=harian; class; student optional; business dates",
+    "template": "pdf.attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "attendance-reports-pdf-harian",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Presensi mingguan",
+    "route": "attendance.reports.pdf",
+    "uri": "attendance/reports/pdf",
+    "controller": "Academic\\AttendanceReportController@pdf",
+    "source": "MASTER_ATTENDANCE + class/student roster",
+    "filter": "report_type=mingguan; class; student optional; business dates",
+    "template": "pdf.attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "attendance-reports-pdf-mingguan",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Presensi bulanan",
+    "route": "attendance.reports.pdf",
+    "uri": "attendance/reports/pdf",
+    "controller": "Academic\\AttendanceReportController@pdf",
+    "source": "MASTER_ATTENDANCE + class/student roster",
+    "filter": "report_type=bulanan; class; student optional; business dates",
+    "template": "pdf.attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "attendance-reports-pdf-bulanan",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Presensi rentang",
+    "route": "attendance.reports.pdf",
+    "uri": "attendance/reports/pdf",
+    "controller": "Academic\\AttendanceReportController@pdf",
+    "source": "MASTER_ATTENDANCE + class/student roster",
+    "filter": "report_type=rentang; class; student optional; business dates",
+    "template": "pdf.attendance_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Hadir 1",
+    "pdf_totals": "Hadir 1",
+    "status": "PASS fixture",
+    "evidence": "attendance-reports-pdf-rentang",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit"
+    ]
+  },
+  {
+    "module": "Teacher",
+    "name": "Nilai Teacher student",
+    "route": "teacher.workspace.reports.scores-pdf",
+    "uri": "teacher/workspace/reports/scores.pdf",
+    "controller": "Academic\\TeacherWorkspaceController@exportScoresPdf",
+    "source": "MASTER_SCORE + managed student/class + subject",
+    "filter": "mode=student; entity; all_periods/date; subject/category",
+    "template": "pdf.teacher_score_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nilai 88,5",
+    "pdf_totals": "Nilai 88,5",
+    "status": "PASS fixture",
+    "evidence": "teacher-student",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit",
+      "88,5",
+      "Semua Periode"
+    ]
+  },
+  {
+    "module": "Teacher",
+    "name": "Nilai Teacher class",
+    "route": "teacher.workspace.reports.scores-pdf",
+    "uri": "teacher/workspace/reports/scores.pdf",
+    "controller": "Academic\\TeacherWorkspaceController@exportScoresPdf",
+    "source": "MASTER_SCORE + managed student/class + subject",
+    "filter": "mode=class; entity; all_periods/date; subject/category",
+    "template": "pdf.teacher_score_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nilai 88,5",
+    "pdf_totals": "Nilai 88,5",
+    "status": "PASS fixture",
+    "evidence": "teacher-class",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Kelas Audit",
+      "88,5",
+      "Semua Periode"
+    ]
+  },
+  {
+    "module": "Student",
+    "name": "Nilai Student",
+    "route": "student.export-scores-pdf",
+    "uri": "student/export-scores-pdf",
+    "controller": "Academic\\StudentWorkspaceController@exportScoresPdf",
+    "source": "MASTER_SCORE + authenticated student",
+    "filter": "own identity",
+    "template": "pdf.student_score_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nilai 88,5",
+    "pdf_totals": "Nilai 88,5",
+    "status": "PASS fixture",
+    "evidence": "student-scores",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "88,5"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Arus kas",
+    "route": "reports.finance.export-pdf",
+    "uri": "finance/reports/export-pdf",
+    "controller": "Finance\\ReportController@exportPdf",
+    "source": "FINANCE_TRANSACTION + MASTER_ACCOUNT",
+    "filter": "business dates, account ID/code, category; independent opening/period sums",
+    "template": "pdf.generic_table",
+    "source_records": 3,
+    "pdf_records": 3,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Opening 100.000; income 1.750.000; expense 1.500.000; net 250.000; closing 350.000",
+    "pdf_totals": "Opening 100.000; income 1.750.000; expense 1.500.000; net 250.000; closing 350.000",
+    "status": "PASS fixture",
+    "evidence": "cash-flow",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "TRX-500",
+      "TRX-1250",
+      "TRX-1500",
+      "100.000",
+      "1.750.000",
+      "1.500.000",
+      "250.000",
+      "350.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Piutang",
+    "route": "reports.finance.export-pdf",
+    "uri": "finance/reports/export-pdf",
+    "controller": "Finance\\ReportController@exportPdf",
+    "source": "FINANCE_INVOICE + verified FINANCE_PAYMENT + payer",
+    "filter": "report_type=outstanding; type/student/company; creation date",
+    "template": "pdf.generic_table",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "2.000.000 - 500.000 = 1.500.000",
+    "pdf_totals": "2.000.000 - 500.000 = 1.500.000",
+    "status": "PASS fixture",
+    "evidence": "outstanding",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "INV-AUDIT",
+      "2.000.000",
+      "500.000",
+      "1.500.000"
+    ]
+  },
+  {
+    "module": "Academic",
+    "name": "Alumni pilihan",
+    "route": "alumni.export-selected-pdf",
+    "uri": "academic/alumni/export-selected-pdf",
+    "controller": "Academic\\AlumniController@exportSelectedPdf",
+    "source": "MASTER_ALUMNI + program/batch/class",
+    "filter": "selected alumni_ids, scoped records",
+    "template": "pdf.selected_alumni",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "alumni-selected",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Alumni Terpilih",
+      "ALM000001"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Smart manual invoice",
+    "route": "finance.smart_generator.pdf",
+    "uri": "finance/smart-generator/pdf",
+    "controller": "Finance\\SmartGeneratorController@exportPdf",
+    "source": "Request manual",
+    "filter": "doc_type/source_type/source_id; manual line arithmetic or canonical invoice",
+    "template": "pdf.smart_generator_invoice",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "smart-manual-invoice",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Klien Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Smart manual kwitansi",
+    "route": "finance.smart_generator.pdf",
+    "uri": "finance/smart-generator/pdf",
+    "controller": "Finance\\SmartGeneratorController@exportPdf",
+    "source": "Request manual",
+    "filter": "doc_type/source_type/source_id; manual line arithmetic or canonical invoice",
+    "template": "pdf.smart_generator_kwitansi",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "smart-manual-kwitansi",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Klien Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Smart student invoice",
+    "route": "finance.smart_generator.pdf",
+    "uri": "finance/smart-generator/pdf",
+    "controller": "Finance\\SmartGeneratorController@exportPdf",
+    "source": "Canonical InvoiceService + verified payments + student",
+    "filter": "doc_type/source_type/source_id; manual line arithmetic or canonical invoice",
+    "template": "pdf.smart_generator_invoice",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "2.000.000",
+    "pdf_totals": "2.000.000",
+    "status": "PASS fixture",
+    "evidence": "smart-student-invoice",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "2.000.000"
+    ]
+  },
+  {
+    "module": "Finance",
+    "name": "Smart student kwitansi",
+    "route": "finance.smart_generator.pdf",
+    "uri": "finance/smart-generator/pdf",
+    "controller": "Finance\\SmartGeneratorController@exportPdf",
+    "source": "Canonical InvoiceService + verified payments + student",
+    "filter": "doc_type/source_type/source_id; manual line arithmetic or canonical invoice",
+    "template": "pdf.smart_generator_kwitansi",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "smart-student-kwitansi",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Core",
+    "name": "QR presensi permanen",
+    "route": "attendance.qr.pdf",
+    "uri": "attendance/qr/{id}/pdf",
+    "controller": "Core\\PermanentQrController@downloadPdf",
+    "source": "MASTER_PERMANENT_QR + lifecycle/window configuration",
+    "filter": "authorized QR_ID; validity window",
+    "template": "attendance.qr.print",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "permanent-qr",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "QR Kelas Audit",
+      "CLS-AUDIT"
+    ]
+  },
+  {
+    "module": "Automation",
+    "name": "Arsip otomatis Certificate",
+    "route": "service:Certificate",
+    "uri": "service invocation / intercepted email",
+    "controller": "StudentService::updateStudent → DocumentAutomationService",
+    "source": "MASTER_STUDENT + MASTER_PROGRAM",
+    "filter": "persisted business identity; version/hash; private storage",
+    "template": "pdf.certificate",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "N/A",
+    "pdf_totals": "N/A",
+    "status": "PASS fixture",
+    "evidence": "automatic-Certificate",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Program Audit"
+    ]
+  },
+  {
+    "module": "Automation",
+    "name": "Arsip otomatis AcademicReport",
+    "route": "service:AcademicReport",
+    "uri": "service invocation / intercepted email",
+    "controller": "StudentService::updateStudent → DocumentAutomationService",
+    "source": "MASTER_STUDENT + MASTER_SCORE + assessment/assignment",
+    "filter": "persisted business identity; version/hash; private storage",
+    "template": "pdf.academic_report",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Nilai 88,5",
+    "pdf_totals": "Nilai 88,5",
+    "status": "PASS fixture",
+    "evidence": "automatic-AcademicReport",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Siswa Audit",
+      "Program Audit",
+      "88,5"
+    ]
+  },
+  {
+    "module": "Automation",
+    "name": "Arsip otomatis Payroll",
+    "route": "service:Payroll",
+    "uri": "service invocation / intercepted email",
+    "controller": "PayrollService::updateStatus → DocumentAutomationService",
+    "source": "MASTER_PAYROLL + MASTER_EMPLOYEE",
+    "filter": "persisted business identity; version/hash; private storage",
+    "template": "pdf.official_payslip",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "Net 3.100.000",
+    "pdf_totals": "Net 3.100.000",
+    "status": "PASS fixture",
+    "evidence": "automatic-Payroll",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "Pegawai Audit",
+      "PRL-AUDIT",
+      "3.100.000"
+    ]
+  },
+  {
+    "module": "Automation",
+    "name": "Lampiran email invoice",
+    "route": "finance.smart_generator.send_email",
+    "uri": "service invocation / intercepted email",
+    "controller": "Finance\\SmartGeneratorController@sendEmail → EmailDeliveryService",
+    "source": "SmartGenerator payload → EmailDeliveryService",
+    "filter": "Mail::raw intercepted, no email sent",
+    "template": "pdf.smart_generator_invoice",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "email-invoice",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "EMAIL-AUDIT",
+      "Penerima Audit",
+      "500.000"
+    ]
+  },
+  {
+    "module": "Automation",
+    "name": "Lampiran email kwitansi",
+    "route": "finance.smart_generator.send_email",
+    "uri": "service invocation / intercepted email",
+    "controller": "Finance\\SmartGeneratorController@sendEmail → EmailDeliveryService",
+    "source": "SmartGenerator payload → EmailDeliveryService",
+    "filter": "Mail::raw intercepted, no email sent",
+    "template": "pdf.smart_generator_kwitansi",
+    "source_records": 1,
+    "pdf_records": 1,
+    "count_method": "metadata Total Data or single-document identity; see test assertions",
+    "expected_totals": "500.000",
+    "pdf_totals": "500.000",
+    "status": "PASS fixture",
+    "evidence": "email-kwitansi",
+    "checks": {
+      "sqlite": true,
+      "mysql": true
+    },
+    "tokens": [
+      "EMAIL-AUDIT",
+      "Penerima Audit",
+      "500.000"
+    ]
+  }
+]

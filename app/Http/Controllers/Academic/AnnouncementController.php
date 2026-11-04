@@ -28,6 +28,7 @@ class AnnouncementController extends Controller
 
         return [
             'moduleName' => 'Pengumuman Akademik',
+            'paginate' => false,
             'data' => collect(array_values($announcements->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Judul', 'Target Penerima', 'Prioritas', 'Status', 'Dibuat Pada'],

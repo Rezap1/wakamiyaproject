@@ -203,11 +203,11 @@
                     <div class="card-title">Detail Penggajian</div>
                     <div class="field-row">
                         <span class="field-label">Periode Penggajian:</span>
-                        <span class="field-value">{{ $payroll['Payroll_Period'] ?? date('Y-m') }}</span>
+                        <span class="field-value">{{ $payroll['Payroll_Period'] ?? $payroll['Period'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">No. Dokumen:</span>
-                        <span class="field-value">{{ $payroll['Document_Number'] ?? '-' }}</span>
+                        <span class="field-value">{{ $payroll['Document_Number'] ?? $payroll['Payroll_ID'] ?? '-' }}</span>
                     </div>
                     <div class="field-row">
                         <span class="field-label">Status Pembayaran:</span>
@@ -330,7 +330,7 @@
                     <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">Verifikasi Keabsahan Slip Gaji</div>
                     @if(!empty($qrCodeSvg))
                         <div style="margin: 0 auto; display: inline-block;">
-                            {!! $qrCodeSvg !!}
+                            <img src="data:image/svg+xml;base64,{{ base64_encode((string) $qrCodeSvg) }}" width="90" height="90" alt="QR verifikasi slip gaji">
                         </div>
                     @else
                         <div style="font-size: 9px; color: #2563eb; font-weight: bold; word-break: break-all; margin: 10px 0;">
@@ -350,7 +350,7 @@
                         {{ $payroll['Approved_By'] ?? 'HR & Finance Director' }}
                     </div>
                     <div style="font-size: 9px; color: #64748b;">
-                        Tanggal: {{ !empty($payroll['Paid_Date']) ? \App\Helpers\DateHelper::format($payroll['Paid_Date'], 'd M Y') : date('d M Y') }}
+                        Tanggal pembayaran: {{ \App\Helpers\DateHelper::format($payroll['Paid_Date'] ?? $payroll['Paid_At'] ?? null, 'd M Y') }}
                     </div>
                 </div>
             </td>

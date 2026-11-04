@@ -53,6 +53,7 @@ class AssignmentController extends Controller
 
         return [
             'moduleName' => 'Tugas Harian',
+            'paginate' => false,
             'data' => collect(array_values($assignments->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Judul', 'Kelas', 'Mata Pelajaran', 'Guru', 'Deadline', 'Status'],

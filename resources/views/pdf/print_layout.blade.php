@@ -60,6 +60,7 @@
         <tr><td width="17%">Nomor Dokumen</td><td width="33%">: {{ $documentNumber ?? '-' }}</td><td width="17%">Dibuat Oleh</td><td>: {{ $generatedBy ?? 'Sistem' }}</td></tr>
         <tr><td>Dibuat Pada</td><td>: {{ $generatedDate ?? '-' }}</td><td>Total Data</td><td>: {{ $totalRecords ?? 0 }}</td></tr>
         @if(!empty($scopeLabel))<tr><td>Ruang Lingkup</td><td colspan="3">: {{ $scopeLabel }}</td></tr>@endif
+        @if(!empty($filterLabel))<tr><td>Filter</td><td colspan="3">: {{ $filterLabel }}</td></tr>@endif
     </table>
     @if(!empty($executive_summary))<div class="exec-summary"><table>{!! $executive_summary !!}</table></div>@endif
     @yield('content')

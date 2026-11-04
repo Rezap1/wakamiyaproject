@@ -211,16 +211,16 @@
             </td>
             @endif
             <td class="header-details">
-                <div class="company-name">{{ $data['company_name'] ?? 'PT WAKAMIYA MANDIRI SEJAHTERA' }}</div>
-                <div class="company-tagline">{{ $data['company_tagline'] ?? 'Growing Together With Integrity' }}</div>
+                <div class="company-name">{{ $data['company_name'] ?? '-' }}</div>
+                <div class="company-tagline">{{ $data['company_tagline'] ?? '-' }}</div>
                 <div class="company-contact">
-                    {{ $data['company_address'] ?? 'Perum Graha Samolo Indah Blok B1 No 22 Desa Babakan Caringin, Karang Tengah,Cianjur' }}<br>
-                    Telp: {{ $data['company_phone'] ?? '0813-1811-5151' }} | Email: {{ $data['company_email'] ?? 'lpkwakamiya01@gmail.com' }}
+                    {{ $data['company_address'] ?? '-' }}<br>
+                    Telp: {{ $data['company_phone'] ?? '-' }} | Email: {{ $data['company_email'] ?? '-' }}
                 </div>
             </td>
             <td class="company-npwp">
                 NPWP USAHA<br>
-                <span style="font-size: 10.5px; color: #0f172a;">{{ $data['company_npwp'] ?? '1000000003150626' }}</span>
+                <span style="font-size: 10.5px; color: #0f172a;">{{ $data['company_npwp'] ?? '-' }}</span>
             </td>
         </tr>
     </table>
@@ -251,14 +251,14 @@
             <td class="field-label" style="padding-top: 12px;">Uang Sejumlah:</td>
             <td class="field-value">
                 <div class="terbilang-card">
-                    {{ $data['terbilang'] ?? '# Tiga Puluh Tiga Juta Empat Ratus Lima Puluh Ribu Rupiah #' }}
+                    {{ $data['terbilang'] ?? '-' }}
                 </div>
             </td>
         </tr>
         <tr>
             <td class="field-label">Untuk Pembayaran:</td>
             <td class="field-value">
-                {!! nl2br(e($data['payment_for'] ?? 'Total Angsuran Keempat Biaya Pengurusan Dokumen Ke Jepang')) !!}
+                {!! nl2br(e($data['payment_for'] ?? '-')) !!}
             </td>
         </tr>
     </table>
@@ -270,14 +270,14 @@
                 <div class="amount-card">
                     <div class="amount-label">JUMLAH TOTAL NOMINAL:</div>
                     <div class="amount-val">
-                        Rp {{ number_format($data['kwitansi_amount'] ?? 33450000, 0, ',', '.') }}
+                        Rp {{ number_format($data['kwitansi_amount'] ?? 0, 0, ',', '.') }}
                     </div>
                 </div>
             </td>
             <td style="text-align: right; vertical-align: top;">
                 <div class="signature-box">
                     <div style="font-size: 10px; color: #334155; font-weight: 700;">
-                        {{ $data['issue_city'] ?? 'Cianjur' }}, {{ isset($data['issue_date']) ? date('Y-m-d', strtotime($data['issue_date'])) : '2026-08-04' }}
+                        {{ $data['issue_city'] ?? '-' }}, {{ \App\Helpers\DateHelper::format($data['issue_date'] ?? null, 'Y-m-d') }}
                     </div>
                     <div class="signature-img-container">
                         @if(!empty($data['stamp']))
@@ -288,10 +288,10 @@
                         @endif
                     </div>
                     <div style="font-weight: 900; color: #0f172a; font-size: 11px; border-bottom: 1.5px solid #0f172a; display: inline-block; padding-bottom: 1px;">
-                        {{ $data['signer_name'] ?? 'Helmi Maulana' }}
+                        {{ $data['signer_name'] ?? '-' }}
                     </div>
                     <div style="font-size: 9.5px; color: #334155; font-weight: 700; margin-top: 2px;">
-                        {{ $data['company_name'] ?? 'PT WAKAMIYA MANDIRI SEJAHTERA' }}
+                        {{ $data['company_name'] ?? '-' }}
                     </div>
                 </div>
             </td>
@@ -300,7 +300,7 @@
 
     <!-- WATERMARK FOOTER -->
     <div class="footer-watermark">
-        Dokumen resmi diterbitkan secara sah oleh komputer {{ $data['company_name'] ?? 'PT WAKAMIYA MANDIRI SEJAHTERA' }}.
+        Dokumen resmi diterbitkan secara sah oleh komputer {{ $data['company_name'] ?? '-' }}.
     </div>
 
 </body>

@@ -65,7 +65,7 @@ class DepartmentController extends Controller
     public function index()
     {
         try {
-            $departments = $this->departmentService->getAllDepartments()->map(function ($dept) {
+            $departments = $this->getExportConfig(request())['data']->map(function ($dept) {
                 $dept['Manager_Name'] = UserResolverHelper::getName($dept['Manager_Employee_ID'] ?? '');
                 $dept['Created_By_Name'] = UserResolverHelper::getName($dept['Created_By'] ?? '');
                 return $dept;

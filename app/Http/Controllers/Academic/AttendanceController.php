@@ -170,6 +170,11 @@ class AttendanceController extends Controller
         return $this->attendanceReportResponse($request, 'preview');
     }
 
+    public function print(Request $request)
+    {
+        return $this->attendanceReportResponse($request, 'print');
+    }
+
     private function attendanceReportResponse(Request $request, string $format)
     {
         $report = $this->buildAttendanceReport($request);

@@ -34,12 +34,7 @@ class InvoiceController extends Controller
 
     protected function getExportConfig(Request $request)
     {
-        $invoices = $this->invoiceService->getAll();
-
-        $search = $request->input('search');
-        if (! empty($search)) {
-            $invoices = CollectionHelper::search($invoices, $search, ['Invoice_ID', 'Category', 'Student_ID']);
-        }
+        $invoices = $this->filteredInvoices($request);
 
         $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())
             ->keyBy('Student_ID');
@@ -80,7 +75,7 @@ class InvoiceController extends Controller
         $this->billingNotificationService = $billingNotificationService;
     }
 
-    public function index(Request $request)
+    private function filteredInvoices(Request $request)
     {
         $invoices = $this->invoiceService->getAll();
 
@@ -108,6 +103,16 @@ class InvoiceController extends Controller
                        stripos($stdName, $search) !== false;
             });
         }
+
+        return $invoices;
+    }
+
+    public function index(Request $request)
+    {
+        $invoices = $this->filteredInvoices($request);
+        $search = $request->input('search');
+        $type = $request->input('type');
+        $statusFilter = $request->input('status');
 
         $invoices = $invoices->map(function ($inv) {
             $stdDetail = UserResolverHelper::getStudentDetail($inv['Student_ID'] ?? '');

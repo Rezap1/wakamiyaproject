@@ -236,7 +236,8 @@ class StudentService
             $oldGradStatus = $student['Graduation_Status'] ?? null;
             
             if ($newGradStatus && in_array(strtolower($newGradStatus), ['lulus', 'graduated', 'completed']) && strtolower($oldGradStatus) !== strtolower($newGradStatus)) {
-                $program = $this->programRepository->findById($student['Program_ID']) ?? [];
+                $documentStudent = array_merge($student, $mappedData);
+                $program = $this->programRepository->findById($documentStudent['Program_ID']) ?? [];
                 // Retrieve scores for Academic Report
                 $scores = [];
                 try {
@@ -244,8 +245,19 @@ class StudentService
                     $scoreRows = method_exists($scoreRepo, 'getAll')
                         ? $scoreRepo->getAll()
                         : $scoreRepo->fetchAll();
-                    $scores = collect($scoreRows)->where('Student_ID', $id)->values()->toArray();
-                } catch (\Throwable $e) {}
+                    $assessments = collect(app(\App\Interfaces\GoogleSheets\AssessmentRepositoryInterface::class)->getAll())->keyBy('Assessment_ID');
+                    $assignments = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
+                    $scores = collect($scoreRows)->where('Student_ID', $id)->map(function ($score) use ($assessments, $assignments) {
+                        $assessmentId = trim((string) ($score['Assessment_ID'] ?? ''));
+                        $assignmentId = trim((string) ($score['Assignment_ID'] ?? ''));
+                        $score['Assessment_Title'] = $assessmentId !== ''
+                            ? \App\Support\Reporting\HumanReadableResolver::assessmentTitle($assessmentId, $assessments)
+                            : ($assignmentId !== '' ? \App\Support\Reporting\HumanReadableResolver::assignmentTitle($assignmentId, $assignments) : 'Penilaian');
+                        return $score;
+                    })->values()->toArray();
+                } catch (\Throwable $e) {
+                    throw new Exception('Data nilai gagal dibaca; dokumen kelulusan tidak diterbitkan.', 0, $e);
+                }
 
                 $docAutomation = app(\App\Services\Core\DocumentAutomationService::class);
                 
@@ -254,7 +266,7 @@ class StudentService
                     'Certificate',
                     'Student',
                     $id,
-                    ['student' => $res, 'program' => $program, 'certificate' => ['Issue_Date' => now()->format('Y-m-d')]],
+                    ['student' => $documentStudent, 'program' => $program, 'certificate' => ['Issue_Date' => now()->format('Y-m-d')]],
                     'pdf.certificate',
                     \App\Support\ActorIdentity::required()
                 );
@@ -264,7 +276,7 @@ class StudentService
                     'AcademicReport',
                     'Student',
                     $id,
-                    ['student' => $res, 'program' => $program, 'scores' => $scores],
+                    ['student' => $documentStudent, 'program' => $program, 'scores' => $scores],
                     'pdf.academic_report',
                     \App\Support\ActorIdentity::required()
                 );

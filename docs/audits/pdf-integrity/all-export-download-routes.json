@@ -1,0 +1,2535 @@
+[
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "verify-receipt/{id}",
+        "name": "payments.verify-receipt-public",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@verifyReceiptPublic",
+        "middleware": [
+            "web",
+            "signed"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "dashboard/personal-payroll/{id}/proof",
+        "name": "dashboard.personal-payroll.proof",
+        "action": "App\\Http\\Controllers\\Dashboard\\PersonalPayrollController@downloadProof",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "director/reports/export-csv",
+        "name": "director.reports.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\DirectorDashboardController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:DIRECTOR,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "attendance/reports/pdf",
+        "name": "attendance.reports.pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceReportController@pdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER,ADMINISTRATOR,MASTER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "users/preview-pdf",
+        "name": "users.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\UserController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "users/export-pdf",
+        "name": "users.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\UserController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "users/export-excel",
+        "name": "users.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\UserController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "users/export-csv",
+        "name": "users.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\UserController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "users/print",
+        "name": "users.print",
+        "action": "App\\Http\\Controllers\\Core\\UserController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "departments/preview-pdf",
+        "name": "departments.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\DepartmentController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "departments/export-pdf",
+        "name": "departments.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\DepartmentController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "departments/export-excel",
+        "name": "departments.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\DepartmentController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "departments/export-csv",
+        "name": "departments.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\DepartmentController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "departments/print",
+        "name": "departments.print",
+        "action": "App\\Http\\Controllers\\Core\\DepartmentController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "positions/preview-pdf",
+        "name": "positions.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\PositionController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "positions/export-pdf",
+        "name": "positions.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\PositionController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "positions/export-excel",
+        "name": "positions.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\PositionController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "positions/export-csv",
+        "name": "positions.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\PositionController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "positions/print",
+        "name": "positions.print",
+        "action": "App\\Http\\Controllers\\Core\\PositionController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "employees/preview-pdf",
+        "name": "employees.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\EmployeeController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "employees/export-pdf",
+        "name": "employees.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\EmployeeController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "employees/export-excel",
+        "name": "employees.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\EmployeeController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "employees/export-csv",
+        "name": "employees.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\EmployeeController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "employees/print",
+        "name": "employees.print",
+        "action": "App\\Http\\Controllers\\Core\\EmployeeController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teachers/preview-pdf",
+        "name": "teachers.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\TeacherController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teachers/export-pdf",
+        "name": "teachers.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\TeacherController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teachers/export-excel",
+        "name": "teachers.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\TeacherController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teachers/export-csv",
+        "name": "teachers.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\TeacherController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teachers/print",
+        "name": "teachers.print",
+        "action": "App\\Http\\Controllers\\Core\\TeacherController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "programs/preview-pdf",
+        "name": "programs.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ProgramController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "programs/export-pdf",
+        "name": "programs.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ProgramController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "programs/export-excel",
+        "name": "programs.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\ProgramController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "programs/export-csv",
+        "name": "programs.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\ProgramController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "programs/print",
+        "name": "programs.print",
+        "action": "App\\Http\\Controllers\\Core\\ProgramController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "students/preview-pdf",
+        "name": "students.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\StudentController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "students/export-pdf",
+        "name": "students.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\StudentController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "students/export-excel",
+        "name": "students.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\StudentController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "students/export-csv",
+        "name": "students.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\StudentController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "students/print",
+        "name": "students.print",
+        "action": "App\\Http\\Controllers\\Core\\StudentController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/alumni/export-csv",
+        "name": "alumni.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\AlumniController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "POST"
+        ],
+        "uri": "academic/alumni/export-selected-pdf",
+        "name": "alumni.export-selected-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AlumniController@exportSelectedPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,ACADEMIC"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "companies/preview-pdf",
+        "name": "companies.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\CompanyController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MARKETING"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "companies/export-pdf",
+        "name": "companies.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\CompanyController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MARKETING"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "companies/export-excel",
+        "name": "companies.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\CompanyController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MARKETING"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "companies/export-csv",
+        "name": "companies.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\CompanyController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MARKETING"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "companies/print",
+        "name": "companies.print",
+        "action": "App\\Http\\Controllers\\Core\\CompanyController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MARKETING"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "modules/preview-pdf",
+        "name": "modules.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ModuleController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "modules/export-pdf",
+        "name": "modules.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ModuleController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "modules/export-excel",
+        "name": "modules.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\ModuleController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "modules/export-csv",
+        "name": "modules.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\ModuleController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "modules/print",
+        "name": "modules.print",
+        "action": "App\\Http\\Controllers\\Core\\ModuleController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/accounts/preview-pdf",
+        "name": "accounts.preview-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\AccountController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/accounts/export-pdf",
+        "name": "accounts.export-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\AccountController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/accounts/export-excel",
+        "name": "accounts.export-excel",
+        "action": "App\\Http\\Controllers\\Finance\\AccountController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/accounts/export-csv",
+        "name": "accounts.export-csv",
+        "action": "App\\Http\\Controllers\\Finance\\AccountController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/accounts/print",
+        "name": "accounts.print",
+        "action": "App\\Http\\Controllers\\Finance\\AccountController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/transactions/preview-pdf",
+        "name": "transactions.preview-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\TransactionController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/transactions/export-pdf",
+        "name": "transactions.export-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\TransactionController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/transactions/export-excel",
+        "name": "transactions.export-excel",
+        "action": "App\\Http\\Controllers\\Finance\\TransactionController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/transactions/export-csv",
+        "name": "transactions.export-csv",
+        "action": "App\\Http\\Controllers\\Finance\\TransactionController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/transactions/print",
+        "name": "transactions.print",
+        "action": "App\\Http\\Controllers\\Finance\\TransactionController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "POST"
+        ],
+        "uri": "finance/smart-generator/pdf",
+        "name": "finance.smart_generator.pdf",
+        "action": "App\\Http\\Controllers\\Finance\\SmartGeneratorController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/preview-pdf",
+        "name": "invoices.preview-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/export-pdf",
+        "name": "invoices.export-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/export-excel",
+        "name": "invoices.export-excel",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/export-csv",
+        "name": "invoices.export-csv",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/print",
+        "name": "invoices.print",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/invoices/{id}/pdf",
+        "name": "invoices.pdf",
+        "action": "App\\Http\\Controllers\\Finance\\InvoiceController@downloadInvoicePdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/preview-pdf",
+        "name": "payments.preview-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/export-pdf",
+        "name": "payments.export-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/export-excel",
+        "name": "payments.export-excel",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/export-csv",
+        "name": "payments.export-csv",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/print",
+        "name": "payments.print",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/{id}/receipt",
+        "name": "payments.receipt",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@downloadReceiptPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/payments/{id}/proof",
+        "name": "payments.proof",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@downloadProof",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/reports/preview-pdf",
+        "name": "reports.finance.preview-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\ReportController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/reports/export-pdf",
+        "name": "reports.finance.export-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\ReportController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/reports/export-excel",
+        "name": "reports.finance.export-excel",
+        "action": "App\\Http\\Controllers\\Finance\\ReportController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/reports/export-csv",
+        "name": "reports.finance.export-csv",
+        "action": "App\\Http\\Controllers\\Finance\\ReportController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "finance/reports/print",
+        "name": "reports.finance.print",
+        "action": "App\\Http\\Controllers\\Finance\\ReportController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,FINANCE,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/preview-pdf",
+        "name": "payrolls.preview-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/export-pdf",
+        "name": "payrolls.export-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/export-excel",
+        "name": "payrolls.export-excel",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/export-csv",
+        "name": "payrolls.export-csv",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/print",
+        "name": "payrolls.print",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/{id}/pdf",
+        "name": "payrolls.pdf",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@downloadPayslipPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/{id}/slip",
+        "name": "payrolls.slip",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@downloadPayslipPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/payrolls/{id}/proof",
+        "name": "payrolls.proof",
+        "action": "App\\Http\\Controllers\\Hr\\PayrollController@downloadProof",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR,FINANCE"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/preview-pdf",
+        "name": "hr.leaves.preview-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\LeaveController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/export-pdf",
+        "name": "hr.leaves.export-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\LeaveController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/export-excel",
+        "name": "hr.leaves.export-excel",
+        "action": "App\\Http\\Controllers\\Hr\\LeaveController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/export-csv",
+        "name": "hr.leaves.export-csv",
+        "action": "App\\Http\\Controllers\\Hr\\LeaveController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/print",
+        "name": "hr.leaves.print",
+        "action": "App\\Http\\Controllers\\Hr\\LeaveController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/leaves/{id}/pdf",
+        "name": "leaves.pdf",
+        "action": "\\App\\Http\\Controllers\\Hr\\LeaveController@downloadLeavePdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/preview-pdf",
+        "name": "hr.overtimes.preview-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\OvertimeController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/export-pdf",
+        "name": "hr.overtimes.export-pdf",
+        "action": "App\\Http\\Controllers\\Hr\\OvertimeController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/export-excel",
+        "name": "hr.overtimes.export-excel",
+        "action": "App\\Http\\Controllers\\Hr\\OvertimeController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/export-csv",
+        "name": "hr.overtimes.export-csv",
+        "action": "App\\Http\\Controllers\\Hr\\OvertimeController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/print",
+        "name": "hr.overtimes.print",
+        "action": "App\\Http\\Controllers\\Hr\\OvertimeController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "hr/overtimes/{id}/pdf",
+        "name": "overtimes.pdf",
+        "action": "\\App\\Http\\Controllers\\Hr\\OvertimeController@downloadOvertimePdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,HR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "audit/preview-pdf",
+        "name": "audit.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\AuditLogController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "audit/export-pdf",
+        "name": "audit.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\AuditLogController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "audit/export-excel",
+        "name": "audit.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\AuditLogController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "audit/export-csv",
+        "name": "audit.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\AuditLogController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "audit/print",
+        "name": "audit.print",
+        "action": "App\\Http\\Controllers\\Core\\AuditLogController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/billing/payments/{paymentId}/proof",
+        "name": "student.billing.payment-proof",
+        "action": "App\\Http\\Controllers\\Finance\\StudentBillingController@downloadPaymentProof",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/billing/payments/{id}/receipt",
+        "name": "student.billing.payment-receipt",
+        "action": "App\\Http\\Controllers\\Finance\\PaymentController@downloadReceiptPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/billing/{id}/pdf",
+        "name": "student.billing.invoice-pdf",
+        "action": "App\\Http\\Controllers\\Finance\\StudentBillingController@downloadInvoicePdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/billing/{id}/proof",
+        "name": "student.billing.proof",
+        "action": "App\\Http\\Controllers\\Finance\\StudentBillingController@downloadProof",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/batches/preview-pdf",
+        "name": "batches.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\BatchController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/batches/export-pdf",
+        "name": "batches.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\BatchController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/batches/export-excel",
+        "name": "batches.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\BatchController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/batches/export-csv",
+        "name": "batches.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\BatchController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/batches/print",
+        "name": "batches.print",
+        "action": "App\\Http\\Controllers\\Academic\\BatchController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/classes/preview-pdf",
+        "name": "classes.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ClassController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/classes/export-pdf",
+        "name": "classes.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ClassController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/classes/export-excel",
+        "name": "classes.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\ClassController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/classes/export-csv",
+        "name": "classes.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\ClassController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/classes/print",
+        "name": "classes.print",
+        "action": "App\\Http\\Controllers\\Academic\\ClassController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assessments/preview-pdf",
+        "name": "assessments.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AssessmentController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assessments/export-pdf",
+        "name": "assessments.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AssessmentController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assessments/export-excel",
+        "name": "assessments.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\AssessmentController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assessments/export-csv",
+        "name": "assessments.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\AssessmentController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assessments/print",
+        "name": "assessments.print",
+        "action": "App\\Http\\Controllers\\Academic\\AssessmentController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendances/preview-pdf",
+        "name": "attendances.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendances/export-pdf",
+        "name": "attendances.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendances/export-excel",
+        "name": "attendances.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendances/export-csv",
+        "name": "attendances.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendances/print",
+        "name": "attendances.print",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/schedules/preview-pdf",
+        "name": "schedules.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ScheduleController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/schedules/export-pdf",
+        "name": "schedules.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ScheduleController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/schedules/export-excel",
+        "name": "schedules.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\ScheduleController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/schedules/export-csv",
+        "name": "schedules.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\ScheduleController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/schedules/print",
+        "name": "schedules.print",
+        "action": "App\\Http\\Controllers\\Academic\\ScheduleController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/scores/preview-pdf",
+        "name": "scores.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ScoreController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/scores/export-pdf",
+        "name": "scores.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\ScoreController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/scores/export-excel",
+        "name": "scores.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\ScoreController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/scores/export-csv",
+        "name": "scores.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\ScoreController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/scores/print",
+        "name": "scores.print",
+        "action": "App\\Http\\Controllers\\Academic\\ScoreController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/subjects/preview-pdf",
+        "name": "subjects.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\SubjectController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/subjects/export-pdf",
+        "name": "subjects.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\SubjectController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/subjects/export-excel",
+        "name": "subjects.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\SubjectController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/subjects/export-csv",
+        "name": "subjects.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\SubjectController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/subjects/print",
+        "name": "subjects.print",
+        "action": "App\\Http\\Controllers\\Academic\\SubjectController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/announcements/preview-pdf",
+        "name": "announcements.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AnnouncementController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/announcements/export-pdf",
+        "name": "announcements.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AnnouncementController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/announcements/export-excel",
+        "name": "announcements.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\AnnouncementController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/announcements/export-csv",
+        "name": "announcements.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\AnnouncementController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/announcements/print",
+        "name": "announcements.print",
+        "action": "App\\Http\\Controllers\\Academic\\AnnouncementController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER,DIRECTOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assignments/preview-pdf",
+        "name": "assignments.preview-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AssignmentController@previewPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assignments/export-pdf",
+        "name": "assignments.export-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\AssignmentController@exportPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assignments/export-excel",
+        "name": "assignments.export-excel",
+        "action": "App\\Http\\Controllers\\Academic\\AssignmentController@exportExcel",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assignments/export-csv",
+        "name": "assignments.export-csv",
+        "action": "App\\Http\\Controllers\\Academic\\AssignmentController@exportCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/assignments/print",
+        "name": "assignments.print",
+        "action": "App\\Http\\Controllers\\Academic\\AssignmentController@print",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR,TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/attendance-requests/{id}/evidence",
+        "name": "teacher.workspace.attendance-requests.evidence",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceRequestController@downloadEvidence",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/attendances.csv",
+        "name": "teacher.workspace.reports.attendances-csv",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@exportAttendancesCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/attendances.pdf",
+        "name": "teacher.workspace.reports.attendances-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@exportAttendancesPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/attendances/print",
+        "name": "teacher.workspace.reports.attendances-print",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@printAttendances",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/scores.csv",
+        "name": "teacher.workspace.reports.scores-csv",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@exportScoresCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/scores.pdf",
+        "name": "teacher.workspace.reports.scores-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@exportScoresPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "teacher/workspace/reports/scores/print",
+        "name": "teacher.workspace.reports.scores-print",
+        "action": "App\\Http\\Controllers\\Academic\\TeacherWorkspaceController@printScores",
+        "middleware": [
+            "web",
+            "auth",
+            "role:TEACHER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/export-scores",
+        "name": "student.export-scores",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@exportScoresCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/export-scores-pdf",
+        "name": "student.export-scores-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@exportScoresPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/print-scores",
+        "name": "student.print-scores",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@printScores",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/export-attendances",
+        "name": "student.export-attendances",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@exportAttendancesCsv",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/export-attendances-pdf",
+        "name": "student.export-attendances-pdf",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@exportAttendancesPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/print-attendances",
+        "name": "student.print-attendances",
+        "action": "App\\Http\\Controllers\\Academic\\StudentWorkspaceController@printAttendances",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "notifications/preview-pdf",
+        "name": "notifications.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\NotificationController@previewPdf",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "notifications/export-pdf",
+        "name": "notifications.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\NotificationController@exportPdf",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "notifications/export-excel",
+        "name": "notifications.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\NotificationController@exportExcel",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "notifications/export-csv",
+        "name": "notifications.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\NotificationController@exportCsv",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "notifications/print",
+        "name": "notifications.print",
+        "action": "App\\Http\\Controllers\\Core\\NotificationController@print",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/preview-pdf",
+        "name": "activity.preview-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@previewPdf",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/export-pdf",
+        "name": "activity.export-pdf",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@exportPdf",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/export-excel",
+        "name": "activity.export-excel",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@exportExcel",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/export-csv",
+        "name": "activity.export-csv",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@exportCsv",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/print",
+        "name": "activity.print",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@print",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "activity/export",
+        "name": "activity.export",
+        "action": "App\\Http\\Controllers\\Core\\ActivityController@export",
+        "middleware": [
+            "web",
+            "auth"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "student/attendance/requests/{id}/evidence",
+        "name": "student.attendance.requests.evidence",
+        "action": "App\\Http\\Controllers\\Student\\AttendanceRequestController@downloadEvidence",
+        "middleware": [
+            "web",
+            "auth",
+            "role:STUDENT"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "academic/attendance/requests/{id}/evidence",
+        "name": "academic.attendance.requests.evidence",
+        "action": "App\\Http\\Controllers\\Academic\\AttendanceRequestController@downloadEvidence",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ACADEMIC,ADMINISTRATOR"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "attendance/qr/{id}/print",
+        "name": "attendance.qr.print",
+        "action": "App\\Http\\Controllers\\Core\\PermanentQrController@printView",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MASTER"
+        ]
+    },
+    {
+        "methods": [
+            "GET",
+            "HEAD"
+        ],
+        "uri": "attendance/qr/{id}/pdf",
+        "name": "attendance.qr.pdf",
+        "action": "App\\Http\\Controllers\\Core\\PermanentQrController@downloadPdf",
+        "middleware": [
+            "web",
+            "auth",
+            "role:ADMINISTRATOR,MASTER"
+        ]
+    }
+]

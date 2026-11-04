@@ -868,7 +868,7 @@ class FinanceHardeningIntegrityTest extends TestCase
 
         $past = $service->getCashFlow('2025-12-31', '2025-12-31');
         $this->assertSame(7.0, $past['total_income']);
-        $this->assertSame('repository_cache', $past['snapshot_source']);
+        $this->assertSame('runtime_repository', $past['snapshot_source']);
     }
 
     public function test_student_self_service_submission_is_waiting_verification_and_server_owned(): void

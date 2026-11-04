@@ -158,6 +158,17 @@
         .btn-secondary {
             background-color: #475569;
         }
+        @if($isPdf)
+        /* DomPDF uses block layout; flex sizing creates overlaps and a blank page. */
+        @page { size: A4 portrait; margin: 24pt; }
+        body { background: white; }
+        .print-container { display: block; width: auto; max-width: none; min-height: 0; height: auto; padding: 24pt; border: none; }
+        .sys-name { margin-bottom: 24pt; }
+        .location { margin-bottom: 20pt; }
+        .qr-wrapper { display: block; width: 220px; margin: 0 auto 18pt; }
+        .status-badge { display: block; width: 230px; margin: 0 auto 20pt; }
+        .footer { width: auto; margin-top: 24pt; padding-top: 18pt; }
+        @endif
     </style>
 </head>
 <body>

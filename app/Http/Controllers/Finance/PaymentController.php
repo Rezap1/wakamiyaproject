@@ -31,28 +31,7 @@ class PaymentController extends Controller
 
     protected function getExportConfig(Request $request)
     {
-        $payments = $this->paymentService->getAll();
-
-        $search = $request->input('search');
-        if (! empty($search)) {
-            $payments = CollectionHelper::search($payments, $search, ['Payment_ID', 'Invoice_ID', 'Student_ID', 'Payment_Method']);
-        }
-
-        if ($request->filled('date_from') && $request->filled('date_to')) {
-            $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
-            $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
-
-            $payments = $payments->filter(function ($item) use ($dateFrom, $dateTo) {
-                $dateStr = $item['Payment_Date'] ?? $item['Created_At'] ?? null;
-                if ($dateStr) {
-                    $itemDate = Carbon::parse($dateStr);
-
-                    return $itemDate->between($dateFrom, $dateTo);
-                }
-
-                return false;
-            });
-        }
+        $payments = $this->filteredPayments($request);
 
         $studentsById = collect(app(StudentRepositoryInterface::class)->fetchAll())
             ->keyBy('Student_ID');
@@ -93,7 +72,7 @@ class PaymentController extends Controller
         $this->transactionPresentationService = $transactionPresentationService;
     }
 
-    public function index(Request $request)
+    private function filteredPayments(Request $request)
     {
         $payments = $this->paymentService->getAll();
 
@@ -108,6 +87,31 @@ class PaymentController extends Controller
                        stripos($stdName, $search) !== false;
             });
         }
+
+        if ($request->filled('date_from') && $request->filled('date_to')) {
+            $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
+            $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
+
+            $payments = $payments->filter(function ($item) use ($dateFrom, $dateTo) {
+                $dateStr = $item['Payment_Date'] ?? $item['Created_At'] ?? null;
+                if ($dateStr) {
+                    $itemDate = Carbon::parse($dateStr);
+
+                    return $itemDate->between($dateFrom, $dateTo);
+                }
+
+                return false;
+            });
+        }
+
+
+        return $payments;
+    }
+
+    public function index(Request $request)
+    {
+        $payments = $this->filteredPayments($request);
+        $search = $request->input('search');
 
         $payments = $payments->map(function ($pay) {
             $pay['student_name'] = UserResolverHelper::getName($pay['Student_ID'] ?? '');

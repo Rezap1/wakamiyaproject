@@ -42,6 +42,8 @@ class TransactionController extends Controller
         return [
             'moduleName' => 'Transaksi (Transactions)',
             'data' => $presented,
+            'dateField' => 'raw.Transaction_Date',
+            'perPage' => 15,
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Tanggal', 'Tipe', 'Sumber', 'Pihak Terkait', 'Akun', 'Nominal', 'Status/Referensi'],
             'mapRow' => function($row) {

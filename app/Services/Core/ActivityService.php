@@ -29,8 +29,11 @@ class ActivityService
         
         return Cache::remember($cacheKey, 60, function () use ($role, $userId, $filters) {
             
-            // 2. Fetch base data (limit to 1000 for performance if possible, assuming fetchAll does it or we take it)
-            $allLogs = collect($this->repo->fetchAll())->sortByDesc('Timestamp')->take(1000);
+            // Scope and filters must see all records, including historical imports.
+            $allLogs = collect($this->repo->fetchAll())->map(function ($row) {
+                $row['Timestamp'] = $row['Created_At'] ?? $row['Timestamp'] ?? null;
+                return $row;
+            })->sortByDesc('Timestamp');
             
             // 3. RBAC Filtering
             $filteredLogs = $allLogs->filter(function($log) use ($role, $userId) {

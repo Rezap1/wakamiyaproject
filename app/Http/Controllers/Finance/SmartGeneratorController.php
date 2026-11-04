@@ -122,6 +122,7 @@ class SmartGeneratorController extends Controller
                 'discount' => (float)($inv['Total_Discount'] ?? 0),
                 'ppn_amount' => (float)($inv['Total_Tax'] ?? 0),
                 'grand_total' => $grandTotal,
+                'paid_amount' => (float) ($inv['Paid_Amount'] ?? 0),
                 'description' => $description,
                 'items' => $items
             ];
@@ -343,19 +344,19 @@ class SmartGeneratorController extends Controller
             'client_address' => $request->input('client_address', ''),
 
             // Company Profile Info
-            'company_name' => $request->input('company_name', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
-            'company_tagline' => $request->input('company_tagline', 'Growing Together With Integrity'),
-            'company_address' => $request->input('company_address', 'Perum Graha Samolo Indah Blok B1 No 22 Desa Babakan Caringin, Karang Tengah,Cianjur'),
-            'company_phone' => $request->input('company_phone', '0813-1811-5151'),
-            'company_email' => $request->input('company_email', 'lpkwakamiya01@gmail.com'),
-            'company_web' => $request->input('company_web', 'www.wakamiya.com'),
-            'company_npwp' => $request->input('company_npwp', '1000000003150626'),
+            'company_name' => $request->input('company_name', $this->settingService->getCompanyProfile()['company']['name'] ?? ''),
+            'company_tagline' => $request->input('company_tagline', $this->settingService->getCompanyProfile()['company']['tagline'] ?? ''),
+            'company_address' => $request->input('company_address', $this->settingService->getCompanyProfile()['company']['address'] ?? ''),
+            'company_phone' => $request->input('company_phone', $this->settingService->getCompanyProfile()['company']['phone'] ?? ''),
+            'company_email' => $request->input('company_email', $this->settingService->getCompanyProfile()['company']['email'] ?? ''),
+            'company_web' => $request->input('company_web', $this->settingService->getCompanyProfile()['company']['website'] ?? ''),
+            'company_npwp' => $request->input('company_npwp', $this->settingService->getCompanyProfile()['company']['npwp'] ?? ''),
             'layout_kop' => $request->input('layout_kop', 'left'),
 
             // Bank Info
-            'bank_name' => $request->input('bank_name', 'Bank Syariah Indonesia (BSI)'),
-            'bank_account' => $request->input('bank_account', '7343551023'),
-            'bank_holder' => $request->input('bank_holder', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
+            'bank_name' => $request->input('bank_name', $this->settingService->getCompanyProfile()['bank']['name'] ?? ''),
+            'bank_account' => $request->input('bank_account', $this->settingService->getCompanyProfile()['bank']['account_number'] ?? ''),
+            'bank_holder' => $request->input('bank_holder', $this->settingService->getCompanyProfile()['bank']['account_holder'] ?? ''),
 
             // Items & Totals
             'items' => $formattedItems,
@@ -369,12 +370,12 @@ class SmartGeneratorController extends Controller
             // Kwitansi specific
             'kwitansi_amount' => $kwitansiAmount,
             'terbilang' => TerbilangHelper::convert($kwitansiAmount),
-            'payment_for' => $request->input('payment_for', 'Total Angsuran Keempat Biaya Pengurusan Dokumen Ke Jepang'),
-            'issue_city' => $request->input('issue_city', 'Cianjur'),
-            'signer_name' => $request->input('signer_name', 'Helmi Maulana'),
+            'payment_for' => $request->input('payment_for', ''),
+            'issue_city' => $request->input('issue_city', ''),
+            'signer_name' => $request->input('signer_name', $this->settingService->getCompanyProfile()['document']['signer_name'] ?? ''),
 
             // Terms
-            'notes' => $request->input('notes', 'Pembayaran via Transfer BSI 7343551023 a.n PT Wakamiya Mandiri Sejahtera.'),
+            'notes' => $request->input('notes', ''),
 
             // Images
             'company_logo' => $logoBase64,
@@ -422,7 +423,11 @@ class SmartGeneratorController extends Controller
         $logoBase64 = $this->encodeImageToBase64($request->input('company_logo'));
         $signatureBase64 = $this->encodeImageToBase64($request->input('signature'));
         $stampBase64 = $this->encodeImageToBase64($request->input('stamp'));
-        $kwitansiAmount = $grandTotal;
+        // A receipt acknowledges accepted money, never the unpaid invoice face value.
+        $kwitansiAmount = (float) ($invoice['Paid_Amount'] ?? 0);
+        if ($docType === 'kwitansi' && $kwitansiAmount <= 0) {
+            throw new \InvalidArgumentException('Kwitansi hanya dapat diterbitkan setelah ada pembayaran terverifikasi.');
+        }
 
         return [
             'source_type' => 'student_invoice',
@@ -433,26 +438,26 @@ class SmartGeneratorController extends Controller
             'theme' => $this->normalizeTheme($request->input('theme', 'emerald')),
             'doc_number' => $docNumber,
             'currency' => 'IDR',
-            'issue_date' => $invoice['Invoice_Date'] ?? ($invoice['Created_At'] ?? date('Y-m-d')),
-            'due_date' => $invoice['Due_Date'] ?? date('Y-m-d', strtotime('+14 days')),
+            'issue_date' => $invoice['Invoice_Date'] ?? $invoice['Created_At'] ?? null,
+            'due_date' => $invoice['Due_Date'] ?? null,
             'status' => $status,
 
             'client_name' => $studentName,
             'client_email' => $studentEmail,
             'client_address' => $student['Address'] ?? '',
 
-            'company_name' => $request->input('company_name', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
-            'company_tagline' => $request->input('company_tagline', 'Growing Together With Integrity'),
-            'company_address' => $request->input('company_address', 'Perum Graha Samolo Indah Blok B1 No 22 Desa Babakan Caringin, Karang Tengah,Cianjur'),
-            'company_phone' => $request->input('company_phone', '0813-1811-5151'),
-            'company_email' => $request->input('company_email', 'lpkwakamiya01@gmail.com'),
-            'company_web' => $request->input('company_web', 'www.wakamiya.com'),
-            'company_npwp' => $request->input('company_npwp', '1000000003150626'),
+            'company_name' => $request->input('company_name', $this->settingService->getCompanyProfile()['company']['name'] ?? ''),
+            'company_tagline' => $request->input('company_tagline', $this->settingService->getCompanyProfile()['company']['tagline'] ?? ''),
+            'company_address' => $request->input('company_address', $this->settingService->getCompanyProfile()['company']['address'] ?? ''),
+            'company_phone' => $request->input('company_phone', $this->settingService->getCompanyProfile()['company']['phone'] ?? ''),
+            'company_email' => $request->input('company_email', $this->settingService->getCompanyProfile()['company']['email'] ?? ''),
+            'company_web' => $request->input('company_web', $this->settingService->getCompanyProfile()['company']['website'] ?? ''),
+            'company_npwp' => $request->input('company_npwp', $this->settingService->getCompanyProfile()['company']['npwp'] ?? ''),
             'layout_kop' => $request->input('layout_kop', 'left'),
 
-            'bank_name' => $request->input('bank_name', 'Bank Syariah Indonesia (BSI)'),
-            'bank_account' => $request->input('bank_account', '7343551023'),
-            'bank_holder' => $request->input('bank_holder', 'PT WAKAMIYA MANDIRI SEJAHTERA'),
+            'bank_name' => $request->input('bank_name', $this->settingService->getCompanyProfile()['bank']['name'] ?? ''),
+            'bank_account' => $request->input('bank_account', $this->settingService->getCompanyProfile()['bank']['account_number'] ?? ''),
+            'bank_holder' => $request->input('bank_holder', $this->settingService->getCompanyProfile()['bank']['account_holder'] ?? ''),
 
             'items' => $items,
             'subtotal' => $subtotal,
@@ -465,9 +470,9 @@ class SmartGeneratorController extends Controller
             'kwitansi_amount' => $kwitansiAmount,
             'terbilang' => TerbilangHelper::convert($kwitansiAmount),
             'payment_for' => $description,
-            'issue_city' => $request->input('issue_city', 'Cianjur'),
-            'signer_name' => $request->input('signer_name', 'Helmi Maulana'),
-            'notes' => $invoice['Notes'] ?? $request->input('notes', 'Pembayaran via Transfer BSI 7343551023 a.n PT Wakamiya Mandiri Sejahtera.'),
+            'issue_city' => $request->input('issue_city', ''),
+            'signer_name' => $request->input('signer_name', $this->settingService->getCompanyProfile()['document']['signer_name'] ?? ''),
+            'notes' => $invoice['Notes'] ?? $request->input('notes', ''),
             'company_logo' => $logoBase64,
             'signature' => $signatureBase64,
             'stamp' => $stampBase64

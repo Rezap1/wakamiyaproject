@@ -50,22 +50,79 @@ class FinanceReportService
             throw new Exception("Mulai Tanggal ({$startDate}) tidak boleh lebih besar dari Sampai Tanggal ({$endDate}).");
         }
 
-        $allAccounts = collect($this->accountRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
+        // Inactive accounts remain valid references for historical ledger entries.
+        $allAccounts = collect($this->accountRepo->fetchAll());
+        $accountIndex = collect();
+        foreach ($allAccounts as $account) {
+            foreach (['Account_ID', 'Account_Code'] as $field) {
+                $key = trim((string) ($account[$field] ?? ''));
+                if ($key === '') { continue; }
+                if ($accountIndex->has($key) && ($accountIndex[$key]['Account_ID'] ?? null) !== ($account['Account_ID'] ?? null)) {
+                    throw new Exception('Referensi akun ambigu: '.$key.'. Rekonsiliasi master akun diperlukan.');
+                }
+                $accountIndex->put($key, $account);
+            }
+        }
         
         // Account Filter Validation
         $selectedAccountKeys = [];
         if ($accountId !== 'ALL') {
-            $validAcc = $allAccounts->firstWhere('Account_ID', $accountId) ?? $allAccounts->firstWhere('Account_Code', $accountId);
+            $validAcc = $accountIndex->get(trim((string) $accountId));
             if (!$validAcc) {
                 throw new Exception("Akun Keuangan dengan ID/Kode #{$accountId} tidak ditemukan.");
             }
-            $selectedAccountKeys = array_values(array_filter([
+            $selectedAccountKeys = array_values(array_filter(array_map(fn ($id) => trim((string) $id), [
                 $validAcc['Account_ID'] ?? null,
                 $validAcc['Account_Code'] ?? null,
-            ]));
+            ]), fn ($id) => $id !== ''));
         }
 
         $allTransactions = collect($this->transactionRepo->fetchAll())->where('Is_Active', '!=', 'FALSE');
+        $duplicateIds = $allTransactions->groupBy('Transaction_ID')->filter(fn ($rows) => $rows->count() > 1)->keys();
+        if ($duplicateIds->isNotEmpty()) {
+            throw new Exception('ID transaksi duplikat; laporan tidak dapat direkonsiliasi: '.$duplicateIds->implode(', '));
+        }
+        $integrityIssues = [];
+        // Distinct ledger IDs can still point to the same idempotent business event.
+        $allTransactions->filter(fn ($row) => in_array(strtolower(trim((string) ($row['Reference_Type'] ?? ''))), ['payment', 'paymentreversal', 'payroll'], true)
+                && trim((string) ($row['Reference_ID'] ?? '')) !== '')
+            ->groupBy(fn ($row) => strtolower(trim($row['Reference_Type'])).' / '.trim($row['Reference_ID']))
+            ->filter(fn ($rows) => $rows->count() > 1)
+            ->each(function ($rows, $reference) use (&$integrityIssues) {
+                $integrityIssues[] = 'Sumber tercatat berulang: '.$reference.' ['.$rows->pluck('Transaction_ID')->implode(', ').']';
+            });
+        $skippedTransactionCount = 0;
+        $allTransactions = $allTransactions->map(function ($row) use ($accountIndex, &$integrityIssues, &$skippedTransactionCount) {
+            $id = (string) ($row['Transaction_ID'] ?? 'UNKNOWN');
+            try {
+                $row['Transaction_Date'] = $this->normaliseDate($row['Transaction_Date'] ?? '', 'Transaction_Date');
+            } catch (Exception) {
+                $skippedTransactionCount++;
+                $integrityIssues[] = 'Tanggal transaksi tidak valid: '.$id;
+                Log::warning('finance.report_skipped_malformed_transaction_date', ['transaction_id' => $id]);
+                return null;
+            }
+            $type = $this->normalizeType($row['Type'] ?? '');
+            if ($type === null) {
+                throw new Exception('Tipe transaksi tidak valid: '.$id.'. Rekonsiliasi diperlukan.');
+            }
+            $row['Type'] = $type;
+            $accountId = trim((string) ($row['Account_ID'] ?? '')) ?: trim((string) ($row['Account_Code'] ?? ''));
+            $row['Account_Name'] = HumanReadableResolver::accountName($accountId, $accountIndex);
+            if (!$accountIndex->has($accountId)) {
+                $integrityIssues[] = 'Referensi akun tidak valid: '.$id.' / '.($accountId ?: '(kosong)');
+                $row['Account_Name'] = 'Referensi akun tidak valid ['.($accountId ?: 'kosong').']';
+            }
+            $referenceId = trim((string) ($row['Reference_ID'] ?? ''));
+            $label = match (strtolower(trim((string) ($row['Reference_Type'] ?? '')))) {
+                'payment' => 'Penerimaan pembayaran',
+                'paymentreversal' => 'Pembatalan pembayaran',
+                'payroll' => 'Pembayaran gaji',
+                default => trim((string) ($row['Description'] ?? '')) ?: 'Transaksi',
+            };
+            $row['Report_Description'] = $label.($referenceId !== '' ? ' | Referensi: '.$referenceId : '');
+            return $row;
+        })->filter()->values();
 
         // Available Categories list
         $categories = $allTransactions->pluck('Category')->filter()->unique()->values();
@@ -87,17 +144,7 @@ class FinanceReportService
         };
 
         // 1. OPENING BALANCE: Sum of all transactions BEFORE startDate
-        $skippedTransactionCount = 0;
-        $priorTransactions = $allTransactions->filter(function($t) use ($startDate, &$skippedTransactionCount) {
-            try {
-                $date = $this->normaliseDate($t['Transaction_Date'] ?? '', 'Transaction_Date');
-                return $date < $startDate;
-            } catch (Exception) {
-                $skippedTransactionCount++;
-                Log::warning('finance.report_skipped_malformed_transaction_date', ['transaction_id' => (string) ($t['Transaction_ID'] ?? 'UNKNOWN')]);
-                return false;
-            }
-        });
+        $priorTransactions = $allTransactions->filter(fn ($t) => $t['Transaction_Date'] < $startDate);
         $priorTransactions = $applyAccountAndCategoryFilter($priorTransactions);
 
         $priorIncome = $this->sumByType($priorTransactions, 'Income');
@@ -105,16 +152,7 @@ class FinanceReportService
         $openingBalance = $priorIncome - $priorExpense;
 
         // 2. PERIOD TRANSACTIONS: startDate <= Transaction_Date <= endDate
-        $periodTransactions = $allTransactions->filter(function($t) use ($startDate, $endDate, &$skippedTransactionCount) {
-            try {
-                $date = $this->normaliseDate($t['Transaction_Date'] ?? '', 'Transaction_Date');
-                return $date >= $startDate && $date <= $endDate;
-            } catch (Exception) {
-                $skippedTransactionCount++;
-                Log::warning('finance.report_skipped_malformed_transaction_date', ['transaction_id' => (string) ($t['Transaction_ID'] ?? 'UNKNOWN')]);
-                return false;
-            }
-        });
+        $periodTransactions = $allTransactions->filter(fn ($t) => $t['Transaction_Date'] >= $startDate && $t['Transaction_Date'] <= $endDate);
         $periodTransactions = $applyAccountAndCategoryFilter($periodTransactions);
 
         $totalIncome = $this->sumByType($periodTransactions, 'Income');
@@ -134,7 +172,8 @@ class FinanceReportService
             'closing_balance' => $closingBalance,
             'transactions' => $periodTransactions->sortByDesc('Transaction_Date')->values(),
             'skipped_transaction_count' => $skippedTransactionCount,
-            'snapshot_source' => 'repository_cache',
+            'integrity_issues' => $integrityIssues,
+            'snapshot_source' => 'runtime_repository',
             'accounts' => $allAccounts->values(),
             'categories' => $categories
         ];

@@ -31,6 +31,7 @@ class AccountController extends Controller
             'moduleName' => 'Master Akun (Chart of Accounts)',
             'data' => collect(array_values($accounts->toArray())),
             'pdfView' => 'pdf.generic_table',
+            'perPage' => 15,
             'headers' => ['Kode Akun', 'Nama Akun', 'Kategori Akun', 'Normal Balance', 'Akun Induk', 'Keterangan', 'Status'],
             'mapRow' => function($row) {
                 return [

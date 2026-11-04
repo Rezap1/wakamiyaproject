@@ -30,73 +30,79 @@ trait Exportable
 
     private function handleExport(Request $request, $format)
     {
+        $request->validate([
+            'export_filter' => ['nullable', 'in:all,today,range,current_page'],
+            'start_date' => ['nullable', 'required_if:export_filter,range', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'required_if:export_filter,range', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'sort_order' => ['nullable', 'in:asc,desc'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'orientation' => ['nullable', 'in:auto,portrait,landscape'],
+        ]);
         $config = $this->getExportConfig($request);
         $data = $config['data'] ?? collect([]);
-        $dateField = property_exists($this, 'exportDateField') ? $this->exportDateField : 'Created_At';
+        $sourceCount = $data->count();
+        $dateField = $config['dateField'] ?? (property_exists($this, 'exportDateField') ? $this->exportDateField : 'Created_At');
         
-        // 1. Data Validation: Remove null rows and empty objects
-        $data = $data->reject(function($row) {
-            return empty($row) || !is_array($row);
-        });
-
-        // Remove duplicate records safely by JSON encoding
-        $data = $data->unique(function($item) {
-            return json_encode($item);
-        });
+        // 1. Reject invalid rows instead of silently losing source records.
+        foreach ($data as $row) {
+            if (!is_array($row) || empty($row)) {
+                throw new \UnexpectedValueException('Dataset laporan berisi record tidak valid. Periksa sumber data.');
+            }
+        }
 
         // 2. Export Filter (all, today, range, current_page)
         $filter = $request->input('export_filter', 'all');
         
-        if ($filter === 'today') {
+        if ($filter === 'today' && !($config['dateFilterApplied'] ?? false)) {
             $today = \Carbon\Carbon::today()->format('Y-m-d');
             $data = $data->filter(function($row) use ($dateField, $today) {
-                if (!isset($row[$dateField]) || empty($row[$dateField])) return false;
+                if (!data_get($row, $dateField)) return false;
                 try {
-                    return \Carbon\Carbon::parse($row[$dateField])->format('Y-m-d') === $today;
+                    return \Carbon\Carbon::parse(data_get($row, $dateField))->timezone(config('app.timezone'))->format('Y-m-d') === $today;
                 } catch (\Exception $e) { return false; }
             });
-        } elseif ($filter === 'range') {
+        } elseif ($filter === 'range' && !($config['dateFilterApplied'] ?? false)) {
             $start = $request->input('start_date');
             $end = $request->input('end_date');
             if ($start && $end) {
                 $data = $data->filter(function($row) use ($dateField, $start, $end) {
-                    if (!isset($row[$dateField]) || empty($row[$dateField])) return false;
+                    if (!data_get($row, $dateField)) return false;
                     try {
-                        $d = \Carbon\Carbon::parse($row[$dateField])->format('Y-m-d');
+                        $d = \Carbon\Carbon::parse(data_get($row, $dateField))->timezone(config('app.timezone'))->format('Y-m-d');
                         return $d >= $start && $d <= $end;
                     } catch (\Exception $e) { return false; }
                 });
             }
-        } elseif ($filter === 'current_page') {
-            $page = max(1, (int) $request->input('page', 1));
-            $perPage = 10;
-            $data = $data->slice(($page - 1) * $perPage, $perPage);
         }
 
         // 3. Sorting
-        $sortOrder = $request->input('sort_order', 'desc');
-        if ($sortOrder === 'desc') {
+        $sortOrder = $request->input('sort_order', $request->input('sort', 'desc'));
+        if ($filter === 'current_page') {
+            // The controller supplies the same ordered collection as its index.
+            $page = max(1, (int) $request->input('page', 1));
+            $perPage = $config['perPage'] ?? 10;
+            if ($config['paginate'] ?? true) {
+                $data = $data->slice(($page - 1) * $perPage, $perPage);
+            }
+        } elseif ($sortOrder === 'desc') {
             $data = $data->sortByDesc(function($row) use ($dateField) {
-                if (!isset($row[$dateField]) || empty($row[$dateField])) return 0;
+                if (!data_get($row, $dateField)) return 0;
                 try {
-                    return \Carbon\Carbon::parse($row[$dateField])->timestamp;
+                    return \Carbon\Carbon::parse(data_get($row, $dateField))->timestamp;
                 } catch (\Exception $e) { return 0; }
             });
         } else {
             $data = $data->sortBy(function($row) use ($dateField) {
-                if (!isset($row[$dateField]) || empty($row[$dateField])) return 0;
+                if (!data_get($row, $dateField)) return 0;
                 try {
-                    return \Carbon\Carbon::parse($row[$dateField])->timestamp;
+                    return \Carbon\Carbon::parse(data_get($row, $dateField))->timestamp;
                 } catch (\Exception $e) { return 0; }
             });
         }
 
         $data = $data->values();
 
-        // 4. Empty State Handling
-        if ($data->isEmpty()) {
-            return back()->with('warning', 'Tidak ada data yang sesuai dengan kriteria yang dipilih.');
-        }
+        // An empty report still records the requested scope and zero records.
 
         // 5. Orientation Override
         $orientation = $request->input('orientation', 'auto');
@@ -107,12 +113,22 @@ trait Exportable
         }
 
         $config['data'] = $data;
+        $metadata = $config['metadata'] ?? [];
+        $metadata['summary'] = isset($config['summaryForData'])
+            ? $config['summaryForData']($data)
+            : ($sourceCount === $data->count()
+                ? ($config['summary'] ?? $metadata['summary'] ?? null)
+                : '<tr><td>Total Data Sesuai Filter</td><td>: '.$data->count().'</td></tr>');
+        $metadata['filterLabel'] = ($metadata['filterLabel'] ?? '').' | Ekspor: '.$filter
+            .($filter === 'range' ? ' '.$request->input('start_date').' s.d. '.$request->input('end_date') : '')
+            .($filter === 'today' ? ' '.now()->toDateString() : '')
+            .($filter === 'current_page' ? ' '.$request->input('page', 1) : '');
 
         return ReportHelper::export(
             $format,
             $config['moduleName'],
             $config['data'],
-            $config['metadata'] ?? [],
+            $metadata,
             $config['pdfView'],
             $config['headers'] ?? [],
             $config['mapRow'] ?? null,

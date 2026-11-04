@@ -726,7 +726,7 @@
                                         <img :src="company.signature" class="relative z-10 h-16 object-contain">
                                     </template>
                                 </div>
-                                <p class="font-black text-slate-950 text-xs border-b-2 border-slate-950 pb-0.5 inline-block" x-text="activeTab === 'kwitansi' ? (kwitansi.signer_name || 'Helmi Maulana') : (company.company_name || 'PT WAKAMIYA MANDIRI SEJAHTERA')"></p>
+                                <p class="font-black text-slate-950 text-xs border-b-2 border-slate-950 pb-0.5 inline-block" x-text="activeTab === 'kwitansi' ? (kwitansi.signer_name || '-') : (company.company_name || 'PT WAKAMIYA MANDIRI SEJAHTERA')"></p>
                                 <p class="text-[9px] text-slate-700 font-extrabold" x-text="activeTab === 'kwitansi' ? (company.company_name || 'PT WAKAMIYA MANDIRI SEJAHTERA') : 'Finance & Accounting Dept.'"></p>
                             </div>
                         </div>
@@ -792,16 +792,16 @@ function smartGenerator() {
         selectedInvoice: null,
 
         company: {
-            company_name: "PT WAKAMIYA MANDIRI SEJAHTERA",
-            company_tagline: "Growing Together With Integrity",
-            company_address: "Perum Graha Samolo Indah Blok B1 No 22 Desa Babakan Caringin, Karang Tengah,Cianjur",
-            company_phone: "0813-1811-5151",
-            company_email: "lpkwakamiya01@gmail.com",
-            company_web: "www.wakamiya.com",
-            company_npwp: "1000000003150626",
-            bank_name: "Bank Syariah Indonesia (BSI)",
-            bank_account: "7343551023",
-            bank_holder: "PT WAKAMIYA MANDIRI SEJAHTERA",
+            company_name: @js($company['company']['name'] ?? ''),
+            company_tagline: @js($company['company']['tagline'] ?? ''),
+            company_address: @js($company['company']['address'] ?? ''),
+            company_phone: @js($company['company']['phone'] ?? ''),
+            company_email: @js($company['company']['email'] ?? ''),
+            company_web: @js($company['company']['website'] ?? ''),
+            company_npwp: @js($company['company']['npwp'] ?? ''),
+            bank_name: @js($company['bank']['name'] ?? ''),
+            bank_account: @js($company['bank']['account_number'] ?? ''),
+            bank_holder: @js($company['bank']['account_holder'] ?? ''),
             layout_kop: 'left',
             company_logo: "{{ asset('img/logo.png.jpeg') }}",
             signature: "",
@@ -812,32 +812,32 @@ function smartGenerator() {
             theme: 'emerald',
             doc_number: 'INV-WMS-0001',
             currency: 'IDR',
-            issue_date: '2026-08-04',
-            due_date: '2026-09-02',
+            issue_date: @js(now()->toDateString()),
+            due_date: @js(now()->addDays(14)->toDateString()),
             status: 'UNPAID',
             client_name: '',
             client_email: '',
             client_address: '',
             items: [
-                { name: 'Sisa Angsuran Biaya Pengurusan Dokumen Ke Jepang', qty: 1, price: 11550000 }
+                { name: '', qty: 1, price: 0 }
             ],
             discount: 0,
             ppn_percent: 0,
             shipping: 0,
-            notes: 'Pembayaran via Transfer BSI 7343551023 a.n PT Wakamiya Mandiri Sejahtera.'
+            notes: ''
         },
 
         kwitansi: {
             theme: 'emerald',
             doc_number: 'KWI-WMS-0001',
-            issue_date: '2026-08-04',
+            issue_date: @js(now()->toDateString()),
             status: 'PAID / LUNAS',
             client_name: '',
             client_email: '',
-            kwitansi_amount: 33450000,
-            payment_for: 'Total Angsuran Keempat Biaya Pengurusan Dokumen Ke Jepang',
-            issue_city: 'Cianjur',
-            signer_name: 'Helmi Maulana'
+            kwitansi_amount: 0,
+            payment_for: '',
+            issue_city: '',
+            signer_name: @js($company['document']['signer_name'] ?? '')
         },
 
         init() {
@@ -888,7 +888,7 @@ function smartGenerator() {
             this.invoice.client_name = inv.student_name;
             this.invoice.client_email = inv.student_email || '';
             this.invoice.client_address = inv.student_address || 'Alamat Siswa';
-            this.invoice.issue_date = inv.issue_date || '2026-08-04';
+            this.invoice.issue_date = inv.issue_date || @js(now()->toDateString());
             this.invoice.due_date = inv.due_date || '2026-08-18';
             this.invoice.status = inv.status || 'UNPAID';
             this.invoice.items = inv.items || [{ name: inv.description || 'Tagihan Siswa', qty: 1, price: inv.amount }];
@@ -901,7 +901,8 @@ function smartGenerator() {
             this.kwitansi.doc_number = 'KWI-' + inv.doc_number;
             this.kwitansi.client_name = inv.student_name;
             this.kwitansi.client_email = inv.student_email || '';
-            this.kwitansi.kwitansi_amount = inv.grand_total || inv.amount;
+            this.kwitansi.kwitansi_amount = Number(inv.paid_amount || 0);
+            this.kwitansi.status = inv.status;
             this.kwitansi.payment_for = inv.description || 'Pelunasan Tagihan Siswa';
         },
 
@@ -936,7 +937,7 @@ function smartGenerator() {
         },
 
         formatDate(dateStr) {
-            if (!dateStr) return '2026-08-04';
+            if (!dateStr) return @js(now()->toDateString());
             return dateStr;
         },
 
@@ -970,16 +971,16 @@ function smartGenerator() {
             this.invoice.client_email = '';
             this.invoice.client_address = '';
             this.invoice.items = [
-                { name: 'Sisa Angsuran Biaya Pengurusan Dokumen Ke Jepang', qty: 1, price: 11550000 }
+                { name: '', qty: 1, price: 0 }
             ];
             this.invoice.discount = 0;
             this.invoice.ppn_percent = 0;
             this.invoice.shipping = 0;
             this.kwitansi.doc_number = 'KWI-WMS-0001';
             this.kwitansi.client_name = '';
-            this.kwitansi.kwitansi_amount = 33450000;
-            this.kwitansi.payment_for = 'Total Angsuran Keempat Biaya Pengurusan Dokumen Ke Jepang';
-            this.kwitansi.signer_name = 'Helmi Maulana';
+            this.kwitansi.kwitansi_amount = 0;
+            this.kwitansi.payment_for = '';
+            this.kwitansi.signer_name = @js($company['document']['signer_name'] ?? '');
         },
 
         resetForm() {
@@ -1261,7 +1262,7 @@ function smartGenerator() {
                 this.kwitansi.client_name = item.client_name;
                 this.kwitansi.kwitansi_amount = item.kwitansi_amount;
                 this.kwitansi.payment_for = item.payment_for;
-                this.kwitansi.signer_name = item.signer_name || 'Helmi Maulana';
+                this.kwitansi.signer_name = item.signer_name || '';
                 if (item.theme) this.kwitansi.theme = item.theme;
             } else {
                 this.activeTab = 'invoice';

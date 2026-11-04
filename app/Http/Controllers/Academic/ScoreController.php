@@ -18,44 +18,15 @@ class ScoreController extends Controller
     protected function getExportConfig(\Illuminate\Http\Request $request)
     {
         $dateFilters = $this->validatedDateFilters($request);
-        $scores = $this->scoreService->getAll()
-            ->map(function ($score) {
-                $score['_Assessment_Date'] = ScoreDateResolver::value((array) $score);
-
-                return $score;
-            });
+        $scores = $this->filteredScores($request);
         $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
-        if ($request->filled('search')) {
-            $search = strtolower($request->search);
-            $scores = $scores->filter(function($item) use ($search, $assessmentConfigService) {
-                $categoryLabel = strtolower($assessmentConfigService->categoryLabel($item['Assessment_Category'] ?? ''));
-                return str_contains(strtolower($item['Score_ID'] ?? ''), $search) ||
-                       str_contains(strtolower($item['Student_ID'] ?? ''), $search) ||
-                       str_contains(strtolower($item['Assessment_Category'] ?? ''), $search) ||
-                       str_contains($categoryLabel, $search);
-            })->values();
-        }
 
-        if ($request->filled('category')) {
-            $category = strtoupper((string) $request->input('category'));
-            $scores = $scores->filter(fn ($score) => strtoupper((string) ($score['Assessment_Category'] ?? '')) === $category)->values();
-        }
-
-        $scores = ScoreDateResolver::filter($scores, $dateFilters['date_from'] ?? null, $dateFilters['date_to'] ?? null)
-            ->sortByDesc(fn ($score) => ($score['_Assessment_Date'] ?? '').'|'.($score['Created_At'] ?? ''))
-            ->values();
-        
-        $studentRepo = app(\App\Repositories\GoogleSheets\StudentRepository::class);
-        $students = $studentRepo->fetchAll()->keyBy('Student_ID');
-        $assessments = collect(app(\App\Repositories\GoogleSheets\AssessmentRepository::class)->fetchAll())->keyBy('Assessment_ID');
-        $assignments = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
-        
         return [
             'moduleName' => 'Nilai (Score)',
             'data' => collect(array_values($scores->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Siswa', 'Kategori', 'Penilaian', 'Nilai', 'Grade', 'Status', 'Metrik Evaluasi'],
-            'mapRow' => function($row) use ($students, $assessments, $assignments, $assessmentConfigService) {
+            'mapRow' => function($row) use ($assessmentConfigService) {
                 $category = strtoupper($row['Assessment_Category'] ?? 'GENERAL');
                 $categoryLabel = $assessmentConfigService->categoryLabel($category);
                 $details = $this->scoreService->parseEvaluationDetails($row);
@@ -64,8 +35,8 @@ class ScoreController extends Controller
                 if (!empty($details) && count($details) > 1) { // more than just 'category'
                     $summaryArr = [];
                     foreach ($details as $k => $v) {
-                        if (in_array(strtolower($k), ['category', 'notes', 'subject_id'])) continue;
-                        $summaryArr[] = ucfirst(str_replace('_', ' ', $k)) . ": " . $v;
+                        if (in_array(strtolower($k), ['category', 'notes', 'subject_id', 'assessment_date', 'class_id'])) continue;
+                        $summaryArr[] = ucfirst(str_replace('_', ' ', $k)) . ": " . (is_scalar($v) ? $v : json_encode($v, JSON_UNESCAPED_UNICODE));
                     }
                     if (!empty($summaryArr)) {
                         $metricSummary = implode(', ', $summaryArr);
@@ -76,16 +47,10 @@ class ScoreController extends Controller
                     $metricSummary = $details['notes'] ?? $row['Remarks'] ?? '-';
                 }
 
-                $assessmentId = trim((string) ($row['Assessment_ID'] ?? ''));
-                $assignmentId = trim((string) ($row['Assignment_ID'] ?? ''));
-                $assessmentTitle = $assessmentId !== ''
-                    ? HumanReadableResolver::assessmentTitle($assessmentId, $assessments)
-                    : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignments) : 'Penilaian tidak ditemukan');
-
                 return [
-                    HumanReadableResolver::studentName($row['Student_ID'] ?? '', $students),
+                    $row['Student_Name'],
                     $categoryLabel,
-                    $assessmentTitle,
+                    $row['Assessment_Title'],
                     ScoreValueFormatter::format($row['Score'] ?? $row['Score_Value'] ?? null),
                     $row['Grade'] ?? '-',
                     $row['Status'] ?? '-',
@@ -122,6 +87,34 @@ class ScoreController extends Controller
 
     public function index(Request $request)
     {
+        $scores = $this->filteredScores($request);
+        $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
+
+        $scoreGroups = $scores
+            ->groupBy(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? 'GENERAL'))))
+            ->map(function ($group, $category) use ($assessmentConfigService) {
+                $numericScores = $group->map(fn ($score) => $score['Score'] ?? $score['Score_Value'] ?? null)->filter(fn ($value) => is_numeric($value));
+
+                return [
+                    'id' => $category,
+                    'title' => $assessmentConfigService->categoryLabel($category),
+                    'total' => $group->count(),
+                    'average' => $numericScores->count() > 0 ? round($numericScores->avg(), 1) : null,
+                    'items' => $group->sortBy('Student_Name')->values(),
+                ];
+            })
+            ->sortBy('title')
+            ->values();
+
+        $scores = \App\Helpers\CollectionHelper::paginate($scores, 10)->withQueryString();
+
+        $assessmentConfigs = collect($assessmentConfigService->getActiveCategories())->keyBy('Category_ID')->toArray();
+
+        return view('academic.scores.index', compact('scores', 'scoreGroups', 'assessmentConfigs'));
+    }
+
+    private function filteredScores(Request $request): \Illuminate\Support\Collection
+    {
         $dateFilters = $this->validatedDateFilters($request);
         $scores = $this->scoreService->getAll();
         
@@ -130,14 +123,18 @@ class ScoreController extends Controller
 
         $assessmentRepo = app(\App\Repositories\GoogleSheets\AssessmentRepository::class);
         $assessments = $assessmentRepo->fetchAll()->keyBy('Assessment_ID');
+        $assignments = collect(app(\App\Services\Core\AssignmentService::class)->getAll())->keyBy('Assignment_ID');
         $assessmentConfigService = app(\App\Services\Academic\AssessmentConfigService::class);
         
-        $scores = $scores->map(function($item) use ($students, $assessments, $assessmentConfigService) {
+        $scores = $scores->map(function($item) use ($students, $assessments, $assignments, $assessmentConfigService) {
             $studentId = $item['Student_ID'] ?? null;
-            $studentName = $studentId && isset($students[$studentId]) ? $students[$studentId]['Full_Name'] : 'Data siswa tidak ditemukan';
+            $studentName = HumanReadableResolver::studentName($studentId, $students);
             
             $asmId = $item['Assessment_ID'] ?? null;
-            $asmTitle = $asmId && isset($assessments[$asmId]) ? ($assessments[$asmId]['Title'] ?? $assessments[$asmId]['Assessment_Name'] ?? 'Penilaian tidak ditemukan') : 'Penilaian tidak ditemukan';
+            $assignmentId = trim((string) ($item['Assignment_ID'] ?? ''));
+            $asmTitle = $asmId
+                ? HumanReadableResolver::assessmentTitle($asmId, $assessments)
+                : ($assignmentId !== '' ? HumanReadableResolver::assignmentTitle($assignmentId, $assignments) : 'Penilaian');
 
             $item['Student_Name'] = $studentName;
             $item['Student_Display'] = $studentName;
@@ -166,27 +163,7 @@ class ScoreController extends Controller
         $sortCallback = fn ($score) => ($score['_Assessment_Date'] ?? '').'|'.($score['Created_At'] ?? '');
         $scores = ($sortDirection === 'asc' ? $scores->sortBy($sortCallback) : $scores->sortByDesc($sortCallback))->values();
 
-        $scoreGroups = $scores
-            ->groupBy(fn ($score) => strtoupper(trim((string) ($score['Assessment_Category'] ?? 'GENERAL'))))
-            ->map(function ($group, $category) use ($assessmentConfigService) {
-                $numericScores = $group->map(fn ($score) => $score['Score'] ?? $score['Score_Value'] ?? null)->filter(fn ($value) => is_numeric($value));
-
-                return [
-                    'id' => $category,
-                    'title' => $assessmentConfigService->categoryLabel($category),
-                    'total' => $group->count(),
-                    'average' => $numericScores->count() > 0 ? round($numericScores->avg(), 1) : null,
-                    'items' => $group->sortBy('Student_Name')->values(),
-                ];
-            })
-            ->sortBy('title')
-            ->values();
-
-        $scores = \App\Helpers\CollectionHelper::paginate($scores, 10)->withQueryString();
-        
-        $assessmentConfigs = collect($assessmentConfigService->getActiveCategories())->keyBy('Category_ID')->toArray();
-        
-        return view('academic.scores.index', compact('scores', 'scoreGroups', 'assessmentConfigs'));
+        return $scores;
     }
 
     private function validatedDateFilters(Request $request): array

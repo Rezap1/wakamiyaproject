@@ -51,6 +51,12 @@
             </form>
         </x-slot:toolbar>
 
+        @if(!empty($integrity_issues))
+            <div role="alert" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+                <strong>Perlu rekonsiliasi data. Laporan belum dapat dinyatakan akurat.</strong>
+                @foreach($integrity_issues as $issue)<p>{{ $issue }}</p>@endforeach
+            </div>
+        @endif
         <!-- SUMMARY CARDS GRID -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <!-- 1. Opening Balance -->
@@ -111,7 +117,7 @@
                         {{ !empty($trx['Transaction_Date']) ? \App\Helpers\DateHelper::format($trx['Transaction_Date'], 'd M Y') : '-' }}
                     </td>
                     <td class="px-6 py-4 font-mono font-bold text-slate-700 text-sm">
-                        {{ $trx['Account_ID'] ?? '-' }}
+                        {{ $trx['Account_Name'] ?? $trx['Account_ID'] ?? '-' }}
                     </td>
                     <td class="px-6 py-4 text-center">
                         @if($isIncome)
@@ -124,7 +130,8 @@
                         {{ $trx['Category'] ?? '-' }}
                     </td>
                     <td class="px-6 py-4 text-sm text-slate-600">
-                        {{ $trx['Description'] ?? '-' }}
+                        {{ $trx['Report_Description'] ?? $trx['Description'] ?? '-' }}
+                        <span class="block text-xs">ID: {{ $trx['Transaction_ID'] ?? '-' }}</span>
                     </td>
                     <td class="px-6 py-4 text-right font-black text-sm {{ $isIncome ? 'text-emerald-600' : 'text-rose-600' }}">
                         {{ $isIncome ? '+' : '-' }} Rp {{ number_format((float)($trx['Amount'] ?? 0), 0, ',', '.') }}

@@ -71,6 +71,9 @@
             @if(!empty($scopeLabel))
             <tr><td>Ruang Lingkup</td><td colspan="3">: {{ $scopeLabel }}</td></tr>
             @endif
+            @if(!empty($filterLabel))
+            <tr><td>Filter</td><td colspan="3">: {{ $filterLabel }}</td></tr>
+            @endif
         </table>
     </div>
 

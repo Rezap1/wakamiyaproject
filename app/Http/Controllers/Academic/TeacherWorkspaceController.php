@@ -331,8 +331,11 @@ class TeacherWorkspaceController extends Controller
             'mode' => ['required', 'string', 'in:student,class'],
             'student_id' => ['nullable', 'string', 'required_if:mode,student', 'prohibited_unless:mode,student'],
             'class_id' => ['nullable', 'string', 'required_if:mode,class', 'prohibited_unless:mode,class'],
-            'date_from' => ['required', 'date_format:Y-m-d'],
-            'date_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'all_periods' => ['sometimes', 'boolean'],
+            'date_from' => ['exclude_if:all_periods,1', 'required', 'date_format:Y-m-d'],
+            'date_to' => ['exclude_if:all_periods,1', 'required', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'category' => ['nullable', 'in:all,assessment,ujian_bab'],
+            'subject' => ['nullable', 'string'],
         ], [
             'mode.required' => 'Jenis laporan wajib dipilih.',
             'mode.in' => 'Jenis laporan tidak valid.',
@@ -352,8 +355,11 @@ class TeacherWorkspaceController extends Controller
         $mode = $filters['mode'];
         $studentId = trim((string) ($filters['student_id'] ?? ''));
         $classId = trim((string) ($filters['class_id'] ?? ''));
-        $dateFrom = trim((string) $filters['date_from']);
-        $dateTo = trim((string) $filters['date_to']);
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+        $subjectFilter = trim((string) ($filters['subject'] ?? ''));
+        $categoryFilter = $filters['category'] ?? 'all';
+        abort_if($subjectFilter !== '' && ! in_array($subjectFilter, $scope['subject_ids'] ?? [], true), 403);
 
         if ($mode === 'student' && ! in_array($studentId, $scope['managed_student_ids'] ?? [], true)) {
             abort(403, 'Siswa berada di luar ruang lingkup pengajaran Anda.');
@@ -381,6 +387,14 @@ class TeacherWorkspaceController extends Controller
                 return $this->scoreClassId((array) $score, $schedulesById, $scope) === $classId;
             });
         $scores = ScoreDateResolver::filter($scores, $dateFrom, $dateTo);
+        $scores = $scores->filter(function ($score) use ($subjectFilter, $categoryFilter, $schedulesById) {
+            $schedule = (array) $schedulesById->get($score['Schedule_ID'] ?? '', []);
+            $subjectId = trim((string) ($score['Subject_ID'] ?? $schedule['Subject_ID'] ?? ''));
+            $isExam = strtoupper(trim((string) ($score['Assessment_Category'] ?? ''))) === 'UJIAN_BAB';
+
+            return ($subjectFilter === '' || $subjectId === $subjectFilter)
+                && ($categoryFilter === 'all' || ($categoryFilter === 'ujian_bab' ? $isExam : ! $isExam));
+        });
 
         $rows = $scores->map(function ($score) use ($classesById, $subjectsById, $schedulesById, $studentsById, $assessmentsById, $assignmentsById) {
             $schedule = (array) $schedulesById->get(trim((string) ($score['Schedule_ID'] ?? '')), []);
@@ -415,11 +429,11 @@ class TeacherWorkspaceController extends Controller
 
         $rosterIds = $mode === 'student'
             ? collect([$studentId])
-            : collect(data_get($scope, 'teaching_students_by_class.'.$classId, []));
+            : collect(data_get($scope, 'managed_students_by_class.'.$classId, []));
         if ($mode === 'class' && $rosterIds->isEmpty()) {
             $rosterIds = $studentsById->filter(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) === $classId)->keys();
         }
-        $rosterIds = $rosterIds->filter(fn ($id) => in_array(trim((string) $id), $scope['teaching_student_ids'] ?? [], true))->map(fn ($id) => trim((string) $id))->unique()->values();
+        $rosterIds = $rosterIds->filter(fn ($id) => in_array(trim((string) $id), $scope['managed_student_ids'] ?? [], true))->map(fn ($id) => trim((string) $id))->unique()->values();
         $studentGroups = $rosterIds->map(function ($id) use ($studentsById, $rows, $classesById, $classId) {
             $student = (array) $studentsById->get($id, []);
             $studentClassId = trim((string) ($student['Class_ID'] ?? $classId));
@@ -435,7 +449,7 @@ class TeacherWorkspaceController extends Controller
 
         $selectedStudent = $mode === 'student' ? (array) $studentGroups->first() : [];
         $selectedClassName = $mode === 'class' ? HumanReadableResolver::className($classId, $classesById) : '';
-        $authorizedClassLabels = collect($scope['teaching_class_ids'] ?? [])
+        $authorizedClassLabels = collect($scope['managed_class_ids'] ?? [])
             ->map(fn ($id) => HumanReadableResolver::className($id, $classesById))
             ->filter()->unique()->implode(', ');
         $authorizedSubjectLabels = collect($scope['subject_ids'] ?? [])
@@ -443,8 +457,8 @@ class TeacherWorkspaceController extends Controller
             ->filter()->unique()->implode(', ');
         $teachingScopeLabel = 'Kelas: '.($authorizedClassLabels ?: '-')
             .' | Mata pelajaran: '.($authorizedSubjectLabels ?: '-');
-        $periodLabel = DateHelper::format($dateFrom, 'd F Y').' s.d. '.DateHelper::format($dateTo, 'd F Y');
-        $filenamePeriod = str_replace('-', '', $dateFrom).'-'.str_replace('-', '', $dateTo);
+        $periodLabel = $dateFrom === '' ? 'Semua Periode' : DateHelper::format($dateFrom, 'd F Y').' s.d. '.DateHelper::format($dateTo, 'd F Y');
+        $filenamePeriod = $dateFrom === '' ? 'Semua-Periode' : str_replace('-', '', $dateFrom).'-'.str_replace('-', '', $dateTo);
         $title = $mode === 'student' ? 'Laporan Nilai Siswa' : 'Laporan Nilai Kelas';
         $filename = $mode === 'student'
             ? 'LAPORAN-NILAI-'.($selectedStudent['student_name'] ?? $studentId).'-'.$filenamePeriod
@@ -467,6 +481,7 @@ class TeacherWorkspaceController extends Controller
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'periodLabel' => $periodLabel,
+            'filterLabel' => 'Kategori: '.$categoryFilter.' | Mata pelajaran: '.($subjectFilter === '' ? 'Semua' : HumanReadableResolver::subjectName($subjectFilter, $subjectsById)),
             'studentCount' => $studentGroups->count(),
             'studentGroups' => $studentGroups,
             'emptyMessage' => $emptyMessage,

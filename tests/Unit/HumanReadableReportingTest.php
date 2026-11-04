@@ -128,7 +128,7 @@ class HumanReadableReportingTest extends TestCase
         $config = (new ReportController($reportService))->getExportConfig(Request::create('/exports', 'GET'));
         $mapped = $config['mapRow']($config['data']->first());
 
-        $this->assertSame('101 - Kas Utama', $mapped[1]);
+        $this->assertSame('101 - Kas Utama', $mapped[2]);
         $this->assertRawIdsAbsent($mapped, ['ACC-1']);
         $this->assertNotContains('Account_ID', $config['headers']);
     }

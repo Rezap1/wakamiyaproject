@@ -11,7 +11,7 @@ class AssessmentController extends Controller
 {
     use \App\Traits\Exportable;
 
-    protected $exportDateField = 'Assessment_Date';
+    protected $exportDateField = 'Date';
 
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
@@ -20,11 +20,7 @@ class AssessmentController extends Controller
         
         // Apply filters if any
         if ($request->filled('search')) {
-            $search = strtolower($request->search);
-            $assessments = $assessments->filter(function($item) use ($search) {
-                return str_contains(strtolower($item['Assessment_ID'] ?? ''), $search) ||
-                       str_contains(strtolower($item['Title'] ?? ''), $search);
-            })->values();
+            $assessments = \App\Helpers\CollectionHelper::search($assessments, $request->input('search'), ['Assessment_ID', 'Title', 'Subject_ID', 'Class_ID', 'Program_ID']);
         }
         
         $classesById = collect(app(\App\Interfaces\GoogleSheets\ClassRepositoryInterface::class)->fetchAll())->keyBy('Class_ID');
@@ -40,7 +36,7 @@ class AssessmentController extends Controller
 
                 return [
                     $row['Type'] ?? '-',
-                    isset($row['Assessment_Date']) ? \Carbon\Carbon::parse($row['Assessment_Date'])->format('d M Y') : '-',
+                    \App\Helpers\DateHelper::format($row['Date'] ?? $row['Assessment_Date'] ?? null, 'd M Y'),
                     $row['Title'] ?? '-',
                     HumanReadableResolver::className($row['Class_ID'] ?? '', $classesById),
                     HumanReadableResolver::subjectName($row['Subject_ID'] ?? '', $subjectsById),
@@ -79,7 +75,7 @@ class AssessmentController extends Controller
             $progId = $item['Program_ID'] ?? '';
             
             $item['Name'] = $item['Title'] ?? '';
-            $item['Exam_Date'] = isset($item['Assessment_Date']) ? \Carbon\Carbon::parse($item['Assessment_Date'])->format('d M Y') : '-';
+            $item['Exam_Date'] = \App\Helpers\DateHelper::format($item['Date'] ?? $item['Assessment_Date'] ?? null, 'd M Y');
             $item['Subject_Name'] = $subjName;
             $item['Class_Name'] = $className;
             $item['Program_ID'] = $progId;

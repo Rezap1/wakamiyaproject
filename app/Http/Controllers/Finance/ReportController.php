@@ -61,12 +61,14 @@ class ReportController extends Controller
             $companyId = $request->input('company_id');
             $data = $this->reportService->getOutstandingInvoices($type, $studentId, $companyId);
             
-            $this->exportDateField = 'Invoice_Date';
+            $this->exportDateField = 'Created_At';
 
             return [
                 'moduleName' => 'Laporan Piutang',
                 'data' => collect($data['invoices'] ?? collect([]))->values(),
                 'pdfView' => 'pdf.generic_table',
+                'paginate' => false,
+                'summaryForData' => fn ($rows) => '<tr><td>Total Piutang Belum Terbayar</td><td>: Rp '.number_format($rows->sum('Remaining_Amount'), 0, ',', '.').'</td></tr>',
                 'headers' => ['Jatuh Tempo', 'No Tagihan', 'Tujuan', 'Status', 'Total Tagihan', 'Sudah Dibayar', 'Sisa Piutang'],
                 'mapRow' => function($row) {
                     $tujuan = '-';
@@ -96,21 +98,22 @@ class ReportController extends Controller
         // Default: cash_flow
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        if ($request->input('export_filter') === 'today') {
+            $startDate = $endDate = now()->toDateString();
+        }
         $accountId = $request->input('account_id', 'ALL');
         $category = $request->input('category', 'ALL');
 
         $data = $this->reportService->getCashFlow($startDate, $endDate, $accountId, $category);
-        $accountsById = collect($data['accounts'] ?? [])->flatMap(function ($account) {
-            $keys = [];
+        $accountsById = collect();
+        foreach (collect($data['accounts'] ?? []) as $account) {
             foreach (['Account_ID', 'Account_Code'] as $field) {
                 $key = trim((string) ($account[$field] ?? ''));
                 if ($key !== '') {
-                    $keys[$key] = $account;
+                    $accountsById->put($key, $account);
                 }
             }
-
-            return $keys;
-        });
+        }
 
         $this->exportDateField = 'Transaction_Date';
 
@@ -118,14 +121,21 @@ class ReportController extends Controller
             'moduleName' => 'Laporan Arus Kas (Cash Flow)',
             'data' => collect($data['transactions'] ?? collect([]))->values(),
             'pdfView' => 'pdf.generic_table',
-            'headers' => ['Tanggal', 'Akun', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'],
+            'dateFilterApplied' => true,
+            'paginate' => false,
+            'metadata' => [
+                'scopeLabel' => 'Periode: '.$startDate.' s.d. '.$endDate.' | Akun: '.$accountId.' | Kategori: '.$category,
+                'integrityIssues' => $data['integrity_issues'] ?? [],
+            ],
+            'headers' => ['ID Transaksi', 'Tanggal', 'Akun', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'],
             'mapRow' => function($row) use ($accountsById) {
                 return [
+                    $row['Transaction_ID'] ?? '-',
                     $row['Transaction_Date'] ?? '-',
-                    HumanReadableResolver::accountName(trim((string) ($row['Account_ID'] ?? '')) ?: ($row['Account_Code'] ?? ''), $accountsById),
+                    $row['Account_Name'] ?? HumanReadableResolver::accountName(trim((string) ($row['Account_ID'] ?? '')) ?: ($row['Account_Code'] ?? ''), $accountsById),
                     $row['Type'] ?? '-',
                     $row['Category'] ?? '-',
-                    $row['Description'] ?? '-',
+                    $row['Report_Description'] ?? $row['Description'] ?? '-',
                     'Rp ' . number_format((float)($row['Amount'] ?? 0), 0, ',', '.')
                 ];
             },

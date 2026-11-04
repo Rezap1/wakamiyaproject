@@ -54,6 +54,8 @@ class EmployeeController extends Controller
             }
         }
 
+        $employees = $this->filterEmploymentDates($employees, $request);
+
         $activeCount = $employees->where('Is_Active', 'TRUE')->count();
         $summary = "<tr><td>Total Karyawan</td><td>: {$employees->count()}</td><td width='20px'></td><td>Karyawan Aktif</td><td>: {$activeCount}</td></tr>";
 
@@ -97,6 +99,28 @@ class EmployeeController extends Controller
         $this->userService = $userService;
     }
 
+    private function filterEmploymentDates($employees, Request $request)
+    {
+        // Date Filter
+        if ($request->filled('date_from') && $request->filled('date_to')) {
+            $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
+            $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
+
+            $employees = $employees->filter(function ($item) use ($dateFrom, $dateTo) {
+                $dateStr = $item['Join_Date'] ?? $item['Created_At'] ?? null;
+                if ($dateStr) {
+                    $itemDate = Carbon::parse($dateStr);
+
+                    return $itemDate->between($dateFrom, $dateTo);
+                }
+
+                return false;
+            });
+        }
+
+        return $employees;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -137,22 +161,7 @@ class EmployeeController extends Controller
                 }
             }
 
-            // Date Filter
-            if ($request->filled('date_from') && $request->filled('date_to')) {
-                $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
-                $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
-
-                $employees = $employees->filter(function ($item) use ($dateFrom, $dateTo) {
-                    $dateStr = $item['Join_Date'] ?? $item['Created_At'] ?? null;
-                    if ($dateStr) {
-                        $itemDate = Carbon::parse($dateStr);
-
-                        return $itemDate->between($dateFrom, $dateTo);
-                    }
-
-                    return false;
-                });
-            }
+            $employees = $this->filterEmploymentDates($employees, $request);
 
             $employeeGroups = $employees
                 ->groupBy(fn ($employee) => trim((string) ($employee['Department_ID'] ?? '')) ?: 'NO_DEPARTMENT')

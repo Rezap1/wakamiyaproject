@@ -40,16 +40,16 @@ class StudentController extends Controller
             $batch = $batches->firstWhere('Batch_ID', $student['Batch_ID']);
             $class = $classes->firstWhere('Class_ID', $student['Class_ID']);
 
-            $student['Program_Name'] = $program ? $program['Program_Name'] : '-';
-            $student['Batch_Name'] = $batch ? $batch['Batch_Name'] : '-';
-            $student['Class_Name'] = $class ? $class['Class_Name'] : '-';
+            $student['Program_Name'] = $program ? $program['Program_Name'] : 'Tidak Ditemukan';
+            $student['Batch_Name'] = $batch ? $batch['Batch_Name'] : 'Tidak Ditemukan';
+            $student['Class_Name'] = $class ? $class['Class_Name'] : 'Tidak Ditemukan';
 
             return $student;
         });
 
         $search = $request->input('search');
         if (! empty($search)) {
-            $students = CollectionHelper::search($students, $search, ['NIS', 'Full_Name', 'Program_Name', 'Batch_Name', 'Class_Name']);
+            $students = CollectionHelper::search($students, $search, ['Student_ID', 'NIS', 'Full_Name', 'Email', 'Phone', 'Program_Name', 'Batch_Name', 'Class_Name']);
         }
 
         if ($request->filled('program')) {
@@ -69,6 +69,8 @@ class StudentController extends Controller
                 : SheetValue::isOperationalStudent((array) $student));
         }
 
+        $students = $this->filterRegistrationDates($students, $request);
+
         return [
             'moduleName' => 'Siswa (Student)',
             'data' => collect(array_values($students->toArray())),
@@ -77,7 +79,7 @@ class StudentController extends Controller
             'mapRow' => function ($row) {
 
                 return [
-                    $row['NIS'] ?? '-',
+                    $row['Student_Number'] ?? $row['NIS'] ?? '-',
                     $row['Full_Name'] ?? '-',
                     $row['Program_Name'] ?? '-',
                     $row['Batch_Name'] ?? '-',
@@ -116,6 +118,35 @@ class StudentController extends Controller
         $this->classService = $classService;
         $this->userService = $userService;
         $this->placementService = $placementService;
+    }
+
+    private function filterRegistrationDates($students, Request $request)
+    {
+        if ($request->filled('date_from')) {
+            $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
+            $students = $students->filter(function ($item) use ($dateFrom) {
+                $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
+                if (! $dateField) {
+                    return false;
+                }
+
+                return Carbon::parse($dateField)->startOfDay()->gte($dateFrom);
+            });
+        }
+
+        if ($request->filled('date_to')) {
+            $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
+            $students = $students->filter(function ($item) use ($dateTo) {
+                $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
+                if (! $dateField) {
+                    return false;
+                }
+
+                return Carbon::parse($dateField)->endOfDay()->lte($dateTo);
+            });
+        }
+
+        return $students;
     }
 
     public function index(Request $request)
@@ -163,29 +194,7 @@ class StudentController extends Controller
                     : SheetValue::isOperationalStudent((array) $student));
             }
 
-            if ($request->filled('date_from')) {
-                $dateFrom = Carbon::parse($request->input('date_from'))->startOfDay();
-                $students = $students->filter(function ($item) use ($dateFrom) {
-                    $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
-                    if (! $dateField) {
-                        return false;
-                    }
-
-                    return Carbon::parse($dateField)->startOfDay()->gte($dateFrom);
-                });
-            }
-
-            if ($request->filled('date_to')) {
-                $dateTo = Carbon::parse($request->input('date_to'))->endOfDay();
-                $students = $students->filter(function ($item) use ($dateTo) {
-                    $dateField = $item['Registration_Date'] ?? $item['Created_At'] ?? null;
-                    if (! $dateField) {
-                        return false;
-                    }
-
-                    return Carbon::parse($dateField)->endOfDay()->lte($dateTo);
-                });
-            }
+            $students = $this->filterRegistrationDates($students, $request);
 
             $studentGroups = $students
                 ->groupBy(fn ($student) => trim((string) ($student['Class_ID'] ?? '')) ?: 'NO_CLASS')
@@ -433,9 +442,9 @@ class StudentController extends Controller
                 'Email' => $student['Email'] ?? '',
                 'Phone_Number' => $student['Phone_Number'] ?? '',
                 'Enrollment_Status' => $student['Enrollment_Status'] ?? '',
-                'Program_Name' => $program ? $program['Program_Name'] : '-',
-                'Batch_Name' => $batch ? $batch['Batch_Name'] : '-',
-                'Class_Name' => $class ? $class['Class_Name'] : '-',
+                'Program_Name' => $program ? $program['Program_Name'] : 'Tidak Ditemukan',
+                'Batch_Name' => $batch ? $batch['Batch_Name'] : 'Tidak Ditemukan',
+                'Class_Name' => $class ? $class['Class_Name'] : 'Tidak Ditemukan',
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Terjadi kesalahan internal.'], 500);

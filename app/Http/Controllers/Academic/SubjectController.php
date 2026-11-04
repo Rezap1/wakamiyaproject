@@ -18,7 +18,8 @@ class SubjectController extends Controller
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
 
-        $subjects = $this->subjectService->getAll();
+        $subjects = $this->subjectService->getAll()
+            ->map(fn ($row) => AcademicSheetMapper::normalizeSubjectRow((array) $row));
         if ($request->filled('search')) {
             $search = strtolower($request->search);
             $subjects = $subjects->filter(function($item) use ($search) {
@@ -27,10 +28,15 @@ class SubjectController extends Controller
             })->values();
         }
         
+        if ($request->filled('status') && $request->status !== 'ALL') {
+            $subjects = $subjects->where('Is_Active', $request->status);
+        }
+
         $programsById = collect($this->programService->getAllPrograms())->keyBy('Program_ID');
 
         return [
             'moduleName' => 'Materi',
+            'paginate' => false,
             'data' => collect(array_values($subjects->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Kode', 'Nama Materi', 'Program', 'Deskripsi'],

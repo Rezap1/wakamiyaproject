@@ -144,7 +144,7 @@ class OvertimeRepository extends BaseSheetRepository implements OvertimeReposito
         if (!$this->isTime($record['Start_Time']) || !$this->isTime($record['End_Time'])) {
             throw new UnexpectedValueException('MASTER_OVERTIME memiliki waktu yang tidak valid.');
         }
-        if ((string) $record['End_Time'] <= (string) $record['Start_Time']) {
+        if (\Carbon\Carbon::parse($record['End_Time'])->lessThanOrEqualTo(\Carbon\Carbon::parse($record['Start_Time']))) {
             throw new UnexpectedValueException('MASTER_OVERTIME memiliki rentang waktu terbalik.');
         }
         if (!is_numeric($record['Duration_Hours']) || (float) $record['Duration_Hours'] < 0.5) {
@@ -189,6 +189,7 @@ class OvertimeRepository extends BaseSheetRepository implements OvertimeReposito
 
     private function isTime($value): bool
     {
-        return preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', trim((string) $value)) === 1;
+        // Sheets/UI use H:i; MySQL TIME(6) returns H:i:s.u.
+        return preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,6})?)?$/', trim((string) $value)) === 1;
     }
 }

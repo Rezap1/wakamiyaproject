@@ -189,7 +189,7 @@ class SystemSettingService
                 'Setting_Name' => 'Alamat Lengkap Perusahaan',
                 'Description' => 'Alamat kantor resmi yang dicantumkan pada kop surat dan kwitansi.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_PHONE',
@@ -198,7 +198,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nomor Telepon Kantor',
                 'Description' => 'Nomor telepon resmi perusahaan.',
                 'Value_Type' => 'text',
-                'Setting_Value' => '(021) 8000-9999',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_EMAIL',
@@ -207,7 +207,7 @@ class SystemSettingService
                 'Setting_Name' => 'Email Perusahaan',
                 'Description' => 'Alamat kontak email utama perusahaan.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'hr@wakamiya.ac.id',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_WEB',
@@ -216,7 +216,7 @@ class SystemSettingService
                 'Setting_Name' => 'Website Resmi',
                 'Description' => 'Alamat situs resmi perusahaan.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'https://wakamiya.ac.id',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_NPWP',
@@ -225,7 +225,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nomor NPWP Perusahaan',
                 'Description' => 'Nomor Pokok Wajib Pajak (NPWP) resmi perusahaan.',
                 'Value_Type' => 'text',
-                'Setting_Value' => '01.234.567.8-901.000',
+                'Setting_Value' => '',
             ],
 
             // COMPANY DOCUMENT & SIGNATURE
@@ -236,7 +236,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nama Penandatangan Resmi',
                 'Description' => 'Nama pejabat berwenang yang tercantum pada Sertifikat & Invoice.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'Dr. Reza Pekanbaru',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_SIGNER_TITLE',
@@ -245,7 +245,7 @@ class SystemSettingService
                 'Setting_Name' => 'Jabatan Penandatangan',
                 'Description' => 'Jabatan resmi pejabat penandatangan dokumen.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'General Director & Founder',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_COMPANY_SIGNATURE_URL',
@@ -568,7 +568,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nama Bank Utama',
                 'Description' => 'Nama bank yang ditampilkan pada invoice dan instruksi pembayaran.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'BANK BCA',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_BANK_ACCOUNT',
@@ -577,7 +577,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nomor Rekening',
                 'Description' => 'Nomor rekening penerimaan pembayaran siswa.',
                 'Value_Type' => 'text',
-                'Setting_Value' => '888-999-777',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_BANK_HOLDER',
@@ -586,7 +586,7 @@ class SystemSettingService
                 'Setting_Name' => 'Nama Pemilik Rekening',
                 'Description' => 'Nama pemilik rekening yang ditampilkan pada dokumen pembayaran.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'PT WAKAMIYA INDONESIA',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_BANK_BRANCH',
@@ -595,7 +595,7 @@ class SystemSettingService
                 'Setting_Name' => 'Cabang Bank',
                 'Description' => 'Cabang bank penerima pembayaran.',
                 'Value_Type' => 'text',
-                'Setting_Value' => 'KCU Jakarta',
+                'Setting_Value' => '',
             ],
             [
                 'Setting_ID' => 'SET_BANK_QR_PAYMENT_URL',
@@ -1244,24 +1244,24 @@ class SystemSettingService
                     'tagline' => $tagline,
                     'logo' => $logo,
                     'logo_url' => $logoUrl,
-                    'address' => $this->get('COMPANY_ADDRESS', 'Jl. Raya Wakamiya No. 88, Jakarta Selatan 12930'),
-                    'phone' => $this->get('COMPANY_PHONE', '(021) 8000-9999'),
+                    'address' => $this->get('COMPANY_ADDRESS', ''),
+                    'phone' => $this->get('COMPANY_PHONE', ''),
                     'whatsapp' => $this->get('COMPANY_WA', ''),
-                    'email' => $this->get('COMPANY_EMAIL', 'hr@wakamiya.ac.id'),
-                    'website' => $this->get('COMPANY_WEB', 'https://wakamiya.ac.id'),
+                    'email' => $this->get('COMPANY_EMAIL', ''),
+                    'website' => $this->get('COMPANY_WEB', ''),
                     'npwp' => $this->get('COMPANY_NPWP', ''),
                 ],
                 'bank' => [
-                    'name' => $this->get('COMPANY_BANK_NAME', 'BANK BCA'),
-                    'account_number' => $this->get('COMPANY_BANK_ACCOUNT', '888-999-777'),
-                    'account_holder' => $this->get('COMPANY_BANK_HOLDER', 'PT WAKAMIYA INDONESIA'),
-                    'branch' => $this->get('COMPANY_BANK_BRANCH', 'KCU Jakarta'),
+                    'name' => $this->get('COMPANY_BANK_NAME', ''),
+                    'account_number' => $this->get('COMPANY_BANK_ACCOUNT', ''),
+                    'account_holder' => $this->get('COMPANY_BANK_HOLDER', ''),
+                    'branch' => $this->get('COMPANY_BANK_BRANCH', ''),
                 ],
                 'document' => [
                     'signature_url' => $this->get('COMPANY_SIGNATURE_URL', ''),
                     'stamp_url' => $this->get('COMPANY_STAMP_URL', ''),
-                    'signer_name' => $this->get('COMPANY_SIGNER_NAME', 'Dr. Reza Pekanbaru'),
-                    'signer_title' => $this->get('COMPANY_SIGNER_TITLE', 'General Director & Founder'),
+                    'signer_name' => $this->get('COMPANY_SIGNER_NAME', ''),
+                    'signer_title' => $this->get('COMPANY_SIGNER_TITLE', ''),
                     'prefix' => $this->get('DOCUMENT_PREFIX', $this->get('COMPANY_DOC_PREFIX', 'DOC/WMS/')),
                 ],
             ];

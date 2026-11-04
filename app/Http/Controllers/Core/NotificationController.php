@@ -31,6 +31,7 @@ class NotificationController extends Controller
             'moduleName' => 'Notifikasi (Notification)',
             'data' => collect(array_values($notifications->toArray())),
             'pdfView' => 'pdf.generic_table',
+            'perPage' => 15,
             'headers' => ['Tanggal', 'Judul', 'Pesan', 'Status'],
             'mapRow' => function ($row) {
 

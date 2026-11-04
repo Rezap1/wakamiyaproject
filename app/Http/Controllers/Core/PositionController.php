@@ -76,7 +76,7 @@ class PositionController extends Controller
     public function index()
     {
         try {
-            $positions = $this->positionService->getAllPositions();
+            $positions = $this->getExportConfig(request())['data'];
             $departments = $this->departmentService->getAllDepartments();
 
             // Map department names to positions for display

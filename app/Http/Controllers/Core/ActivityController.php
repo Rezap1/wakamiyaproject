@@ -12,7 +12,7 @@ class ActivityController extends Controller
 {
     use \App\Traits\Exportable;
 
-    protected $exportDateField = 'Timestamp';
+    protected $exportDateField = 'Created_At';
 
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
@@ -28,6 +28,7 @@ class ActivityController extends Controller
         
         return [
             'moduleName' => 'Log Aktivitas (Activity)',
+            'paginate' => false,
             'data' => collect(array_values($activities->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Waktu', 'Modul', 'Aktivitas', 'Aktor'],

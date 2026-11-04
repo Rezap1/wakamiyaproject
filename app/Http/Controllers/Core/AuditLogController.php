@@ -14,21 +14,26 @@ class AuditLogController extends Controller
         protected function getExportConfig(\Illuminate\Http\Request $request)
     {
 
-        $logs = $this->auditService->activity()->take(100);
+        $logs = $this->auditService->activity();
+        if ($request->input('export_filter') === 'current_page') {
+            $logs = $logs->take(100);
+        }
+        $users = collect(app(\App\Interfaces\GoogleSheets\UserRepositoryInterface::class)->fetchAll())->keyBy('User_ID');
         
         return [
             'moduleName' => 'Audit Log',
+            'paginate' => false,
             'data' => collect(array_values($logs->toArray())),
             'pdfView' => 'pdf.generic_table',
             'headers' => ['Waktu', 'Aksi', 'Modul', 'Pengguna', 'IP Address'],
-            'mapRow' => function($row) {
+            'mapRow' => function($row) use ($users) {
 
                 return [
                     isset($row['Created_At']) ? \Carbon\Carbon::parse($row['Created_At'])->format('d M Y H:i:s') : '-',
                     $row['Action'] ?? '-',
                     $row['Module'] ?? '-',
-                    $row['User_Name'] ?? '-',
-                    $row['IP_Address'] ?? '-'
+                    $row['User_Name'] ?? \App\Support\Reporting\HumanReadableResolver::userName($row['User_ID'] ?? '', $users),
+                    $row['IP_Address'] ?? $row['IPAddress'] ?? '-'
                 ];
                     },
             'isLandscape' => true,
