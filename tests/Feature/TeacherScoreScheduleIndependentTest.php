@@ -158,8 +158,6 @@ class TeacherScoreScheduleIndependentTest extends TestCase
         $score = Mockery::mock(ScoreService::class);
         $score->shouldReceive('getTeacherScoreScope')->once()->with('TCH-A')->andReturn($this->scope);
         $score->shouldReceive('getAll')->once()->andReturn(collect([$row]));
-        $score->shouldReceive('isScoreInTeacherScope')->once()->with($row, 'TCH-A', Mockery::on(fn (array $scope): bool => ($scope['actor_user_id'] ?? '') === 'USR-A'
-        ))->andReturn(true);
         $this->bindWorkspace($score, $this->numericConfig());
 
         $this->get(route('teacher.workspace.scores'))
@@ -216,7 +214,9 @@ class TeacherScoreScheduleIndependentTest extends TestCase
             ['Class_ID' => 'CLS-B', 'Class_Name' => 'Kelas B'],
         ]);
         $this->app->instance(ClassService::class, $classes);
-        $this->app->instance(ScheduleService::class, Mockery::mock(ScheduleService::class));
+        $schedules = Mockery::mock(ScheduleService::class);
+        $schedules->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect());
+        $this->app->instance(ScheduleService::class, $schedules);
 
         $students = Mockery::mock(StudentService::class);
         $students->shouldReceive('getAllStudents')->zeroOrMoreTimes()->andReturn([
@@ -226,9 +226,16 @@ class TeacherScoreScheduleIndependentTest extends TestCase
         $this->app->instance(StudentService::class, $students);
         $this->app->instance(AttendanceService::class, Mockery::mock(AttendanceService::class));
         $this->app->instance(AttendanceRequestService::class, Mockery::mock(AttendanceRequestService::class));
-        $this->app->instance(SubjectService::class, Mockery::mock(SubjectService::class));
+        $subjects = Mockery::mock(SubjectService::class);
+        $subjects->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect());
+        $this->app->instance(SubjectService::class, $subjects);
         $this->app->instance(BatchService::class, Mockery::mock(BatchService::class));
-        $this->app->instance(AssignmentService::class, Mockery::mock(AssignmentService::class));
+        $assignments = Mockery::mock(AssignmentService::class);
+        $assignments->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect());
+        $this->app->instance(AssignmentService::class, $assignments);
+        $assessments = Mockery::mock(AssessmentRepositoryInterface::class);
+        $assessments->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect());
+        $this->app->instance(AssessmentRepositoryInterface::class, $assessments);
         $this->app->instance(ScoreService::class, $score);
 
         $config ??= Mockery::mock(AssessmentConfigService::class);

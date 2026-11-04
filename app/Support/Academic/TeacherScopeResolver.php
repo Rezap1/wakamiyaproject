@@ -64,14 +64,19 @@ class TeacherScopeResolver
         }
 
         $allSchedules = collect($this->scheduleRepository->fetchAll());
-        $teacherSchedules = $allSchedules
+        $historicalTeacherSchedules = $allSchedules
             ->filter(fn ($row) => trim((string) ($row['Teacher_ID'] ?? '')) === $teacherId)
+            ->values();
+        $teacherSchedules = $historicalTeacherSchedules
             ->filter(fn ($row) => ! $this->isInactive($row))
             ->values();
 
         $scheduleIds = $teacherSchedules->pluck('Schedule_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
         $teachingClassIds = $teacherSchedules->pluck('Class_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
         $subjectIds = $teacherSchedules->pluck('Subject_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
+        $historicalScheduleIds = $historicalTeacherSchedules->pluck('Schedule_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
+        $historicalTeachingClassIds = $historicalTeacherSchedules->pluck('Class_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
+        $historicalSubjectIds = $historicalTeacherSchedules->pluck('Subject_ID')->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
 
         $allClasses = collect($this->classRepository->fetchAll())
             ->filter(fn ($row) => ! $this->isInactive($row))
@@ -137,10 +142,13 @@ class TeacherScopeResolver
             'teacher_id' => $teacherId,
             'teacher_user_id' => trim((string) ($teacher['User_ID'] ?? '')),
             'schedule_ids' => $scheduleIds,
+            'historical_schedule_ids' => $historicalScheduleIds,
             'class_ids' => $classIds,
             'managed_class_ids' => $classIds,
             'teaching_class_ids' => $teachingClassIds,
+            'historical_teaching_class_ids' => $historicalTeachingClassIds,
             'subject_ids' => $subjectIds,
+            'historical_subject_ids' => $historicalSubjectIds,
             'student_ids' => $studentIds,
             'managed_student_ids' => $managedStudentIds,
             'teaching_student_ids' => $teachingStudentIds,
@@ -150,6 +158,7 @@ class TeacherScopeResolver
             'teaching_students_by_class' => $teachingStudentsByClass,
             'schedule_student_ids' => $scheduleStudentIds,
             'schedules' => $teacherSchedules,
+            'historical_schedules' => $historicalTeacherSchedules,
             'classes' => $classes,
             'managed_classes' => $classes->filter(fn ($row) => in_array(trim((string) ($row['Class_ID'] ?? '')), $classIds, true))->values(),
             'students' => $students->whereIn('Student_ID', $studentIds)->values(),
@@ -198,10 +207,13 @@ class TeacherScopeResolver
             'teacher_id' => '',
             'teacher_user_id' => '',
             'schedule_ids' => [],
+            'historical_schedule_ids' => [],
             'class_ids' => [],
             'managed_class_ids' => [],
             'teaching_class_ids' => [],
+            'historical_teaching_class_ids' => [],
             'subject_ids' => [],
+            'historical_subject_ids' => [],
             'student_ids' => [],
             'managed_student_ids' => [],
             'teaching_student_ids' => [],
@@ -211,6 +223,7 @@ class TeacherScopeResolver
             'teaching_students_by_class' => [],
             'schedule_student_ids' => [],
             'schedules' => collect(),
+            'historical_schedules' => collect(),
             'classes' => collect(),
             'managed_classes' => collect(),
             'students' => collect(),

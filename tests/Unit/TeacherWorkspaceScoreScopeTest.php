@@ -34,16 +34,20 @@ class TeacherWorkspaceScoreScopeTest extends TestCase
 
         $assessmentRepo = Mockery::mock(AssessmentRepositoryInterface::class);
         $assessmentRepo->shouldReceive('fetchAll')->zeroOrMoreTimes()->andReturn(collect([
-            ['Assessment_ID' => 'ASM-A', 'Teacher_ID' => 'TCH-A'],
-            ['Assessment_ID' => 'ASM-B', 'Teacher_ID' => 'TCH-B'],
+            ['Assessment_ID' => 'ASM-A', 'Teacher_ID' => 'TCH-A', 'Class_ID' => 'CLS-A'],
+            ['Assessment_ID' => 'ASM-B', 'Teacher_ID' => 'TCH-B', 'Class_ID' => 'CLS-B'],
+        ]));
+        $assessmentRepo->shouldReceive('getAll')->zeroOrMoreTimes()->andReturn(collect([
+            ['Assessment_ID' => 'ASM-A', 'Teacher_ID' => 'TCH-A', 'Class_ID' => 'CLS-A'],
+            ['Assessment_ID' => 'ASM-B', 'Teacher_ID' => 'TCH-B', 'Class_ID' => 'CLS-B'],
         ]));
         $this->app->instance(AssessmentRepositoryInterface::class, $assessmentRepo);
 
         $scores = collect([
-            ['Score_ID' => 'SCR-OWN-ASM', 'Assessment_ID' => 'ASM-A', 'Student_ID' => 'STU-1'],
-            ['Score_ID' => 'SCR-OTHER-ASM', 'Assessment_ID' => 'ASM-B', 'Student_ID' => 'STU-2'],
-            ['Score_ID' => 'SCR-OWN-DIRECT', 'Teacher_ID' => 'TCH-A', 'Student_ID' => 'STU-2'],
-            ['Score_ID' => 'SCR-OTHER-DIRECT', 'Teacher_ID' => 'TCH-B', 'Student_ID' => 'STU-1'],
+            ['Score_ID' => 'SCR-OWN-ASM', 'Assessment_ID' => 'ASM-A', 'Student_ID' => 'STU-1', 'Class_ID' => 'CLS-A'],
+            ['Score_ID' => 'SCR-OTHER-ASM', 'Assessment_ID' => 'ASM-B', 'Student_ID' => 'STU-2', 'Class_ID' => 'CLS-B'],
+            ['Score_ID' => 'SCR-OWN-DIRECT', 'Teacher_ID' => 'TCH-A', 'Student_ID' => 'STU-2', 'Class_ID' => 'CLS-A'],
+            ['Score_ID' => 'SCR-OTHER-DIRECT', 'Teacher_ID' => 'TCH-B', 'Student_ID' => 'STU-1', 'Class_ID' => 'CLS-A'],
             ['Score_ID' => 'SCR-UNOWNED', 'Student_ID' => 'STU-1'],
         ]);
 
@@ -96,16 +100,20 @@ class TeacherWorkspaceScoreScopeTest extends TestCase
                 ['Teacher_ID' => 'TCH-A', 'User_ID' => 'USR-A'],
             ])]),
             $this->mockService(ClassService::class, []),
-            $this->mockService(ScheduleService::class, []),
+            $this->mockService(ScheduleService::class, ['getAll' => collect([
+                ['Schedule_ID' => 'SCH-A', 'Teacher_ID' => 'TCH-A', 'Class_ID' => 'CLS-A', 'Subject_ID' => 'SUB-A'],
+            ])]),
             $this->mockService(StudentService::class, ['getAllStudents' => collect([
                 ['Student_ID' => 'STU-1', 'Full_Name' => 'Student One', 'Class_ID' => 'CLS-A'],
                 ['Student_ID' => 'STU-2', 'Full_Name' => 'Student Two', 'Class_ID' => 'CLS-A'],
             ])]),
             $this->mockService(AttendanceService::class, []),
             $this->mockService(AttendanceRequestService::class, []),
-            $this->mockService(SubjectService::class, []),
+            $this->mockService(SubjectService::class, ['getAll' => collect([
+                ['Subject_ID' => 'SUB-A', 'Subject_Name' => 'Subject A'],
+            ])]),
             $this->mockService(BatchService::class, []),
-            $this->mockService(AssignmentService::class, []),
+            $this->mockService(AssignmentService::class, ['getAll' => collect()]),
             $scoreService,
             $assessmentConfig,
             $scopeResolver
