@@ -11,6 +11,7 @@ use App\Services\Quiz\QuizCleanupService;
 use App\Services\Quiz\QuizPeriodService;
 use App\Services\Quiz\QuizService;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -210,6 +211,158 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame('EXPIRED', $this->attempts->rows[0]['Status']);
     }
 
+    public function test_autosave_is_idempotent_and_saved_answers_survive_resume(): void
+    {
+        $this->seedQuiz('Q1', points: [10, 15]);
+        $payload = $this->service->start('Q1', $this->student());
+        $attemptId = $payload['attempt']['Attempt_ID'];
+        $answers = [
+            $payload['questions'][0]['Question_ID'] => 'A',
+            $payload['questions'][1]['Question_ID'] => 'B',
+        ];
+
+        $first = $this->service->autosave($attemptId, $this->student(), $answers, 1);
+        $duplicate = $this->service->autosave($attemptId, $this->student(), $answers, 1);
+        $resumed = $this->service->resume($attemptId, $this->student());
+
+        $this->assertTrue($first['saved']);
+        $this->assertFalse($first['idempotent']);
+        $this->assertTrue($duplicate['idempotent']);
+        $this->assertSame(1, $resumed['answerVersion']);
+        $this->assertSame($answers, $resumed['savedAnswers']);
+        $this->assertStringNotContainsString('Correct_Option', json_encode($resumed, JSON_THROW_ON_ERROR));
+        $stored = json_decode($this->attempts->rows[0]['Submitted_Answers_JSON'], true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('A', $stored[$payload['questions'][0]['Question_ID']]);
+        $this->assertSame('B', $stored[$payload['questions'][1]['Question_ID']]);
+        $this->assertSame(1, $stored['__quiz_answer_version']);
+        $this->assertArrayNotHasKey('answers', $stored, 'Format harus tetap dapat dibaca oleh review path versi sebelum patch.');
+    }
+
+    public function test_out_of_order_or_conflicting_autosave_cannot_overwrite_newer_answers(): void
+    {
+        $this->seedQuiz('Q1', points: [10]);
+        $payload = $this->service->start('Q1', $this->student());
+        $attemptId = $payload['attempt']['Attempt_ID'];
+        $questionId = $payload['questions'][0]['Question_ID'];
+
+        $this->service->autosave($attemptId, $this->student(), [$questionId => 'B'], 2);
+        $stale = $this->service->autosave($attemptId, $this->student(), [$questionId => 'A'], 1);
+        $sameVersionConflict = $this->service->autosave($attemptId, $this->student(), [$questionId => 'C'], 2);
+        $resumed = $this->service->resume($attemptId, $this->student());
+
+        $this->assertTrue($stale['conflict']);
+        $this->assertTrue($sameVersionConflict['conflict']);
+        $this->assertSame([$questionId => 'B'], $resumed['savedAnswers']);
+        $this->assertSame(2, $resumed['answerVersion']);
+    }
+
+    public function test_autosave_rejects_wrong_owner_unknown_question_invalid_answer_and_deadline(): void
+    {
+        $this->seedQuiz('Q1', points: [10]);
+        $payload = $this->service->start('Q1', $this->student());
+        $attemptId = $payload['attempt']['Attempt_ID'];
+        $questionId = $payload['questions'][0]['Question_ID'];
+
+        foreach ([
+            fn () => $this->service->autosave($attemptId, ['Student_ID' => 'S2', 'Class_ID' => 'C1'], [$questionId => 'A'], 1),
+            fn () => $this->service->autosave($attemptId, $this->student(), ['FOREIGN' => 'A'], 1),
+            fn () => $this->service->autosave($attemptId, $this->student(), [$questionId => 'E'], 1),
+        ] as $operation) {
+            try {
+                $operation();
+                $this->fail('Autosave yang tidak sah harus ditolak.');
+            } catch (HttpException $exception) {
+                $this->assertContains($exception->getStatusCode(), [403, 422]);
+            }
+        }
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse($payload['attempt']['Deadline_At'], 'Asia/Jakarta'));
+        try {
+            $this->service->autosave($attemptId, $this->student(), [$questionId => 'A'], 1);
+            $this->fail('Autosave pada deadline harus ditolak.');
+        } catch (HttpException $exception) {
+            $this->assertSame(410, $exception->getStatusCode());
+        }
+    }
+
+    public function test_persisted_answers_are_scored_after_deadline_and_late_answers_are_ignored(): void
+    {
+        $this->seedQuiz('Q1', points: [10, 15]);
+        $payload = $this->service->start('Q1', $this->student());
+        $attemptId = $payload['attempt']['Attempt_ID'];
+        $firstId = $payload['questions'][0]['Question_ID'];
+        $secondId = $payload['questions'][1]['Question_ID'];
+        $this->service->autosave($attemptId, $this->student(), [$firstId => 'A'], 1);
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse($payload['attempt']['Deadline_At'], 'Asia/Jakarta'));
+        $result = $this->service->submit($attemptId, $this->student(), [$firstId => 'B', $secondId => 'A'], 2);
+        $again = $this->service->submit($attemptId, $this->student(), [], 1);
+
+        $this->assertSame(10.0, (float) $result['Raw_Score']);
+        $this->assertSame('EXPIRED', $this->attempts->rows[0]['Status']);
+        $this->assertSame($result['Result_ID'], $again['Result_ID']);
+        $this->assertCount(1, $this->results->rows);
+        $stored = json_decode($this->attempts->rows[0]['Submitted_Answers_JSON'], true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('A', $stored[$firstId]);
+        $this->assertSame(1, $stored['__quiz_answer_version']);
+    }
+
+    public function test_resume_after_deadline_finalizes_once_and_autosave_after_finalization_is_rejected(): void
+    {
+        $this->seedQuiz('Q1', points: [10]);
+        $payload = $this->service->start('Q1', $this->student());
+        $attemptId = $payload['attempt']['Attempt_ID'];
+        $questionId = $payload['questions'][0]['Question_ID'];
+        $this->service->autosave($attemptId, $this->student(), [$questionId => 'A'], 1);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse($payload['attempt']['Deadline_At'], 'Asia/Jakarta'));
+
+        $resumed = $this->service->resume($attemptId, $this->student());
+        $resumedAgain = $this->service->resume($attemptId, $this->student());
+        $this->assertSame(10.0, (float) $resumed['finalized_result']['Raw_Score']);
+        $this->assertSame($resumed['finalized_result']['Result_ID'], $resumedAgain['finalized_result']['Result_ID']);
+        $this->assertCount(1, $this->results->rows);
+
+        try {
+            $this->service->autosave($attemptId, $this->student(), [$questionId => 'B'], 2);
+            $this->fail('Autosave setelah finalisasi harus ditolak.');
+        } catch (HttpException $exception) {
+            $this->assertSame(409, $exception->getStatusCode());
+        }
+    }
+
+    public function test_dashboard_access_finalizes_an_expired_abandoned_attempt_from_saved_answers(): void
+    {
+        $this->seedQuiz('Q1', points: [10]);
+        $payload = $this->service->start('Q1', $this->student());
+        $questionId = $payload['questions'][0]['Question_ID'];
+        $this->service->autosave($payload['attempt']['Attempt_ID'], $this->student(), [$questionId => 'A'], 1);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse($payload['attempt']['Deadline_At'], 'Asia/Jakarta'));
+
+        $dashboard = $this->service->studentDashboard($this->student());
+
+        $this->assertCount(1, $this->results->rows);
+        $this->assertSame(10.0, (float) $this->results->rows[0]['Raw_Score']);
+        $this->assertCount(0, $dashboard['available']);
+    }
+
+    public function test_cache_lock_timeout_is_mapped_to_retryable_http_response(): void
+    {
+        $key = 'quiz-test-lock-timeout';
+        $held = Cache::lock($key, 30);
+        $this->assertTrue($held->get());
+
+        try {
+            $method = new \ReflectionMethod(QuizService::class, 'withCacheLock');
+            $method->invoke($this->service, $key, 30, 0, fn () => 'unsafe');
+            $this->fail('Lock timeout harus dikonversi menjadi respons aman.');
+        } catch (HttpException $exception) {
+            $this->assertSame(423, $exception->getStatusCode());
+            $this->assertStringContainsString('coba kembali', $exception->getMessage());
+        } finally {
+            $held->release();
+        }
+    }
+
     public function test_review_is_available_before_but_not_at_exact_four_minute_boundary(): void
     {
         $this->seedQuiz('Q1', points: [10]);
@@ -328,7 +481,7 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(0, $this->attempts->fetchAllCalls);
     }
 
-    public function test_completed_quiz_delete_cascades_exact_graph_and_updates_leaderboard(): void
+    public function test_started_completed_or_related_quiz_cannot_be_deleted_and_history_stays_intact(): void
     {
         $this->seedQuiz('Q1', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [5, 5, 5]);
         $this->seedQuiz('Q2', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [40]);
@@ -342,35 +495,51 @@ class H877QuizDomainTest extends TestCase
             ['Quiz_ID' => 'Q1', 'Attempt_ID' => 'A2'] + $this->resultRow('R2', 'S2', 'Budi', 'C1', 5, 15, 33.3333, '2026-10-08 08:30:00'),
             ['Quiz_ID' => 'Q2', 'Attempt_ID' => 'A3'] + $this->resultRow('R3', 'S1', 'Aiko', 'C1', 40, 40, 100, '2026-10-08 08:30:00'),
         ];
-        $this->assertSame(55.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
-
-        $deleted = $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
-
-        $this->assertSame(['quiz' => 1, 'questions' => 3, 'attempts' => 2, 'results' => 2], $deleted['deleted']);
-        $this->assertFalse(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
-        $this->assertFalse(collect($this->questions->rows)->contains('Quiz_ID', 'Q1'));
-        $this->assertFalse(collect($this->attempts->rows)->contains('Quiz_ID', 'Q1'));
-        $this->assertFalse(collect($this->results->rows)->contains('Quiz_ID', 'Q1'));
-        $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q2'));
-        $this->assertSame(40.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
-        $this->activityLog->shouldHaveReceived('logAction')->once()->withArgs(function (...$arguments) {
-            $serialized = json_encode($arguments, JSON_THROW_ON_ERROR);
-
-            return $arguments[1] === 'DELETE'
-                && $arguments[2] === 'QUIZ'
-                && $arguments[5] === ['Title' => 'Kuis Q1', 'Class_ID' => 'C1']
-                && ! str_contains($serialized, 'Correct_Option')
-                && ! str_contains($serialized, 'Raw_Score')
-                && ! str_contains($serialized, 'Student_Name');
-        });
-
         try {
             $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
-            $this->fail('Deleting an already deleted quiz must return not found.');
-        } catch (HttpException $exception) {
-            $this->assertSame(404, $exception->getStatusCode());
+            $this->fail('Kuis bersejarah tidak boleh dihapus.');
+        } catch (\DomainException $exception) {
+            $this->assertStringContainsString('tidak dapat dihapus', $exception->getMessage());
         }
+        $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertCount(3, collect($this->questions->rows)->where('Quiz_ID', 'Q1'));
+        $this->assertCount(2, collect($this->attempts->rows)->where('Quiz_ID', 'Q1'));
+        $this->assertCount(2, collect($this->results->rows)->where('Quiz_ID', 'Q1'));
         $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q2'));
+        $this->assertSame(55.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
+        $this->activityLog->shouldNotHaveReceived('logAction');
+    }
+
+    public function test_future_quiz_without_attempts_or_results_can_still_be_deleted(): void
+    {
+        $this->seedQuiz('FUTURE', '2026-10-10 08:00:00', '2026-10-10 09:00:00', 30, [10]);
+
+        $deleted = $this->service->deleteQuiz('FUTURE', 'T1', ['C1'], 'U1');
+
+        $this->assertSame(['quiz' => 1, 'questions' => 1, 'attempts' => 0, 'results' => 0], $deleted['deleted']);
+        $this->assertFalse(collect($this->quizzes->rows)->contains('Quiz_ID', 'FUTURE'));
+        $this->activityLog->shouldHaveReceived('logAction')->once();
+    }
+
+    public function test_delete_guard_covers_started_quiz_future_attempt_and_future_result_independently(): void
+    {
+        $this->seedQuiz('STARTED', '2026-10-09 07:00:00', '2026-10-09 09:00:00', 30, [10]);
+        $this->seedQuiz('FUTURE-ATTEMPT', '2026-10-10 08:00:00', '2026-10-10 09:00:00', 30, [10]);
+        $this->seedQuiz('FUTURE-RESULT', '2026-10-10 08:00:00', '2026-10-10 09:00:00', 30, [10]);
+        $this->attempts->rows[] = ['Attempt_ID' => 'A-FUTURE', 'Quiz_ID' => 'FUTURE-ATTEMPT', 'Student_ID' => 'S1'];
+        $this->results->rows[] = ['Quiz_ID' => 'FUTURE-RESULT', 'Attempt_ID' => 'A-LEGACY']
+            + $this->resultRow('R-FUTURE', 'S1', 'Aiko', 'C1', 10, 10, 100, '2026-10-09 07:30:00');
+
+        foreach (['STARTED', 'FUTURE-ATTEMPT', 'FUTURE-RESULT'] as $quizId) {
+            try {
+                $this->service->deleteQuiz($quizId, 'T1', ['C1'], 'U1');
+                $this->fail("{$quizId} tidak boleh dihapus.");
+            } catch (\DomainException) {
+                $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', $quizId));
+            }
+        }
+        $this->assertCount(1, $this->attempts->rows);
+        $this->assertCount(1, $this->results->rows);
     }
 
     public function test_quiz_delete_revalidates_owner_and_class_under_lock(): void
@@ -404,7 +573,7 @@ class H877QuizDomainTest extends TestCase
         try {
             $service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
             $this->fail('A failed child verification must stop deletion.');
-        } catch (\RuntimeException) {
+        } catch (\DomainException) {
             $this->assertTrue(collect($quizzes->rows)->contains('Quiz_ID', 'Q1'));
             $this->assertTrue(collect($questions->rows)->contains('Quiz_ID', 'Q1'));
             $this->assertTrue(collect($attempts->rows)->contains('Quiz_ID', 'Q1'));
@@ -425,6 +594,32 @@ class H877QuizDomainTest extends TestCase
         $this->assertCount(1, $this->results->rows);
         $this->assertSame('Aiko', $this->results->rows[0]['Student_Name']);
         $this->assertSame(100.0, $this->results->rows[0]['Normalized_Score']);
+    }
+
+    public function test_cleanup_finalizer_scores_server_persisted_answers_instead_of_zero(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-15 00:10:00', 'Asia/Jakarta'));
+        $this->seedQuiz('OLD-SAVED', '2026-10-02 08:00:00', '2026-10-02 09:00:00', 30, [10, 15]);
+        $this->attempts->rows[] = [
+            'Attempt_ID' => 'A-SAVED',
+            'Quiz_ID' => 'OLD-SAVED',
+            'Student_ID' => 'S1',
+            'Started_At' => '2026-10-02 08:00:00',
+            'Deadline_At' => '2026-10-02 08:30:00',
+            'Status' => 'IN_PROGRESS',
+            'Submitted_Answers_JSON' => json_encode(['version' => 2, 'answers' => ['OLD-SAVEDQ0' => 'A', 'OLD-SAVEDQ1' => 'B']], JSON_THROW_ON_ERROR),
+            'Submitted_At' => '',
+            'Created_At' => '2026-10-02 08:00:00',
+            'Updated_At' => '2026-10-02 08:20:00',
+        ];
+        $cleanup = new QuizCleanupService($this->quizzes, $this->questions, $this->attempts, $this->results, $this->periods);
+
+        $summary = $cleanup->run();
+
+        $this->assertSame(1, $summary['results_created']);
+        $this->assertSame(10.0, (float) $this->results->rows[0]['Raw_Score']);
+        $this->assertSame(25.0, (float) $this->results->rows[0]['Maximum_Score']);
+        $this->assertSame(40.0, (float) $this->results->rows[0]['Normalized_Score']);
     }
 
     public function test_cleanup_protects_current_future_and_unexpired_review_content(): void

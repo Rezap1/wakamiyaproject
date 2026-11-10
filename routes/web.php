@@ -836,6 +836,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/leaderboard', [StudentQuizController::class, 'leaderboard'])->name('leaderboard');
         Route::post('/{quiz}/start', [StudentQuizController::class, 'start'])->middleware('throttle:20,1')->name('start');
         Route::get('/attempts/{attempt}', [StudentQuizController::class, 'play'])->name('play');
+        Route::post('/attempts/{attempt}/answers', [StudentQuizController::class, 'autosave'])->middleware('throttle:120,1')->name('autosave');
         Route::post('/attempts/{attempt}/submit', [StudentQuizController::class, 'submit'])->middleware('throttle:10,1')->name('submit');
         Route::get('/results/{result}', [StudentQuizController::class, 'result'])->name('result');
     });

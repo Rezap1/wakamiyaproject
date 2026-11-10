@@ -143,6 +143,8 @@ class TeacherQuizController extends Controller
                 $request->ip(),
                 $request->userAgent(),
             );
+        } catch (\DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
         } catch (\RuntimeException $exception) {
             Log::error('Quiz permanent deletion failed verification.', [
                 'quiz_id' => $quiz,

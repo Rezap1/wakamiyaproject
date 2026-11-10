@@ -24,6 +24,10 @@ class H877QuizResponsiveContractTest extends TestCase
         $this->assertStringContainsString('pb-32', $player);
         $this->assertStringContainsString('min-h-14', $player);
         $this->assertStringContainsString('sticky', $player);
+        $this->assertStringContainsString("route('student.quizzes.autosave'", $player);
+        $this->assertStringContainsString('@change="answerChanged"', $player);
+        $this->assertStringContainsString('this.finalize(true)', $player);
+        $this->assertStringContainsString('Jawaban tersimpan di server', $player);
         $this->assertStringContainsString('pb-28', $index);
         $this->assertStringContainsString('max-w-4xl', $leaderboard);
         $this->assertStringContainsString('min-w-0', $leaderboard);

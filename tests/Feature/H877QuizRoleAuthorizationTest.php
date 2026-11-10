@@ -41,7 +41,47 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->get(route('student.quizzes.index'))->assertForbidden();
         $this->post(route('student.quizzes.start', 'FORGED'))->assertForbidden();
         $this->get(route('student.quizzes.play', 'FORGED'))->assertForbidden();
+        $this->postJson(route('student.quizzes.autosave', 'FORGED'), ['version' => 1, 'answers' => []])->assertForbidden();
         $this->post(route('student.quizzes.submit', 'FORGED'))->assertForbidden();
+    }
+
+    public function test_student_autosave_endpoint_returns_confirmed_server_version(): void
+    {
+        $this->actingAsRole('STUDENT');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('studentForUser')->once()->andReturn(['Student_ID' => 'S1', 'Class_ID' => 'C1']);
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldReceive('autosave')->once()->with('A1', ['Student_ID' => 'S1', 'Class_ID' => 'C1'], ['Q1' => 'A'], 4)->andReturn([
+            'saved' => true,
+            'idempotent' => false,
+            'version' => 4,
+            'answers' => ['Q1' => 'A'],
+            'saved_at' => '2026-11-10 20:55:00',
+        ]);
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->postJson(route('student.quizzes.autosave', 'A1'), [
+            'version' => 4,
+            'answers' => ['Q1' => 'A'],
+        ])->assertOk()->assertJsonPath('saved', true)->assertJsonPath('version', 4);
+    }
+
+    public function test_direct_teacher_delete_displays_domain_guard_message(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('classesForTeacher')->once()->with('T1')->andReturn(collect([['Class_ID' => 'C1']]));
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldReceive('deleteQuiz')->once()->andThrow(new \DomainException('Kuis bersejarah tidak dapat dihapus.'));
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->from(route('teacher.quizzes.show', 'Q1'))
+            ->delete(route('teacher.quizzes.destroy', 'Q1'))
+            ->assertRedirect(route('teacher.quizzes.show', 'Q1'))
+            ->assertSessionHas('error', 'Kuis bersejarah tidak dapat dihapus.');
     }
 
     public static function nonTeacherRoles(): array

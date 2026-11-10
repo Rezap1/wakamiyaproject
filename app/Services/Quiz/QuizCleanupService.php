@@ -61,6 +61,13 @@ class QuizCleanupService
                         continue;
                     }
                     $completed = trim((string) ($attempt['Deadline_At'] ?? $quiz['End_At']));
+                    $answers = $this->answerMap((string) ($attempt['Submitted_Answers_JSON'] ?? ''));
+                    $raw = (float) $quizQuestions->sum(function ($question) use ($answers) {
+                        $selected = strtoupper(trim((string) ($answers[$question['Question_ID']] ?? '')));
+                        $correct = strtoupper(trim((string) ($question['Correct_Option'] ?? '')));
+
+                        return $selected !== '' && $selected === $correct ? (float) ($question['Point'] ?? 0) : 0.0;
+                    });
                     $this->results->create([
                         'Result_ID' => 'QRS'.strtoupper(substr(hash('sha256', $attempt['Attempt_ID']), 0, 24)),
                         'Quiz_ID' => $quizId,
@@ -70,9 +77,9 @@ class QuizCleanupService
                         'Student_Name' => $attempt['Student_ID'],
                         'Class_ID' => $quiz['Class_ID'],
                         'Teacher_ID' => $quiz['Teacher_ID'],
-                        'Raw_Score' => 0,
+                        'Raw_Score' => $raw,
                         'Maximum_Score' => $maximum,
-                        'Normalized_Score' => 0,
+                        'Normalized_Score' => $maximum > 0 ? round(($raw / $maximum) * 100, 4) : 0,
                         'Started_At' => $attempt['Started_At'],
                         'Completed_At' => $completed,
                         'Created_At' => $now->format('Y-m-d H:i:s'),
@@ -89,5 +96,24 @@ class QuizCleanupService
 
             return $summary;
         });
+    }
+
+    /** @return array<string, string> */
+    private function answerMap(string $json): array
+    {
+        $decoded = json_decode($json, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $answers = isset($decoded['answers']) && is_array($decoded['answers']) ? $decoded['answers'] : $decoded;
+
+        return collect($answers)->mapWithKeys(function ($answer, $questionId) {
+            $answer = strtoupper(trim((string) $answer));
+
+            return in_array($answer, ['A', 'B', 'C', 'D'], true)
+                ? [trim((string) $questionId) => $answer]
+                : [];
+        })->all();
     }
 }
