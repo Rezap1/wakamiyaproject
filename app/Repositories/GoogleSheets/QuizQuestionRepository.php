@@ -6,7 +6,7 @@ use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 
 class QuizQuestionRepository extends BaseSheetRepository implements QuizQuestionRepositoryInterface
 {
-    public const HEADERS = ['Question_ID', 'Quiz_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order', 'Created_At', 'Updated_At'];
+    public const HEADERS = ['Question_ID', 'Quiz_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order', 'Created_At', 'Updated_At', 'Image_Path', 'Image_Mime', 'Image_Size_Bytes', 'Audio_Path', 'Audio_Mime', 'Audio_Size_Bytes', 'Audio_Duration_Milliseconds'];
 
     public function __construct()
     {
@@ -20,6 +20,11 @@ class QuizQuestionRepository extends BaseSheetRepository implements QuizQuestion
     public function findById(string $id)
     {
         return $this->fetchAll()->firstWhere('Question_ID', $id);
+    }
+
+    public function findByIdFresh($id)
+    {
+        return parent::findByIdFresh($id);
     }
 
     public function create(array $data)

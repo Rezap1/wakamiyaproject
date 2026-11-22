@@ -68,6 +68,7 @@ use App\Http\Controllers\Hr\LeaveController;
 use App\Http\Controllers\Hr\OvertimeController;
 use App\Http\Controllers\Hr\PayrollController;
 use App\Http\Controllers\Hr\QRAttendanceController;
+use App\Http\Controllers\Quiz\QuizMediaController;
 use App\Http\Controllers\Quiz\StudentQuizController;
 use App\Http\Controllers\Quiz\TeacherQuizController;
 use App\Http\Controllers\Student\AttendanceHistoryController;
@@ -817,6 +818,8 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('teacher/quizzes')->name('teacher.quizzes.')->middleware('role:TEACHER')->group(function () {
         Route::get('/', [TeacherQuizController::class, 'index'])->name('index');
+        Route::post('/media/staging', [QuizMediaController::class, 'upload'])->middleware('throttle:30,1')->name('media.upload');
+        Route::get('/media/staging/{token}', [QuizMediaController::class, 'staging'])->middleware('throttle:120,1')->name('media.staging');
         Route::get('/create', [TeacherQuizController::class, 'create'])->name('create');
         Route::post('/', [TeacherQuizController::class, 'store'])->name('store');
         Route::get('/classes/{class}', [TeacherQuizController::class, 'classHub'])->name('class');
@@ -825,6 +828,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/results', [TeacherQuizController::class, 'results'])->name('results');
         Route::get('/results/{result}', [TeacherQuizController::class, 'result'])->name('result');
         Route::get('/leaderboard/{class}', [TeacherQuizController::class, 'leaderboard'])->name('leaderboard');
+        Route::get('/{quiz}/questions/{question}/media/{type}', [QuizMediaController::class, 'teacher'])->where('type', 'image|audio')->middleware('throttle:240,1')->name('media');
         Route::get('/{quiz}', [TeacherQuizController::class, 'show'])->name('show');
         Route::get('/{quiz}/edit', [TeacherQuizController::class, 'edit'])->name('edit');
         Route::put('/{quiz}', [TeacherQuizController::class, 'update'])->name('update');
@@ -836,9 +840,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/leaderboard', [StudentQuizController::class, 'leaderboard'])->name('leaderboard');
         Route::post('/{quiz}/start', [StudentQuizController::class, 'start'])->middleware('throttle:20,1')->name('start');
         Route::get('/attempts/{attempt}', [StudentQuizController::class, 'play'])->name('play');
+        Route::get('/attempts/{attempt}/questions/{question}/media/{type}', [QuizMediaController::class, 'attempt'])->where('type', 'image|audio')->middleware('throttle:600,1')->name('attempt-media');
         Route::post('/attempts/{attempt}/answers', [StudentQuizController::class, 'autosave'])->middleware('throttle:120,1')->name('autosave');
         Route::post('/attempts/{attempt}/submit', [StudentQuizController::class, 'submit'])->middleware('throttle:10,1')->name('submit');
         Route::get('/results/{result}', [StudentQuizController::class, 'result'])->name('result');
+        Route::get('/results/{result}/questions/{question}/media/{type}', [QuizMediaController::class, 'result'])->where('type', 'image|audio')->middleware('throttle:600,1')->name('result-media');
     });
 
 });

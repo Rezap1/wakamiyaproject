@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\ExternalGifProvider;
+use App\Interfaces\AgendaRepositoryInterface;
 use App\Interfaces\GoogleSheets\AcademicYearRepositoryInterface;
 use App\Interfaces\GoogleSheets\AccountRepositoryInterface;
 use App\Interfaces\GoogleSheets\ActivityLogRepositoryInterface;
@@ -49,7 +50,6 @@ use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
-use App\Interfaces\AgendaRepositoryInterface;
 use App\Repositories\GoogleSheets\AcademicYearRepository;
 use App\Repositories\GoogleSheets\AccountRepository;
 use App\Repositories\GoogleSheets\ActivityLogRepository;
@@ -99,10 +99,16 @@ use App\Repositories\GoogleSheets\UserRepository;
 use App\Repositories\GoogleSheets\WorkflowRepository;
 use App\Repositories\MySql\AgendaRepository;
 use App\Services\Academic\DisabledExternalGifProvider;
+use App\Services\Core\ActivityLogService;
 use App\Services\Core\EnterpriseAutomationService;
 use App\Services\Core\SystemSettingService;
 use App\Services\Core\UserService;
 use App\Services\Dashboard\DashboardContextService;
+use App\Services\Quiz\QuizAudioInspector;
+use App\Services\Quiz\QuizMediaIdempotencyService;
+use App\Services\Quiz\QuizMediaService;
+use App\Services\Quiz\QuizPeriodService;
+use App\Services\Quiz\QuizService;
 use App\Support\LoginRateLimiter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -166,6 +172,22 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(QuizQuestionRepositoryInterface::class, QuizQuestionRepository::class);
         $this->app->bind(QuizAttemptRepositoryInterface::class, QuizAttemptRepository::class);
         $this->app->bind(QuizResultRepositoryInterface::class, QuizResultRepository::class);
+        $this->app->singleton(QuizMediaIdempotencyService::class);
+        $this->app->bind(QuizMediaService::class, fn ($app) => new QuizMediaService(
+            $app->make(QuizAudioInspector::class),
+            $app->make(QuizQuestionRepositoryInterface::class),
+            $app->make(QuizMediaIdempotencyService::class),
+        ));
+        $this->app->bind(QuizService::class, fn ($app) => new QuizService(
+            $app->make(QuizRepositoryInterface::class),
+            $app->make(QuizQuestionRepositoryInterface::class),
+            $app->make(QuizAttemptRepositoryInterface::class),
+            $app->make(QuizResultRepositoryInterface::class),
+            $app->make(QuizPeriodService::class),
+            $app->make(ActivityLogService::class),
+            $app->make(QuizMediaService::class),
+            $app->make(QuizMediaIdempotencyService::class),
+        ));
         $this->app->bind(ExternalGifProvider::class, DisabledExternalGifProvider::class);
         $this->app->singleton(EnterpriseAutomationService::class, function ($app) {
             return new EnterpriseAutomationService;

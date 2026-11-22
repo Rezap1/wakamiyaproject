@@ -5,21 +5,25 @@ namespace Tests\Feature;
 use App\Repositories\GoogleSheets\AlumniRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\MySqlTestGuard;
+use Tests\Support\UsesIsolatedMySqlDatabase;
 use Tests\TestCase;
 
 class AlumniWorkFieldMySqlTest extends TestCase
 {
+    use UsesIsolatedMySqlDatabase;
+
     private bool $transactionStarted = false;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $connection = DB::connection((string) config('wms_runtime.connection'));
-        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)
-            || $connection->getDatabaseName() !== 'wms_mysql_test') {
+        $connectionName = (string) config('wms_runtime.connection');
+        if (! in_array((string) config("database.connections.{$connectionName}.driver"), ['mysql', 'mariadb'], true)) {
             $this->markTestSkipped('Alumni MySQL integration test requires wms_mysql_test.');
         }
+        $connection = MySqlTestGuard::connection();
 
         $connection->beginTransaction();
         $this->transactionStarted = true;

@@ -798,6 +798,37 @@ class H877QuizDomainTest extends TestCase
         }
     }
 
+    public function test_media_access_is_bound_to_teacher_attempt_result_and_existing_review_window(): void
+    {
+        $this->seedQuiz('MEDIA', points: [10]);
+        $this->questions->rows[0] += [
+            'Image_Path' => 'quiz-media/MEDIA/MEDIAQ0/image.jpg',
+            'Image_Mime' => 'image/jpeg',
+            'Audio_Path' => 'quiz-media/MEDIA/MEDIAQ0/audio.mp3',
+            'Audio_Mime' => 'audio/mpeg',
+        ];
+        $this->assertSame('image/jpeg', $this->service->teacherMedia('MEDIA', 'MEDIAQ0', 'image', 'T1', ['C1'])['mime']);
+
+        $attempt = $this->service->start('MEDIA', $this->student())['attempt'];
+        $this->assertSame('audio/mpeg', $this->service->attemptMedia($attempt['Attempt_ID'], 'MEDIAQ0', 'audio', $this->student())['mime']);
+        try {
+            $this->service->attemptMedia($attempt['Attempt_ID'], 'MEDIAQ0', 'audio', ['Student_ID' => 'S2', 'Class_ID' => 'C1']);
+            $this->fail('Another student must not access attempt media.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
+        $result = $this->service->submit($attempt['Attempt_ID'], $this->student(), []);
+        $this->assertSame('image/jpeg', $this->service->resultMedia($result['Result_ID'], 'MEDIAQ0', 'image', $this->student())['mime']);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse($result['Completed_At'], 'Asia/Jakarta')->addMinutes(4));
+        try {
+            $this->service->resultMedia($result['Result_ID'], 'MEDIAQ0', 'image', $this->student());
+            $this->fail('Expired review media must not remain authorized.');
+        } catch (HttpException $exception) {
+            $this->assertSame(410, $exception->getStatusCode());
+        }
+    }
+
     private function question(string $text, string $a, string $b, string $c, string $d, string $correct, float $point): array
     {
         return [

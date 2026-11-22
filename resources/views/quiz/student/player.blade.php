@@ -41,7 +41,16 @@
         <template x-for="(q, i) in questions" :key="q.Question_ID">
             <fieldset x-show="index === i" class="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
                 <legend class="sr-only" x-text="`Soal ${i + 1}`"></legend>
-                <p class="text-lg font-black leading-relaxed" x-text="q.Question_Text"></p>
+                <div x-show="q.Image_URL" class="mb-5">
+                    <img :src="mediaSource(q, 'image', i)" loading="lazy" decoding="async" alt="Gambar materi soal" class="max-h-[65dvh] w-full rounded-xl border border-slate-200 object-contain" @load="clearMediaError(q, 'image')" x-on:error="setMediaError(q, 'image')">
+                    <div x-show="mediaError(q, 'image')" class="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">Gambar gagal dimuat. <button type="button" class="font-bold underline" @click="retryMedia(q, 'image')">Coba lagi</button></div>
+                </div>
+                <div x-show="q.Audio_URL" class="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <audio :src="mediaSource(q, 'audio', i)" controls preload="none" class="w-full" @canplay="clearMediaError(q, 'audio')" x-on:error="setMediaError(q, 'audio')" data-quiz-audio></audio>
+                    <p class="mt-2 text-xs text-slate-500">Audio dapat diputar, dijeda, dicari, dan diulang tanpa batas selama waktu kuis tersedia.</p>
+                    <div x-show="mediaError(q, 'audio')" class="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">Audio gagal dimuat. <button type="button" class="font-bold underline" @click="retryMedia(q, 'audio')">Coba lagi</button></div>
+                </div>
+                <p x-show="q.Question_Text" class="text-lg font-black leading-relaxed" x-text="q.Question_Text"></p>
                 <div class="mt-6 space-y-3">
                     <template x-for="letter in ['A', 'B', 'C', 'D']" :key="`${q.Question_ID}-${letter}`">
                         <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition focus-within:ring-2 focus-within:ring-sky-500" :class="answers[q.Question_ID] === letter ? 'border-sky-500 bg-sky-50' : 'border-slate-200'">
@@ -55,13 +64,13 @@
         </template>
 
         <div class="mt-4 flex gap-3">
-            <button type="button" @click="index--" :disabled="index === 0 || finalizing" class="min-h-12 flex-1 rounded-xl border border-slate-300 bg-white font-black disabled:opacity-40">Sebelumnya</button>
-            <button type="button" x-show="index < questions.length - 1" @click="index++" :disabled="finalizing" class="min-h-12 flex-1 rounded-xl bg-sky-600 font-black text-white disabled:opacity-40">Berikutnya</button>
+            <button type="button" @click="goTo(index - 1)" :disabled="index === 0 || finalizing" class="min-h-12 flex-1 rounded-xl border border-slate-300 bg-white font-black disabled:opacity-40">Sebelumnya</button>
+            <button type="button" x-show="index < questions.length - 1" @click="goTo(index + 1)" :disabled="finalizing" class="min-h-12 flex-1 rounded-xl bg-sky-600 font-black text-white disabled:opacity-40">Berikutnya</button>
             <button type="submit" x-show="index === questions.length - 1" :disabled="finalizing" class="min-h-12 flex-1 rounded-xl bg-emerald-600 font-black text-white disabled:opacity-50" x-text="finalizing ? 'Memfinalisasi...' : 'Kirim Jawaban'">Kirim Jawaban</button>
         </div>
         <div class="mt-4 flex flex-wrap gap-2" aria-label="Status jawaban">
             <template x-for="(q, i) in questions" :key="`nav-${q.Question_ID}`">
-                <button type="button" @click="index = i" :disabled="finalizing" class="h-10 w-10 rounded-lg border font-bold" :class="answers[q.Question_ID] ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-white text-slate-500'" :aria-label="`Soal ${i + 1}, ${answers[q.Question_ID] ? 'sudah' : 'belum'} dijawab`" x-text="i + 1"></button>
+                <button type="button" @click="goTo(i)" :disabled="finalizing" class="h-10 w-10 rounded-lg border font-bold" :class="answers[q.Question_ID] ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-white text-slate-500'" :aria-label="`Soal ${i + 1}, ${answers[q.Question_ID] ? 'sudah' : 'belum'} dijawab`" x-text="i + 1"></button>
             </template>
         </div>
     </form>
@@ -89,6 +98,8 @@ function quizPlayer(questions, deadline, initialAnswers, initialVersion, autosav
         finalizing: false,
         finalizeStatus: '',
         initialized: false,
+        mediaFailures: {},
+        mediaRetries: {},
         get saveStatus() {
             if (this.saveError) return 'Jawaban belum terkonfirmasi tersimpan';
             if (this.saving) return 'Menyimpan jawaban...';
@@ -116,6 +127,25 @@ function quizPlayer(questions, deadline, initialAnswers, initialVersion, autosav
             this.saveError = '';
             clearTimeout(this.saveTimer);
             this.saveTimer = setTimeout(() => this.flushSave(), 650);
+        },
+        pauseAllAudio() {
+            document.querySelectorAll('[data-quiz-audio]').forEach(audio => { audio.pause(); });
+        },
+        goTo(next) {
+            this.pauseAllAudio();
+            this.index = Math.max(0, Math.min(this.questions.length - 1, next));
+        },
+        mediaKey(q, type) { return `${q.Question_ID}:${type}`; },
+        mediaError(q, type) { return Boolean(this.mediaFailures[this.mediaKey(q, type)]); },
+        setMediaError(q, type) { this.mediaFailures[this.mediaKey(q, type)] = true; },
+        clearMediaError(q, type) { this.mediaFailures[this.mediaKey(q, type)] = false; },
+        retryMedia(q, type) { const key = this.mediaKey(q, type); this.mediaFailures[key] = false; this.mediaRetries[key] = (this.mediaRetries[key] || 0) + 1; },
+        mediaSource(q, type, questionIndex) {
+            if (this.index !== questionIndex) return null;
+            const url = q[type === 'image' ? 'Image_URL' : 'Audio_URL'];
+            if (!url) return null;
+            const retry = this.mediaRetries[this.mediaKey(q, type)] || 0;
+            return retry ? `${url}${url.includes('?') ? '&' : '?'}retry=${retry}` : url;
         },
         retrySave() {
             if (this.saveBlocked) return false;
@@ -192,6 +222,7 @@ function quizPlayer(questions, deadline, initialAnswers, initialVersion, autosav
             if (!automatic && !window.confirm('Kirim jawaban final? Jawaban tidak dapat diubah setelah dikirim.')) return;
 
             this.finalizing = true;
+            this.pauseAllAudio();
             this.finalizeStatus = 'Menyimpan perubahan terakhir...';
             clearTimeout(this.saveTimer);
             clearTimeout(this.retryTimer);
@@ -244,6 +275,7 @@ function quizPlayer(questions, deadline, initialAnswers, initialVersion, autosav
                 if (left > 0 && left <= 10000 && this.dirty && !this.saving) this.flushSave();
                 if (left === 0) {
                     clearInterval(this.timer);
+                    this.pauseAllAudio();
                     this.finalize(true);
                 }
             };

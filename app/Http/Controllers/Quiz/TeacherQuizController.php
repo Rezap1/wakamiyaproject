@@ -144,7 +144,10 @@ class TeacherQuizController extends Controller
                 $request->userAgent(),
             );
         } catch (\DomainException $exception) {
-            return back()->with('error', $exception->getMessage());
+            return back()->with('error', $this->safeExceptionMessage(
+                $exception,
+                'Kuis yang sudah dimulai atau memiliki percobaan/hasil tidak dapat dihapus.'
+            ));
         } catch (\RuntimeException $exception) {
             Log::error('Quiz permanent deletion failed verification.', [
                 'quiz_id' => $quiz,
@@ -219,16 +222,21 @@ class TeacherQuizController extends Controller
             'Start_At' => ['required', 'date'],
             'End_At' => ['required', 'date', 'after:Start_At'],
             'Duration_Minutes' => ['required', 'integer', 'min:1', 'max:'.config('quiz.max_duration_minutes', 480)],
+            'Idempotency_Key' => ['required', 'uuid'],
             'intent' => ['required', 'in:draft,publish'],
             'question_count' => ['required', 'integer', 'min:1', 'max:'.$maxQuestions],
             'questions' => ['required', 'array', 'min:1', 'max:'.$maxQuestions],
-            'questions.*.Question_Text' => ['required_if:intent,publish', 'nullable', 'string', 'max:2000'],
+            'questions.*.Question_Text' => ['nullable', 'string', 'max:2000'],
             'questions.*.Option_A' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
             'questions.*.Option_B' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
             'questions.*.Option_C' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
             'questions.*.Option_D' => ['required_if:intent,publish', 'nullable', 'string', 'max:1000'],
             'questions.*.Correct_Option' => ['required_if:intent,publish', 'nullable', 'in:A,B,C,D'],
             'questions.*.Point' => ['required_if:intent,publish', 'nullable', 'numeric', 'gt:0', 'max:10000'],
+            'questions.*.Image_Token' => ['nullable', 'uuid'],
+            'questions.*.Audio_Token' => ['nullable', 'uuid'],
+            'questions.*.Remove_Image' => ['nullable', 'boolean'],
+            'questions.*.Remove_Audio' => ['nullable', 'boolean'],
         ], [
             'question_count.required' => 'Jumlah soal wajib diisi.',
             'question_count.integer' => 'Jumlah soal harus berupa bilangan bulat.',
@@ -238,7 +246,6 @@ class TeacherQuizController extends Controller
             'questions.required_if' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
             'questions.min' => 'Minimal satu soal diperlukan sebelum kuis diterbitkan.',
             'questions.max' => "Jumlah soal maksimal {$maxQuestions}.",
-            'questions.*.Question_Text.required_if' => 'Pertanyaan wajib diisi sebelum kuis diterbitkan.',
             'questions.*.Option_A.required_if' => 'Pilihan A wajib diisi sebelum kuis diterbitkan.',
             'questions.*.Option_B.required_if' => 'Pilihan B wajib diisi sebelum kuis diterbitkan.',
             'questions.*.Option_C.required_if' => 'Pilihan C wajib diisi sebelum kuis diterbitkan.',
@@ -275,6 +282,10 @@ class TeacherQuizController extends Controller
             'Option_D' => trim((string) ($question['Option_D'] ?? '')),
             'Correct_Option' => strtoupper(trim((string) ($question['Correct_Option'] ?? 'A'))),
             'Point' => (float) ($question['Point'] ?? 10),
+            'Image_Token' => trim((string) ($question['Image_Token'] ?? '')),
+            'Audio_Token' => trim((string) ($question['Audio_Token'] ?? '')),
+            'Remove_Image' => filter_var($question['Remove_Image'] ?? false, FILTER_VALIDATE_BOOL),
+            'Remove_Audio' => filter_var($question['Remove_Audio'] ?? false, FILTER_VALIDATE_BOOL),
         ])->all();
 
         return $data;

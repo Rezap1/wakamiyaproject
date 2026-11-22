@@ -5,6 +5,8 @@ namespace Tests;
 use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Cache;
+use RuntimeException;
+use Tests\Support\UsesIsolatedMySqlDatabase;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -12,12 +14,20 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        $default = (string) config('database.default');
+        $driver = (string) config("database.connections.{$default}.driver");
+        if (in_array($driver, ['mysql', 'mariadb'], true)
+            && ! in_array(UsesIsolatedMySqlDatabase::class, class_uses_recursive(static::class), true)) {
+            throw new RuntimeException('Only explicitly marked MySQL integration tests may use the MySQL test connection.');
+        }
+
         // Global view composers must stay offline in tests. Suites that
         // exercise SystemSettingService explicitly flush these keys first.
         Cache::forever('system_theme_tokens_payload', []);
         Cache::forever('system_company_profile_payload', []);
 
-        $this->app->instance(NotificationRepositoryInterface::class, new class implements NotificationRepositoryInterface {
+        $this->app->instance(NotificationRepositoryInterface::class, new class implements NotificationRepositoryInterface
+        {
             public function getAll()
             {
                 return collect();

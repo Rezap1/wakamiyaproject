@@ -5,6 +5,9 @@ return [
     // M1 importer remains isolated on the `wms_migration` connection.
     'connection' => env('WMS_RUNTIME_DB_CONNECTION', env('DB_CONNECTION', 'mysql')),
     'database' => env('WMS_RUNTIME_DB_DATABASE', 'wms_mysql'),
+    // No default is intentional: production multimedia migrations must name
+    // the exact owner-approved target and fail closed when it is absent.
+    'quiz_multimedia_migration_database' => env('WMS_QUIZ_MULTIMEDIA_MIGRATION_DATABASE'),
     'sequence_table' => 'WMS_ID_SEQUENCE',
     'allow_test_truncate' => env('WMS_ALLOW_TEST_TRUNCATE', false),
     'allow_missing_test_schema' => true,
@@ -35,6 +38,15 @@ return [
         'MASTER_PERMANENT_QR' => [
             'ATTENDANCE_START_TIME',
             'ATTENDANCE_END_TIME',
+        ],
+        'QUIZ_QUESTION' => [
+            'Image_Path',
+            'Image_Mime',
+            'Image_Size_Bytes',
+            'Audio_Path',
+            'Audio_Mime',
+            'Audio_Size_Bytes',
+            'Audio_Duration_Milliseconds',
         ],
     ],
 ];

@@ -263,6 +263,7 @@ class H877TeacherQuizUxHotfixTest extends TestCase
     private function validPayload(int $count = 1): array
     {
         return [
+            'Idempotency_Key' => '20000000-0000-4000-8000-000000000877',
             'Title' => 'Kosakata',
             'Class_ID' => 'C1',
             'Start_At' => '2026-10-10 08:00:00',

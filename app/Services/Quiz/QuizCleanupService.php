@@ -17,6 +17,7 @@ class QuizCleanupService
         private QuizAttemptRepositoryInterface $attempts,
         private QuizResultRepositoryInterface $results,
         private QuizPeriodService $periods,
+        private ?QuizMediaService $media = null,
     ) {}
 
     public function run(?CarbonImmutable $at = null, ?int $limit = null): array
@@ -92,6 +93,16 @@ class QuizCleanupService
                 $summary['questions'] += $this->questions->hardDeleteMany($quizQuestions->pluck('Question_ID')->all());
                 $summary['attempts'] += $this->attempts->hardDeleteMany($quizAttempts->pluck('Attempt_ID')->all());
                 $summary['quizzes'] += $this->quizzes->hardDeleteMany([$quizId]);
+                if ($this->media !== null) {
+                    $this->media->deleteUnreferenced($quizQuestions->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])->filter());
+                }
+            }
+
+            if ($this->media !== null) {
+                $remaining = collect($this->questions->fetchAllFresh())
+                    ->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])
+                    ->filter();
+                $this->media->cleanupOrphans($remaining);
             }
 
             return $summary;

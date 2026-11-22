@@ -13,6 +13,8 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class QuizService
 {
@@ -23,63 +25,150 @@ class QuizService
         private QuizResultRepositoryInterface $results,
         private QuizPeriodService $periods,
         private ActivityLogService $activityLog,
+        private ?QuizMediaService $media = null,
+        private ?QuizMediaIdempotencyService $mediaIdempotency = null,
     ) {}
 
     public function create(array $data, array $teacher, string $userId): string
     {
-        $quizId = 'QIZ'.strtoupper(substr(str_replace('-', '', (string) Str::uuid()), 0, 20));
-
-        return $this->runtimeTransaction($this->quizzes, function () use ($data, $teacher, $userId, $quizId): string {
-            $this->assertQuestionPayload($data['questions'] ?? []);
-            $now = $this->stamp($this->periods->now());
-            $publish = ($data['intent'] ?? 'draft') === 'publish';
-            $this->quizzes->create([
-                'Quiz_ID' => $quizId,
-                'Teacher_ID' => $teacher['Teacher_ID'],
-                'Class_ID' => $data['Class_ID'],
-                'Title' => trim($data['Title']),
-                'Start_At' => $this->stamp($this->date($data['Start_At'])),
-                'End_At' => $this->stamp($this->date($data['End_At'])),
-                'Duration_Minutes' => (int) $data['Duration_Minutes'],
-                'Status' => 'DRAFT',
-                'Created_At' => $now,
-                'Updated_At' => $now,
-                'Created_By' => $userId,
-                'Updated_By' => $userId,
-            ]);
-            $this->writeQuestions($quizId, $data['questions'], $now);
-            if ($publish) {
-                $this->quizzes->update($quizId, ['Status' => 'PUBLISHED', 'Updated_At' => $now, 'Updated_By' => $userId]);
+        [$idempotencyKey, $payloadHash] = $this->idempotencyContext($data, $userId, 'create', null);
+        if ($idempotencyKey !== null) {
+            $replay = $this->mediaIdempotency?->replayResult($idempotencyKey, $userId, 'create', null, $payloadHash);
+            if ($replay !== null) {
+                return $this->availableReplay($replay, $teacher);
             }
+        }
+        $quizId = 'QIZ'.strtoupper(substr(str_replace('-', '', (string) Str::uuid()), 0, 20));
+        $this->assertQuestionPayload($data['questions'] ?? []);
+        $plan = $this->media?->prepare($quizId, $data['questions'], [], $userId);
+        if ($plan !== null) {
+            $data['questions'] = $plan['questions'];
+        }
+        $this->assertPublishableQuestions($data);
 
-            return $quizId;
-        });
-    }
-
-    public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
-    {
-        $this->withCacheLock('quiz_edit_'.hash('sha256', $quizId), 30, 10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
-            return $this->runtimeTransaction($this->quizzes, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds): void {
-                $quiz = $this->requireQuizFresh($quizId);
-                $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
-                $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
-                abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
-                $this->assertQuestionPayload($data['questions'] ?? []);
+        try {
+            $created = $this->runtimeTransaction($this->quizzes, function () use ($data, $teacher, $userId, $quizId, $plan, $idempotencyKey, $payloadHash): string {
                 $now = $this->stamp($this->periods->now());
-                $existingIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
-                $this->questions->hardDeleteMany($existingIds);
-                $this->writeQuestions($quizId, $data['questions'], $now);
-                $this->quizzes->update($quizId, [
+                $publish = ($data['intent'] ?? 'draft') === 'publish';
+                $this->quizzes->create([
+                    'Quiz_ID' => $quizId,
+                    'Teacher_ID' => $teacher['Teacher_ID'],
                     'Class_ID' => $data['Class_ID'],
                     'Title' => trim($data['Title']),
                     'Start_At' => $this->stamp($this->date($data['Start_At'])),
                     'End_At' => $this->stamp($this->date($data['End_At'])),
                     'Duration_Minutes' => (int) $data['Duration_Minutes'],
-                    'Status' => ($data['intent'] ?? 'draft') === 'publish' ? 'PUBLISHED' : 'DRAFT',
+                    'Status' => 'DRAFT',
+                    'Created_At' => $now,
                     'Updated_At' => $now,
+                    'Created_By' => $userId,
                     'Updated_By' => $userId,
                 ]);
-            }, [[$this->quizzes, $quizId]]);
+                $this->writeQuestions($quizId, $data['questions'], $now);
+                if ($publish) {
+                    $this->quizzes->update($quizId, ['Status' => 'PUBLISHED', 'Updated_At' => $now, 'Updated_By' => $userId]);
+                }
+                if ($idempotencyKey !== null) {
+                    $this->mediaIdempotency?->recordCommitted(
+                        $idempotencyKey,
+                        $userId,
+                        'create',
+                        null,
+                        $payloadHash,
+                        $quizId,
+                        $plan['token_uses'] ?? [],
+                        $now,
+                    );
+                }
+
+                return $quizId;
+            });
+        } catch (\Throwable $exception) {
+            if ($plan !== null) {
+                $this->media?->rollback($plan);
+            }
+            if ($idempotencyKey !== null) {
+                $replay = $this->mediaIdempotency?->replayResult($idempotencyKey, $userId, 'create', null, $payloadHash);
+                if ($replay !== null) {
+                    return $this->availableReplay($replay, $teacher);
+                }
+            }
+            throw $exception;
+        }
+        if ($plan !== null) {
+            $this->media?->commit($plan);
+        }
+
+        return $created;
+    }
+
+    public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
+    {
+        $this->withCacheLock('quiz_edit_'.hash('sha256', $quizId), 30, 10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
+            [$idempotencyKey, $payloadHash] = $this->idempotencyContext($data, $userId, 'update', $quizId);
+            if ($idempotencyKey !== null) {
+                $replay = $this->mediaIdempotency?->replayResult(
+                    $idempotencyKey,
+                    $userId,
+                    'update',
+                    $quizId,
+                    $payloadHash,
+                );
+                if ($replay !== null) {
+                    $this->availableReplay($replay, $teacher, $allowedClassIds);
+
+                    return;
+                }
+            }
+            $quiz = $this->requireQuizFresh($quizId);
+            $this->assertTeacherOwns($quiz, $teacher['Teacher_ID']);
+            $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+            abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
+            $this->assertQuestionPayload($data['questions'] ?? []);
+            $existingQuestions = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->values();
+            $plan = $this->media?->prepare($quizId, $data['questions'], $existingQuestions, $userId);
+            if ($plan !== null) {
+                $data['questions'] = $plan['questions'];
+            }
+            $this->assertPublishableQuestions($data);
+            $now = $this->stamp($this->periods->now());
+
+            try {
+                $this->runtimeTransaction($this->quizzes, function () use ($quizId, $data, $userId, $now, $existingQuestions, $plan, $idempotencyKey, $payloadHash): void {
+                    $this->questions->hardDeleteMany($existingQuestions->pluck('Question_ID')->all());
+                    $this->writeQuestions($quizId, $data['questions'], $now);
+                    $this->quizzes->update($quizId, [
+                        'Class_ID' => $data['Class_ID'],
+                        'Title' => trim($data['Title']),
+                        'Start_At' => $this->stamp($this->date($data['Start_At'])),
+                        'End_At' => $this->stamp($this->date($data['End_At'])),
+                        'Duration_Minutes' => (int) $data['Duration_Minutes'],
+                        'Status' => ($data['intent'] ?? 'draft') === 'publish' ? 'PUBLISHED' : 'DRAFT',
+                        'Updated_At' => $now,
+                        'Updated_By' => $userId,
+                    ]);
+                    if ($idempotencyKey !== null) {
+                        $this->mediaIdempotency?->recordCommitted(
+                            $idempotencyKey,
+                            $userId,
+                            'update',
+                            $quizId,
+                            $payloadHash,
+                            $quizId,
+                            $plan['token_uses'] ?? [],
+                            $now,
+                        );
+                    }
+                }, [[$this->quizzes, $quizId]]);
+            } catch (\Throwable $exception) {
+                if ($plan !== null) {
+                    $this->media?->rollback($plan);
+                }
+                throw $exception;
+            }
+            if ($plan !== null) {
+                $this->media?->commit($plan);
+            }
         });
     }
 
@@ -197,7 +286,13 @@ class QuizService
         $quiz = (array) ($this->quizzes->findById($quizId) ?: abort(404));
         $this->assertTeacherOwns($quiz, $teacherId);
         $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
-        $quiz['questions'] = collect($this->questions->fetchAll())->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->values();
+        $quiz['questions'] = collect($this->questions->fetchAll())->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->map(function ($question) use ($quizId) {
+            $question = (array) $question;
+            $question['Image_URL'] = ! empty($question['Image_Path']) ? route('teacher.quizzes.media', [$quizId, $question['Question_ID'], 'image']) : null;
+            $question['Audio_URL'] = ! empty($question['Audio_Path']) ? route('teacher.quizzes.media', [$quizId, $question['Question_ID'], 'audio']) : null;
+
+            return $question;
+        })->values();
         $quiz['results'] = collect($this->results->fetchAll())->where('Quiz_ID', $quizId)->sortByDesc('Completed_At')->values();
         $quiz['Editable'] = $this->isEditable($quiz);
         $quiz['Deletable'] = $this->isDeletable($quiz);
@@ -214,7 +309,7 @@ class QuizService
         ?string $userAgent = null,
     ): array {
         return $this->withCacheLock('quiz_delete_'.hash('sha256', $quizId), 45, 15, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent) {
-            return $this->runtimeTransaction($this->quizzes, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
+            $outcome = $this->runtimeTransaction($this->quizzes, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
                 $quiz = $this->requireQuizFresh($quizId);
                 $this->assertTeacherOwns($quiz, $teacherId);
                 $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
@@ -228,7 +323,8 @@ class QuizService
 
                 $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
                 $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
-                $questionIds = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Question_ID')->all();
+                $questionRows = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId);
+                $questionIds = $questionRows->pluck('Question_ID')->all();
 
                 $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
                 $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
@@ -260,8 +356,18 @@ class QuizService
                     $quizId,
                 );
 
-                return ['quiz' => $quiz, 'deleted' => $deleted];
+                return [
+                    'quiz' => $quiz,
+                    'deleted' => $deleted,
+                    'media_paths' => $questionRows->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])->filter()->values()->all(),
+                ];
             }, [[$this->quizzes, $quizId]]);
+            if ($this->media !== null) {
+                $this->media->deleteUnreferenced($outcome['media_paths']);
+            }
+            unset($outcome['media_paths']);
+
+            return $outcome;
         });
     }
 
@@ -570,9 +676,49 @@ class QuizService
             'Option_A' => $question['Option_A'], 'Option_B' => $question['Option_B'],
             'Option_C' => $question['Option_C'], 'Option_D' => $question['Option_D'],
             'Selected_Option' => $answers[$question['Question_ID']] ?? null,
+            'Image_URL' => ! empty($question['Image_Path']) ? route('student.quizzes.result-media', [$resultId, $question['Question_ID'], 'image']) : null,
+            'Audio_URL' => ! empty($question['Audio_Path']) ? route('student.quizzes.result-media', [$resultId, $question['Question_ID'], 'audio']) : null,
+            'Audio_Duration_Milliseconds' => $question['Audio_Duration_Milliseconds'] ?? null,
         ])->values();
 
         return compact('result', 'questions');
+    }
+
+    /** @return array{path:string,mime:string} */
+    public function teacherMedia(string $quizId, string $questionId, string $type, string $teacherId, array $allowedClassIds): array
+    {
+        $quiz = $this->requireQuizFresh($quizId);
+        $this->assertTeacherOwns($quiz, $teacherId);
+        $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+        $question = (array) ($this->questions->findByIdFresh($questionId) ?: abort(404));
+
+        return $this->mediaFromQuestion($question, $quizId, $type);
+    }
+
+    /** @return array{path:string,mime:string} */
+    public function attemptMedia(string $attemptId, string $questionId, string $type, array $student): array
+    {
+        $attempt = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
+        abort_unless(trim((string) ($attempt['Student_ID'] ?? '')) === trim((string) $student['Student_ID']), 403);
+        abort_unless(($attempt['Status'] ?? '') === 'IN_PROGRESS', 410, 'Percobaan kuis sudah berakhir.');
+        $quiz = $this->requireQuizFresh((string) $attempt['Quiz_ID']);
+        $this->assertStudentEligible($quiz, $student);
+        abort_unless(($quiz['Status'] ?? '') === 'PUBLISHED', 403);
+        abort_if($this->attemptExpired($attempt, $quiz), 410, 'Waktu kuis telah berakhir.');
+        $question = (array) ($this->questions->findByIdFresh($questionId) ?: abort(404));
+
+        return $this->mediaFromQuestion($question, (string) $quiz['Quiz_ID'], $type);
+    }
+
+    /** @return array{path:string,mime:string} */
+    public function resultMedia(string $resultId, string $questionId, string $type, array $student): array
+    {
+        $result = (array) ($this->results->findByIdFresh($resultId) ?: abort(404));
+        abort_unless(($result['Student_ID'] ?? '') === $student['Student_ID'] && ($result['Class_ID'] ?? '') === $student['Class_ID'], 403);
+        abort_unless($this->reviewAvailable($result), 410, 'Masa review 4 menit telah berakhir.');
+        $question = (array) ($this->questions->findByIdFresh($questionId) ?: abort(404));
+
+        return $this->mediaFromQuestion($question, (string) $result['Quiz_ID'], $type);
     }
 
     public function leaderboard(string $classId, ?CarbonImmutable $at = null): array
@@ -689,6 +835,9 @@ class QuizService
             'Option_A' => $question['Option_A'], 'Option_B' => $question['Option_B'],
             'Option_C' => $question['Option_C'], 'Option_D' => $question['Option_D'],
             'Sort_Order' => $question['Sort_Order'],
+            'Image_URL' => ! empty($question['Image_Path']) ? route('student.quizzes.attempt-media', [$attempt['Attempt_ID'], $question['Question_ID'], 'image']) : null,
+            'Audio_URL' => ! empty($question['Audio_Path']) ? route('student.quizzes.attempt-media', [$attempt['Attempt_ID'], $question['Question_ID'], 'audio']) : null,
+            'Audio_Duration_Milliseconds' => $question['Audio_Duration_Milliseconds'] ?? null,
         ])->values();
         abort_if($questions->isEmpty(), 409, 'Kuis tidak memiliki soal.');
 
@@ -708,7 +857,7 @@ class QuizService
         $expected = [];
         foreach (array_values($questions) as $index => $question) {
             $row = [
-                'Question_ID' => 'QQN'.strtoupper(substr(hash('sha256', $quizId.'|'.$index), 0, 20)),
+                'Question_ID' => $this->questionId($quizId, $index),
                 'Quiz_ID' => $quizId,
                 'Question_Text' => trim($question['Question_Text']),
                 'Option_A' => trim($question['Option_A']), 'Option_B' => trim($question['Option_B']),
@@ -717,6 +866,13 @@ class QuizService
                 'Point' => (float) $question['Point'],
                 'Sort_Order' => $index + 1,
                 'Created_At' => $now, 'Updated_At' => $now,
+                'Image_Path' => $question['Image_Path'] ?? null,
+                'Image_Mime' => $question['Image_Mime'] ?? null,
+                'Image_Size_Bytes' => $question['Image_Size_Bytes'] ?? null,
+                'Audio_Path' => $question['Audio_Path'] ?? null,
+                'Audio_Mime' => $question['Audio_Mime'] ?? null,
+                'Audio_Size_Bytes' => $question['Audio_Size_Bytes'] ?? null,
+                'Audio_Duration_Milliseconds' => $question['Audio_Duration_Milliseconds'] ?? null,
             ];
             $this->questions->create($row);
             $expected[] = $row;
@@ -730,7 +886,7 @@ class QuizService
             throw new \RuntimeException("Soal kuis {$quizId} tidak tersimpan lengkap.");
         }
         foreach ($expected as $index => $row) {
-            foreach (['Question_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order'] as $field) {
+            foreach (['Question_ID', 'Question_Text', 'Option_A', 'Option_B', 'Option_C', 'Option_D', 'Correct_Option', 'Point', 'Sort_Order', 'Image_Path', 'Image_Mime', 'Image_Size_Bytes', 'Audio_Path', 'Audio_Mime', 'Audio_Size_Bytes', 'Audio_Duration_Milliseconds'] as $field) {
                 $persistedValue = $persisted[$index][$field] ?? null;
                 $expectedValue = $row[$field];
 
@@ -756,6 +912,59 @@ class QuizService
         }
         if (! array_is_list($questions)) {
             throw new \InvalidArgumentException('Urutan soal harus berurutan mulai dari 0.');
+        }
+    }
+
+    /** @return array{0:?string,1:string} */
+    private function idempotencyContext(array $data, string $userId, string $operation, ?string $targetQuizId): array
+    {
+        $key = trim((string) ($data['Idempotency_Key'] ?? ''));
+        if ($this->mediaIdempotency === null) {
+            return [null, ''];
+        }
+        if (! Str::isUuid($key)) {
+            throw ValidationException::withMessages(['Idempotency_Key' => 'Kunci idempotensi kuis tidak valid. Muat ulang form dan coba lagi.']);
+        }
+
+        $payload = $data;
+        unset($payload['Idempotency_Key']);
+        $canonical = $this->canonicalize($payload);
+        $hash = hash('sha256', json_encode([
+            'user_id' => trim($userId),
+            'operation' => $operation,
+            'target_quiz_id' => $targetQuizId,
+            'payload' => $canonical,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+        return [$key, $hash];
+    }
+
+    private function canonicalize(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return array_map(fn (mixed $item): mixed => $this->canonicalize($item), $value);
+    }
+
+    private function assertPublishableQuestions(array $data): void
+    {
+        if (($data['intent'] ?? 'draft') !== 'publish') {
+            return;
+        }
+        foreach ($data['questions'] ?? [] as $index => $question) {
+            $hasPrompt = trim((string) ($question['Question_Text'] ?? '')) !== ''
+                || trim((string) ($question['Image_Path'] ?? '')) !== ''
+                || trim((string) ($question['Audio_Path'] ?? '')) !== '';
+            if (! $hasPrompt) {
+                throw ValidationException::withMessages([
+                    "questions.{$index}.Question_Text" => 'Isi teks pertanyaan atau unggah gambar/audio sebelum kuis diterbitkan.',
+                ]);
+            }
         }
     }
 
@@ -893,6 +1102,18 @@ class QuizService
         return (array) ($this->quizzes->findByIdFresh($id) ?: abort(404, 'Kuis tidak ditemukan.'));
     }
 
+    private function availableReplay(string $quizId, array $teacher, ?array $allowedClassIds = null): string
+    {
+        $quiz = $this->quizzes->findByIdFresh($quizId);
+        if (! is_array($quiz) || $quiz === []) {
+            throw new HttpException(410, 'Kuis dari operasi idempotensi ini sudah tidak tersedia.');
+        }
+        $this->assertTeacherOwns($quiz, (string) ($teacher['Teacher_ID'] ?? ''));
+        $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+
+        return $quizId;
+    }
+
     private function assertTeacherOwns(array $quiz, string $teacherId): void
     {
         abort_unless(trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId), 403);
@@ -914,6 +1135,19 @@ class QuizService
     private function assertStudentEligible(array $quiz, array $student): void
     {
         abort_unless(trim((string) ($quiz['Class_ID'] ?? '')) === trim((string) ($student['Class_ID'] ?? '')), 403);
+    }
+
+    /** @return array{path:string,mime:string} */
+    private function mediaFromQuestion(array $question, string $quizId, string $type): array
+    {
+        abort_unless(trim((string) ($question['Quiz_ID'] ?? '')) === trim($quizId), 404);
+        abort_unless(in_array($type, ['image', 'audio'], true), 404);
+        $prefix = ucfirst($type);
+        $path = trim((string) ($question[$prefix.'_Path'] ?? ''));
+        $mime = trim((string) ($question[$prefix.'_Mime'] ?? ''));
+        abort_if($path === '' || $mime === '', 404, 'Media tidak ditemukan.');
+
+        return compact('path', 'mime');
     }
 
     /**
@@ -942,6 +1176,11 @@ class QuizService
     private function attemptId(string $quizId, string $studentId): string
     {
         return 'QAT'.strtoupper(substr(hash('sha256', $quizId.'|'.$studentId), 0, 24));
+    }
+
+    private function questionId(string $quizId, int $index): string
+    {
+        return 'QQN'.strtoupper(substr(hash('sha256', $quizId.'|'.$index), 0, 20));
     }
 
     private function resultId(string $attemptId): string

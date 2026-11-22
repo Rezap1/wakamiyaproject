@@ -22,21 +22,25 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
+use Tests\Support\MySqlTestGuard;
+use Tests\Support\UsesIsolatedMySqlDatabase;
 use Tests\TestCase;
 
 class M2MySqlRuntimePersistenceTest extends TestCase
 {
+    use UsesIsolatedMySqlDatabase;
+
     private bool $transactionStarted = false;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $connection = DB::connection((string) config('wms_runtime.connection'));
-        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)
-            || $connection->getDatabaseName() !== 'wms_mysql_test') {
+        $connectionName = (string) config('wms_runtime.connection');
+        if (! in_array((string) config("database.connections.{$connectionName}.driver"), ['mysql', 'mariadb'], true)) {
             $this->markTestSkipped('M2 integration tests require the isolated wms_mysql_test database.');
         }
+        $connection = MySqlTestGuard::connection();
 
         $connection->beginTransaction();
         $this->transactionStarted = true;

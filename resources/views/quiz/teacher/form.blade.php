@@ -2,15 +2,29 @@
 @section('header', $quiz ? 'Edit Kuis' : 'Buat Kuis')
 @section('content')
 @php
-    $seed = old('questions', collect($questions)->map(fn($q) => (array)$q)->values()->all());
+    $persistedSeed = collect($questions)->map(fn($q) => (array)$q)->values();
+    $oldQuestions = old('questions');
+    $seed = is_array($oldQuestions)
+        ? collect(array_values($oldQuestions))->map(fn($q, $i) => array_merge((array)($persistedSeed->get($i) ?? []), (array)$q))->all()
+        : $persistedSeed->all();
     $maxQuestions = (int) config('quiz.max_questions', 100);
     $lockedClass = $lockedClass ?? null;
+    $mediaConfig = [
+        'image_max_bytes' => (int) config('quiz.media.image_max_bytes'),
+        'image_max_width' => (int) config('quiz.media.image_max_width'),
+        'image_max_height' => (int) config('quiz.media.image_max_height'),
+        'audio_max_bytes' => (int) config('quiz.media.audio_max_bytes'),
+        'audio_max_duration_ms' => (int) config('quiz.media.audio_max_duration_ms'),
+        'aggregate_warning_bytes' => (int) config('quiz.media.aggregate_warning_bytes'),
+        'aggregate_max_bytes' => (int) config('quiz.media.aggregate_max_bytes'),
+    ];
     $formAction = $quiz
         ? route('teacher.quizzes.update', $quiz['Quiz_ID'])
         : ($lockedClass ? route('teacher.quizzes.class.store', $lockedClass['Class_ID']) : route('teacher.quizzes.store'));
 @endphp
-<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed), {{ $maxQuestions }})">
+<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed), {{ $maxQuestions }}, @js(route('teacher.quizzes.media.upload')), @js(csrf_token()), @js($mediaConfig), @js($errors->toArray()))" @submit="if (uploadingCount > 0) { $event.preventDefault(); countError = 'Tunggu seluruh upload media selesai.'; }">
     @csrf @if($quiz) @method('PUT') @endif
+    <input type="hidden" name="Idempotency_Key" value="{{ old('Idempotency_Key', (string) \Illuminate\Support\Str::uuid()) }}">
     @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ $errors->first() }}</div>@endif
     <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><h2 class="text-xl font-black">Informasi Kuis</h2>
         <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -42,10 +56,40 @@
             <template x-for="(q, i) in questions" :key="q.key">
                 <fieldset class="min-w-0 rounded-2xl border border-slate-200 p-4 sm:p-5" data-question-card>
                     <legend class="px-2 text-lg font-black" x-text="`Soal ${i + 1}`"></legend>
+                    <p x-show="questionError(i)" x-text="questionError(i)" class="mb-3 rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700"></p>
                     <label class="block text-sm font-bold text-slate-700">
                         Pertanyaan
                         <textarea :name="`questions[${i}][Question_Text]`" x-model="q.Question_Text" rows="3" class="mt-2 w-full rounded-xl border-slate-300" placeholder="Tulis pertanyaan..."></textarea>
                     </label>
+                    <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                        <section class="rounded-xl border border-slate-200 p-4">
+                            <h4 class="text-sm font-black text-slate-800">Gambar soal</h4>
+                            <p class="mt-1 text-xs text-slate-500">JPG, JPEG, PNG, atau WebP · maksimal 7 MB · maksimal 4096×4096 piksel.</p>
+                            <input type="hidden" :name="`questions[${i}][Image_Token]`" :value="q.Image_Token || ''">
+                            <input type="hidden" :name="`questions[${i}][Remove_Image]`" :value="q.Remove_Image ? 1 : 0">
+                            <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="uploadMedia(q, 'image', $event)" :disabled="q.Image_Uploading" class="mt-3 block w-full min-w-0 text-sm">
+                            <div x-show="q.Image_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Image_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700">Mengunggah <span x-text="q.Image_Progress"></span>%</p></div>
+                            <p x-show="q.Image_Error" x-text="q.Image_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
+                            <div x-show="q.Image_URL" class="mt-3 space-y-2">
+                                <img :src="q.Image_URL" alt="Preview gambar soal" class="max-h-64 w-full rounded-xl border border-slate-200 object-contain">
+                                <div class="flex items-center justify-between gap-2 text-xs"><span x-text="formatBytes(q.Image_Size_Bytes)"></span><button type="button" @click="removeMedia(q, 'image')" class="font-bold text-rose-700">Hapus gambar</button></div>
+                            </div>
+                        </section>
+                        <section class="rounded-xl border border-slate-200 p-4">
+                            <h4 class="text-sm font-black text-slate-800">Audio listening</h4>
+                            <p class="mt-1 text-xs text-slate-500">MP3 atau M4A · maksimal 01:30 · maksimal 5 MB. Siswa dapat memutar ulang tanpa batas.</p>
+                            <input type="hidden" :name="`questions[${i}][Audio_Token]`" :value="q.Audio_Token || ''">
+                            <input type="hidden" :name="`questions[${i}][Remove_Audio]`" :value="q.Remove_Audio ? 1 : 0">
+                            <input type="file" accept=".mp3,.m4a,audio/mpeg,audio/mp4" @change="uploadMedia(q, 'audio', $event)" :disabled="q.Audio_Uploading" class="mt-3 block w-full min-w-0 text-sm">
+                            <div x-show="q.Audio_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Audio_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700">Mengunggah <span x-text="q.Audio_Progress"></span>%</p></div>
+                            <p x-show="q.Audio_Warning" x-text="q.Audio_Warning" class="mt-2 text-xs font-semibold text-amber-700"></p>
+                            <p x-show="q.Audio_Error" x-text="q.Audio_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
+                            <div x-show="q.Audio_URL" class="mt-3 space-y-2">
+                                <audio :src="q.Audio_URL" controls preload="metadata" class="w-full"></audio>
+                                <div class="flex items-center justify-between gap-2 text-xs"><span><span x-text="formatDuration(q.Audio_Duration_Milliseconds)"></span> · <span x-text="formatBytes(q.Audio_Size_Bytes)"></span></span><button type="button" @click="removeMedia(q, 'audio')" class="font-bold text-rose-700">Hapus audio</button></div>
+                            </div>
+                        </section>
+                    </div>
                     <div class="mt-5">
                         <p class="text-sm font-black text-slate-800">Pilihan Jawaban</p>
                         <div class="mt-3 space-y-3">
@@ -70,11 +114,12 @@
             </template>
         </div>
     </section>
-    <div class="sticky bottom-20 z-20 flex gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur md:bottom-4"><button name="intent" value="draft" class="min-h-12 flex-1 rounded-xl border border-slate-300 font-black">Simpan Draft</button><button name="intent" value="publish" class="min-h-12 flex-1 rounded-xl bg-sky-600 font-black text-white">Terbitkan</button></div>
+    <div class="rounded-xl border p-4 text-sm" :class="totalMediaBytes > Number(mediaConfig.aggregate_warning_bytes) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-700'"><strong>Total media: <span x-text="formatBytes(totalMediaBytes)"></span></strong><span> / <span x-text="formatBytes(Number(mediaConfig.aggregate_max_bytes))"></span></span><p x-show="totalMediaBytes > Number(mediaConfig.aggregate_warning_bytes)" class="mt-1 text-xs font-bold">Ukuran media sudah melewati 50 MB. Perhatikan waktu muat siswa.</p></div>
+    <div class="sticky bottom-20 z-20 flex gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur md:bottom-4"><button name="intent" value="draft" :disabled="uploadingCount > 0" class="min-h-12 flex-1 rounded-xl border border-slate-300 font-black disabled:opacity-50">Simpan Draft</button><button name="intent" value="publish" :disabled="uploadingCount > 0" class="min-h-12 flex-1 rounded-xl bg-sky-600 font-black text-white disabled:opacity-50">Terbitkan</button></div>
 </form>
 @push('scripts')
 <script>
-function quizBuilder(seed, maxQuestions) {
+function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, validationErrors) {
     const fresh = () => ({
         key: `${Date.now()}-${Math.random()}`,
         Question_Text: '',
@@ -84,12 +129,21 @@ function quizBuilder(seed, maxQuestions) {
         Option_D: '',
         Correct_Option: 'A',
         Point: 10,
+        Image_Token: '', Image_URL: null, Image_Size_Bytes: 0, Remove_Image: false, Image_Uploading: false, Image_Progress: 0, Image_Error: '',
+        Audio_Token: '', Audio_URL: null, Audio_Size_Bytes: 0, Audio_Duration_Milliseconds: 0, Remove_Audio: false, Audio_Uploading: false, Audio_Progress: 0, Audio_Warning: '', Audio_Error: '',
     });
-    const normalize = (question, index) => ({
-        ...fresh(),
-        ...question,
-        key: question.Question_ID || `${Date.now()}-${index}-${Math.random()}`,
-    });
+    const normalize = (question, index) => {
+        const normalized = {
+            ...fresh(),
+            ...question,
+            key: question.Question_ID || `${Date.now()}-${index}-${Math.random()}`,
+        };
+        if (normalized.Image_Token) normalized.Image_URL = `${uploadUrl}/${encodeURIComponent(normalized.Image_Token)}`;
+        if (normalized.Audio_Token) normalized.Audio_URL = `${uploadUrl}/${encodeURIComponent(normalized.Audio_Token)}`;
+        if (normalized.Remove_Image) { normalized.Image_URL = null; normalized.Image_Size_Bytes = 0; }
+        if (normalized.Remove_Audio) { normalized.Audio_URL = null; normalized.Audio_Size_Bytes = 0; normalized.Audio_Duration_Milliseconds = 0; }
+        return normalized;
+    };
 
     const initialQuestions = seed.length ? seed.map(normalize) : [fresh()];
 
@@ -97,7 +151,13 @@ function quizBuilder(seed, maxQuestions) {
         questions: initialQuestions,
         requestedCount: initialQuestions.length,
         maxQuestions,
+        uploadUrl,
+        csrfToken,
+        mediaConfig,
+        validationErrors,
         countError: '',
+        get uploadingCount() { return this.questions.filter(q => q.Image_Uploading || q.Audio_Uploading).length; },
+        get totalMediaBytes() { return this.questions.reduce((total, q) => total + Number(q.Image_Size_Bytes || 0) + Number(q.Audio_Size_Bytes || 0), 0); },
         get maximum() {
             return this.questions.reduce((total, question) => total + (Number(question.Point) || 0), 0);
         },
@@ -127,6 +187,82 @@ function quizBuilder(seed, maxQuestions) {
                 }
             }
             this.requestedCount = this.questions.length;
+        },
+        formatBytes(bytes) {
+            const value = Number(bytes) || 0;
+            if (value < 1024) return `${value} B`;
+            if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+            return `${(value / 1024 / 1024).toFixed(2)} MB`;
+        },
+        questionError(index) {
+            const prefix = `questions.${index}.`;
+            const key = Object.keys(this.validationErrors || {}).find(key => key.startsWith(prefix));
+            return key ? (this.validationErrors[key][0] || '') : '';
+        },
+        formatDuration(ms) {
+            const seconds = Math.ceil((Number(ms) || 0) / 1000);
+            return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        },
+        removeMedia(q, type) {
+            const prefix = type === 'image' ? 'Image' : 'Audio';
+            q[`${prefix}_Token`] = '';
+            q[`${prefix}_URL`] = null;
+            q[`${prefix}_Size_Bytes`] = 0;
+            q[`Remove_${prefix}`] = true;
+            q[`${prefix}_Error`] = '';
+            if (type === 'audio') { q.Audio_Duration_Milliseconds = 0; q.Audio_Warning = ''; }
+        },
+        async browserValidate(file, type) {
+            const max = Number(type === 'image' ? this.mediaConfig.image_max_bytes : this.mediaConfig.audio_max_bytes);
+            if (file.size > max) throw new Error(type === 'image' ? 'Ukuran file gambar maksimal 7 MB.' : 'Ukuran file audio maksimal 5 MB.');
+            let url = '';
+            try {
+                url = URL.createObjectURL(file);
+                if (type === 'image') {
+                    const dimensions = await new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = reject; img.src = url; });
+                    if (dimensions[0] > Number(this.mediaConfig.image_max_width) || dimensions[1] > Number(this.mediaConfig.image_max_height)) throw new Error('Dimensi gambar maksimal 4096×4096 piksel.');
+                } else {
+                    const duration = await new Promise((resolve, reject) => { const audio = new Audio(); audio.preload = 'metadata'; audio.onloadedmetadata = () => resolve(audio.duration); audio.onerror = reject; audio.src = url; });
+                    if (!Number.isFinite(duration) || duration <= 0) return 'Durasi audio tidak dapat dibaca browser. File tetap diperiksa oleh server.';
+                    if (duration * 1000 > Number(this.mediaConfig.audio_max_duration_ms)) return 'Metadata browser menunjukkan durasi di atas 01:30. File tetap diperiksa oleh server.';
+                }
+            } catch (error) {
+                if (type === 'audio') return 'Durasi audio tidak dapat dibaca browser. File tetap diperiksa oleh server.';
+                throw error;
+            } finally { if (url) URL.revokeObjectURL(url); }
+            return '';
+        },
+        async uploadMedia(q, type, event) {
+            const input = event.target;
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const prefix = type === 'image' ? 'Image' : 'Audio';
+            q[`${prefix}_Error`] = '';
+            if (type === 'audio') q.Audio_Warning = '';
+            try {
+                const browserWarning = await this.browserValidate(file, type);
+                if (type === 'audio') q.Audio_Warning = browserWarning;
+                q[`${prefix}_Uploading`] = true;
+                q[`${prefix}_Progress`] = 0;
+                const data = await new Promise((resolve, reject) => {
+                    const body = new FormData(); body.append('media_type', type); body.append('file', file);
+                    const xhr = new XMLHttpRequest(); xhr.open('POST', this.uploadUrl); xhr.setRequestHeader('Accept', 'application/json'); xhr.setRequestHeader('X-CSRF-TOKEN', this.csrfToken); xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    xhr.upload.onprogress = e => { if (e.lengthComputable) q[`${prefix}_Progress`] = Math.round((e.loaded / e.total) * 100); };
+                    xhr.onload = () => { let payload = {}; try { payload = JSON.parse(xhr.responseText); } catch (_) {} if (xhr.status >= 200 && xhr.status < 300) resolve(payload); else reject(new Error(payload.message || Object.values(payload.errors || {})[0]?.[0] || 'Upload media gagal.')); };
+                    xhr.onerror = () => reject(new Error('Upload media gagal. Periksa koneksi.')); xhr.send(body);
+                });
+                if (!this.questions.includes(q)) return;
+                q[`${prefix}_Token`] = data.token;
+                q[`${prefix}_URL`] = data.preview_url;
+                q[`${prefix}_Size_Bytes`] = data.size;
+                q[`Remove_${prefix}`] = false;
+                if (type === 'audio') q.Audio_Duration_Milliseconds = data.duration_ms;
+            } catch (error) {
+                q[`${prefix}_Error`] = error.message || 'Upload media gagal.';
+            } finally {
+                q[`${prefix}_Uploading`] = false;
+                input.value = '';
+            }
         },
     };
 }

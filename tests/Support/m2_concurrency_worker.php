@@ -8,6 +8,7 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\MySqlTestGuard;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
@@ -20,6 +21,7 @@ config()->set('database.connections.mysql.database', 'wms_mysql_test');
 config()->set('wms_runtime.connection', 'mysql');
 config()->set('wms_runtime.database', 'wms_mysql_test');
 DB::purge('mysql');
+MySqlTestGuard::connection();
 
 file_put_contents($gateDirectory.'/ready-'.$slot, 'ready');
 $deadline = microtime(true) + 15;

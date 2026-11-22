@@ -119,7 +119,7 @@ final class WmsMigrationManifest
     /** @return list<string> */
     public static function integerColumns(): array
     {
-        return ['Capacity', 'Current_Student', 'Credit', 'Duration', 'Duration_Days', 'Duration_Minutes', 'Failed_Login', 'Grace_Period', 'Module_Order', 'Sort_Order', 'Step_Order'];
+        return ['Capacity', 'Current_Student', 'Credit', 'Duration', 'Duration_Days', 'Duration_Minutes', 'Failed_Login', 'Grace_Period', 'Module_Order', 'Sort_Order', 'Step_Order', 'Image_Size_Bytes', 'Audio_Size_Bytes', 'Audio_Duration_Milliseconds'];
     }
 
     /** @return list<string> */

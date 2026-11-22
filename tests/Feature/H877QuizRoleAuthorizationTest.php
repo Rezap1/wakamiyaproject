@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Interfaces\GoogleSheets\RoleRepositoryInterface;
+use App\Services\Quiz\QuizMediaService;
 use App\Services\Quiz\QuizScopeService;
 use App\Services\Quiz\QuizService;
 use Illuminate\Auth\GenericUser;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -32,6 +35,8 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->get(route('teacher.quizzes.leaderboard', 'FORGED'))->assertForbidden();
         $this->put(route('teacher.quizzes.update', 'FORGED'), [])->assertForbidden();
         $this->delete(route('teacher.quizzes.destroy', 'FORGED'))->assertForbidden();
+        $this->post(route('teacher.quizzes.media.upload'))->assertForbidden();
+        $this->get(route('teacher.quizzes.media', ['FORGED', 'FORGED', 'image']))->assertForbidden();
     }
 
     #[DataProvider('nonStudentRoles')]
@@ -43,6 +48,7 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->get(route('student.quizzes.play', 'FORGED'))->assertForbidden();
         $this->postJson(route('student.quizzes.autosave', 'FORGED'), ['version' => 1, 'answers' => []])->assertForbidden();
         $this->post(route('student.quizzes.submit', 'FORGED'))->assertForbidden();
+        $this->get(route('student.quizzes.attempt-media', ['FORGED', 'FORGED', 'audio']))->assertForbidden();
     }
 
     public function test_student_autosave_endpoint_returns_confirmed_server_version(): void
@@ -65,6 +71,38 @@ class H877QuizRoleAuthorizationTest extends TestCase
             'version' => 4,
             'answers' => ['Q1' => 'A'],
         ])->assertOk()->assertJsonPath('saved', true)->assertJsonPath('version', 4);
+    }
+
+    public function test_authenticated_media_endpoint_supports_full_and_range_responses(): void
+    {
+        $this->actingAsRole('STUDENT');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('studentForUser')->twice()->andReturn(['Student_ID' => 'S1', 'Class_ID' => 'C1']);
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldReceive('attemptMedia')->twice()->andReturn(['path' => 'quiz-media/Q1/Q1/audio.mp3', 'mime' => 'audio/mpeg']);
+        $media = Mockery::mock(QuizMediaService::class);
+        $path = tempnam(sys_get_temp_dir(), 'quiz-range-');
+        file_put_contents($path, '0123456789');
+        $this->beforeApplicationDestroyed(static fn () => @unlink($path));
+        $media->shouldReceive('absolutePath')->twice()->andReturn($path);
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+        $this->app->instance(QuizMediaService::class, $media);
+
+        $url = route('student.quizzes.attempt-media', ['A1', 'Q1', 'audio']);
+        $this->get($url)->assertOk()
+            ->assertHeader('Content-Type', 'audio/mpeg')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->withHeader('Range', 'bytes=2-5')->get($url)
+            ->assertStatus(206)
+            ->assertHeader('Content-Range', 'bytes 2-5/10')
+            ->assertHeader('Accept-Ranges', 'bytes');
+    }
+
+    public function test_guest_cannot_access_media_routes(): void
+    {
+        $this->get(route('student.quizzes.attempt-media', ['A1', 'Q1', 'audio']))->assertRedirect(route('login'));
+        $this->get(route('teacher.quizzes.media', ['Q1', 'Q1', 'image']))->assertRedirect(route('login'));
     }
 
     public function test_direct_teacher_delete_displays_domain_guard_message(): void
@@ -147,6 +185,7 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->app->instance(QuizService::class, $quizzes);
 
         $this->post(route('teacher.quizzes.class.store', 'C1'), [
+            'Idempotency_Key' => '10000000-0000-4000-8000-000000000877',
             'Title' => 'Kuis Aman',
             'Class_ID' => 'C3',
             'Start_At' => '2026-10-10 08:00:00',
@@ -166,11 +205,42 @@ class H877QuizRoleAuthorizationTest extends TestCase
         ])->assertRedirect(route('teacher.quizzes.show', 'Q1'));
     }
 
+    public function test_quiz_upload_endpoint_accepts_exact_seven_megabytes_without_changing_global_limit(): void
+    {
+        Storage::fake('local');
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $this->app->instance(QuizScopeService::class, $scope);
+        $file = $this->exactImageUpload(7 * 1024 * 1024);
+
+        $this->post(route('teacher.quizzes.media.upload'), [
+            'media_type' => 'image',
+            'file' => $file,
+        ])->assertCreated()->assertJsonPath('size', 7 * 1024 * 1024);
+
+        $this->assertSame(5120, config('upload.max_kb'));
+        $this->assertSame(7168, config('quiz.media.image_max_kb'));
+    }
+
     private function actingAsRole(string $role): void
     {
         $roleId = 'ROLE-'.$role;
         $this->app->instance(RoleRepositoryInterface::class, new H877RoleRepository([['Role_ID' => $roleId, 'Role_Name' => $role, 'Is_Active' => 'TRUE']]));
         $this->actingAs(new GenericUser(['id' => 'U-'.$role, 'User_ID' => 'U-'.$role, 'Role_ID' => $roleId]));
+    }
+
+    private function exactImageUpload(int $bytes): UploadedFile
+    {
+        $resource = imagecreatetruecolor(20, 20);
+        $path = tempnam(sys_get_temp_dir(), 'quiz-upload-');
+        imagejpeg($resource, $path, 85);
+        imagedestroy($resource);
+        file_put_contents($path, str_repeat("\0", $bytes - filesize($path)), FILE_APPEND);
+        clearstatcache(true, $path);
+        $this->beforeApplicationDestroyed(static fn () => @unlink($path));
+
+        return new UploadedFile($path, 'exact-7mb.jpg', 'image/jpeg', UPLOAD_ERR_OK, true);
     }
 }
 
