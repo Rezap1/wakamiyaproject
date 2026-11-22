@@ -53,16 +53,16 @@ class QuizAudioInspector
         if ($sampleRate === null || $sampleRate <= 0) {
             $this->invalid();
         }
-        $this->assertPacketTimeline($payload, $audio, $decodedSamples);
+        $effectiveSamples = $this->assertPacketTimeline($payload, $audio, $decodedSamples);
         $maximumMilliseconds = (int) config('quiz.media.audio_max_duration_ms', 90000);
-        if ($decodedSamples > intdiv(PHP_INT_MAX, 1000)
+        if ($effectiveSamples > intdiv(PHP_INT_MAX, 1000)
             || $maximumMilliseconds > intdiv(PHP_INT_MAX, $sampleRate)
-            || ($decodedSamples * 1000) > ($maximumMilliseconds * $sampleRate)) {
+            || ($effectiveSamples * 1000) > ($maximumMilliseconds * $sampleRate)) {
             throw ValidationException::withMessages(['file' => 'Durasi audio maksimal 1 menit 30 detik.']);
         }
         // Ceiling is deliberate for persisted millisecond metadata. The limit
         // itself is enforced above using exact integer samples before conversion.
-        $durationMilliseconds = intdiv(($decodedSamples * 1000) + $sampleRate - 1, $sampleRate);
+        $durationMilliseconds = intdiv(($effectiveSamples * 1000) + $sampleRate - 1, $sampleRate);
 
         return compact('mime', 'extension', 'codec') + ['duration_ms' => $durationMilliseconds];
     }
@@ -171,7 +171,7 @@ class QuizAudioInspector
     }
 
     /** @param array<string,mixed> $audio */
-    private function assertPacketTimeline(array $payload, array $audio, int $decodedSamples): void
+    private function assertPacketTimeline(array $payload, array $audio, int $decodedSamples): int
     {
         $streamIndex = $this->integer($audio['index'] ?? null);
         $sampleRate = $this->integer($audio['sample_rate'] ?? null);
@@ -232,14 +232,49 @@ class QuizAudioInspector
         if ($skipSamples > PHP_INT_MAX - $discardPadding) {
             $this->invalid();
         }
-        $packetSeconds = (($previousEnd - $firstPts) * $timeBaseNumerator) / $timeBaseDenominator;
-        $effectivePacketSamples = ($packetSeconds * $sampleRate) - $skipSamples - $discardPadding;
-        $streamSamples = (($streamDurationTicks * $timeBaseNumerator) / $timeBaseDenominator) * $sampleRate;
-        if ($effectivePacketSamples <= 0
-            || abs($effectivePacketSamples - $decodedSamples) > 1
-            || abs($streamSamples - $decodedSamples) > 1) {
+        $packetTicks = $previousEnd - $firstPts;
+        if ($packetTicks <= 0
+            || $packetTicks > intdiv(PHP_INT_MAX, $timeBaseNumerator)
+            || ($packetTicks * $timeBaseNumerator) > intdiv(PHP_INT_MAX, $sampleRate)
+            || $streamDurationTicks > intdiv(PHP_INT_MAX, $timeBaseNumerator)
+            || ($streamDurationTicks * $timeBaseNumerator) > intdiv(PHP_INT_MAX, $sampleRate)) {
             $this->invalid();
         }
+
+        $packetSampleValue = ($packetTicks * $timeBaseNumerator * $sampleRate) / $timeBaseDenominator;
+        $streamSampleValue = ($streamDurationTicks * $timeBaseNumerator * $sampleRate) / $timeBaseDenominator;
+        // Container time bases can represent a sample boundary as a tiny
+        // fraction above an integer. Ceiling keeps the duration check
+        // fail-closed instead of rounding an over-limit stream down.
+        $roundedPacketSamples = (int) round($packetSampleValue);
+        $roundedStreamSamples = (int) round($streamSampleValue);
+        $packetSamples = abs($packetSampleValue - $roundedPacketSamples) <= 0.001
+            ? $roundedPacketSamples
+            : (int) ceil($packetSampleValue);
+        $streamSamples = abs($streamSampleValue - $roundedStreamSamples) <= 0.001
+            ? $roundedStreamSamples
+            : (int) ceil($streamSampleValue);
+        if ($skipSamples > $packetSamples
+            || $discardPadding > ($packetSamples - $skipSamples)) {
+            $this->invalid();
+        }
+
+        $effectivePacketSamples = $packetSamples - $skipSamples - $discardPadding;
+        $streamMatchesTimeline = abs($streamSamples - $effectivePacketSamples) <= 1
+            || abs($streamSamples - $packetSamples) <= 1;
+        $decoderPaddingAllowance = match (strtolower((string) ($audio['codec_name'] ?? ''))) {
+            'aac' => 1024,
+            'mp3' => 1152,
+            default => 0,
+        };
+        if ($effectivePacketSamples <= 0
+            || ! $streamMatchesTimeline
+            || $decodedSamples < $effectivePacketSamples
+            || ($decodedSamples - $effectivePacketSamples) > $decoderPaddingAllowance) {
+            $this->invalid();
+        }
+
+        return $effectivePacketSamples;
     }
 
     private function integer(mixed $value): ?int

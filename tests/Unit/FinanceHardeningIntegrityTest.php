@@ -30,6 +30,7 @@ use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Facades\Cache;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 use Tests\TestCase;
@@ -611,7 +612,7 @@ class FinanceHardeningIntegrityTest extends TestCase
         }
     }
 
-    /** @dataProvider unauthorizedFinanceRoles */
+    #[DataProvider('unauthorizedFinanceRoles')]
     public function test_finance_mutation_services_reject_student_director_and_roleless_actors(string $role): void
     {
         $this->actingAs(new GenericUser(['id' => 'USR-BAD-'.($role ?: 'NONE'), 'User_ID' => 'USR-BAD', 'Role' => $role]));

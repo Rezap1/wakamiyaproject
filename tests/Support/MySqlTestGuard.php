@@ -27,9 +27,9 @@ final class MySqlTestGuard
 
         $connection = DB::connection($connectionName);
         $metadata = $connection->selectOne(
-            'SELECT DATABASE() AS database_name, @@port AS server_port, @@sql_mode AS sql_mode, VERSION() AS server_version, CURRENT_USER() AS current_user',
+            'SELECT DATABASE() AS database_name, @@port AS server_port, @@sql_mode AS sql_mode, VERSION() AS server_version, CURRENT_USER() AS authenticated_user',
         );
-        $currentUser = strtolower(strtok((string) ($metadata->current_user ?? ''), '@') ?: '');
+        $currentUser = strtolower(strtok((string) ($metadata->authenticated_user ?? ''), '@') ?: '');
         if (($metadata->database_name ?? null) !== 'wms_mysql_test'
             || (int) ($metadata->server_port ?? 0) !== 3306
             || ! str_contains(strtolower((string) ($metadata->server_version ?? '')), 'mariadb')

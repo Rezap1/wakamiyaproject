@@ -44,7 +44,7 @@ class QuizAudioSampleRateIntegrationTest extends TestCase
         if ($boundary === 'over') {
             try {
                 $this->inspector->inspect($path, $extension, $mime);
-                $this->fail('One effective decoded sample over 90 seconds must be rejected.');
+                $this->fail('Effective decoded audio over 90 seconds must be rejected.');
             } catch (ValidationException $exception) {
                 $this->assertSame('Durasi audio maksimal 1 menit 30 detik.', $exception->errors()['file'][0]);
             }

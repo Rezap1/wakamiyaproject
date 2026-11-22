@@ -206,8 +206,8 @@ class QuizMultimediaMySqlConcurrencyTest extends TestCase
 
             $this->assertIndependentWorkers($results);
             $state = json_decode((string) DB::table('QUIZ_ATTEMPT')->where('Attempt_ID', $payload['attempt_id'])->value('Submitted_Answers_JSON'), true);
-            $this->assertSame(2, $state['version']);
-            $this->assertSame('A', $state['answers'][$payload['question_id']]);
+            $this->assertSame(2, $state['__quiz_answer_version']);
+            $this->assertSame('A', $state[$payload['question_id']]);
         } finally {
             $this->cleanup($token);
         }

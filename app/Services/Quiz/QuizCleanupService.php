@@ -54,44 +54,65 @@ class QuizCleanupService
                 $quizId = $quiz['Quiz_ID'];
                 $quizQuestions = $questions->where('Quiz_ID', $quizId);
                 $quizAttempts = $attempts->where('Quiz_ID', $quizId);
-                $quizResults = $results->where('Quiz_ID', $quizId);
                 $maximum = (float) $quizQuestions->sum(fn ($row) => (float) ($row['Point'] ?? 0));
 
                 foreach ($quizAttempts as $attempt) {
-                    if ($quizResults->contains('Attempt_ID', $attempt['Attempt_ID'])) {
+                    $attemptId = trim((string) ($attempt['Attempt_ID'] ?? ''));
+                    if ($attemptId === '') {
                         continue;
                     }
-                    $completed = trim((string) ($attempt['Deadline_At'] ?? $quiz['End_At']));
-                    $answers = $this->answerMap((string) ($attempt['Submitted_Answers_JSON'] ?? ''));
-                    $raw = (float) $quizQuestions->sum(function ($question) use ($answers) {
-                        $selected = strtoupper(trim((string) ($answers[$question['Question_ID']] ?? '')));
-                        $correct = strtoupper(trim((string) ($question['Correct_Option'] ?? '')));
 
-                        return $selected !== '' && $selected === $correct ? (float) ($question['Point'] ?? 0) : 0.0;
+                    // Share the same cross-process lock as autosave/submit. The
+                    // fresh result check prevents cleanup from racing a final
+                    // submission into a duplicate result, and the attempt is
+                    // removed before releasing the lock so it cannot be left
+                    // behind after a successful finalization.
+                    Cache::lock('quiz_attempt_mutation_'.hash('sha256', $attemptId), 45)->block(15, function () use (
+                        $attempt,
+                        $attemptId,
+                        $quiz,
+                        $quizId,
+                        $quizQuestions,
+                        $maximum,
+                        $now,
+                        &$summary,
+                    ): void {
+                        $hasResult = collect($this->results->fetchAllFresh())->contains('Attempt_ID', $attemptId);
+                        if (! $hasResult) {
+                            $completed = trim((string) ($attempt['Deadline_At'] ?? $quiz['End_At']));
+                            $answers = $this->answerMap((string) ($attempt['Submitted_Answers_JSON'] ?? ''));
+                            $raw = (float) $quizQuestions->sum(function ($question) use ($answers) {
+                                $selected = strtoupper(trim((string) ($answers[$question['Question_ID']] ?? '')));
+                                $correct = strtoupper(trim((string) ($question['Correct_Option'] ?? '')));
+
+                                return $selected !== '' && $selected === $correct ? (float) ($question['Point'] ?? 0) : 0.0;
+                            });
+                            $this->results->create([
+                                'Result_ID' => 'QRS'.strtoupper(substr(hash('sha256', $attemptId), 0, 24)),
+                                'Quiz_ID' => $quizId,
+                                'Quiz_Title' => $quiz['Title'],
+                                'Attempt_ID' => $attemptId,
+                                'Student_ID' => $attempt['Student_ID'],
+                                'Student_Name' => $attempt['Student_ID'],
+                                'Class_ID' => $quiz['Class_ID'],
+                                'Teacher_ID' => $quiz['Teacher_ID'],
+                                'Raw_Score' => $raw,
+                                'Maximum_Score' => $maximum,
+                                'Normalized_Score' => $maximum > 0 ? round(($raw / $maximum) * 100, 4) : 0,
+                                'Started_At' => $attempt['Started_At'],
+                                'Completed_At' => $completed,
+                                'Created_At' => $now->format('Y-m-d H:i:s'),
+                            ]);
+                            $summary['results_created']++;
+                        }
+
+                        $summary['attempts'] += $this->attempts->hardDeleteMany([$attemptId]);
                     });
-                    $this->results->create([
-                        'Result_ID' => 'QRS'.strtoupper(substr(hash('sha256', $attempt['Attempt_ID']), 0, 24)),
-                        'Quiz_ID' => $quizId,
-                        'Quiz_Title' => $quiz['Title'],
-                        'Attempt_ID' => $attempt['Attempt_ID'],
-                        'Student_ID' => $attempt['Student_ID'],
-                        'Student_Name' => $attempt['Student_ID'],
-                        'Class_ID' => $quiz['Class_ID'],
-                        'Teacher_ID' => $quiz['Teacher_ID'],
-                        'Raw_Score' => $raw,
-                        'Maximum_Score' => $maximum,
-                        'Normalized_Score' => $maximum > 0 ? round(($raw / $maximum) * 100, 4) : 0,
-                        'Started_At' => $attempt['Started_At'],
-                        'Completed_At' => $completed,
-                        'Created_At' => $now->format('Y-m-d H:i:s'),
-                    ]);
-                    $summary['results_created']++;
                 }
 
                 // Every destructive repository call performs a fresh authoritative
                 // read, re-resolves row indexes, and deletes bottom-to-top.
                 $summary['questions'] += $this->questions->hardDeleteMany($quizQuestions->pluck('Question_ID')->all());
-                $summary['attempts'] += $this->attempts->hardDeleteMany($quizAttempts->pluck('Attempt_ID')->all());
                 $summary['quizzes'] += $this->quizzes->hardDeleteMany([$quizId]);
                 if ($this->media !== null) {
                     $this->media->deleteUnreferenced($quizQuestions->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])->filter());

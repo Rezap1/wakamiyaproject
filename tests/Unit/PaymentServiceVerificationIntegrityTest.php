@@ -16,6 +16,7 @@ use Exception;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Cache;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class PaymentServiceVerificationIntegrityTest extends TestCase
@@ -154,7 +155,7 @@ class PaymentServiceVerificationIntegrityTest extends TestCase
         $service->verifyPayment('PAY-VERIFIED', 'SPOOFED-ACTOR', 'Verified');
     }
 
-    /** @dataProvider allowedVerificationTransitions */
+    #[DataProvider('allowedVerificationTransitions')]
     public function test_allowed_payment_state_transitions_are_explicit(string $from, string $to): void
     {
         $repo = Mockery::mock(PaymentRepositoryInterface::class);
@@ -233,7 +234,7 @@ class PaymentServiceVerificationIntegrityTest extends TestCase
         $this->assertTrue($service->verifyPayment('PAY-NR', 'ignored', 'Verified'));
     }
 
-    /** @dataProvider terminalPaymentStates */
+    #[DataProvider('terminalPaymentStates')]
     public function test_terminal_payment_states_cannot_reenter_verification(string $from, string $to): void
     {
         $repo = Mockery::mock(PaymentRepositoryInterface::class);
@@ -267,7 +268,7 @@ class PaymentServiceVerificationIntegrityTest extends TestCase
         $service->deletePayment('PAY-STALE');
     }
 
-    /** @dataProvider destructiveTerminalStates */
+    #[DataProvider('destructiveTerminalStates')]
     public function test_destructive_payment_mutation_rejects_all_terminal_states(string $state): void
     {
         $repo = Mockery::mock(PaymentRepositoryInterface::class);
@@ -296,7 +297,7 @@ class PaymentServiceVerificationIntegrityTest extends TestCase
         $service->deletePayment('PAY-STALE-REV');
     }
 
-    /** @dataProvider cancellablePaymentStates */
+    #[DataProvider('cancellablePaymentStates')]
     public function test_only_waiting_or_need_revision_payments_can_be_cancelled(string $state): void
     {
         $row = ['Payment_ID' => 'PAY-CANCEL', 'Status' => $state, 'Student_ID' => 'STU-1'];
