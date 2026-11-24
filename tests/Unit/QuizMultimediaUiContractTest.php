@@ -41,7 +41,7 @@ class QuizMultimediaUiContractTest extends TestCase
         $this->assertStringContainsString("return 'Metadata browser menunjukkan durasi di atas 01:30. File tetap diperiksa oleh server.'", $source);
         $this->assertStringContainsString("return 'Durasi audio tidak dapat dibaca browser. File tetap diperiksa oleh server.'", $source);
         $this->assertStringNotContainsString('if (duration * 1000 > Number(this.mediaConfig.audio_max_duration_ms)) throw', $source);
-        $this->assertStringContainsString('const browserWarning = await this.browserValidate(file, type)', $source);
+        $this->assertStringContainsString('const browserWarning = await this.browserValidate(uploadableFile, type)', $source);
         $this->assertStringContainsString('q.Audio_Warning = browserWarning', $source);
         $this->assertStringContainsString('q[`${prefix}_Token`] = data.token', $source);
         $this->assertStringContainsString('q[`${prefix}_URL`] = data.preview_url', $source);
@@ -85,5 +85,21 @@ class QuizMultimediaUiContractTest extends TestCase
         $this->assertStringContainsString('preview.origin !== window.location.origin', $view);
         $this->assertStringContainsString('Upload berhasil, tetapi preview media belum dapat dimuat', $view);
         $this->assertStringNotContainsString('Upload media gagal. Periksa koneksi.', $view);
+    }
+
+    public function test_audio_picker_snapshots_file_before_form_data_and_classifies_local_read_failures(): void
+    {
+        $view = file_get_contents(resource_path('views/quiz/teacher/form.blade.php'));
+
+        foreach (['QMU-FILE-READ', 'QMU-FILE-EMPTY', 'QMU-FILE-ACCESS', 'QMU-REQUEST-SEND'] as $code) {
+            $this->assertStringContainsString($code, $view);
+        }
+        $this->assertStringContainsString('await file.arrayBuffer()', $view);
+        $this->assertStringContainsString('new File([bytes], file.name', $view);
+        $this->assertStringContainsString('reader.readAsArrayBuffer(file)', $view);
+        $this->assertStringContainsString("type === 'audio' && source === 'upload'", $view);
+        $this->assertStringContainsString("body.append('file', uploadableFile", $view);
+        $this->assertStringContainsString("finally { input.value = ''; }", $view);
+        $this->assertStringNotContainsString("body.append('file', file, file.name", $view);
     }
 }

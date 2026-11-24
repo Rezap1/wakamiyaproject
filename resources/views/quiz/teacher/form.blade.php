@@ -283,8 +283,9 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
             const input = event.target;
             const file = input.files && input.files[0];
             if (!file) return;
-            await this.uploadFile(q, type, file, 'upload');
-            input.value = '';
+            try {
+                await this.uploadFile(q, type, file, 'upload');
+            } finally { input.value = ''; }
         },
         errorMessage(status, payload) {
             const validation = payload?.errors?.file;
@@ -315,6 +316,54 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         },
         requestId() {
             return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        },
+        async snapshotAudioFile(file) {
+            const size = Number(file?.size);
+            if (!Number.isFinite(size) || size <= 0) {
+                throw this.uploadFailure('QMU-FILE-EMPTY', 'File audio kosong. Silakan pilih file lain.');
+            }
+            if (size > Number(this.mediaConfig.audio_max_bytes)) {
+                throw new Error('Ukuran file audio maksimal 5 MB.');
+            }
+
+            let bytes;
+            try {
+                if (typeof file.arrayBuffer === 'function') {
+                    bytes = await file.arrayBuffer();
+                } else {
+                    bytes = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(reader.error || new Error('FileReader gagal membaca audio.'));
+                        reader.onabort = () => reject(new DOMException('Pembacaan file dibatalkan.', 'AbortError'));
+                        reader.readAsArrayBuffer(file);
+                    });
+                }
+            } catch (error) {
+                const accessFailure = ['NotAllowedError', 'NotReadableError', 'SecurityError'].includes(error?.name);
+                throw this.uploadFailure(
+                    accessFailure ? 'QMU-FILE-ACCESS' : 'QMU-FILE-READ',
+                    accessFailure
+                        ? 'Browser tidak dapat mengakses file audio. Pilih ulang file dari penyimpanan perangkat.'
+                        : 'File audio tidak dapat dibaca. Silakan pilih ulang atau gunakan file lain.',
+                );
+            }
+
+            if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0) {
+                throw this.uploadFailure('QMU-FILE-EMPTY', 'File audio kosong. Silakan pilih file lain.');
+            }
+            if (bytes.byteLength !== size) {
+                throw this.uploadFailure('QMU-FILE-READ', 'File audio tidak terbaca lengkap. Silakan pilih ulang file.');
+            }
+
+            try {
+                return new File([bytes], file.name || 'audio', {
+                    type: file.type || '',
+                    lastModified: Number(file.lastModified) || Date.now(),
+                });
+            } catch (_) {
+                throw this.uploadFailure('QMU-FILE-READ', 'File audio tidak dapat disiapkan untuk upload. Silakan pilih ulang file.');
+            }
         },
         validateStagingResponse(payload, type, requestId) {
             if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -368,7 +417,11 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
                 xhr.onerror = () => reject(this.uploadFailure('QMU-NETWORK', 'Koneksi terputus. Silakan coba kembali.', 0, requestId));
                 xhr.ontimeout = () => reject(this.uploadFailure('QMU-TIMEOUT', 'Pemrosesan media terlalu lama. Silakan coba kembali.', 0, requestId));
                 xhr.onabort = () => reject(this.uploadFailure('QMU-ABORTED', 'Upload digantikan oleh file yang lebih baru.', 0, requestId));
-                xhr.send(body);
+                try {
+                    xhr.send(body);
+                } catch (_) {
+                    reject(this.uploadFailure('QMU-REQUEST-SEND', 'Browser gagal memulai upload media. Silakan pilih ulang file.', 0, requestId));
+                }
             });
         },
         previewFailed(q, type) {
@@ -389,12 +442,15 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
             if (type === 'audio') q.Audio_Processing = source === 'recording';
             q[`${prefix}_Progress`] = 0;
             try {
-                const browserWarning = await this.browserValidate(file, type);
+                const uploadableFile = type === 'audio' && source === 'upload'
+                    ? await this.snapshotAudioFile(file)
+                    : file;
+                const browserWarning = await this.browserValidate(uploadableFile, type);
                 if (type === 'audio') q.Audio_Warning = browserWarning;
                 const body = new FormData();
                 body.append('media_type', type);
                 body.append('source', source);
-                body.append('file', file, file.name || (source === 'recording' ? 'rekaman-suara.m4a' : 'media'));
+                body.append('file', uploadableFile, uploadableFile.name || (source === 'recording' ? 'rekaman-suara.m4a' : 'media'));
                 const requestId = this.requestId();
                 const data = await this.requestUpload(q, prefix, body, type, requestId);
                 if (!this.questions.includes(q) || q[`${prefix}_Request`] !== request) return;
