@@ -122,7 +122,9 @@ class TeacherClassMappingRegressionTest extends TestCase
         $this->assertSame(['CLS-A'], $assignedClasses->pluck('Class_ID')->all());
         $this->assertStringContainsString('Kelas Alpha', $html);
         $this->assertStringNotContainsString('Kelas C Stale', $html);
-        $this->assertStringContainsString('-- Pilih Kelas --', $html);
+        $this->assertStringContainsString('name="Class_IDs[]" value="CLS-A"', $html);
+        $this->assertStringContainsString('Pilih Semua Kelas', $html);
+        $this->assertStringNotContainsString('-- Pilih Kelas --', $html);
     }
 
     private function repository(string $interface, array $rows)

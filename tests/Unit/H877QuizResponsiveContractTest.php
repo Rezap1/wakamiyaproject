@@ -74,7 +74,8 @@ class H877QuizResponsiveContractTest extends TestCase
         $this->assertStringContainsString('$quiz[\'Raw_Score\']', $studentIndex);
         $this->assertStringNotContainsString('$quiz[\'Normalized_Score\']', $studentIndex);
         $this->assertStringContainsString('Hapus kuis ini?', $teacherShow);
-        $this->assertStringContainsString('hasil/nilai siswa, dan poin leaderboard', $teacherShow);
+        $this->assertStringContainsString('hasil/nilai siswa, audience kelas, dan poin leaderboard', $teacherShow);
+        $this->assertStringContainsString('Reset Hasil Quiz', $teacherShow);
         $this->assertStringContainsString('Hapus Permanen', $teacherShow);
         $this->assertStringContainsString('env(safe-area-inset-bottom', $teacherShow);
         $this->assertStringNotContainsString('Normalized_Score', $teacherShow.$teacherResults.$teacherResult);
@@ -107,8 +108,8 @@ class H877QuizResponsiveContractTest extends TestCase
         $teacherShow = file_get_contents(resource_path('views/quiz/teacher/show.blade.php'));
 
         $this->assertContains($width, [375, 390, 430, 768, 1024]);
-        $this->assertStringContainsString("document.body.classList.toggle('overflow-hidden', deleteOpen)", $teacherShow);
-        $this->assertStringContainsString("document.body.classList.toggle('wms-modal-open', deleteOpen)", $teacherShow);
+        $this->assertStringContainsString("document.body.classList.toggle('overflow-hidden', deleteOpen || resetOpen)", $teacherShow);
+        $this->assertStringContainsString("document.body.classList.toggle('wms-modal-open', deleteOpen || resetOpen)", $teacherShow);
         $this->assertStringContainsString('x-teleport="body"', $teacherShow);
         $this->assertStringContainsString('max-h-[calc(100dvh-1.5rem)]', $teacherShow);
         $this->assertStringContainsString('min-h-0 overflow-y-auto', $teacherShow);

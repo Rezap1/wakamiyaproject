@@ -31,6 +31,7 @@ class QuizMultimediaMySqlIntegrationTest extends TestCase
         $connection = MySqlTestGuard::connection();
         QuizMultimediaSchemaGuard::assertMediaColumns();
         QuizMultimediaSchemaGuard::assertIdempotencyTables();
+        QuizMultimediaSchemaGuard::assertAudienceTables();
         $connection->beginTransaction();
         $this->transactionStarted = true;
         Storage::fake('local');
@@ -143,6 +144,100 @@ class QuizMultimediaMySqlIntegrationTest extends TestCase
             $this->assertSame(409, $exception->getStatusCode());
         }
         $this->assertSame(0, DB::table('QUIZ_MEDIA_OPERATION')->where('Idempotency_Key', 'b0000000-0000-4000-8000-000000000005')->count());
+    }
+
+    public function test_mysql_multi_class_reset_delete_and_stale_attempt_lifecycle_are_isolated(): void
+    {
+        $service = app(QuizService::class);
+        $payload = $this->payload('b0000000-0000-4000-8000-000000000006', [$this->question()]);
+        $payload['Class_IDs'] = ['C-QMMYSQL-A', 'C-QMMYSQL-B'];
+        $payload['Class_ID'] = 'C-QMMYSQL-A';
+        $payload['Start_At'] = now()->subMinute()->format('Y-m-d H:i:s');
+        $payload['End_At'] = now()->addHour()->format('Y-m-d H:i:s');
+        $payload['intent'] = 'publish';
+        $quizId = $service->create($payload, ['Teacher_ID' => 'T-QMMYSQL'], 'U-QMMYSQL-LIFECYCLE');
+
+        $this->assertSame(
+            ['C-QMMYSQL-A', 'C-QMMYSQL-B'],
+            DB::table('QUIZ_AUDIENCE_CLASS')->where('Quiz_ID', $quizId)->orderBy('Class_ID')->pluck('Class_ID')->all(),
+        );
+        $student = ['Student_ID' => 'S-QMMYSQL-B', 'Class_ID' => 'C-QMMYSQL-B', 'Full_Name' => 'Siswa B'];
+        $attempt = $service->start($quizId, $student)['attempt'];
+        $questionId = (string) DB::table('QUIZ_QUESTION')->where('Quiz_ID', $quizId)->value('Question_ID');
+        $service->autosave($attempt['Attempt_ID'], $student, [$questionId => 'A'], 1);
+        $result = $service->submit($attempt['Attempt_ID'], $student, [$questionId => 'A'], 1);
+        $this->assertSame('C-QMMYSQL-B', $result['Class_ID']);
+
+        $reset = $service->resetResults(
+            $quizId,
+            'T-QMMYSQL',
+            ['C-QMMYSQL-A', 'C-QMMYSQL-B'],
+            'U-QMMYSQL-LIFECYCLE',
+        );
+        $this->assertSame(['attempts' => 1, 'results' => 1], $reset['deleted']);
+        $this->assertSame(1, $reset['attempt_generation']);
+        $this->assertSame(1, DB::table('QUIZ_QUESTION')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(2, DB::table('QUIZ_AUDIENCE_CLASS')->where('Quiz_ID', $quizId)->count());
+
+        try {
+            $service->autosave($attempt['Attempt_ID'], $student, [$questionId => 'B'], 2);
+            $this->fail('A stale attempt must not survive reset.');
+        } catch (HttpException $exception) {
+            $this->assertSame(404, $exception->getStatusCode());
+        }
+
+        $newAttempt = $service->start($quizId, $student)['attempt'];
+        $this->assertNotSame($attempt['Attempt_ID'], $newAttempt['Attempt_ID']);
+        $service->submit($newAttempt['Attempt_ID'], $student, [$questionId => 'A']);
+
+        $outcome = $service->deleteQuiz(
+            $quizId,
+            'T-QMMYSQL',
+            ['C-QMMYSQL-A', 'C-QMMYSQL-B'],
+            'U-QMMYSQL-LIFECYCLE',
+        );
+        $this->assertSame(1, $outcome['deleted']['results']);
+        $this->assertSame(0, DB::table('QUIZ')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(0, DB::table('QUIZ_QUESTION')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(0, DB::table('QUIZ_ATTEMPT')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(0, DB::table('QUIZ_RESULT')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(0, DB::table('QUIZ_AUDIENCE_CLASS')->where('Quiz_ID', $quizId)->count());
+        $this->assertSame(1, DB::table('QUIZ_TOMBSTONE')->where('Quiz_ID', $quizId)->count());
+
+        try {
+            $service->deleteQuiz($quizId, 'T-QMMYSQL', ['C-QMMYSQL-A', 'C-QMMYSQL-B'], 'U-QMMYSQL-LIFECYCLE');
+            $this->fail('A duplicate delete must be authoritative gone.');
+        } catch (HttpException $exception) {
+            $this->assertSame(410, $exception->getStatusCode());
+        }
+    }
+
+    public function test_mysql_audience_migration_backfills_all_attempts_across_chunk_boundary(): void
+    {
+        $quizId = 'QIZ-QMMYSQL-BULK';
+        DB::table('QUIZ')->insert([
+            'Quiz_ID' => $quizId,
+            'Teacher_ID' => 'T-QMMYSQL',
+            'Class_ID' => 'C-QMMYSQL-BULK',
+            'Title' => 'Bulk migration safety',
+            'Start_At' => '2026-12-01 08:00:00',
+            'End_At' => '2026-12-01 09:00:00',
+            'Duration_Minutes' => 30,
+            'Status' => 'DRAFT',
+        ]);
+        collect(range(1, 501))->chunk(100)->each(function ($numbers) use ($quizId): void {
+            DB::table('QUIZ_ATTEMPT')->insert($numbers->map(fn (int $number): array => [
+                'Attempt_ID' => sprintf('A-QMMYSQL-BULK-%04d', $number),
+                'Quiz_ID' => $quizId,
+                'Student_ID' => sprintf('S-QMMYSQL-BULK-%04d', $number),
+            ])->all());
+        });
+
+        $migration = require database_path('migrations/wms_mysql/2026_11_23_000001_add_quiz_audience_and_runtime_state.php');
+        $migration->up();
+
+        $this->assertSame(501, DB::table('QUIZ_ATTEMPT')->where('Quiz_ID', $quizId)->where('Class_ID', 'C-QMMYSQL-BULK')->count());
+        $this->assertSame(0, DB::table('QUIZ_ATTEMPT')->where('Quiz_ID', $quizId)->whereNull('Class_ID')->count());
     }
 
     private function payload(string $key, array $questions): array

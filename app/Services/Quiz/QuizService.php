@@ -27,6 +27,8 @@ class QuizService
         private ActivityLogService $activityLog,
         private ?QuizMediaService $media = null,
         private ?QuizMediaIdempotencyService $mediaIdempotency = null,
+        private ?QuizAudienceService $audiences = null,
+        private ?QuizRuntimeStateService $runtimeState = null,
     ) {}
 
     public function create(array $data, array $teacher, string $userId): string
@@ -53,7 +55,7 @@ class QuizService
                 $this->quizzes->create([
                     'Quiz_ID' => $quizId,
                     'Teacher_ID' => $teacher['Teacher_ID'],
-                    'Class_ID' => $data['Class_ID'],
+                    'Class_ID' => $data['Class_IDs'][0] ?? $data['Class_ID'],
                     'Title' => trim($data['Title']),
                     'Start_At' => $this->stamp($this->date($data['Start_At'])),
                     'End_At' => $this->stamp($this->date($data['End_At'])),
@@ -64,6 +66,8 @@ class QuizService
                     'Created_By' => $userId,
                     'Updated_By' => $userId,
                 ]);
+                $this->audience()->replace($quizId, $data['Class_IDs'] ?? [$data['Class_ID']], $now);
+                $this->state()->ensure($quizId, $now);
                 $this->writeQuestions($quizId, $data['questions'], $now);
                 if ($publish) {
                     $this->quizzes->update($quizId, ['Status' => 'PUBLISHED', 'Updated_At' => $now, 'Updated_By' => $userId]);
@@ -104,7 +108,7 @@ class QuizService
 
     public function update(string $quizId, array $data, array $teacher, string $userId, ?array $allowedClassIds = null): void
     {
-        $this->withCacheLock('quiz_edit_'.hash('sha256', $quizId), 30, 10, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
+        $this->withCacheLock($this->quizMutationLock($quizId), 45, 15, function () use ($quizId, $data, $teacher, $userId, $allowedClassIds) {
             [$idempotencyKey, $payloadHash] = $this->idempotencyContext($data, $userId, 'update', $quizId);
             if ($idempotencyKey !== null) {
                 $replay = $this->mediaIdempotency?->replayResult(
@@ -138,7 +142,7 @@ class QuizService
                     $this->questions->hardDeleteMany($existingQuestions->pluck('Question_ID')->all());
                     $this->writeQuestions($quizId, $data['questions'], $now);
                     $this->quizzes->update($quizId, [
-                        'Class_ID' => $data['Class_ID'],
+                        'Class_ID' => $data['Class_IDs'][0] ?? $data['Class_ID'],
                         'Title' => trim($data['Title']),
                         'Start_At' => $this->stamp($this->date($data['Start_At'])),
                         'End_At' => $this->stamp($this->date($data['End_At'])),
@@ -147,6 +151,7 @@ class QuizService
                         'Updated_At' => $now,
                         'Updated_By' => $userId,
                     ]);
+                    $this->audience()->replace($quizId, $data['Class_IDs'] ?? [$data['Class_ID']], $now);
                     if ($idempotencyKey !== null) {
                         $this->mediaIdempotency?->recordCommitted(
                             $idempotencyKey,
@@ -179,9 +184,10 @@ class QuizService
         $results = collect($this->results->fetchAll())->groupBy('Quiz_ID');
         $rows = collect($this->quizzes->fetchAll())->where('Teacher_ID', $teacherId)
             ->when($allowedClassIds !== null, fn ($rows) => $rows->filter(
-                fn ($quiz) => in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true)
+                fn ($quiz) => $this->quizInClasses((array) $quiz, $allowedClassIds)
             ))->map(function ($quiz) use ($questions, $attempts, $results) {
                 $quiz = (array) $quiz;
+                $quiz['Audience_Class_IDs'] = $this->audience()->classIds($quiz);
                 $quiz['Lifecycle'] = $this->lifecycle($quiz);
                 $quiz['Question_Count'] = $questions->get($quiz['Quiz_ID'], collect())->count();
                 $quiz['Participant_Count'] = $results->get($quiz['Quiz_ID'], collect())->count();
@@ -208,19 +214,22 @@ class QuizService
         $allowedClassIds = $classes->pluck('Class_ID')->map(fn ($id) => trim((string) $id))->filter()->all();
         $quizzes = collect($this->quizzes->fetchAll())
             ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
-                && in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true))
+                && $this->quizInClasses((array) $quiz, $allowedClassIds))
             ->map(function ($quiz) {
                 $quiz = (array) $quiz;
                 $quiz['Lifecycle'] = $this->lifecycle($quiz);
+                $quiz['Audience_Class_IDs'] = $this->audience()->classIds($quiz);
 
                 return $quiz;
             })
-            ->groupBy(fn ($quiz) => trim((string) ($quiz['Class_ID'] ?? '')));
+            ->flatMap(fn ($quiz) => collect($quiz['Audience_Class_IDs'])->mapWithKeys(fn ($classId) => [
+                $classId.'|'.$quiz['Quiz_ID'] => $quiz,
+            ]));
 
         return $classes->map(function ($class) use ($quizzes, $studentCounts) {
             $class = (array) $class;
             $classId = trim((string) ($class['Class_ID'] ?? ''));
-            $classQuizzes = collect($quizzes->get($classId, collect()));
+            $classQuizzes = $quizzes->filter(fn ($quiz, $key) => str_starts_with((string) $key, $classId.'|'))->values();
 
             return $class + [
                 'Active_Quiz_Count' => $classQuizzes->where('Lifecycle', 'ACTIVE')->count(),
@@ -239,11 +248,13 @@ class QuizService
         $resultsByQuiz = $allResults->groupBy('Quiz_ID');
         $quizzes = collect($this->quizzes->fetchAll())
             ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
-                && trim((string) ($quiz['Class_ID'] ?? '')) === trim($classId))
-            ->map(function ($quiz) use ($questionsByQuiz, $resultsByQuiz) {
+                && $this->audience()->includes((array) $quiz, $classId))
+            ->map(function ($quiz) use ($questionsByQuiz, $resultsByQuiz, $classId) {
                 $quiz = (array) $quiz;
+                $quiz['Audience_Class_IDs'] = $this->audience()->classIds($quiz);
                 $quizId = trim((string) ($quiz['Quiz_ID'] ?? ''));
-                $quizResults = collect($resultsByQuiz->get($quizId, collect()));
+                $quizResults = collect($resultsByQuiz->get($quizId, collect()))
+                    ->filter(fn ($result) => trim((string) ($result['Class_ID'] ?? '')) === trim($classId));
                 $quiz['Lifecycle'] = $this->lifecycle($quiz);
                 $quiz['Question_Count'] = (int) $questionsByQuiz->get($quizId, 0);
                 $quiz['Participant_Count'] = $quizResults->pluck('Student_ID')->filter()->unique()->count();
@@ -286,6 +297,7 @@ class QuizService
         $quiz = (array) ($this->quizzes->findById($quizId) ?: abort(404));
         $this->assertTeacherOwns($quiz, $teacherId);
         $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+        $quiz['Audience_Class_IDs'] = $this->audience()->classIds($quiz);
         $quiz['questions'] = collect($this->questions->fetchAll())->where('Quiz_ID', $quizId)->sortBy('Sort_Order')->map(function ($question) use ($quizId) {
             $question = (array) $question;
             $question['Image_URL'] = ! empty($question['Image_Path']) ? route('teacher.quizzes.media', [$quizId, $question['Question_ID'], 'image']) : null;
@@ -294,6 +306,10 @@ class QuizService
             return $question;
         })->values();
         $quiz['results'] = collect($this->results->fetchAll())->where('Quiz_ID', $quizId)->sortByDesc('Completed_At')->values();
+        $quiz['Attempt_Count'] = collect($this->attempts->fetchAll())->where('Quiz_ID', $quizId)->count();
+        $quiz['Result_Count'] = $quiz['results']->count();
+        $quiz['Participant_Count'] = $quiz['results']->pluck('Student_ID')->filter()->unique()->count();
+        $quiz['Lifecycle'] = $this->lifecycle($quiz);
         $quiz['Editable'] = $this->isEditable($quiz);
         $quiz['Deletable'] = $this->isDeletable($quiz);
 
@@ -308,18 +324,11 @@ class QuizService
         ?string $ipAddress = null,
         ?string $userAgent = null,
     ): array {
-        return $this->withCacheLock('quiz_delete_'.hash('sha256', $quizId), 45, 15, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent) {
+        return $this->withCacheLock($this->quizMutationLock($quizId), 60, 20, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent) {
             $outcome = $this->runtimeTransaction($this->quizzes, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
                 $quiz = $this->requireQuizFresh($quizId);
                 $this->assertTeacherOwns($quiz, $teacherId);
                 $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
-
-                $hasAttempt = collect($this->attempts->fetchAllFresh())->contains('Quiz_ID', $quizId);
-                $hasResult = collect($this->results->fetchAllFresh())->contains('Quiz_ID', $quizId);
-                $startAt = trim((string) ($quiz['Start_At'] ?? ''));
-                if ($startAt === '' || ! $this->periods->now()->lessThan($this->date($startAt)) || $hasAttempt || $hasResult) {
-                    throw new \DomainException('Kuis yang sudah dimulai atau memiliki percobaan/hasil tidak dapat dihapus.');
-                }
 
                 $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
                 $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
@@ -329,6 +338,8 @@ class QuizService
                 $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
                 $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
                 $this->deleteChildrenAndVerify($this->questions, $questionIds, $quizId, 'soal kuis');
+                $audienceIds = $this->audience()->classIds($quiz);
+                $this->audience()->delete($quizId);
                 $this->quizzes->hardDeleteMany([$quizId]);
                 if ($this->quizzes->findByIdFresh($quizId)) {
                     throw new \RuntimeException("Kuis {$quizId} belum terhapus sepenuhnya.");
@@ -340,6 +351,8 @@ class QuizService
                     'attempts' => count($attemptIds),
                     'results' => count($resultIds),
                 ];
+                $deletedAt = $this->stamp($this->periods->now());
+                $this->state()->tombstone($quizId, $userId, $deletedAt);
                 $this->activityLog->logAction(
                     $userId,
                     'DELETE',
@@ -348,7 +361,7 @@ class QuizService
                     $ipAddress,
                     [
                         'Title' => trim((string) ($quiz['Title'] ?? '')),
-                        'Class_ID' => trim((string) ($quiz['Class_ID'] ?? '')),
+                        'Class_IDs' => $audienceIds,
                     ],
                     null,
                     $userAgent,
@@ -371,6 +384,48 @@ class QuizService
         });
     }
 
+    public function resetResults(
+        string $quizId,
+        string $teacherId,
+        array $allowedClassIds,
+        string $userId,
+        ?string $ipAddress = null,
+        ?string $userAgent = null,
+    ): array {
+        return $this->withCacheLock($this->quizMutationLock($quizId), 60, 20, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
+            return $this->runtimeTransaction($this->quizzes, function () use ($quizId, $teacherId, $allowedClassIds, $userId, $ipAddress, $userAgent): array {
+                $quiz = $this->requireQuizFresh($quizId);
+                $this->assertTeacherOwns($quiz, $teacherId);
+                $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
+                $resultIds = collect($this->results->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Result_ID')->filter()->values()->all();
+                $attemptIds = collect($this->attempts->fetchAllFresh())->where('Quiz_ID', $quizId)->pluck('Attempt_ID')->filter()->values()->all();
+
+                $this->deleteChildrenAndVerify($this->results, $resultIds, $quizId, 'hasil kuis');
+                $this->deleteChildrenAndVerify($this->attempts, $attemptIds, $quizId, 'percobaan kuis');
+                $stamp = $this->stamp($this->periods->now());
+                $generation = $this->state()->incrementGeneration($quizId, $stamp);
+                $this->activityLog->logAction(
+                    $userId,
+                    'RESET',
+                    'QUIZ_RESULT',
+                    'Hasil dan percobaan kuis direset; definisi soal dan media dipertahankan.',
+                    $ipAddress,
+                    ['Attempt_Count' => count($attemptIds), 'Result_Count' => count($resultIds)],
+                    ['Attempt_Generation' => $generation],
+                    $userAgent,
+                    'QUIZ',
+                    $quizId,
+                );
+
+                return [
+                    'quiz' => $quiz,
+                    'deleted' => ['attempts' => count($attemptIds), 'results' => count($resultIds)],
+                    'attempt_generation' => $generation,
+                ];
+            }, [[$this->quizzes, $quizId]]);
+        });
+    }
+
     public function teacherResults(string $teacherId, string $classId, iterable $roster = []): array
     {
         $roster = collect($roster)->keyBy(fn ($student) => trim((string) ($student['Student_ID'] ?? '')));
@@ -382,7 +437,7 @@ class QuizService
         $resultsByQuiz = $results->groupBy('Quiz_ID');
         $quizzes = collect($this->quizzes->fetchAll())
             ->filter(fn ($quiz) => trim((string) ($quiz['Teacher_ID'] ?? '')) === trim($teacherId)
-                && trim((string) ($quiz['Class_ID'] ?? '')) === trim($classId))
+                && $this->audience()->includes((array) $quiz, $classId))
             ->keyBy('Quiz_ID');
 
         foreach ($resultsByQuiz as $quizId => $quizResults) {
@@ -449,7 +504,8 @@ class QuizService
         $results = collect($this->results->fetchAll())->where('Student_ID', $student['Student_ID'])->keyBy('Quiz_ID');
         $counts = collect($this->questions->fetchAll())->countBy('Quiz_ID');
         $rows = collect($this->quizzes->fetchAll())
-            ->where('Class_ID', $student['Class_ID'])->where('Status', 'PUBLISHED')
+            ->filter(fn ($quiz) => $this->audience()->includes((array) $quiz, (string) $student['Class_ID']))
+            ->where('Status', 'PUBLISHED')
             ->map(function ($quiz) use ($attempts, $results, $counts, $now) {
                 $quiz = (array) $quiz;
                 $attempt = $attempts->get($quiz['Quiz_ID']);
@@ -475,9 +531,9 @@ class QuizService
 
     public function start(string $quizId, array $student): array
     {
-        $attemptId = $this->attemptId($quizId, $student['Student_ID']);
+        return $this->withCacheLock($this->quizMutationLock($quizId), 45, 15, function () use ($quizId, $student) {
+            $attemptId = $this->attemptId($quizId, $student['Student_ID'], $this->state()->generation($quizId));
 
-        return $this->withCacheLock('quiz_start_'.hash('sha256', $attemptId), 30, 10, function () use ($quizId, $student, $attemptId) {
             return $this->runtimeTransaction($this->attempts, function () use ($quizId, $student, $attemptId): array {
                 $quiz = $this->requireQuizFresh($quizId);
                 $this->assertStudentEligible($quiz, $student);
@@ -496,6 +552,7 @@ class QuizService
                         'Attempt_ID' => $attemptId,
                         'Quiz_ID' => $quizId,
                         'Student_ID' => $student['Student_ID'],
+                        'Class_ID' => $student['Class_ID'],
                         'Started_At' => $stamp,
                         'Deadline_At' => $this->stamp($deadline),
                         'Status' => 'IN_PROGRESS',
@@ -530,7 +587,10 @@ class QuizService
 
     public function autosave(string $attemptId, array $student, array $answers, int $version): array
     {
-        return $this->withCacheLock('quiz_attempt_mutation_'.hash('sha256', $attemptId), 45, 15, function () use ($attemptId, $student, $answers, $version) {
+        $snapshot = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
+        $quizId = trim((string) ($snapshot['Quiz_ID'] ?? ''));
+
+        return $this->withCacheLock($this->quizMutationLock($quizId), 45, 15, function () use ($attemptId, $student, $answers, $version) {
             return $this->runtimeTransaction($this->attempts, function () use ($attemptId, $student, $answers, $version): array {
                 abort_if($this->results->findByIdFresh($this->resultId($attemptId)), 409, 'Kuis sudah difinalisasi.');
                 $attempt = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
@@ -583,7 +643,10 @@ class QuizService
 
     public function submit(string $attemptId, array $student, array $answers, ?int $answerVersion = null): array
     {
-        return $this->withCacheLock('quiz_attempt_mutation_'.hash('sha256', $attemptId), 45, 15, function () use ($attemptId, $student, $answers, $answerVersion) {
+        $snapshot = (array) ($this->attempts->findByIdFresh($attemptId) ?: abort(404));
+        $quizId = trim((string) ($snapshot['Quiz_ID'] ?? ''));
+
+        return $this->withCacheLock($this->quizMutationLock($quizId), 45, 15, function () use ($attemptId, $student, $answers, $answerVersion) {
             return $this->runtimeTransaction($this->attempts, function () use ($attemptId, $student, $answers, $answerVersion): array {
                 $resultId = $this->resultId($attemptId);
                 $existingResult = $this->results->findByIdFresh($resultId);
@@ -640,7 +703,7 @@ class QuizService
                     'Attempt_ID' => $attemptId,
                     'Student_ID' => $student['Student_ID'],
                     'Student_Name' => $student['Full_Name'] ?? $student['Student_Name'] ?? 'Siswa',
-                    'Class_ID' => $quiz['Class_ID'],
+                    'Class_ID' => $student['Class_ID'],
                     'Teacher_ID' => $quiz['Teacher_ID'],
                     'Raw_Score' => $raw,
                     'Maximum_Score' => $maximum,
@@ -741,7 +804,7 @@ class QuizService
         $studentResults = $results->where('Student_ID', $studentId)->keyBy('Quiz_ID');
         $studentAttempts = collect($this->attempts->fetchAll())->where('Student_ID', $studentId)->keyBy('Quiz_ID');
         $quizzes = collect($this->quizzes->fetchAll())
-            ->filter(fn ($quiz) => trim((string) ($quiz['Class_ID'] ?? '')) === $classId
+            ->filter(fn ($quiz) => $this->audience()->includes((array) $quiz, $classId)
                 && strtoupper(trim((string) ($quiz['Status'] ?? ''))) === 'PUBLISHED')
             ->map(function ($quiz) use ($now, $studentResults, $studentAttempts) {
                 $quiz = (array) $quiz;
@@ -984,7 +1047,7 @@ class QuizService
 
         foreach ($attempts as $attempt) {
             $quiz = (array) ($quizzes->get($attempt['Quiz_ID'] ?? '') ?? []);
-            if ($quiz === [] || trim((string) ($quiz['Class_ID'] ?? '')) !== $classId) {
+            if ($quiz === [] || ! $this->audience()->includes($quiz, $classId)) {
                 continue;
             }
             if ($this->attemptExpired((array) $attempt, $quiz)) {
@@ -1087,19 +1150,17 @@ class QuizService
 
     private function isDeletable(array $quiz): bool
     {
-        $quizId = trim((string) ($quiz['Quiz_ID'] ?? ''));
-        $startAt = trim((string) ($quiz['Start_At'] ?? ''));
-
-        return $quizId !== ''
-            && $startAt !== ''
-            && $this->periods->now()->lessThan($this->date($startAt))
-            && ! collect($this->attempts->fetchAll())->contains('Quiz_ID', $quizId)
-            && ! collect($this->results->fetchAll())->contains('Quiz_ID', $quizId);
+        return trim((string) ($quiz['Quiz_ID'] ?? '')) !== '';
     }
 
     private function requireQuizFresh(string $id): array
     {
-        return (array) ($this->quizzes->findByIdFresh($id) ?: abort(404, 'Kuis tidak ditemukan.'));
+        $quiz = $this->quizzes->findByIdFresh($id);
+        if (! $quiz && $this->state()->isTombstoned($id)) {
+            abort(410, 'Kuis sudah dihapus permanen.');
+        }
+
+        return (array) ($quiz ?: abort(404, 'Kuis tidak ditemukan.'));
     }
 
     private function availableReplay(string $quizId, array $teacher, ?array $allowedClassIds = null): string
@@ -1126,7 +1187,7 @@ class QuizService
         }
 
         abort_unless(
-            in_array(trim((string) ($quiz['Class_ID'] ?? '')), $allowedClassIds, true),
+            $this->quizInClasses($quiz, $allowedClassIds),
             403,
             'Kuis berada di luar scope kelas Anda.'
         );
@@ -1134,7 +1195,33 @@ class QuizService
 
     private function assertStudentEligible(array $quiz, array $student): void
     {
-        abort_unless(trim((string) ($quiz['Class_ID'] ?? '')) === trim((string) ($student['Class_ID'] ?? '')), 403);
+        abort_unless($this->audience()->includes($quiz, (string) ($student['Class_ID'] ?? '')), 403);
+    }
+
+    /** @param list<string> $classIds */
+    private function quizInClasses(array $quiz, array $classIds): bool
+    {
+        $audience = collect($this->audience()->classIds($quiz))->filter()->unique();
+        $allowed = collect($classIds)->map(fn ($id) => trim((string) $id))->filter()->unique();
+
+        return $audience->isNotEmpty() && $audience->diff($allowed)->isEmpty();
+    }
+
+    private function audience(): QuizAudienceService
+    {
+        return $this->audiences ??= app(QuizAudienceService::class);
+    }
+
+    private function state(): QuizRuntimeStateService
+    {
+        return $this->runtimeState ??= app(QuizRuntimeStateService::class);
+    }
+
+    private function quizMutationLock(string $quizId): string
+    {
+        abort_if(trim($quizId) === '', 404, 'Kuis tidak ditemukan.');
+
+        return 'quiz_mutation_'.hash('sha256', trim($quizId));
     }
 
     /** @return array{path:string,mime:string} */
@@ -1173,9 +1260,13 @@ class QuizService
         });
     }
 
-    private function attemptId(string $quizId, string $studentId): string
+    private function attemptId(string $quizId, string $studentId, int $generation = 0): string
     {
-        return 'QAT'.strtoupper(substr(hash('sha256', $quizId.'|'.$studentId), 0, 24));
+        $seed = max(0, $generation) === 0
+            ? $quizId.'|'.$studentId
+            : $quizId.'|'.$studentId.'|'.$generation;
+
+        return 'QAT'.strtoupper(substr(hash('sha256', $seed), 0, 24));
     }
 
     private function questionId(string $quizId, int $index): string

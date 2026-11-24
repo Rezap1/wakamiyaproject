@@ -65,7 +65,7 @@
                             </div>
                             <span class="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xl font-black text-emerald-800">{{ (float) $result['Raw_Score'] }} / {{ (float) $result['Maximum_Score'] }} poin</span>
                         </div>
-                        <p class="mt-3 text-xs text-slate-500">Selesai {{ $result['Completed_At'] ?? '-' }} WIB</p>
+                        <p class="mt-3 text-xs text-slate-500">Selesai {{ app(\App\Support\Quiz\QuizDateFormatter::class)->dateTime($result['Completed_At'] ?? null) }}</p>
                         <a href="{{ route('teacher.quizzes.result', $result['Result_ID']) }}" class="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 text-sm font-bold text-slate-800">Lihat Detail</a>
                     </article>
                 @empty

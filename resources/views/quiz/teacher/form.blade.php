@@ -9,6 +9,9 @@
         : $persistedSeed->all();
     $maxQuestions = (int) config('quiz.max_questions', 100);
     $lockedClass = $lockedClass ?? null;
+    $availableClassIds = collect($classes)->pluck('Class_ID')->map(fn($id) => (string) $id)->values()->all();
+    $selectedClassIds = old('Class_IDs', $quiz['Audience_Class_IDs'] ?? (isset($quiz['Class_ID']) ? [$quiz['Class_ID']] : ($lockedClass ? [$lockedClass['Class_ID']] : [])));
+    $selectedClassIds = is_array($selectedClassIds) ? array_values($selectedClassIds) : [];
     $mediaConfig = [
         'image_max_bytes' => (int) config('quiz.media.image_max_bytes'),
         'image_max_width' => (int) config('quiz.media.image_max_width'),
@@ -22,7 +25,7 @@
         ? route('teacher.quizzes.update', $quiz['Quiz_ID'])
         : ($lockedClass ? route('teacher.quizzes.class.store', $lockedClass['Class_ID']) : route('teacher.quizzes.store'));
 @endphp
-<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed), {{ $maxQuestions }}, @js(route('teacher.quizzes.media.upload')), @js(csrf_token()), @js($mediaConfig), @js($errors->toArray()))" @submit="if (uploadingCount > 0) { $event.preventDefault(); countError = 'Tunggu seluruh upload media selesai.'; }">
+<form method="POST" action="{{ $formAction }}" class="mx-auto max-w-5xl space-y-6 pb-24" x-data="quizBuilder(@js($seed), {{ $maxQuestions }}, @js(route('teacher.quizzes.media.upload')), @js(csrf_token()), @js($mediaConfig), @js($errors->toArray()), @js($selectedClassIds), @js($availableClassIds))" x-init="init()" @submit="if (uploadingCount > 0 || recordingCount > 0) { $event.preventDefault(); countError = 'Hentikan rekaman dan tunggu seluruh upload media selesai.'; }">
     @csrf @if($quiz) @method('PUT') @endif
     <input type="hidden" name="Idempotency_Key" value="{{ old('Idempotency_Key', (string) \Illuminate\Support\Str::uuid()) }}">
     @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ $errors->first() }}</div>@endif
@@ -30,9 +33,14 @@
         <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <label class="sm:col-span-2 text-sm font-bold">Judul Kuis<input name="Title" value="{{ old('Title', $quiz['Title'] ?? '') }}" required maxlength="160" class="mt-2 min-h-12 w-full rounded-xl border-slate-300 focus:border-sky-500 focus:ring-sky-500"></label>
             @if($lockedClass)
-                <label class="text-sm font-bold">Kelas<input type="hidden" name="Class_ID" value="{{ $lockedClass['Class_ID'] }}"><span class="mt-2 flex min-h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-800">{{ $lockedClass['Class_Name'] ?? 'Kelas Anda' }}</span></label>
+                <label class="text-sm font-bold">Kelas<input type="hidden" name="Class_IDs[]" value="{{ $lockedClass['Class_ID'] }}"><span class="mt-2 flex min-h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-800">{{ $lockedClass['Class_Name'] ?? 'Kelas Anda' }}</span></label>
             @else
-                <label class="text-sm font-bold">Kelas<select name="Class_ID" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"><option value="">-- Pilih Kelas --</option>@foreach($classes as $class)<option value="{{ $class['Class_ID'] }}" @selected(old('Class_ID', $quiz['Class_ID'] ?? '') === $class['Class_ID'])>{{ $class['Class_Name'] ?? $class['Class_ID'] }}</option>@endforeach</select></label>
+                <fieldset class="sm:col-span-2 rounded-xl border border-slate-200 p-4">
+                    <legend class="px-2 text-sm font-bold">Kelas Audience</legend>
+                    <div class="flex flex-wrap items-center justify-between gap-2"><p class="text-xs text-slate-500">Pilih satu atau beberapa kelas yang Anda ajar.</p><button type="button" @click="selectedClassIds = [...availableClassIds]" class="min-h-11 rounded-lg bg-sky-50 px-3 text-xs font-black text-sky-700">Pilih Semua Kelas</button></div>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-2">@foreach($classes as $class)<label class="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"><input type="checkbox" name="Class_IDs[]" value="{{ $class['Class_ID'] }}" x-model="selectedClassIds" class="h-5 w-5 rounded border-slate-300 text-sky-600"><span>{{ $class['Class_Name'] ?? $class['Class_ID'] }}</span></label>@endforeach</div>
+                    <p class="mt-3 text-xs font-bold text-sky-700"><span x-text="selectedClassIds.length"></span> kelas dipilih</p>
+                </fieldset>
             @endif
             <label class="text-sm font-bold">Durasi (menit)<input type="number" min="1" max="480" name="Duration_Minutes" value="{{ old('Duration_Minutes', $quiz['Duration_Minutes'] ?? 30) }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>
             <label class="text-sm font-bold">Mulai<input type="datetime-local" name="Start_At" value="{{ old('Start_At', isset($quiz['Start_At']) ? str_replace(' ', 'T', substr($quiz['Start_At'], 0, 16)) : '') }}" required class="mt-2 min-h-12 w-full rounded-xl border-slate-300"></label>
@@ -67,12 +75,16 @@
                             <p class="mt-1 text-xs text-slate-500">JPG, JPEG, PNG, atau WebP · maksimal 7 MB · maksimal 4096×4096 piksel.</p>
                             <input type="hidden" :name="`questions[${i}][Image_Token]`" :value="q.Image_Token || ''">
                             <input type="hidden" :name="`questions[${i}][Remove_Image]`" :value="q.Remove_Image ? 1 : 0">
-                            <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="uploadMedia(q, 'image', $event)" :disabled="q.Image_Uploading" class="mt-3 block w-full min-w-0 text-sm">
+                            <div class="mt-3 flex min-w-0 flex-wrap gap-2">
+                                <button type="button" @click="$event.currentTarget.nextElementSibling.click()" :disabled="q.Image_Uploading" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><x-sidebar.icon name="photo" class="h-5 w-5" /><span x-text="q.Image_URL ? 'Ganti Gambar' : 'Pilih Gambar'"></span></button>
+                                <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="uploadMedia(q, 'image', $event)" :disabled="q.Image_Uploading" class="sr-only" aria-label="Pilih gambar soal">
+                                <span x-show="q.Image_FileName" x-text="q.Image_FileName" class="min-w-0 self-center break-all text-xs text-slate-600"></span>
+                            </div>
                             <div x-show="q.Image_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Image_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700">Mengunggah <span x-text="q.Image_Progress"></span>%</p></div>
                             <p x-show="q.Image_Error" x-text="q.Image_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
                             <div x-show="q.Image_URL" class="mt-3 space-y-2">
                                 <img :src="q.Image_URL" alt="Preview gambar soal" class="max-h-64 w-full rounded-xl border border-slate-200 object-contain">
-                                <div class="flex items-center justify-between gap-2 text-xs"><span x-text="formatBytes(q.Image_Size_Bytes)"></span><button type="button" @click="removeMedia(q, 'image')" class="font-bold text-rose-700">Hapus gambar</button></div>
+                                <div class="flex items-center justify-between gap-2 text-xs"><span x-text="formatBytes(q.Image_Size_Bytes)"></span><button type="button" @click="removeMedia(q, 'image')" class="min-h-11 px-2 font-bold text-rose-700">Hapus gambar</button></div>
                             </div>
                         </section>
                         <section class="rounded-xl border border-slate-200 p-4">
@@ -80,13 +92,21 @@
                             <p class="mt-1 text-xs text-slate-500">MP3 atau M4A · maksimal 01:30 · maksimal 5 MB. Siswa dapat memutar ulang tanpa batas.</p>
                             <input type="hidden" :name="`questions[${i}][Audio_Token]`" :value="q.Audio_Token || ''">
                             <input type="hidden" :name="`questions[${i}][Remove_Audio]`" :value="q.Remove_Audio ? 1 : 0">
-                            <input type="file" accept=".mp3,.m4a,audio/mpeg,audio/mp4" @change="uploadMedia(q, 'audio', $event)" :disabled="q.Audio_Uploading" class="mt-3 block w-full min-w-0 text-sm">
-                            <div x-show="q.Audio_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Audio_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700">Mengunggah <span x-text="q.Audio_Progress"></span>%</p></div>
+                            <div class="mt-3 flex min-w-0 flex-wrap gap-2">
+                                <button type="button" @click="$event.currentTarget.nextElementSibling.click()" :disabled="q.Audio_Uploading || q.Recording_Active" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><x-sidebar.icon name="musical-note" class="h-5 w-5" /><span x-text="q.Audio_URL ? 'Ganti Audio' : 'Pilih Audio'"></span></button>
+                                <input type="file" accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a" @change="uploadMedia(q, 'audio', $event)" :disabled="q.Audio_Uploading || q.Recording_Active" class="sr-only" aria-label="Pilih audio soal">
+                                <button type="button" x-show="!q.Recording_Active" @click="startRecording(q)" :disabled="q.Audio_Uploading" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-black text-rose-700 disabled:opacity-50"><x-sidebar.icon name="microphone" class="h-5 w-5" /><span x-text="q.Audio_URL ? 'Rekam Ulang' : 'Rekam Suara'"></span></button>
+                                <button type="button" x-show="q.Recording_Active" @click="stopRecording(q)" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-black text-white"><span class="h-3 w-3 animate-pulse rounded-full bg-white"></span>Berhenti Merekam</button>
+                            </div>
+                            <div x-show="q.Recording_Active" role="status" class="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">Merekam <span x-text="formatDuration(q.Recording_Elapsed_Milliseconds)"></span> / 01:30</div>
+                            <p x-show="!recordingSupported" class="mt-2 text-xs text-slate-500">Browser ini tidak mendukung perekaman suara. Gunakan tombol Pilih Audio.</p>
+                            <p x-show="q.Audio_FileName" class="mt-2 min-w-0 break-all text-xs text-slate-600">File: <span x-text="q.Audio_FileName"></span></p>
+                            <div x-show="q.Audio_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Audio_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700"><span x-text="q.Audio_Processing ? 'Memproses rekaman' : 'Mengunggah audio'"></span> <span x-text="q.Audio_Progress"></span>%</p></div>
                             <p x-show="q.Audio_Warning" x-text="q.Audio_Warning" class="mt-2 text-xs font-semibold text-amber-700"></p>
                             <p x-show="q.Audio_Error" x-text="q.Audio_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
                             <div x-show="q.Audio_URL" class="mt-3 space-y-2">
                                 <audio :src="q.Audio_URL" controls preload="metadata" class="w-full"></audio>
-                                <div class="flex items-center justify-between gap-2 text-xs"><span><span x-text="formatDuration(q.Audio_Duration_Milliseconds)"></span> · <span x-text="formatBytes(q.Audio_Size_Bytes)"></span></span><button type="button" @click="removeMedia(q, 'audio')" class="font-bold text-rose-700">Hapus audio</button></div>
+                                <div class="flex items-center justify-between gap-2 text-xs"><span><span x-text="formatDuration(q.Audio_Duration_Milliseconds)"></span> · <span x-text="formatBytes(q.Audio_Size_Bytes)"></span></span><button type="button" @click="removeMedia(q, 'audio')" class="min-h-11 px-2 font-bold text-rose-700">Hapus audio</button></div>
                             </div>
                         </section>
                     </div>
@@ -119,7 +139,7 @@
 </form>
 @push('scripts')
 <script>
-function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, validationErrors) {
+function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, validationErrors, selectedClassIds, availableClassIds) {
     const fresh = () => ({
         key: `${Date.now()}-${Math.random()}`,
         Question_Text: '',
@@ -129,8 +149,9 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         Option_D: '',
         Correct_Option: 'A',
         Point: 10,
-        Image_Token: '', Image_URL: null, Image_Size_Bytes: 0, Remove_Image: false, Image_Uploading: false, Image_Progress: 0, Image_Error: '',
-        Audio_Token: '', Audio_URL: null, Audio_Size_Bytes: 0, Audio_Duration_Milliseconds: 0, Remove_Audio: false, Audio_Uploading: false, Audio_Progress: 0, Audio_Warning: '', Audio_Error: '',
+        Image_Token: '', Image_URL: null, Image_Size_Bytes: 0, Image_FileName: '', Remove_Image: false, Image_Uploading: false, Image_Progress: 0, Image_Error: '', Image_Request: 0, Image_Xhr: null,
+        Audio_Token: '', Audio_URL: null, Audio_Size_Bytes: 0, Audio_FileName: '', Audio_Duration_Milliseconds: 0, Remove_Audio: false, Audio_Uploading: false, Audio_Processing: false, Audio_Progress: 0, Audio_Warning: '', Audio_Error: '', Audio_Request: 0, Audio_Xhr: null,
+        Recording_Active: false, Recording_Discard: false, Recording_Elapsed_Milliseconds: 0, Recording_Recorder: null, Recording_Stream: null, Recording_Timer: null, Recording_Chunks: [],
     });
     const normalize = (question, index) => {
         const normalized = {
@@ -155,8 +176,12 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         csrfToken,
         mediaConfig,
         validationErrors,
+        selectedClassIds,
+        availableClassIds,
         countError: '',
+        recordingSupported: Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder),
         get uploadingCount() { return this.questions.filter(q => q.Image_Uploading || q.Audio_Uploading).length; },
+        get recordingCount() { return this.questions.filter(q => q.Recording_Active).length; },
         get totalMediaBytes() { return this.questions.reduce((total, q) => total + Number(q.Image_Size_Bytes || 0) + Number(q.Audio_Size_Bytes || 0), 0); },
         get maximum() {
             return this.questions.reduce((total, question) => total + (Number(question.Point) || 0), 0);
@@ -164,6 +189,9 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         get questionActionLabel() {
             const count = Number(this.requestedCount);
             return Number.isInteger(count) ? `Buat ${count} Soal` : 'Buat Soal';
+        },
+        init() {
+            window.addEventListener('beforeunload', () => this.questions.forEach(q => this.releaseRecording(q)));
         },
         applyQuestionCount() {
             const target = Number(this.requestedCount);
@@ -180,7 +208,14 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
                     this.requestedCount = this.questions.length;
                     return;
                 }
-                this.questions.splice(target);
+                const removedQuestions = this.questions.splice(target);
+                removedQuestions.forEach(q => {
+                    ['Image', 'Audio'].forEach(prefix => {
+                        q[`${prefix}_Request`] = Number(q[`${prefix}_Request`] || 0) + 1;
+                        q[`${prefix}_Xhr`]?.abort();
+                    });
+                    this.cancelRecording(q);
+                });
             } else {
                 while (this.questions.length < target) {
                     this.questions.push(fresh());
@@ -205,9 +240,18 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         },
         removeMedia(q, type) {
             const prefix = type === 'image' ? 'Image' : 'Audio';
+            q[`${prefix}_Request`] = Number(q[`${prefix}_Request`] || 0) + 1;
+            q[`${prefix}_Xhr`]?.abort();
+            q[`${prefix}_Xhr`] = null;
+            q[`${prefix}_Uploading`] = false;
+            if (type === 'audio') {
+                this.cancelRecording(q);
+                q.Audio_Processing = false;
+            }
             q[`${prefix}_Token`] = '';
             q[`${prefix}_URL`] = null;
             q[`${prefix}_Size_Bytes`] = 0;
+            q[`${prefix}_FileName`] = '';
             q[`Remove_${prefix}`] = true;
             q[`${prefix}_Error`] = '';
             if (type === 'audio') { q.Audio_Duration_Milliseconds = 0; q.Audio_Warning = ''; }
@@ -236,33 +280,135 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
             const input = event.target;
             const file = input.files && input.files[0];
             if (!file) return;
+            await this.uploadFile(q, type, file, 'upload');
+            input.value = '';
+        },
+        errorMessage(status, payload) {
+            const validation = payload?.errors?.file;
+            if (Array.isArray(validation) && validation[0]) return validation[0];
+            if (typeof validation === 'string' && validation) return validation;
+            if (payload?.message && status === 422) return payload.message;
+            const messages = {
+                401: 'Sesi login berakhir. Silakan login kembali.',
+                403: 'Anda tidak memiliki akses untuk mengunggah media ini.',
+                409: 'Media berubah karena permintaan lain. Silakan pilih file kembali.',
+                410: 'Media staging sudah kedaluwarsa. Silakan unggah kembali.',
+                413: 'Ukuran request terlalu besar untuk server.',
+                419: 'Sesi atau token keamanan berakhir. Muat ulang halaman lalu coba lagi.',
+                423: 'Media sedang diproses oleh permintaan lain. Silakan coba kembali.',
+                429: 'Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.',
+                500: 'Terjadi kesalahan internal saat memproses media.',
+                503: 'Layanan pemrosesan audio sementara tidak tersedia.',
+                504: 'Pemrosesan media terlalu lama. Silakan coba kembali.',
+            };
+            return messages[status] || payload?.message || `Upload media gagal (HTTP ${status}).`;
+        },
+        async uploadFile(q, type, file, source = 'upload') {
             const prefix = type === 'image' ? 'Image' : 'Audio';
+            const request = Number(q[`${prefix}_Request`] || 0) + 1;
+            q[`${prefix}_Request`] = request;
+            if (q[`${prefix}_Xhr`]) q[`${prefix}_Xhr`].abort();
             q[`${prefix}_Error`] = '';
             if (type === 'audio') q.Audio_Warning = '';
+            q[`${prefix}_Uploading`] = true;
+            if (type === 'audio') q.Audio_Processing = source === 'recording';
+            q[`${prefix}_Progress`] = 0;
             try {
                 const browserWarning = await this.browserValidate(file, type);
                 if (type === 'audio') q.Audio_Warning = browserWarning;
-                q[`${prefix}_Uploading`] = true;
-                q[`${prefix}_Progress`] = 0;
                 const data = await new Promise((resolve, reject) => {
-                    const body = new FormData(); body.append('media_type', type); body.append('file', file);
+                    const body = new FormData(); body.append('media_type', type); body.append('source', source); body.append('file', file);
                     const xhr = new XMLHttpRequest(); xhr.open('POST', this.uploadUrl); xhr.setRequestHeader('Accept', 'application/json'); xhr.setRequestHeader('X-CSRF-TOKEN', this.csrfToken); xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    xhr.timeout = 45000; q[`${prefix}_Xhr`] = xhr;
                     xhr.upload.onprogress = e => { if (e.lengthComputable) q[`${prefix}_Progress`] = Math.round((e.loaded / e.total) * 100); };
-                    xhr.onload = () => { let payload = {}; try { payload = JSON.parse(xhr.responseText); } catch (_) {} if (xhr.status >= 200 && xhr.status < 300) resolve(payload); else reject(new Error(payload.message || Object.values(payload.errors || {})[0]?.[0] || 'Upload media gagal.')); };
-                    xhr.onerror = () => reject(new Error('Upload media gagal. Periksa koneksi.')); xhr.send(body);
+                    xhr.onload = () => { let payload = {}; try { payload = JSON.parse(xhr.responseText); } catch (_) {} if (xhr.status >= 200 && xhr.status < 300) resolve(payload); else reject(new Error(this.errorMessage(xhr.status, payload))); };
+                    xhr.onerror = () => reject(new Error('Koneksi terputus. Silakan coba kembali.'));
+                    xhr.ontimeout = () => reject(new Error('Pemrosesan media terlalu lama. Silakan coba kembali.'));
+                    xhr.onabort = () => reject(new DOMException('Upload digantikan oleh file yang lebih baru.', 'AbortError'));
+                    xhr.send(body);
                 });
-                if (!this.questions.includes(q)) return;
+                if (!this.questions.includes(q) || q[`${prefix}_Request`] !== request) return;
                 q[`${prefix}_Token`] = data.token;
                 q[`${prefix}_URL`] = data.preview_url;
                 q[`${prefix}_Size_Bytes`] = data.size;
+                q[`${prefix}_FileName`] = file.name || (source === 'recording' ? 'rekaman-suara.m4a' : '');
                 q[`Remove_${prefix}`] = false;
                 if (type === 'audio') q.Audio_Duration_Milliseconds = data.duration_ms;
             } catch (error) {
-                q[`${prefix}_Error`] = error.message || 'Upload media gagal.';
+                if (error?.name !== 'AbortError' && q[`${prefix}_Request`] === request) q[`${prefix}_Error`] = error.message || 'Upload media gagal.';
             } finally {
-                q[`${prefix}_Uploading`] = false;
-                input.value = '';
+                if (q[`${prefix}_Request`] === request) {
+                    q[`${prefix}_Uploading`] = false;
+                    q[`${prefix}_Xhr`] = null;
+                    if (type === 'audio') q.Audio_Processing = false;
+                }
             }
+        },
+        recordingMime() {
+            return ['audio/mp4;codecs=mp4a.40.2', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus']
+                .find(type => MediaRecorder.isTypeSupported(type)) || '';
+        },
+        recordingExtension(mime) {
+            if (mime.includes('mp4')) return 'm4a';
+            if (mime.includes('ogg')) return 'ogg';
+            return 'webm';
+        },
+        async startRecording(q) {
+            if (!this.recordingSupported) { q.Audio_Error = 'Browser ini tidak mendukung perekaman suara.'; return; }
+            if (q.Recording_Active || q.Audio_Uploading) return;
+            q.Audio_Error = ''; q.Audio_Warning = ''; q.Recording_Discard = false;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
+                const requestedMime = this.recordingMime();
+                const recorder = requestedMime ? new MediaRecorder(stream, {mimeType: requestedMime}) : new MediaRecorder(stream);
+                q.Recording_Stream = stream; q.Recording_Recorder = recorder; q.Recording_Chunks = [];
+                q.Recording_Elapsed_Milliseconds = 0; q.Recording_Active = true;
+                const startedAt = Date.now();
+                recorder.addEventListener('dataavailable', event => { if (event.data?.size) q.Recording_Chunks.push(event.data); });
+                recorder.addEventListener('error', () => {
+                    q.Recording_Discard = true;
+                    q.Audio_Error = 'Rekaman suara gagal. Silakan rekam ulang.';
+                    this.releaseRecording(q);
+                });
+                recorder.addEventListener('stop', async () => {
+                    clearInterval(q.Recording_Timer); q.Recording_Timer = null; q.Recording_Active = false;
+                    const actualMime = recorder.mimeType || q.Recording_Chunks[0]?.type || requestedMime;
+                    const blob = new Blob(q.Recording_Chunks, {type: actualMime});
+                    const discard = q.Recording_Discard;
+                    this.releaseRecording(q); q.Recording_Chunks = [];
+                    if (discard) return;
+                    if (!blob.size) { q.Audio_Error = 'Rekaman kosong. Silakan rekam ulang.'; return; }
+                    const extension = this.recordingExtension(actualMime);
+                    await this.uploadFile(q, 'audio', new File([blob], `rekaman-${Date.now()}.${extension}`, {type: actualMime}), 'recording');
+                }, {once: true});
+                recorder.start(250);
+                q.Recording_Timer = setInterval(() => {
+                    q.Recording_Elapsed_Milliseconds = Date.now() - startedAt;
+                    if (q.Recording_Elapsed_Milliseconds >= 89500) this.stopRecording(q);
+                }, 250);
+            } catch (error) {
+                this.releaseRecording(q);
+                q.Audio_Error = error?.name === 'NotAllowedError'
+                    ? 'Izin mikrofon belum diberikan.'
+                    : error?.name === 'NotFoundError'
+                        ? 'Mikrofon tidak tersedia pada perangkat ini.'
+                        : 'Mikrofon tidak dapat digunakan. Tutup aplikasi lain yang sedang memakainya lalu coba lagi.';
+            }
+        },
+        stopRecording(q) {
+            if (q.Recording_Recorder?.state === 'recording') q.Recording_Recorder.stop();
+        },
+        cancelRecording(q) {
+            q.Recording_Discard = true;
+            const recorder = q.Recording_Recorder;
+            if (recorder?.state === 'recording') recorder.stop();
+            this.releaseRecording(q);
+            q.Recording_Chunks = [];
+        },
+        releaseRecording(q) {
+            clearInterval(q.Recording_Timer); q.Recording_Timer = null;
+            q.Recording_Stream?.getTracks().forEach(track => track.stop());
+            q.Recording_Stream = null; q.Recording_Recorder = null; q.Recording_Active = false;
         },
     };
 }

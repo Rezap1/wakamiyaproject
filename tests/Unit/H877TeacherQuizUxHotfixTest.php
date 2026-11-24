@@ -200,7 +200,7 @@ class H877TeacherQuizUxHotfixTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('action="'.route('teacher.quizzes.class.store', 'C1').'"', $html);
-        $this->assertStringContainsString('type="hidden" name="Class_ID" value="C1"', $html);
+        $this->assertStringContainsString('type="hidden" name="Class_IDs[]" value="C1"', $html);
         $this->assertStringContainsString('Kelas A', $html);
         $this->assertStringNotContainsString('<select name="Class_ID"', $html);
     }

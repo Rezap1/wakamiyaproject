@@ -47,5 +47,33 @@ class QuizMultimediaUiContractTest extends TestCase
         $this->assertStringContainsString('q[`${prefix}_URL`] = data.preview_url', $source);
         $this->assertStringContainsString('q[`${prefix}_Error`] = error.message || \'Upload media gagal.\'', $source);
         $this->assertStringContainsString('@click="removeMedia(q, \'audio\')"', $source);
+        $this->assertSame(2, substr_count($source, 'class="min-h-11 px-2 font-bold text-rose-700"'));
+    }
+
+    public function test_recording_uses_feature_detection_actual_mime_and_dedicated_backend_source(): void
+    {
+        $view = file_get_contents(resource_path('views/quiz/teacher/form.blade.php'));
+
+        $this->assertStringContainsString('navigator.mediaDevices?.getUserMedia', $view);
+        $this->assertStringContainsString('MediaRecorder.isTypeSupported', $view);
+        $this->assertStringContainsString('recorder.mimeType', $view);
+        $this->assertStringContainsString("body.append('source', source)", $view);
+        $this->assertStringContainsString("source === 'recording'", $view);
+        $this->assertStringContainsString('getTracks().forEach(track => track.stop())', $view);
+        $this->assertStringContainsString('89500', $view);
+        $this->assertStringContainsString('Recording_Discard', $view);
+        $this->assertStringContainsString('cancelRecording(q)', $view);
+    }
+
+    public function test_upload_errors_distinguish_validation_session_timeout_and_real_network_failure(): void
+    {
+        $view = file_get_contents(resource_path('views/quiz/teacher/form.blade.php'));
+
+        foreach ([401, 403, 409, 410, 413, 419, 422, 423, 429, 500, 503, 504] as $status) {
+            $this->assertStringContainsString((string) $status, $view);
+        }
+        $this->assertStringContainsString('payload?.errors?.file', $view);
+        $this->assertStringContainsString('Koneksi terputus. Silakan coba kembali.', $view);
+        $this->assertStringNotContainsString('Upload media gagal. Periksa koneksi.', $view);
     }
 }

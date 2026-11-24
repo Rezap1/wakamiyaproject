@@ -818,8 +818,8 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('teacher/quizzes')->name('teacher.quizzes.')->middleware('role:TEACHER')->group(function () {
         Route::get('/', [TeacherQuizController::class, 'index'])->name('index');
-        Route::post('/media/staging', [QuizMediaController::class, 'upload'])->middleware('throttle:30,1')->name('media.upload');
-        Route::get('/media/staging/{token}', [QuizMediaController::class, 'staging'])->middleware('throttle:120,1')->name('media.staging');
+        Route::post('/media/staging', [QuizMediaController::class, 'upload'])->middleware('throttle:30,1,quiz-media-upload')->name('media.upload');
+        Route::get('/media/staging/{token}', [QuizMediaController::class, 'staging'])->middleware('throttle:120,1,quiz-media-staging')->name('media.staging');
         Route::get('/create', [TeacherQuizController::class, 'create'])->name('create');
         Route::post('/', [TeacherQuizController::class, 'store'])->name('store');
         Route::get('/classes/{class}', [TeacherQuizController::class, 'classHub'])->name('class');
@@ -828,23 +828,24 @@ Route::middleware('auth')->group(function () {
         Route::get('/results', [TeacherQuizController::class, 'results'])->name('results');
         Route::get('/results/{result}', [TeacherQuizController::class, 'result'])->name('result');
         Route::get('/leaderboard/{class}', [TeacherQuizController::class, 'leaderboard'])->name('leaderboard');
-        Route::get('/{quiz}/questions/{question}/media/{type}', [QuizMediaController::class, 'teacher'])->where('type', 'image|audio')->middleware('throttle:240,1')->name('media');
+        Route::get('/{quiz}/questions/{question}/media/{type}', [QuizMediaController::class, 'teacher'])->where('type', 'image|audio')->middleware('throttle:240,1,quiz-teacher-media')->name('media');
         Route::get('/{quiz}', [TeacherQuizController::class, 'show'])->name('show');
         Route::get('/{quiz}/edit', [TeacherQuizController::class, 'edit'])->name('edit');
         Route::put('/{quiz}', [TeacherQuizController::class, 'update'])->name('update');
+        Route::post('/{quiz}/reset-results', [TeacherQuizController::class, 'resetResults'])->middleware('throttle:10,1,quiz-reset-results')->name('reset-results');
         Route::delete('/{quiz}', [TeacherQuizController::class, 'destroy'])->name('destroy');
     });
 
     Route::prefix('student/quizzes')->name('student.quizzes.')->middleware('role:STUDENT')->group(function () {
         Route::get('/', [StudentQuizController::class, 'index'])->name('index');
         Route::get('/leaderboard', [StudentQuizController::class, 'leaderboard'])->name('leaderboard');
-        Route::post('/{quiz}/start', [StudentQuizController::class, 'start'])->middleware('throttle:20,1')->name('start');
+        Route::post('/{quiz}/start', [StudentQuizController::class, 'start'])->middleware('throttle:20,1,quiz-start')->name('start');
         Route::get('/attempts/{attempt}', [StudentQuizController::class, 'play'])->name('play');
-        Route::get('/attempts/{attempt}/questions/{question}/media/{type}', [QuizMediaController::class, 'attempt'])->where('type', 'image|audio')->middleware('throttle:600,1')->name('attempt-media');
-        Route::post('/attempts/{attempt}/answers', [StudentQuizController::class, 'autosave'])->middleware('throttle:120,1')->name('autosave');
-        Route::post('/attempts/{attempt}/submit', [StudentQuizController::class, 'submit'])->middleware('throttle:10,1')->name('submit');
+        Route::get('/attempts/{attempt}/questions/{question}/media/{type}', [QuizMediaController::class, 'attempt'])->where('type', 'image|audio')->middleware('throttle:600,1,quiz-attempt-media')->name('attempt-media');
+        Route::post('/attempts/{attempt}/answers', [StudentQuizController::class, 'autosave'])->middleware('throttle:120,1,quiz-autosave')->name('autosave');
+        Route::post('/attempts/{attempt}/submit', [StudentQuizController::class, 'submit'])->middleware('throttle:10,1,quiz-submit')->name('submit');
         Route::get('/results/{result}', [StudentQuizController::class, 'result'])->name('result');
-        Route::get('/results/{result}/questions/{question}/media/{type}', [QuizMediaController::class, 'result'])->where('type', 'image|audio')->middleware('throttle:600,1')->name('result-media');
+        Route::get('/results/{result}/questions/{question}/media/{type}', [QuizMediaController::class, 'result'])->where('type', 'image|audio')->middleware('throttle:600,1,quiz-result-media')->name('result-media');
     });
 
 });

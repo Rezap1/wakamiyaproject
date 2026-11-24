@@ -230,6 +230,51 @@ class QuizMultimediaMySqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_reset_and_stale_autosave_cannot_resurrect_an_attempt(): void
+    {
+        $token = $this->token();
+        try {
+            $payload = $this->workerPayload($token);
+            $this->seedAttempt($token, $payload);
+            $payload['quiz_id'] = 'QIZ-QM-'.$token;
+            $payload['class_id'] = 'C-QM-'.$token;
+            $results = $this->runWorkers('reset_or_autosave', $token, $payload);
+
+            $this->assertTrue($results[0]['ok']);
+            $this->assertTrue($results[1]['ok'] || in_array($results[1]['status'] ?? null, [404, 410], true));
+            $this->assertIndependentWorkers($results);
+            $this->assertSame(0, DB::table('QUIZ_ATTEMPT')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(0, DB::table('QUIZ_RESULT')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(1, DB::table('QUIZ_QUESTION')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(1, (int) DB::table('QUIZ_RUNTIME_STATE')->where('Quiz_ID', $payload['quiz_id'])->value('Attempt_Generation'));
+        } finally {
+            $this->cleanup($token);
+        }
+    }
+
+    public function test_delete_and_concurrent_submit_leave_only_an_authoritative_tombstone(): void
+    {
+        $token = $this->token();
+        try {
+            $payload = $this->workerPayload($token);
+            $this->seedAttempt($token, $payload);
+            $payload['quiz_id'] = 'QIZ-QM-'.$token;
+            $payload['class_id'] = 'C-QM-'.$token;
+            $results = $this->runWorkers('delete_or_submit', $token, $payload);
+
+            $this->assertTrue($results[0]['ok']);
+            $this->assertTrue($results[1]['ok'] || in_array($results[1]['status'] ?? null, [404, 410], true));
+            $this->assertIndependentWorkers($results);
+            $this->assertSame(0, DB::table('QUIZ')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(0, DB::table('QUIZ_ATTEMPT')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(0, DB::table('QUIZ_RESULT')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(0, DB::table('QUIZ_QUESTION')->where('Quiz_ID', $payload['quiz_id'])->count());
+            $this->assertSame(1, DB::table('QUIZ_TOMBSTONE')->where('Quiz_ID', $payload['quiz_id'])->count());
+        } finally {
+            $this->cleanup($token);
+        }
+    }
+
     private function assertTokenRace(string $cacheMode): void
     {
         $token = $this->token();
@@ -447,6 +492,10 @@ class QuizMultimediaMySqlConcurrencyTest extends TestCase
         DB::table('QUIZ_RESULT')->whereIn('Quiz_ID', $quizIds)->delete();
         DB::table('QUIZ_ATTEMPT')->whereIn('Quiz_ID', $quizIds)->delete();
         DB::table('QUIZ_QUESTION')->whereIn('Quiz_ID', $quizIds)->delete();
+        DB::table('MASTER_AUDIT_LOG')->where('Reference_Type', 'QUIZ')->whereIn('Reference_ID', $quizIds)->delete();
+        DB::table('QUIZ_AUDIENCE_CLASS')->whereIn('Quiz_ID', $quizIds)->delete();
+        DB::table('QUIZ_RUNTIME_STATE')->whereIn('Quiz_ID', $quizIds)->delete();
+        DB::table('QUIZ_TOMBSTONE')->whereIn('Quiz_ID', $quizIds)->delete();
         DB::table('QUIZ')->whereIn('Quiz_ID', $quizIds)->delete();
     }
 

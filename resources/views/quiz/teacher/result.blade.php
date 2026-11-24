@@ -12,7 +12,7 @@
         </div>
         <dl class="mt-6 grid gap-4 text-sm sm:grid-cols-2">
             <div><dt class="font-bold text-slate-500">Kelas</dt><dd class="mt-1 font-black text-slate-900">{{ $result['Class_ID'] }}</dd></div>
-            <div><dt class="font-bold text-slate-500">Waktu Selesai</dt><dd class="mt-1 font-black text-slate-900">{{ $result['Completed_At'] ?? '-' }} WIB</dd></div>
+            <div><dt class="font-bold text-slate-500">Waktu Selesai</dt><dd class="mt-1 font-black text-slate-900">{{ app(\App\Support\Quiz\QuizDateFormatter::class)->dateTime($result['Completed_At'] ?? null) }}</dd></div>
         </dl>
     </section>
 </div>

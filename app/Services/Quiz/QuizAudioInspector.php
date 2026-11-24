@@ -21,8 +21,8 @@ class QuizAudioInspector
 
         $extension = strtolower($extension);
         $allowed = [
-            'mp3' => ['mimes' => ['audio/mpeg'], 'codecs' => ['mp3']],
-            'm4a' => ['mimes' => ['audio/mp4', 'audio/x-m4a'], 'codecs' => ['aac']],
+            'mp3' => ['mimes' => ['audio/mpeg', 'audio/mp3', 'audio/x-mp3', 'audio/x-mpeg'], 'codecs' => ['mp3']],
+            'm4a' => ['mimes' => ['audio/mp4', 'audio/x-m4a', 'video/mp4', 'application/mp4'], 'codecs' => ['aac']],
         ];
         if (! isset($allowed[$extension]) || ! in_array($mime, $allowed[$extension]['mimes'], true)) {
             throw ValidationException::withMessages(['file' => 'Format audio yang didukung adalah MP3 dan M4A.']);
@@ -34,8 +34,15 @@ class QuizAudioInspector
         }
 
         $streams = collect($payload['streams'] ?? []);
-        if ($streams->contains(fn ($stream) => ($stream['codec_type'] ?? '') === 'video')) {
+        if ($streams->contains(fn ($stream) => ($stream['codec_type'] ?? '') === 'video'
+            && (int) data_get($stream, 'disposition.attached_pic', 0) !== 1)) {
             throw ValidationException::withMessages(['file' => 'File audio tidak boleh mengandung video stream.']);
+        }
+        if ($streams->filter(fn ($stream) => ($stream['codec_type'] ?? '') === 'video')->contains(
+            fn ($stream) => (int) data_get($stream, 'disposition.attached_pic', 0) !== 1
+                || ! in_array(strtolower((string) ($stream['codec_name'] ?? '')), ['mjpeg', 'png'], true)
+        )) {
+            $this->invalid();
         }
         $audioStreams = $streams->filter(fn ($stream) => ($stream['codec_type'] ?? '') === 'audio')->values();
         if ($audioStreams->count() !== 1) {
@@ -87,7 +94,7 @@ class QuizAudioInspector
             '-v', 'error',
             '-protocol_whitelist', 'file,pipe',
             '-show_packets',
-            '-show_entries', 'stream=index,codec_type,codec_name,sample_rate,time_base,duration_ts:packet=stream_index,pts,duration,side_data_list',
+            '-show_entries', 'stream=index,codec_type,codec_name,sample_rate,time_base,duration_ts:stream_disposition=attached_pic:packet=stream_index,pts,duration,side_data_list',
             '-of', 'json',
             $realPath,
         ]);

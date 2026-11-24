@@ -8,9 +8,11 @@ use App\Services\Quiz\QuizScopeService;
 use App\Services\Quiz\QuizService;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class H877QuizRoleAuthorizationTest extends TestCase
@@ -19,6 +21,29 @@ class H877QuizRoleAuthorizationTest extends TestCase
     {
         Mockery::close();
         parent::tearDown();
+    }
+
+    public function test_quiz_rate_limits_have_distinct_operation_namespaces(): void
+    {
+        $expected = [
+            'teacher.quizzes.media.upload' => 'throttle:30,1,quiz-media-upload',
+            'teacher.quizzes.media.staging' => 'throttle:120,1,quiz-media-staging',
+            'teacher.quizzes.media' => 'throttle:240,1,quiz-teacher-media',
+            'teacher.quizzes.reset-results' => 'throttle:10,1,quiz-reset-results',
+            'student.quizzes.start' => 'throttle:20,1,quiz-start',
+            'student.quizzes.attempt-media' => 'throttle:600,1,quiz-attempt-media',
+            'student.quizzes.autosave' => 'throttle:120,1,quiz-autosave',
+            'student.quizzes.submit' => 'throttle:10,1,quiz-submit',
+            'student.quizzes.result-media' => 'throttle:600,1,quiz-result-media',
+        ];
+
+        foreach ($expected as $name => $middleware) {
+            $route = Route::getRoutes()->getByName($name);
+            $this->assertNotNull($route, "Route {$name} must exist.");
+            $this->assertContains($middleware, $route->gatherMiddleware(), "Route {$name} must not share another quiz operation's throttle counter.");
+        }
+
+        $this->assertCount(count($expected), array_unique(array_values($expected)));
     }
 
     #[DataProvider('nonTeacherRoles')]
@@ -34,6 +59,7 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $this->get(route('teacher.quizzes.result', 'FORGED'))->assertForbidden();
         $this->get(route('teacher.quizzes.leaderboard', 'FORGED'))->assertForbidden();
         $this->put(route('teacher.quizzes.update', 'FORGED'), [])->assertForbidden();
+        $this->post(route('teacher.quizzes.reset-results', 'FORGED'))->assertForbidden();
         $this->delete(route('teacher.quizzes.destroy', 'FORGED'))->assertForbidden();
         $this->post(route('teacher.quizzes.media.upload'))->assertForbidden();
         $this->get(route('teacher.quizzes.media', ['FORGED', 'FORGED', 'image']))->assertForbidden();
@@ -103,6 +129,21 @@ class H877QuizRoleAuthorizationTest extends TestCase
     {
         $this->get(route('student.quizzes.attempt-media', ['A1', 'Q1', 'audio']))->assertRedirect(route('login'));
         $this->get(route('teacher.quizzes.media', ['Q1', 'Q1', 'image']))->assertRedirect(route('login'));
+    }
+
+    public function test_teacher_quiz_form_allows_same_origin_microphone_capture(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('classesForTeacher')->once()->with('T1')->andReturn(collect([
+            ['Class_ID' => 'C1', 'Class_Name' => 'Kelas A'],
+        ]));
+        $this->app->instance(QuizScopeService::class, $scope);
+
+        $this->get(route('teacher.quizzes.create'))
+            ->assertOk()
+            ->assertHeader('Permissions-Policy', 'microphone=(self)');
     }
 
     public function test_direct_teacher_delete_displays_domain_guard_message(): void
@@ -178,6 +219,7 @@ class H877QuizRoleAuthorizationTest extends TestCase
         $quizzes = Mockery::mock(QuizService::class);
         $quizzes->shouldReceive('create')->once()->withArgs(function (array $data, array $teacher, string $userId) {
             return $data['Class_ID'] === 'C1'
+                && $data['Class_IDs'] === ['C1']
                 && $teacher['Teacher_ID'] === 'T1'
                 && $userId === 'U-TEACHER';
         })->andReturn('Q1');
@@ -203,6 +245,35 @@ class H877QuizRoleAuthorizationTest extends TestCase
                 'Point' => 10,
             ]],
         ])->assertRedirect(route('teacher.quizzes.show', 'Q1'));
+    }
+
+    public function test_mixed_authorized_and_unauthorized_audience_is_rejected_atomically(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('assertTeacherClass')->once()->with('T1', 'C1');
+        $scope->shouldReceive('assertTeacherClass')->once()->with('T1', 'C9')
+            ->andThrow(new HttpException(403, 'Kelas di luar penugasan.'));
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldNotReceive('create');
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+
+        $this->post(route('teacher.quizzes.store'), [
+            'Idempotency_Key' => '20000000-0000-4000-8000-000000000877',
+            'Title' => 'Kuis Multi Kelas',
+            'Class_IDs' => ['C1', 'C9'],
+            'Start_At' => '2026-10-10 08:00:00',
+            'End_At' => '2026-10-10 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'draft',
+            'question_count' => 1,
+            'questions' => [[
+                'Question_Text' => '', 'Option_A' => '', 'Option_B' => '',
+                'Option_C' => '', 'Option_D' => '', 'Correct_Option' => 'A', 'Point' => 10,
+            ]],
+        ])->assertForbidden();
     }
 
     public function test_quiz_upload_endpoint_accepts_exact_seven_megabytes_without_changing_global_limit(): void

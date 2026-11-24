@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Repositories\GoogleSheets\QuizAttemptRepository;
 use App\Repositories\GoogleSheets\QuizQuestionRepository;
 use App\Services\Quiz\QuizMediaIdempotencyService;
 use App\Services\Quiz\QuizMediaService;
@@ -50,6 +51,10 @@ class QuizMediaSchemaTest extends TestCase
 
         $this->assertSame($this->mediaColumns(), $runtime);
         $this->assertSame($runtime, array_slice(QuizQuestionRepository::HEADERS, -count($runtime)));
+
+        $attemptRuntime = config('wms_runtime.runtime_columns.QUIZ_ATTEMPT');
+        $this->assertSame(['Class_ID'], $attemptRuntime);
+        $this->assertSame($attemptRuntime, array_slice(QuizAttemptRepository::HEADERS, -count($attemptRuntime)));
     }
 
     public function test_media_migration_rejects_an_incompatible_existing_column(): void
@@ -149,8 +154,84 @@ class QuizMediaSchemaTest extends TestCase
         $migration->up();
     }
 
+    public function test_audience_migration_is_additive_idempotent_and_backfills_legacy_class(): void
+    {
+        $this->createLegacyQuizTables();
+        DB::table('QUIZ')->insert([
+            'Quiz_ID' => 'Q-LEGACY', 'Class_ID' => 'C-ONE',
+            'Created_At' => '2026-11-20 08:00:00', 'Updated_At' => '2026-11-21 08:00:00',
+        ]);
+        DB::table('QUIZ_ATTEMPT')->insert(['Attempt_ID' => 'A-LEGACY', 'Quiz_ID' => 'Q-LEGACY', 'Student_ID' => 'S1']);
+        DB::table('QUIZ_RESULT')->insert(['Result_ID' => 'R-LEGACY', 'Attempt_ID' => 'A-LEGACY', 'Class_ID' => 'C-HISTORICAL']);
+        $migration = require database_path('migrations/wms_mysql/2026_11_23_000001_add_quiz_audience_and_runtime_state.php');
+
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(1, DB::table('QUIZ_AUDIENCE_CLASS')->count());
+        $this->assertSame('C-ONE', DB::table('QUIZ_AUDIENCE_CLASS')->where('Quiz_ID', 'Q-LEGACY')->value('Class_ID'));
+        $this->assertSame(0, (int) DB::table('QUIZ_RUNTIME_STATE')->where('Quiz_ID', 'Q-LEGACY')->value('Attempt_Generation'));
+        $this->assertTrue(Schema::hasTable('QUIZ_TOMBSTONE'));
+        $this->assertTrue(Schema::hasColumn('QUIZ', 'Class_ID'), 'Legacy single-class column must remain intact.');
+        $this->assertSame('C-HISTORICAL', DB::table('QUIZ_ATTEMPT')->where('Attempt_ID', 'A-LEGACY')->value('Class_ID'));
+    }
+
+    public function test_audience_migration_rejects_incompatible_partial_table(): void
+    {
+        $this->createLegacyQuizTables();
+        Schema::create('QUIZ_AUDIENCE_CLASS', function (Blueprint $table): void {
+            $table->string('Quiz_ID')->primary();
+        });
+        $migration = require database_path('migrations/wms_mysql/2026_11_23_000001_add_quiz_audience_and_runtime_state.php');
+
+        $this->expectException(RuntimeException::class);
+        $migration->up();
+    }
+
+    public function test_audience_migration_backfills_every_attempt_across_chunk_boundaries(): void
+    {
+        $this->createLegacyQuizTables();
+        DB::table('QUIZ')->insert([
+            'Quiz_ID' => 'Q-BULK', 'Class_ID' => 'C-BULK',
+            'Created_At' => '2026-11-20 08:00:00', 'Updated_At' => '2026-11-21 08:00:00',
+        ]);
+        collect(range(1, 501))->chunk(100)->each(function ($numbers): void {
+            DB::table('QUIZ_ATTEMPT')->insert($numbers->map(fn (int $number): array => [
+                'Attempt_ID' => sprintf('A-BULK-%04d', $number),
+                'Quiz_ID' => 'Q-BULK',
+                'Student_ID' => sprintf('S-BULK-%04d', $number),
+            ])->all());
+        });
+
+        $migration = require database_path('migrations/wms_mysql/2026_11_23_000001_add_quiz_audience_and_runtime_state.php');
+        $migration->up();
+
+        $this->assertSame(501, DB::table('QUIZ_ATTEMPT')->where('Class_ID', 'C-BULK')->count());
+        $this->assertSame(0, DB::table('QUIZ_ATTEMPT')->whereNull('Class_ID')->orWhere('Class_ID', '')->count());
+    }
+
     private function mediaColumns(): array
     {
         return ['Image_Path', 'Image_Mime', 'Image_Size_Bytes', 'Audio_Path', 'Audio_Mime', 'Audio_Size_Bytes', 'Audio_Duration_Milliseconds'];
+    }
+
+    private function createLegacyQuizTables(): void
+    {
+        Schema::create('QUIZ', function (Blueprint $table): void {
+            $table->string('Quiz_ID', 191)->primary();
+            $table->string('Class_ID', 191);
+            $table->dateTime('Created_At', 6)->nullable();
+            $table->dateTime('Updated_At', 6)->nullable();
+        });
+        Schema::create('QUIZ_ATTEMPT', function (Blueprint $table): void {
+            $table->string('Attempt_ID', 191)->primary();
+            $table->string('Quiz_ID', 191);
+            $table->string('Student_ID', 191);
+        });
+        Schema::create('QUIZ_RESULT', function (Blueprint $table): void {
+            $table->string('Result_ID', 191)->primary();
+            $table->string('Attempt_ID', 191);
+            $table->string('Class_ID', 191);
+        });
     }
 }

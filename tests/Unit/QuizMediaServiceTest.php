@@ -4,13 +4,17 @@ namespace Tests\Unit;
 
 use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 use App\Services\Quiz\QuizAudioInspector;
+use App\Services\Quiz\QuizBoundedProcessRunner;
 use App\Services\Quiz\QuizMediaIdempotencyService;
 use App\Services\Quiz\QuizMediaService;
+use App\Services\Quiz\QuizRecordingNormalizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 class QuizMediaServiceTest extends TestCase
@@ -24,6 +28,43 @@ class QuizMediaServiceTest extends TestCase
         $questions = Mockery::mock(QuizQuestionRepositoryInterface::class);
         $questions->shouldReceive('fetchAllFresh')->zeroOrMoreTimes()->andReturn(collect());
         $this->media = new QuizMediaService(new QuizAudioInspector, $questions);
+    }
+
+    public function test_recording_normalization_timeout_is_reported_as_gateway_timeout(): void
+    {
+        $input = tempnam(sys_get_temp_dir(), 'quiz-recording-timeout-');
+        file_put_contents($input, 'representative browser recording');
+        $this->beforeApplicationDestroyed(static fn () => @unlink($input));
+        config([
+            'quiz.media.ffprobe_path' => PHP_BINARY,
+            'quiz.media.ffmpeg_path' => PHP_BINARY,
+        ]);
+
+        $runner = Mockery::mock(QuizBoundedProcessRunner::class);
+        $runner->shouldReceive('run')->once()->andReturn([
+            'stdout' => json_encode([
+                'streams' => [['codec_type' => 'audio', 'codec_name' => 'opus']],
+                'format' => ['duration' => '2.0'],
+            ], JSON_THROW_ON_ERROR),
+            'stderr' => '',
+            'exit_code' => 0,
+        ]);
+        $process = new Process([PHP_BINARY, '-v']);
+        $process->setTimeout(1);
+        $runner->shouldReceive('run')->once()->andThrow(new ProcessTimedOutException(
+            $process,
+            ProcessTimedOutException::TYPE_GENERAL,
+        ));
+        $inspector = Mockery::mock(QuizAudioInspector::class);
+        $inspector->shouldNotReceive('inspect');
+
+        try {
+            (new QuizRecordingNormalizer($inspector, $runner))->normalize($input, $input.'.m4a', 'webm', 'audio/webm');
+            $this->fail('A timed-out recording transcode must fail with HTTP 504.');
+        } catch (HttpException $exception) {
+            $this->assertSame(504, $exception->getStatusCode());
+            $this->assertSame('Pemrosesan rekaman terlalu lama. Silakan rekam ulang.', $exception->getMessage());
+        }
     }
 
     public function test_valid_jpeg_png_and_webp_are_staged_with_server_metadata(): void
@@ -194,6 +235,52 @@ class QuizMediaServiceTest extends TestCase
         $this->media->stage($this->image('jpg', 20, 20), 'image', 'U1');
     }
 
+    public function test_failed_recording_normalization_removes_input_and_partial_output(): void
+    {
+        $questions = Mockery::mock(QuizQuestionRepositoryInterface::class);
+        $questions->shouldReceive('fetchAllFresh')->zeroOrMoreTimes()->andReturn(collect());
+        $normalizer = Mockery::mock(QuizRecordingNormalizer::class);
+        $normalizer->shouldReceive('normalize')->once()->andReturnUsing(function (string $input, string $output): never {
+            file_put_contents($output, 'partial-output');
+            throw ValidationException::withMessages(['file' => 'Rekaman suara rusak atau tidak dapat diproses.']);
+        });
+        $media = new QuizMediaService(new QuizAudioInspector, $questions, null, $normalizer);
+        $path = tempnam(sys_get_temp_dir(), 'quiz-recording-failure-');
+        file_put_contents($path, 'recording-input');
+        $this->beforeApplicationDestroyed(static fn () => @unlink($path));
+
+        try {
+            $media->stage(new RecordingUploadedFile($path), 'audio', 'U1', 'recording');
+            $this->fail('A failed recording normalization must not be staged.');
+        } catch (ValidationException) {
+            $this->assertSame([], Storage::disk('local')->allFiles('quiz-media'));
+        }
+    }
+
+    public function test_normalized_recording_is_rechecked_against_staging_quota(): void
+    {
+        config(['quiz.media.staging_quota_bytes' => 10]);
+        $questions = Mockery::mock(QuizQuestionRepositoryInterface::class);
+        $questions->shouldReceive('fetchAllFresh')->zeroOrMoreTimes()->andReturn(collect());
+        $normalizer = Mockery::mock(QuizRecordingNormalizer::class);
+        $normalizer->shouldReceive('normalize')->once()->andReturnUsing(function (string $input, string $output): array {
+            file_put_contents($output, str_repeat('a', 20));
+
+            return ['mime' => 'audio/mp4', 'extension' => 'm4a', 'duration_ms' => 1000, 'codec' => 'aac'];
+        });
+        $media = new QuizMediaService(new QuizAudioInspector, $questions, null, $normalizer);
+        $path = tempnam(sys_get_temp_dir(), 'quiz-recording-quota-');
+        file_put_contents($path, 'input');
+        $this->beforeApplicationDestroyed(static fn () => @unlink($path));
+
+        try {
+            $media->stage(new RecordingUploadedFile($path), 'audio', 'U1', 'recording');
+            $this->fail('Normalized output must remain within the per-user staging quota.');
+        } catch (ValidationException) {
+            $this->assertCount(0, Storage::disk('local')->allFiles('quiz-media'));
+        }
+    }
+
     private function image(string $extension, int $width, int $height, ?int $targetSize = null, ?string $name = null): UploadedFile
     {
         $resource = imagecreatetruecolor($width, $height);
@@ -237,5 +324,18 @@ class QuizMediaServiceTest extends TestCase
         $this->beforeApplicationDestroyed(static fn () => @unlink($path));
 
         return $upload;
+    }
+}
+
+class RecordingUploadedFile extends UploadedFile
+{
+    public function __construct(string $path)
+    {
+        parent::__construct($path, 'recording.webm', 'audio/webm', UPLOAD_ERR_OK, true);
+    }
+
+    public function getMimeType(): ?string
+    {
+        return 'audio/webm';
     }
 }

@@ -107,7 +107,7 @@
                                 <h4 class="min-w-0 break-words font-black text-slate-900">{{ $quiz['Title'] }}</h4>
                                 <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase {{ $statusTone }}">{{ $statusLabel }}</span>
                             </div>
-                            <p class="mt-3 flex min-w-0 items-start gap-2 break-words text-xs leading-5 text-slate-600"><x-sidebar.icon name="calendar" class="mt-0.5 h-4 w-4 shrink-0" /> {{ $quiz['Start_At'] }} &ndash; {{ $quiz['End_At'] }} WIB</p>
+                            <p class="mt-3 flex min-w-0 items-start gap-2 break-words text-xs leading-5 text-slate-600"><x-sidebar.icon name="calendar" class="mt-0.5 h-4 w-4 shrink-0" /> {{ app(\App\Support\Quiz\QuizDateFormatter::class)->range($quiz['Start_At'], $quiz['End_At']) }}</p>
                             <dl class="mt-3 grid grid-cols-3 gap-2 text-center">
                                 <div class="rounded-lg bg-slate-50 p-2"><dt class="text-[9px] font-bold uppercase text-slate-500">Durasi</dt><dd class="mt-1 text-xs font-black text-slate-900">{{ $quiz['Duration_Minutes'] }} mnt</dd></div>
                                 <div class="rounded-lg bg-slate-50 p-2"><dt class="text-[9px] font-bold uppercase text-slate-500">Soal</dt><dd class="mt-1 text-xs font-black text-slate-900">{{ $quiz['Question_Count'] }}</dd></div>

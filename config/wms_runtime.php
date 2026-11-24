@@ -48,5 +48,8 @@ return [
             'Audio_Size_Bytes',
             'Audio_Duration_Milliseconds',
         ],
+        'QUIZ_ATTEMPT' => [
+            'Class_ID',
+        ],
     ],
 ];

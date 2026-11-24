@@ -31,5 +31,6 @@ return [
         'ffmpeg_path' => env('QUIZ_FFMPEG_PATH', 'ffmpeg'),
         'ffmpeg_timeout_seconds' => 20,
         'ffmpeg_max_output_bytes' => 64 * 1024,
+        'recording_timeout_seconds' => 30,
     ],
 ];

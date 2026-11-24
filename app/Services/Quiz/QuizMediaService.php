@@ -17,13 +17,17 @@ class QuizMediaService
         private QuizAudioInspector $audioInspector,
         private QuizQuestionRepositoryInterface $questions,
         private ?QuizMediaIdempotencyService $idempotency = null,
+        private ?QuizRecordingNormalizer $recordingNormalizer = null,
     ) {}
 
     /** @return array<string,mixed> */
-    public function stage(UploadedFile $file, string $type, string $userId): array
+    public function stage(UploadedFile $file, string $type, string $userId, string $source = 'upload', ?string $requestId = null): array
     {
         $type = strtolower($type);
         abort_unless(in_array($type, ['image', 'audio'], true), 422);
+        $source = strtolower(trim($source));
+        abort_unless(in_array($source, ['upload', 'recording'], true), 422);
+        abort_if($source === 'recording' && $type !== 'audio', 422, 'Sumber rekaman hanya dapat digunakan untuk audio.');
         if (! $file->isValid()) {
             throw ValidationException::withMessages(['file' => 'Upload media gagal. Silakan pilih file kembali.']);
         }
@@ -31,7 +35,9 @@ class QuizMediaService
         $clientExtension = strtolower($file->getClientOriginalExtension());
         $mime = strtolower((string) $file->getMimeType());
         $size = (int) $file->getSize();
-        $extension = $this->validatedExtension($type, $clientExtension, $mime, $size);
+        $extension = $source === 'recording'
+            ? $this->validatedRecordingInput($clientExtension, $mime, $size)
+            : $this->validatedExtension($type, $clientExtension, $mime, $size);
         $userDirectory = $this->stagingDirectory($userId);
         $quotaLock = Cache::lock('quiz_media_staging_quota_'.hash('sha256', trim($userId)), 30);
         abort_unless($quotaLock->get(), 423, 'Upload lain sedang diproses. Silakan coba kembali.');
@@ -46,14 +52,51 @@ class QuizMediaService
             $quotaLock->release();
         }
 
+        $originalPath = $path;
+        $normalizedPath = null;
         try {
+            $metadata = null;
+            if ($source === 'recording') {
+                $normalizedPath = $userDirectory.'/'.Str::uuid().'.m4a';
+                // Production has a small PHP-FPM pool. A fail-fast global
+                // lock prevents concurrent transcodes from occupying every
+                // worker while each FFmpeg process is already thread-limited.
+                $normalizationLock = Cache::lock(
+                    'quiz_recording_normalization',
+                    (int) ceil((float) config('quiz.media.recording_timeout_seconds', 30)) + 5,
+                );
+                abort_unless($normalizationLock->get(), 423, 'Rekaman lain sedang diproses. Silakan coba kembali.');
+                try {
+                    $metadata = ($this->recordingNormalizer ?? app(QuizRecordingNormalizer::class))->normalize(
+                        $this->disk()->path($path),
+                        $this->disk()->path($normalizedPath),
+                        $extension,
+                        $mime,
+                    );
+                } finally {
+                    $normalizationLock->release();
+                }
+                $this->disk()->delete($path);
+                $path = $normalizedPath;
+                $extension = 'm4a';
+                $mime = 'audio/mp4';
+            }
             $absolutePath = $this->disk()->path($path);
             $actualSize = (int) $this->disk()->size($path);
-            if ($actualSize !== $size || $actualSize <= 0) {
+            if (($source === 'upload' && $actualSize !== $size) || $actualSize <= 0) {
                 throw ValidationException::withMessages(['file' => 'Ukuran media tidak dapat diverifikasi.']);
             }
+            if ($source === 'recording') {
+                $finalQuotaLock = Cache::lock('quiz_media_staging_quota_'.hash('sha256', trim($userId)), 30);
+                abort_unless($finalQuotaLock->get(), 423, 'Upload lain sedang diproses. Silakan coba kembali.');
+                try {
+                    $this->assertStagingQuota($userDirectory, 0);
+                } finally {
+                    $finalQuotaLock->release();
+                }
+            }
 
-            $metadata = $type === 'image'
+            $metadata ??= $type === 'image'
                 ? $this->inspectImage($absolutePath, $extension, $mime)
                 : $this->audioInspector->inspect($absolutePath, $extension, $mime);
             $token = (string) Str::uuid();
@@ -80,6 +123,23 @@ class QuizMediaService
             ];
         } catch (\Throwable $exception) {
             $this->disk()->delete($path);
+            if ($path !== $originalPath) {
+                $this->disk()->delete($originalPath);
+            }
+            if ($normalizedPath !== null && $normalizedPath !== $path) {
+                $this->disk()->delete($normalizedPath);
+            }
+            Log::warning('Quiz media staging failed.', [
+                'request_id' => $requestId,
+                'stage' => $source === 'recording' ? 'recording_normalize_or_inspect' : 'upload_inspect',
+                'media_type' => $type,
+                'source' => $source,
+                'extension' => $clientExtension,
+                'detected_mime' => $mime,
+                'file_size' => $size,
+                'reason_code' => $this->failureReason($exception),
+                'exception_class' => $exception::class,
+            ]);
             throw $exception;
         }
     }
@@ -297,7 +357,10 @@ class QuizMediaService
     {
         $map = $type === 'image'
             ? ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp']
-            : ['mp3' => 'audio/mpeg', 'm4a' => ['audio/mp4', 'audio/x-m4a']];
+            : [
+                'mp3' => ['audio/mpeg', 'audio/mp3', 'audio/x-mp3', 'audio/x-mpeg'],
+                'm4a' => ['audio/mp4', 'audio/x-m4a', 'video/mp4', 'application/mp4'],
+            ];
         $max = (int) config("quiz.media.{$type}_max_bytes");
         if ($size <= 0 || $size > $max) {
             $message = $type === 'image' ? 'Ukuran file gambar maksimal 7 MB.' : 'Ukuran file audio maksimal 5 MB.';
@@ -312,6 +375,39 @@ class QuizMediaService
         }
 
         return $extension;
+    }
+
+    private function validatedRecordingInput(string $extension, string $mime, int $size): string
+    {
+        if ($size <= 0 || $size > (int) config('quiz.media.audio_max_bytes', 5 * 1024 * 1024)) {
+            throw ValidationException::withMessages(['file' => 'Ukuran rekaman suara maksimal 5 MB.']);
+        }
+        $allowed = [
+            'webm' => ['audio/webm', 'video/webm', 'application/webm'],
+            'ogg' => ['audio/ogg', 'application/ogg'],
+            'oga' => ['audio/ogg', 'application/ogg'],
+            'mp4' => ['audio/mp4', 'video/mp4', 'application/mp4'],
+            'm4a' => ['audio/mp4', 'audio/x-m4a', 'video/mp4', 'application/mp4'],
+        ];
+        if (! isset($allowed[$extension]) || ! in_array($mime, $allowed[$extension], true)) {
+            throw ValidationException::withMessages(['file' => 'Format rekaman browser tidak didukung. Silakan gunakan pilihan file MP3 atau M4A.']);
+        }
+
+        return $extension;
+    }
+
+    private function failureReason(\Throwable $exception): string
+    {
+        $message = strtolower($exception->getMessage());
+
+        return match (true) {
+            str_contains($message, 'durasi') => 'duration_limit',
+            str_contains($message, 'ukuran') => 'size_limit',
+            str_contains($message, 'format') || str_contains($message, 'codec') => 'format_rejected',
+            str_contains($message, 'sementara tidak tersedia') || str_contains($message, 'tidak tersedia di server') => 'processor_unavailable',
+            str_contains($message, 'terlalu lama') => 'processor_timeout',
+            default => 'media_invalid',
+        };
     }
 
     /** @return array{mime:string,extension:string} */

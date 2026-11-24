@@ -64,6 +64,35 @@ class QuizAudioInspectorTest extends TestCase
         $this->inspector($payload)->inspect($this->localFile(), 'm4a', 'audio/mp4');
     }
 
+    public function test_mp3_allows_safe_attached_cover_art_but_not_disguised_video(): void
+    {
+        $payload = $this->payload('mp3', '10.000000000');
+        $payload['streams'][] = [
+            'index' => 1,
+            'codec_type' => 'video',
+            'codec_name' => 'mjpeg',
+            'disposition' => ['attached_pic' => 1],
+        ];
+
+        $result = $this->inspector($payload)->inspect($this->localFile(), 'mp3', 'audio/x-mp3');
+        $this->assertSame(10000, $result['duration_ms']);
+
+        $payload['streams'][1]['codec_name'] = 'h264';
+        $this->expectException(ValidationException::class);
+        $this->inspector($payload)->inspect($this->localFile(), 'mp3', 'audio/mpeg');
+    }
+
+    public function test_legitimate_platform_mime_aliases_still_require_matching_codec(): void
+    {
+        $mp3 = $this->inspector($this->payload('mp3', '10.000000000'))
+            ->inspect($this->localFile(), 'mp3', 'audio/x-mpeg');
+        $m4a = $this->inspector($this->payload('aac', '10.000000000'))
+            ->inspect($this->localFile(), 'm4a', 'video/mp4');
+
+        $this->assertSame('mp3', $mp3['codec']);
+        $this->assertSame('aac', $m4a['codec']);
+    }
+
     public function test_missing_ffprobe_fails_closed_with_safe_message(): void
     {
         config(['quiz.media.ffprobe_path' => base_path('definitely-missing-ffprobe-binary')]);

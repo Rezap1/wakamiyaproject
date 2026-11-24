@@ -6,7 +6,7 @@ use App\Interfaces\GoogleSheets\QuizAttemptRepositoryInterface;
 
 class QuizAttemptRepository extends BaseSheetRepository implements QuizAttemptRepositoryInterface
 {
-    public const HEADERS = ['Attempt_ID', 'Quiz_ID', 'Student_ID', 'Started_At', 'Deadline_At', 'Status', 'Submitted_Answers_JSON', 'Submitted_At', 'Created_At', 'Updated_At'];
+    public const HEADERS = ['Attempt_ID', 'Quiz_ID', 'Student_ID', 'Started_At', 'Deadline_At', 'Status', 'Submitted_Answers_JSON', 'Submitted_At', 'Created_At', 'Updated_At', 'Class_ID'];
 
     public function __construct()
     {

@@ -228,6 +228,46 @@ final class QuizMultimediaSchemaGuard
         }
     }
 
+    public static function assertAudienceTables(): void
+    {
+        self::assertColumns('QUIZ_ATTEMPT', [
+            'Class_ID' => ['kind' => 'varchar', 'length' => 191, 'nullable' => true],
+        ]);
+        self::assertColumns('QUIZ_AUDIENCE_CLASS', [
+            'Quiz_ID' => ['kind' => 'varchar', 'length' => 191, 'nullable' => false],
+            'Class_ID' => ['kind' => 'varchar', 'length' => 191, 'nullable' => false],
+            'Created_At' => ['kind' => 'datetime', 'nullable' => false],
+        ]);
+        self::assertColumns('QUIZ_RUNTIME_STATE', [
+            'Quiz_ID' => ['kind' => 'varchar', 'length' => 191, 'nullable' => false],
+            'Attempt_Generation' => ['kind' => 'bigint', 'unsigned' => true, 'nullable' => false],
+            'Updated_At' => ['kind' => 'datetime', 'nullable' => false],
+        ]);
+        self::assertColumns('QUIZ_TOMBSTONE', [
+            'Quiz_ID' => ['kind' => 'varchar', 'length' => 191, 'nullable' => false],
+            'Deleted_By' => ['kind' => 'varchar', 'length' => 191, 'nullable' => false],
+            'Deleted_At' => ['kind' => 'datetime', 'nullable' => false],
+        ]);
+        self::assertIndexes('QUIZ_AUDIENCE_CLASS', [
+            'PRIMARY' => ['Quiz_ID', 'Class_ID'],
+            'quiz_audience_class_lookup' => ['Class_ID', 'Quiz_ID'],
+        ]);
+        self::assertIndexes('QUIZ_RUNTIME_STATE', ['PRIMARY' => ['Quiz_ID']]);
+        self::assertIndexes('QUIZ_TOMBSTONE', ['PRIMARY' => ['Quiz_ID']]);
+
+        if (self::isMySqlFamily()) {
+            foreach (['QUIZ_AUDIENCE_CLASS', 'QUIZ_RUNTIME_STATE', 'QUIZ_TOMBSTONE'] as $table) {
+                $metadata = DB::selectOne(
+                    'SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+                    [$table],
+                );
+                if (strtoupper((string) ($metadata->ENGINE ?? '')) !== 'INNODB') {
+                    throw new RuntimeException("{$table} must use the InnoDB storage engine.");
+                }
+            }
+        }
+    }
+
     /** @param array<string,array{kind:string,length?:int,unsigned?:bool,nullable:bool}> $expected */
     private static function assertColumns(string $table, array $expected): void
     {

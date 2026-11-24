@@ -7,11 +7,14 @@ use App\Interfaces\GoogleSheets\QuizQuestionRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
 use App\Services\Core\ActivityLogService;
+use App\Services\Quiz\QuizAudienceService;
 use App\Services\Quiz\QuizCleanupService;
 use App\Services\Quiz\QuizPeriodService;
 use App\Services\Quiz\QuizService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -481,7 +484,74 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(0, $this->attempts->fetchAllCalls);
     }
 
-    public function test_started_completed_or_related_quiz_cannot_be_deleted_and_history_stays_intact(): void
+    public function test_multi_class_audience_controls_student_visibility_attempt_result_and_teacher_counts(): void
+    {
+        $this->createAudienceTables();
+        $this->seedQuiz('MULTI-CLASS', points: [10]);
+        app(QuizAudienceService::class)->replace('MULTI-CLASS', ['C1', 'C2'], '2026-10-09 08:00:00');
+        $studentC2 = ['Student_ID' => 'S2', 'Full_Name' => 'Budi', 'Class_ID' => 'C2'];
+        $studentC3 = ['Student_ID' => 'S3', 'Full_Name' => 'Citra', 'Class_ID' => 'C3'];
+
+        $this->assertSame(['MULTI-CLASS'], collect($this->service->studentIndex($studentC2)['today'])->pluck('Quiz_ID')->all());
+        $this->assertCount(0, $this->service->studentIndex($studentC3)['today']);
+        $attempt = $this->service->start('MULTI-CLASS', $studentC2);
+        $result = $this->service->submit($attempt['attempt']['Attempt_ID'], $studentC2, [
+            $attempt['questions'][0]['Question_ID'] => 'A',
+        ]);
+        $this->assertSame('C2', $result['Class_ID']);
+
+        $classes = $this->service->teacherClassIndex('T1', [
+            ['Class_ID' => 'C1'], ['Class_ID' => 'C2'], ['Class_ID' => 'C3'],
+        ], collect());
+        $this->assertSame(1, $classes->firstWhere('Class_ID', 'C1')['Quiz_Count']);
+        $this->assertSame(1, $classes->firstWhere('Class_ID', 'C2')['Quiz_Count']);
+        $this->assertSame(0, $classes->firstWhere('Class_ID', 'C3')['Quiz_Count']);
+
+        try {
+            $this->service->teacherQuiz('MULTI-CLASS', 'T1', ['C1']);
+            $this->fail('A teacher who no longer owns the complete audience scope must not read all shared results.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
+        try {
+            $this->service->start('MULTI-CLASS', $studentC3);
+            $this->fail('A non-audience student must not start the shared quiz.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+    }
+
+    public function test_reset_results_preserves_definition_media_and_uses_new_attempt_generation(): void
+    {
+        $this->createAudienceTables();
+        $this->seedQuiz('RESET-ME', points: [10]);
+        app(QuizAudienceService::class)->replace('RESET-ME', ['C1'], '2026-10-09 08:00:00');
+        $this->questions->rows[0]['Audio_Path'] = 'quiz-media/RESET-ME/q/audio.m4a';
+        $first = $this->service->start('RESET-ME', $this->student());
+        $oldAttemptId = $first['attempt']['Attempt_ID'];
+        $this->service->submit($oldAttemptId, $this->student(), [$first['questions'][0]['Question_ID'] => 'A']);
+
+        $reset = $this->service->resetResults('RESET-ME', 'T1', ['C1'], 'U1');
+
+        $this->assertSame(['attempts' => 1, 'results' => 1], $reset['deleted']);
+        $this->assertCount(0, $this->attempts->rows);
+        $this->assertCount(0, $this->results->rows);
+        $this->assertCount(1, $this->questions->rows);
+        $this->assertSame('quiz-media/RESET-ME/q/audio.m4a', $this->questions->rows[0]['Audio_Path']);
+        $this->assertCount(0, $this->service->leaderboard('C1')['entries']);
+
+        $second = $this->service->start('RESET-ME', $this->student());
+        $this->assertNotSame($oldAttemptId, $second['attempt']['Attempt_ID']);
+        try {
+            $this->service->autosave($oldAttemptId, $this->student(), [], 1);
+            $this->fail('Stale autosave from the reset generation must not target the new attempt.');
+        } catch (HttpException $exception) {
+            $this->assertSame(404, $exception->getStatusCode());
+        }
+    }
+
+    public function test_completed_quiz_delete_removes_only_target_history_and_recalculates_leaderboard(): void
     {
         $this->seedQuiz('Q1', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [5, 5, 5]);
         $this->seedQuiz('Q2', '2026-10-08 08:00:00', '2026-10-08 09:00:00', 30, [40]);
@@ -495,19 +565,18 @@ class H877QuizDomainTest extends TestCase
             ['Quiz_ID' => 'Q1', 'Attempt_ID' => 'A2'] + $this->resultRow('R2', 'S2', 'Budi', 'C1', 5, 15, 33.3333, '2026-10-08 08:30:00'),
             ['Quiz_ID' => 'Q2', 'Attempt_ID' => 'A3'] + $this->resultRow('R3', 'S1', 'Aiko', 'C1', 40, 40, 100, '2026-10-08 08:30:00'),
         ];
-        try {
-            $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
-            $this->fail('Kuis bersejarah tidak boleh dihapus.');
-        } catch (\DomainException $exception) {
-            $this->assertStringContainsString('tidak dapat dihapus', $exception->getMessage());
-        }
-        $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
-        $this->assertCount(3, collect($this->questions->rows)->where('Quiz_ID', 'Q1'));
-        $this->assertCount(2, collect($this->attempts->rows)->where('Quiz_ID', 'Q1'));
-        $this->assertCount(2, collect($this->results->rows)->where('Quiz_ID', 'Q1'));
+        $deleted = $this->service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
+
+        $this->assertSame(['quiz' => 1, 'questions' => 3, 'attempts' => 2, 'results' => 2], $deleted['deleted']);
+        $this->assertFalse(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q1'));
+        $this->assertCount(0, collect($this->questions->rows)->where('Quiz_ID', 'Q1'));
+        $this->assertCount(0, collect($this->attempts->rows)->where('Quiz_ID', 'Q1'));
+        $this->assertCount(0, collect($this->results->rows)->where('Quiz_ID', 'Q1'));
         $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', 'Q2'));
-        $this->assertSame(55.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
-        $this->activityLog->shouldNotHaveReceived('logAction');
+        $this->assertCount(1, collect($this->attempts->rows)->where('Quiz_ID', 'Q2'));
+        $this->assertCount(1, collect($this->results->rows)->where('Quiz_ID', 'Q2'));
+        $this->assertSame(40.0, $this->service->leaderboard('C1')['entries']->firstWhere('Student_ID', 'S1')['Points']);
+        $this->activityLog->shouldHaveReceived('logAction')->once();
     }
 
     public function test_future_quiz_without_attempts_or_results_can_still_be_deleted(): void
@@ -521,7 +590,7 @@ class H877QuizDomainTest extends TestCase
         $this->activityLog->shouldHaveReceived('logAction')->once();
     }
 
-    public function test_delete_guard_covers_started_quiz_future_attempt_and_future_result_independently(): void
+    public function test_delete_supports_started_quiz_future_attempt_and_future_result_independently(): void
     {
         $this->seedQuiz('STARTED', '2026-10-09 07:00:00', '2026-10-09 09:00:00', 30, [10]);
         $this->seedQuiz('FUTURE-ATTEMPT', '2026-10-10 08:00:00', '2026-10-10 09:00:00', 30, [10]);
@@ -531,15 +600,12 @@ class H877QuizDomainTest extends TestCase
             + $this->resultRow('R-FUTURE', 'S1', 'Aiko', 'C1', 10, 10, 100, '2026-10-09 07:30:00');
 
         foreach (['STARTED', 'FUTURE-ATTEMPT', 'FUTURE-RESULT'] as $quizId) {
-            try {
-                $this->service->deleteQuiz($quizId, 'T1', ['C1'], 'U1');
-                $this->fail("{$quizId} tidak boleh dihapus.");
-            } catch (\DomainException) {
-                $this->assertTrue(collect($this->quizzes->rows)->contains('Quiz_ID', $quizId));
-            }
+            $this->service->deleteQuiz($quizId, 'T1', ['C1'], 'U1');
+            $this->assertFalse(collect($this->quizzes->rows)->contains('Quiz_ID', $quizId));
         }
-        $this->assertCount(1, $this->attempts->rows);
-        $this->assertCount(1, $this->results->rows);
+        $this->assertCount(0, $this->attempts->rows);
+        $this->assertCount(0, $this->results->rows);
+        $this->activityLog->shouldHaveReceived('logAction')->times(3);
     }
 
     public function test_quiz_delete_revalidates_owner_and_class_under_lock(): void
@@ -573,7 +639,7 @@ class H877QuizDomainTest extends TestCase
         try {
             $service->deleteQuiz('Q1', 'T1', ['C1'], 'U1');
             $this->fail('A failed child verification must stop deletion.');
-        } catch (\DomainException) {
+        } catch (\RuntimeException) {
             $this->assertTrue(collect($quizzes->rows)->contains('Quiz_ID', 'Q1'));
             $this->assertTrue(collect($questions->rows)->contains('Quiz_ID', 'Q1'));
             $this->assertTrue(collect($attempts->rows)->contains('Quiz_ID', 'Q1'));
@@ -604,6 +670,7 @@ class H877QuizDomainTest extends TestCase
             'Attempt_ID' => 'A-SAVED',
             'Quiz_ID' => 'OLD-SAVED',
             'Student_ID' => 'S1',
+            'Class_ID' => 'C2',
             'Started_At' => '2026-10-02 08:00:00',
             'Deadline_At' => '2026-10-02 08:30:00',
             'Status' => 'IN_PROGRESS',
@@ -620,6 +687,7 @@ class H877QuizDomainTest extends TestCase
         $this->assertSame(10.0, (float) $this->results->rows[0]['Raw_Score']);
         $this->assertSame(25.0, (float) $this->results->rows[0]['Maximum_Score']);
         $this->assertSame(40.0, (float) $this->results->rows[0]['Normalized_Score']);
+        $this->assertSame('C2', $this->results->rows[0]['Class_ID'], 'Cleanup must retain the class that actually started the shared quiz.');
     }
 
     public function test_cleanup_protects_current_future_and_unexpired_review_content(): void
@@ -840,6 +908,26 @@ class H877QuizDomainTest extends TestCase
             'Correct_Option' => $correct,
             'Point' => $point,
         ];
+    }
+
+    private function createAudienceTables(): void
+    {
+        Schema::create('QUIZ_AUDIENCE_CLASS', function (Blueprint $table): void {
+            $table->string('Quiz_ID', 191);
+            $table->string('Class_ID', 191);
+            $table->dateTime('Created_At', 6);
+            $table->primary(['Quiz_ID', 'Class_ID']);
+        });
+        Schema::create('QUIZ_RUNTIME_STATE', function (Blueprint $table): void {
+            $table->string('Quiz_ID', 191)->primary();
+            $table->unsignedBigInteger('Attempt_Generation')->default(0);
+            $table->dateTime('Updated_At', 6);
+        });
+        Schema::create('QUIZ_TOMBSTONE', function (Blueprint $table): void {
+            $table->string('Quiz_ID', 191)->primary();
+            $table->string('Deleted_By', 191);
+            $table->dateTime('Deleted_At', 6);
+        });
     }
 
     private function seedQuiz(string $id, string $start = '2026-10-09 08:00:00', string $end = '2026-10-09 15:00:00', int $duration = 30, array $points = [10]): void

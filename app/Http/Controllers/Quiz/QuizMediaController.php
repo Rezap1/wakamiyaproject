@@ -7,6 +7,10 @@ use App\Services\Quiz\QuizMediaService;
 use App\Services\Quiz\QuizScopeService;
 use App\Services\Quiz\QuizService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class QuizMediaController extends Controller
 {
@@ -19,17 +23,53 @@ class QuizMediaController extends Controller
     public function upload(Request $request)
     {
         $this->scope->teacherForUser($request->user());
-        $data = $request->validate([
-            'media_type' => ['required', 'in:image,audio'],
-            // The endpoint-specific 7 MB ceiling intentionally does not alter
-            // the shared 5 MB WMS upload configuration used by other modules.
-            'file' => ['required', 'file', 'max:'.config('quiz.media.image_max_kb', 7168)],
-        ]);
-        $staged = $this->media->stage($request->file('file'), $data['media_type'], (string) $request->user()->User_ID);
+        $requestId = trim((string) $request->header('X-Request-ID'));
+        if (! Str::isUuid($requestId)) {
+            $requestId = (string) Str::uuid();
+        }
+        try {
+            $data = $request->validate([
+                'media_type' => ['required', 'in:image,audio'],
+                'source' => ['sometimes', 'in:upload,recording'],
+                // The endpoint-specific 7 MB ceiling intentionally does not alter
+                // the shared 5 MB WMS upload configuration used by other modules.
+                'file' => ['required', 'file', 'max:'.config('quiz.media.image_max_kb', 7168)],
+            ]);
+            $staged = $this->media->stage(
+                $request->file('file'),
+                $data['media_type'],
+                (string) $request->user()->User_ID,
+                (string) ($data['source'] ?? 'upload'),
+                $requestId,
+            );
+        } catch (\Throwable $exception) {
+            if (strtolower((string) $request->input('media_type')) === 'audio') {
+                $file = $request->file('file');
+                if (! $file instanceof UploadedFile) {
+                    $file = null;
+                }
+                Log::warning('Quiz audio upload request failed.', [
+                    'request_id' => $requestId,
+                    'stage' => 'request_or_staging',
+                    'media_type' => 'audio',
+                    'source' => strtolower((string) $request->input('source', 'upload')),
+                    'extension' => $file?->getClientOriginalExtension(),
+                    'detected_mime' => $file?->getMimeType(),
+                    'file_size' => $file?->getSize(),
+                    'codec' => null,
+                    'duration_ms' => null,
+                    'failure_reason_code' => strtolower(class_basename($exception)),
+                    'process_exit_code' => null,
+                    'timeout' => $exception instanceof HttpExceptionInterface && $exception->getStatusCode() === 504,
+                ]);
+            }
+            throw $exception;
+        }
 
         return response()->json($staged + [
             'preview_url' => route('teacher.quizzes.media.staging', $staged['token']),
-        ], 201);
+            'request_id' => $requestId,
+        ], 201)->header('X-Request-ID', $requestId);
     }
 
     public function staging(Request $request, string $token)

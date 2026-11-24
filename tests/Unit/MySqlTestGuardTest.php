@@ -16,6 +16,17 @@ class MySqlTestGuardTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function test_explicit_non_default_isolated_port_is_accepted(): void
+    {
+        $state = $this->safeState();
+        $state['port'] = '3310';
+        $state['expected_port'] = '3310';
+
+        MySqlTestGuard::assertSafeConfiguration($state);
+
+        $this->addToAssertionCount(1);
+    }
+
     #[DataProvider('unsafeOverrides')]
     public function test_unsafe_configuration_is_rejected_before_any_connection(string $key, string $value): void
     {
@@ -35,6 +46,7 @@ class MySqlTestGuardTest extends TestCase
             'remote host' => ['host', 'db.example.test'],
             'localhost alias' => ['host', 'localhost'],
             'port' => ['port', '3307'],
+            'invalid expected port' => ['expected_port', '70000'],
             'database' => ['database', 'wms_mysql'],
             'runtime database' => ['runtime_database', 'wms_mysql'],
             'url override' => ['url', 'mysql://remote.example.test/wms_mysql_test'],
@@ -53,6 +65,7 @@ class MySqlTestGuardTest extends TestCase
             'driver' => 'mysql',
             'host' => '127.0.0.1',
             'port' => '3306',
+            'expected_port' => '3306',
             'database' => 'wms_mysql_test',
             'runtime_database' => 'wms_mysql_test',
             'url' => '',

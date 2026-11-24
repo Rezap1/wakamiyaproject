@@ -19,6 +19,7 @@ final class MySqlTestGuard
             'driver' => (string) ($connectionConfig['driver'] ?? ''),
             'host' => (string) ($connectionConfig['host'] ?? ''),
             'port' => (string) ($connectionConfig['port'] ?? ''),
+            'expected_port' => (string) env('WMS_MYSQL_TEST_PORT', '3306'),
             'database' => (string) ($connectionConfig['database'] ?? ''),
             'runtime_database' => (string) config('wms_runtime.database'),
             'url' => (string) ($connectionConfig['url'] ?? ''),
@@ -30,8 +31,9 @@ final class MySqlTestGuard
             'SELECT DATABASE() AS database_name, @@port AS server_port, @@sql_mode AS sql_mode, VERSION() AS server_version, CURRENT_USER() AS authenticated_user',
         );
         $currentUser = strtolower(strtok((string) ($metadata->authenticated_user ?? ''), '@') ?: '');
+        $expectedPort = (int) env('WMS_MYSQL_TEST_PORT', 3306);
         if (($metadata->database_name ?? null) !== 'wms_mysql_test'
-            || (int) ($metadata->server_port ?? 0) !== 3306
+            || (int) ($metadata->server_port ?? 0) !== $expectedPort
             || ! str_contains(strtolower((string) ($metadata->server_version ?? '')), 'mariadb')
             || (! str_contains((string) ($metadata->sql_mode ?? ''), 'STRICT_TRANS_TABLES')
                 && ! str_contains((string) ($metadata->sql_mode ?? ''), 'STRICT_ALL_TABLES'))
@@ -55,11 +57,15 @@ final class MySqlTestGuard
     /** @param array<string,string> $state */
     public static function assertSafeConfiguration(array $state): void
     {
+        $expectedPort = filter_var($state['expected_port'] ?? '3306', FILTER_VALIDATE_INT);
         if (($state['app_env'] ?? '') !== 'testing'
             || ($state['opt_in'] ?? '') !== '1'
             || ! in_array($state['driver'] ?? '', ['mysql', 'mariadb'], true)
             || ($state['host'] ?? '') !== '127.0.0.1'
-            || ($state['port'] ?? '') !== '3306'
+            || $expectedPort === false
+            || $expectedPort < 1024
+            || $expectedPort > 65535
+            || ($state['port'] ?? '') !== (string) $expectedPort
             || ($state['database'] ?? '') !== 'wms_mysql_test'
             || ($state['runtime_database'] ?? '') !== 'wms_mysql_test'
             || ($state['url'] ?? '') !== ''

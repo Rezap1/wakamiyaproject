@@ -32,7 +32,8 @@ class TeacherQuizController extends Controller
     {
         $teacher = $this->scope->teacherForUser($request->user());
 
-        return view('quiz.teacher.form', ['quiz' => null, 'questions' => collect(), 'classes' => $this->scope->classesForTeacher($teacher['Teacher_ID'])]);
+        return response()->view('quiz.teacher.form', ['quiz' => null, 'questions' => collect(), 'classes' => $this->scope->classesForTeacher($teacher['Teacher_ID'])])
+            ->header('Permissions-Policy', 'microphone=(self)');
     }
 
     public function classHub(Request $request, string $class)
@@ -63,19 +64,21 @@ class TeacherQuizController extends Controller
         );
         abort_unless($selectedClass, 403, 'Kelas berada di luar penugasan kelas Anda.');
 
-        return view('quiz.teacher.form', [
+        return response()->view('quiz.teacher.form', [
             'quiz' => null,
             'questions' => collect(),
             'classes' => collect([$selectedClass]),
             'lockedClass' => $selectedClass,
-        ]);
+        ])->header('Permissions-Policy', 'microphone=(self)');
     }
 
     public function store(Request $request)
     {
         $teacher = $this->scope->teacherForUser($request->user());
         $data = $this->validated($request);
-        $this->scope->assertTeacherClass($teacher['Teacher_ID'], $data['Class_ID']);
+        foreach ($data['Class_IDs'] as $classId) {
+            $this->scope->assertTeacherClass($teacher['Teacher_ID'], $classId);
+        }
         $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
 
         return redirect()->route('teacher.quizzes.show', $id)->with('success', 'Kuis berhasil disimpan.');
@@ -89,7 +92,7 @@ class TeacherQuizController extends Controller
             fn ($row) => trim((string) ($row['Class_ID'] ?? '')) === trim($class)
         );
         abort_unless($selectedClass, 403, 'Kelas berada di luar penugasan kelas Anda.');
-        $request->merge(['Class_ID' => (string) $selectedClass['Class_ID']]);
+        $request->merge(['Class_ID' => (string) $selectedClass['Class_ID'], 'Class_IDs' => [(string) $selectedClass['Class_ID']]]);
         $data = $this->validated($request);
         $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
 
@@ -106,6 +109,7 @@ class TeacherQuizController extends Controller
         return view('quiz.teacher.show', [
             'quiz' => $row,
             'className' => $classes->firstWhere('Class_ID', $row['Class_ID'])['Class_Name'] ?? 'Kelas Anda',
+            'audienceClasses' => $classes->filter(fn ($class) => in_array((string) $class['Class_ID'], $row['Audience_Class_IDs'] ?? [], true))->values(),
         ]);
     }
 
@@ -116,7 +120,8 @@ class TeacherQuizController extends Controller
         $row = $this->quizzes->teacherQuiz($quiz, $teacher['Teacher_ID'], $classes->pluck('Class_ID')->all());
         abort_unless($row['Editable'], 409, 'Kuis tidak lagi dapat diedit.');
 
-        return view('quiz.teacher.form', ['quiz' => $row, 'questions' => $row['questions'], 'classes' => $classes]);
+        return response()->view('quiz.teacher.form', ['quiz' => $row, 'questions' => $row['questions'], 'classes' => $classes])
+            ->header('Permissions-Policy', 'microphone=(self)');
     }
 
     public function update(Request $request, string $quiz)
@@ -124,7 +129,7 @@ class TeacherQuizController extends Controller
         $teacher = $this->scope->teacherForUser($request->user());
         $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
         $data = $this->validated($request);
-        abort_unless(in_array($data['Class_ID'], $classIds, true), 403, 'Kelas berada di luar penugasan kelas Anda.');
+        abort_unless(collect($data['Class_IDs'])->every(fn ($classId) => in_array($classId, $classIds, true)), 403, 'Satu atau lebih kelas berada di luar penugasan kelas Anda.');
         $this->quizzes->update($quiz, $data, $teacher, (string) $request->user()->User_ID, $classIds);
 
         return redirect()->route('teacher.quizzes.show', $quiz)->with('success', 'Kuis berhasil diperbarui.');
@@ -159,6 +164,25 @@ class TeacherQuizController extends Controller
         }
 
         return redirect()->route('teacher.quizzes.class', $deleted['quiz']['Class_ID'])->with('success', 'Kuis berhasil dihapus. Soal, hasil siswa, dan poin leaderboard terkait juga telah dihapus.');
+    }
+
+    public function resetResults(Request $request, string $quiz)
+    {
+        $teacher = $this->scope->teacherForUser($request->user());
+        $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
+        $reset = $this->quizzes->resetResults(
+            $quiz,
+            $teacher['Teacher_ID'],
+            $classIds,
+            (string) $request->user()->User_ID,
+            $request->ip(),
+            $request->userAgent(),
+        );
+
+        return redirect()->route('teacher.quizzes.show', $quiz)->with(
+            'success',
+            "Hasil kuis berhasil direset ({$reset['deleted']['attempts']} percobaan, {$reset['deleted']['results']} hasil). Soal dan media tetap dipertahankan."
+        );
     }
 
     public function results(Request $request)
@@ -216,9 +240,17 @@ class TeacherQuizController extends Controller
     private function validated(Request $request): array
     {
         $maxQuestions = (int) config('quiz.max_questions', 100);
+        $classIds = $request->input('Class_IDs');
+        if (! is_array($classIds)) {
+            $legacyClassId = trim((string) $request->input('Class_ID'));
+            $classIds = $legacyClassId === '' ? [] : [$legacyClassId];
+        }
+        $request->merge(['Class_IDs' => array_values($classIds)]);
         $validator = Validator::make($request->all(), [
             'Title' => ['required', 'string', 'max:160'],
-            'Class_ID' => ['required', 'string', 'max:80'],
+            'Class_ID' => ['nullable', 'string', 'max:80'],
+            'Class_IDs' => ['required', 'array', 'min:1'],
+            'Class_IDs.*' => ['required', 'string', 'max:80', 'distinct'],
             'Start_At' => ['required', 'date'],
             'End_At' => ['required', 'date', 'after:Start_At'],
             'Duration_Minutes' => ['required', 'integer', 'min:1', 'max:'.config('quiz.max_duration_minutes', 480)],
@@ -274,6 +306,8 @@ class TeacherQuizController extends Controller
             }
         });
         $data = $validator->validate();
+        $data['Class_IDs'] = collect($data['Class_IDs'])->map(fn ($id) => trim((string) $id))->filter()->unique()->values()->all();
+        $data['Class_ID'] = $data['Class_IDs'][0];
         $data['questions'] = collect(array_values($data['questions'] ?? []))->map(fn ($question) => [
             'Question_Text' => trim((string) ($question['Question_Text'] ?? '')),
             'Option_A' => trim((string) ($question['Option_A'] ?? '')),

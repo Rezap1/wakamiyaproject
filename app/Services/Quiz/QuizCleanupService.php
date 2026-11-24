@@ -18,6 +18,8 @@ class QuizCleanupService
         private QuizResultRepositoryInterface $results,
         private QuizPeriodService $periods,
         private ?QuizMediaService $media = null,
+        private ?QuizAudienceService $audiences = null,
+        private ?QuizRuntimeStateService $runtimeState = null,
     ) {}
 
     public function run(?CarbonImmutable $at = null, ?int $limit = null): array
@@ -52,31 +54,24 @@ class QuizCleanupService
             $summary = ['quizzes' => 0, 'questions' => 0, 'attempts' => 0, 'results_created' => 0];
             foreach ($eligible as $quiz) {
                 $quizId = $quiz['Quiz_ID'];
-                $quizQuestions = $questions->where('Quiz_ID', $quizId);
-                $quizAttempts = $attempts->where('Quiz_ID', $quizId);
-                $maximum = (float) $quizQuestions->sum(fn ($row) => (float) ($row['Point'] ?? 0));
+                Cache::lock('quiz_mutation_'.hash('sha256', $quizId), 90)->block(15, function () use (
+                    $quiz,
+                    $quizId,
+                    $questions,
+                    $attempts,
+                    $now,
+                    &$summary,
+                ): void {
+                    $quizQuestions = $questions->where('Quiz_ID', $quizId);
+                    $quizAttempts = $attempts->where('Quiz_ID', $quizId);
+                    $maximum = (float) $quizQuestions->sum(fn ($row) => (float) ($row['Point'] ?? 0));
 
-                foreach ($quizAttempts as $attempt) {
-                    $attemptId = trim((string) ($attempt['Attempt_ID'] ?? ''));
-                    if ($attemptId === '') {
-                        continue;
-                    }
+                    foreach ($quizAttempts as $attempt) {
+                        $attemptId = trim((string) ($attempt['Attempt_ID'] ?? ''));
+                        if ($attemptId === '') {
+                            continue;
+                        }
 
-                    // Share the same cross-process lock as autosave/submit. The
-                    // fresh result check prevents cleanup from racing a final
-                    // submission into a duplicate result, and the attempt is
-                    // removed before releasing the lock so it cannot be left
-                    // behind after a successful finalization.
-                    Cache::lock('quiz_attempt_mutation_'.hash('sha256', $attemptId), 45)->block(15, function () use (
-                        $attempt,
-                        $attemptId,
-                        $quiz,
-                        $quizId,
-                        $quizQuestions,
-                        $maximum,
-                        $now,
-                        &$summary,
-                    ): void {
                         $hasResult = collect($this->results->fetchAllFresh())->contains('Attempt_ID', $attemptId);
                         if (! $hasResult) {
                             $completed = trim((string) ($attempt['Deadline_At'] ?? $quiz['End_At']));
@@ -94,7 +89,7 @@ class QuizCleanupService
                                 'Attempt_ID' => $attemptId,
                                 'Student_ID' => $attempt['Student_ID'],
                                 'Student_Name' => $attempt['Student_ID'],
-                                'Class_ID' => $quiz['Class_ID'],
+                                'Class_ID' => trim((string) ($attempt['Class_ID'] ?? '')) ?: $quiz['Class_ID'],
                                 'Teacher_ID' => $quiz['Teacher_ID'],
                                 'Raw_Score' => $raw,
                                 'Maximum_Score' => $maximum,
@@ -107,16 +102,21 @@ class QuizCleanupService
                         }
 
                         $summary['attempts'] += $this->attempts->hardDeleteMany([$attemptId]);
-                    });
-                }
+                    }
 
-                // Every destructive repository call performs a fresh authoritative
-                // read, re-resolves row indexes, and deletes bottom-to-top.
-                $summary['questions'] += $this->questions->hardDeleteMany($quizQuestions->pluck('Question_ID')->all());
-                $summary['quizzes'] += $this->quizzes->hardDeleteMany([$quizId]);
-                if ($this->media !== null) {
-                    $this->media->deleteUnreferenced($quizQuestions->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])->filter());
-                }
+                    // Keep the shared quiz lock through all destructive DB calls.
+                    $summary['questions'] += $this->questions->hardDeleteMany($quizQuestions->pluck('Question_ID')->all());
+                    ($this->audiences ??= app(QuizAudienceService::class))->delete($quizId);
+                    $summary['quizzes'] += $this->quizzes->hardDeleteMany([$quizId]);
+                    ($this->runtimeState ??= app(QuizRuntimeStateService::class))->tombstone(
+                        $quizId,
+                        'SYSTEM',
+                        $now->format('Y-m-d H:i:s'),
+                    );
+                    if ($this->media !== null) {
+                        $this->media->deleteUnreferenced($quizQuestions->flatMap(fn ($row) => [$row['Image_Path'] ?? null, $row['Audio_Path'] ?? null])->filter());
+                    }
+                });
             }
 
             if ($this->media !== null) {

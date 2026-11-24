@@ -71,6 +71,31 @@ try {
         'cleanup_or_finalize' => (int) $slot === 1
             ? app(QuizService::class)->submit($payload['attempt_id'], $payload['student'], [])
             : app(QuizCleanupService::class)->run(CarbonImmutable::parse($payload['cleanup_at']), 10),
+        'reset_or_autosave' => (int) $slot === 1
+            ? app(QuizService::class)->resetResults(
+                $payload['quiz_id'],
+                $payload['teacher']['Teacher_ID'],
+                [$payload['class_id']],
+                $payload['user_id'],
+            )
+            : app(QuizService::class)->autosave(
+                $payload['attempt_id'],
+                $payload['student'],
+                [$payload['question_id'] => 'B'],
+                2,
+            ),
+        'delete_or_submit' => (int) $slot === 1
+            ? app(QuizService::class)->deleteQuiz(
+                $payload['quiz_id'],
+                $payload['teacher']['Teacher_ID'],
+                [$payload['class_id']],
+                $payload['user_id'],
+            )
+            : app(QuizService::class)->submit(
+                $payload['attempt_id'],
+                $payload['student'],
+                [$payload['question_id'] => 'A'],
+            ),
         'deadlock' => (function () use ($connection, $payload, $slot, $gateDirectory) {
             $attempt = 0;
 
