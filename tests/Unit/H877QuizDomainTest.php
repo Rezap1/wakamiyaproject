@@ -8,13 +8,19 @@ use App\Interfaces\GoogleSheets\QuizRepositoryInterface;
 use App\Interfaces\GoogleSheets\QuizResultRepositoryInterface;
 use App\Services\Core\ActivityLogService;
 use App\Services\Quiz\QuizAudienceService;
+use App\Services\Quiz\QuizAudioInspector;
 use App\Services\Quiz\QuizCleanupService;
+use App\Services\Quiz\QuizMediaService;
 use App\Services\Quiz\QuizPeriodService;
 use App\Services\Quiz\QuizService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -363,6 +369,134 @@ class H877QuizDomainTest extends TestCase
             $this->assertStringContainsString('coba kembali', $exception->getMessage());
         } finally {
             $held->release();
+        }
+    }
+
+    public function test_media_locks_are_released_when_publish_validation_fails_before_retry(): void
+    {
+        $originalCache = (string) config('cache.default');
+        $cachePath = storage_path('framework/testing/quiz-file-lock-'.bin2hex(random_bytes(8)));
+        File::ensureDirectoryExists($cachePath);
+        config([
+            'cache.default' => 'file',
+            'cache.stores.file.path' => $cachePath,
+            'cache.stores.file.lock_path' => $cachePath,
+        ]);
+        Cache::forgetDriver('file');
+        Cache::setDefaultDriver('file');
+        Storage::fake('local');
+
+        try {
+            $media = new QuizMediaService(new QuizAudioInspector, $this->questions);
+            $service = new QuizService(
+                $this->quizzes,
+                $this->questions,
+                $this->attempts,
+                $this->results,
+                $this->periods,
+                $this->activityLog,
+                $media,
+            );
+            $staged = $media->stage(UploadedFile::fake()->image('lock.jpg', 20, 20), 'image', 'U1');
+            $payload = [
+                'Class_ID' => 'C1',
+                'Class_IDs' => ['C1'],
+                'Title' => 'Retry lock regression',
+                'Start_At' => '2026-10-10 08:00:00',
+                'End_At' => '2026-10-10 09:00:00',
+                'Duration_Minutes' => 30,
+                'intent' => 'publish',
+                'questions' => [
+                    $this->question('', 'A', 'B', 'C', 'D', 'A', 10) + ['Image_Token' => $staged['token']],
+                    $this->question('', 'A', 'B', 'C', 'D', 'A', 10),
+                ],
+            ];
+
+            try {
+                $service->create($payload, ['Teacher_ID' => 'T1'], 'U1');
+                $this->fail('The incomplete second question must fail publish validation.');
+            } catch (ValidationException) {
+                $this->addToAssertionCount(1);
+            }
+
+            $payload['questions'][1]['Question_Text'] = 'Pertanyaan kedua sudah diperbaiki';
+            $quizId = $service->create($payload, ['Teacher_ID' => 'T1'], 'U1');
+
+            $this->assertNotEmpty($quizId);
+            $this->assertSame('PUBLISHED', collect($this->quizzes->rows)->firstWhere('Quiz_ID', $quizId)['Status']);
+            $this->assertCount(2, collect($this->questions->rows)->where('Quiz_ID', $quizId));
+        } finally {
+            Cache::setDefaultDriver($originalCache);
+            Cache::forgetDriver('file');
+            File::deleteDirectory($cachePath);
+        }
+    }
+
+    public function test_media_locks_are_released_after_transaction_failure_before_retry(): void
+    {
+        $originalCache = (string) config('cache.default');
+        $cachePath = storage_path('framework/testing/quiz-rollback-lock-'.bin2hex(random_bytes(8)));
+        File::ensureDirectoryExists($cachePath);
+        config([
+            'cache.default' => 'file',
+            'cache.stores.file.path' => $cachePath,
+            'cache.stores.file.lock_path' => $cachePath,
+        ]);
+        Cache::forgetDriver('file');
+        Cache::setDefaultDriver('file');
+        Storage::fake('local');
+
+        try {
+            $media = new QuizMediaService(new QuizAudioInspector, $this->questions);
+            $failedRepository = \Mockery::mock(QuizRepositoryInterface::class);
+            $failedRepository->shouldReceive('create')->once()->andThrow(new \RuntimeException('simulated transaction failure'));
+            $failedService = new QuizService(
+                $failedRepository,
+                $this->questions,
+                $this->attempts,
+                $this->results,
+                $this->periods,
+                $this->activityLog,
+                $media,
+            );
+            $retryService = new QuizService(
+                $this->quizzes,
+                $this->questions,
+                $this->attempts,
+                $this->results,
+                $this->periods,
+                $this->activityLog,
+                $media,
+            );
+            $staged = $media->stage(UploadedFile::fake()->image('rollback.jpg', 20, 20), 'image', 'U1');
+            $payload = [
+                'Class_ID' => 'C1',
+                'Class_IDs' => ['C1'],
+                'Title' => 'Transaction retry regression',
+                'Start_At' => '2026-10-10 08:00:00',
+                'End_At' => '2026-10-10 09:00:00',
+                'Duration_Minutes' => 30,
+                'intent' => 'publish',
+                'questions' => [
+                    $this->question('Pertanyaan valid', 'A', 'B', 'C', 'D', 'A', 10) + ['Image_Token' => $staged['token']],
+                ],
+            ];
+
+            try {
+                $failedService->create($payload, ['Teacher_ID' => 'T1'], 'U1');
+                $this->fail('The simulated transaction failure must be propagated.');
+            } catch (\RuntimeException $exception) {
+                $this->assertSame('simulated transaction failure', $exception->getMessage());
+            }
+
+            $quizId = $retryService->create($payload, ['Teacher_ID' => 'T1'], 'U1');
+
+            $this->assertNotEmpty($quizId);
+            $this->assertSame('PUBLISHED', collect($this->quizzes->rows)->firstWhere('Quiz_ID', $quizId)['Status']);
+        } finally {
+            Cache::setDefaultDriver($originalCache);
+            Cache::forgetDriver('file');
+            File::deleteDirectory($cachePath);
         }
     }
 

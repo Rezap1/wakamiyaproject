@@ -81,9 +81,10 @@
                                 <span x-show="q.Image_FileName" x-text="q.Image_FileName" class="min-w-0 self-center break-all text-xs text-slate-600"></span>
                             </div>
                             <div x-show="q.Image_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Image_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700">Mengunggah <span x-text="q.Image_Progress"></span>%</p></div>
-                            <p x-show="q.Image_Error" x-text="q.Image_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
+                            <p x-show="q.Image_Warning" x-text="q.Image_Warning" class="mt-2 text-xs font-semibold text-amber-700"></p>
+                            <p x-show="q.Image_Error" class="mt-2 text-xs font-bold text-rose-700"><span x-text="q.Image_Error"></span><span x-show="q.Image_Error_Code" x-text="` (Kode: ${q.Image_Error_Code})`"></span></p>
                             <div x-show="q.Image_URL" class="mt-3 space-y-2">
-                                <img :src="q.Image_URL" alt="Preview gambar soal" class="max-h-64 w-full rounded-xl border border-slate-200 object-contain">
+                                <img :src="q.Image_URL" x-on:error="previewFailed(q, 'image')" alt="Preview gambar soal" class="max-h-64 w-full rounded-xl border border-slate-200 object-contain">
                                 <div class="flex items-center justify-between gap-2 text-xs"><span x-text="formatBytes(q.Image_Size_Bytes)"></span><button type="button" @click="removeMedia(q, 'image')" class="min-h-11 px-2 font-bold text-rose-700">Hapus gambar</button></div>
                             </div>
                         </section>
@@ -103,9 +104,9 @@
                             <p x-show="q.Audio_FileName" class="mt-2 min-w-0 break-all text-xs text-slate-600">File: <span x-text="q.Audio_FileName"></span></p>
                             <div x-show="q.Audio_Uploading" class="mt-3"><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-sky-500" :style="`width:${q.Audio_Progress}%`"></div></div><p class="mt-1 text-xs text-sky-700"><span x-text="q.Audio_Processing ? 'Memproses rekaman' : 'Mengunggah audio'"></span> <span x-text="q.Audio_Progress"></span>%</p></div>
                             <p x-show="q.Audio_Warning" x-text="q.Audio_Warning" class="mt-2 text-xs font-semibold text-amber-700"></p>
-                            <p x-show="q.Audio_Error" x-text="q.Audio_Error" class="mt-2 text-xs font-bold text-rose-700"></p>
+                            <p x-show="q.Audio_Error" class="mt-2 text-xs font-bold text-rose-700"><span x-text="q.Audio_Error"></span><span x-show="q.Audio_Error_Code" x-text="` (Kode: ${q.Audio_Error_Code})`"></span></p>
                             <div x-show="q.Audio_URL" class="mt-3 space-y-2">
-                                <audio :src="q.Audio_URL" controls preload="metadata" class="w-full"></audio>
+                                <audio :src="q.Audio_URL" x-on:error="previewFailed(q, 'audio')" controls preload="metadata" class="w-full"></audio>
                                 <div class="flex items-center justify-between gap-2 text-xs"><span><span x-text="formatDuration(q.Audio_Duration_Milliseconds)"></span> · <span x-text="formatBytes(q.Audio_Size_Bytes)"></span></span><button type="button" @click="removeMedia(q, 'audio')" class="min-h-11 px-2 font-bold text-rose-700">Hapus audio</button></div>
                             </div>
                         </section>
@@ -149,8 +150,8 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
         Option_D: '',
         Correct_Option: 'A',
         Point: 10,
-        Image_Token: '', Image_URL: null, Image_Size_Bytes: 0, Image_FileName: '', Remove_Image: false, Image_Uploading: false, Image_Progress: 0, Image_Error: '', Image_Request: 0, Image_Xhr: null,
-        Audio_Token: '', Audio_URL: null, Audio_Size_Bytes: 0, Audio_FileName: '', Audio_Duration_Milliseconds: 0, Remove_Audio: false, Audio_Uploading: false, Audio_Processing: false, Audio_Progress: 0, Audio_Warning: '', Audio_Error: '', Audio_Request: 0, Audio_Xhr: null,
+        Image_Token: '', Image_URL: null, Image_Size_Bytes: 0, Image_FileName: '', Remove_Image: false, Image_Uploading: false, Image_Progress: 0, Image_Warning: '', Image_Error: '', Image_Error_Code: '', Image_Request: 0, Image_Xhr: null,
+        Audio_Token: '', Audio_URL: null, Audio_Size_Bytes: 0, Audio_FileName: '', Audio_Duration_Milliseconds: 0, Remove_Audio: false, Audio_Uploading: false, Audio_Processing: false, Audio_Progress: 0, Audio_Warning: '', Audio_Error: '', Audio_Error_Code: '', Audio_Request: 0, Audio_Xhr: null,
         Recording_Active: false, Recording_Discard: false, Recording_Elapsed_Milliseconds: 0, Recording_Recorder: null, Recording_Stream: null, Recording_Timer: null, Recording_Chunks: [],
     });
     const normalize = (question, index) => {
@@ -254,6 +255,8 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
             q[`${prefix}_FileName`] = '';
             q[`Remove_${prefix}`] = true;
             q[`${prefix}_Error`] = '';
+            q[`${prefix}_Error_Code`] = '';
+            q[`${prefix}_Warning`] = '';
             if (type === 'audio') { q.Audio_Duration_Milliseconds = 0; q.Audio_Warning = ''; }
         },
         async browserValidate(file, type) {
@@ -303,39 +306,121 @@ function quizBuilder(seed, maxQuestions, uploadUrl, csrfToken, mediaConfig, vali
             };
             return messages[status] || payload?.message || `Upload media gagal (HTTP ${status}).`;
         },
+        uploadFailure(reasonCode, message, status = 0, requestId = '') {
+            const error = new Error(message);
+            error.reasonCode = reasonCode;
+            error.status = status;
+            error.requestId = requestId;
+            return error;
+        },
+        requestId() {
+            return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        },
+        validateStagingResponse(payload, type, requestId) {
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                throw this.uploadFailure('QMU-SCHEMA', 'Server mengirim respons upload yang tidak lengkap.', 201, requestId);
+            }
+            const token = typeof payload.token === 'string' ? payload.token.trim() : '';
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            const size = Number(payload.size);
+            const duration = Number(payload.duration_ms);
+            let preview;
+            try { preview = new URL(payload.preview_url, window.location.href); } catch (_) {}
+            const validDuration = type !== 'audio' || (Number.isFinite(duration) && duration > 0);
+            if (!uuid.test(token) || payload.type !== type || !Number.isFinite(size) || size <= 0
+                || !preview || preview.origin !== window.location.origin || !validDuration) {
+                throw this.uploadFailure('QMU-SCHEMA', 'Server mengirim respons upload yang tidak lengkap.', 201, requestId);
+            }
+
+            return {...payload, token, size, duration_ms: type === 'audio' ? duration : null, preview_url: preview.href};
+        },
+        requestUpload(q, prefix, body, type, requestId) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', this.uploadUrl);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.setRequestHeader('X-CSRF-TOKEN', this.csrfToken);
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                xhr.setRequestHeader('X-Request-ID', requestId);
+                xhr.timeout = 45000;
+                q[`${prefix}_Xhr`] = xhr;
+                xhr.upload.onprogress = event => {
+                    if (event.lengthComputable) q[`${prefix}_Progress`] = Math.round((event.loaded / event.total) * 100);
+                };
+                xhr.onload = () => {
+                    let payload;
+                    try {
+                        payload = JSON.parse(xhr.responseText);
+                    } catch (_) {
+                        reject(this.uploadFailure('QMU-JSON', 'Respons upload dari server tidak dapat dibaca.', xhr.status, requestId));
+                        return;
+                    }
+                    if (xhr.status < 200 || xhr.status >= 300) {
+                        reject(this.uploadFailure(`QMU-HTTP-${xhr.status || 0}`, this.errorMessage(xhr.status, payload), xhr.status, requestId));
+                        return;
+                    }
+                    try {
+                        resolve(this.validateStagingResponse(payload, type, requestId));
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                xhr.onerror = () => reject(this.uploadFailure('QMU-NETWORK', 'Koneksi terputus. Silakan coba kembali.', 0, requestId));
+                xhr.ontimeout = () => reject(this.uploadFailure('QMU-TIMEOUT', 'Pemrosesan media terlalu lama. Silakan coba kembali.', 0, requestId));
+                xhr.onabort = () => reject(this.uploadFailure('QMU-ABORTED', 'Upload digantikan oleh file yang lebih baru.', 0, requestId));
+                xhr.send(body);
+            });
+        },
+        previewFailed(q, type) {
+            const prefix = type === 'image' ? 'Image' : 'Audio';
+            if (!q[`${prefix}_Token`]) return;
+            q[`${prefix}_Warning`] = 'Upload berhasil, tetapi preview media belum dapat dimuat. Media tetap tersimpan untuk penerbitan.';
+            console.warn('quiz_media_preview_failure', {reason_code: 'QMU-PREVIEW', media_type: type});
+        },
         async uploadFile(q, type, file, source = 'upload') {
             const prefix = type === 'image' ? 'Image' : 'Audio';
             const request = Number(q[`${prefix}_Request`] || 0) + 1;
             q[`${prefix}_Request`] = request;
             if (q[`${prefix}_Xhr`]) q[`${prefix}_Xhr`].abort();
             q[`${prefix}_Error`] = '';
-            if (type === 'audio') q.Audio_Warning = '';
+            q[`${prefix}_Error_Code`] = '';
+            q[`${prefix}_Warning`] = '';
             q[`${prefix}_Uploading`] = true;
             if (type === 'audio') q.Audio_Processing = source === 'recording';
             q[`${prefix}_Progress`] = 0;
             try {
                 const browserWarning = await this.browserValidate(file, type);
                 if (type === 'audio') q.Audio_Warning = browserWarning;
-                const data = await new Promise((resolve, reject) => {
-                    const body = new FormData(); body.append('media_type', type); body.append('source', source); body.append('file', file);
-                    const xhr = new XMLHttpRequest(); xhr.open('POST', this.uploadUrl); xhr.setRequestHeader('Accept', 'application/json'); xhr.setRequestHeader('X-CSRF-TOKEN', this.csrfToken); xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                    xhr.timeout = 45000; q[`${prefix}_Xhr`] = xhr;
-                    xhr.upload.onprogress = e => { if (e.lengthComputable) q[`${prefix}_Progress`] = Math.round((e.loaded / e.total) * 100); };
-                    xhr.onload = () => { let payload = {}; try { payload = JSON.parse(xhr.responseText); } catch (_) {} if (xhr.status >= 200 && xhr.status < 300) resolve(payload); else reject(new Error(this.errorMessage(xhr.status, payload))); };
-                    xhr.onerror = () => reject(new Error('Koneksi terputus. Silakan coba kembali.'));
-                    xhr.ontimeout = () => reject(new Error('Pemrosesan media terlalu lama. Silakan coba kembali.'));
-                    xhr.onabort = () => reject(new DOMException('Upload digantikan oleh file yang lebih baru.', 'AbortError'));
-                    xhr.send(body);
-                });
+                const body = new FormData();
+                body.append('media_type', type);
+                body.append('source', source);
+                body.append('file', file, file.name || (source === 'recording' ? 'rekaman-suara.m4a' : 'media'));
+                const requestId = this.requestId();
+                const data = await this.requestUpload(q, prefix, body, type, requestId);
                 if (!this.questions.includes(q) || q[`${prefix}_Request`] !== request) return;
                 q[`${prefix}_Token`] = data.token;
-                q[`${prefix}_URL`] = data.preview_url;
                 q[`${prefix}_Size_Bytes`] = data.size;
                 q[`${prefix}_FileName`] = file.name || (source === 'recording' ? 'rekaman-suara.m4a' : '');
                 q[`Remove_${prefix}`] = false;
                 if (type === 'audio') q.Audio_Duration_Milliseconds = data.duration_ms;
+                try {
+                    q[`${prefix}_URL`] = data.preview_url;
+                } catch (_) {
+                    q[`${prefix}_Warning`] = 'Upload berhasil, tetapi preview media belum dapat ditampilkan. Media tetap tersimpan untuk penerbitan.';
+                    console.warn('quiz_media_ui_failure', {reason_code: 'QMU-UI', media_type: type, source});
+                }
             } catch (error) {
-                if (error?.name !== 'AbortError' && q[`${prefix}_Request`] === request) q[`${prefix}_Error`] = error.message || 'Upload media gagal.';
+                if (error?.reasonCode !== 'QMU-ABORTED' && q[`${prefix}_Request`] === request) {
+                    q[`${prefix}_Error`] = error?.message || 'Upload media gagal.';
+                    q[`${prefix}_Error_Code`] = error?.reasonCode || 'QMU-UI';
+                    console.warn('quiz_media_upload_failure', {
+                        reason_code: q[`${prefix}_Error_Code`],
+                        media_type: type,
+                        source,
+                        status: Number(error?.status || 0),
+                        request_id: error?.requestId || '',
+                    });
+                }
             } finally {
                 if (q[`${prefix}_Request`] === request) {
                     q[`${prefix}_Uploading`] = false;

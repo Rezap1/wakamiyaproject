@@ -42,13 +42,13 @@ class QuizService
         }
         $quizId = 'QIZ'.strtoupper(substr(str_replace('-', '', (string) Str::uuid()), 0, 20));
         $this->assertQuestionPayload($data['questions'] ?? []);
-        $plan = $this->media?->prepare($quizId, $data['questions'], [], $userId);
-        if ($plan !== null) {
-            $data['questions'] = $plan['questions'];
-        }
-        $this->assertPublishableQuestions($data);
-
+        $plan = null;
         try {
+            $plan = $this->media?->prepare($quizId, $data['questions'], [], $userId);
+            if ($plan !== null) {
+                $data['questions'] = $plan['questions'];
+            }
+            $this->assertPublishableQuestions($data);
             $created = $this->runtimeTransaction($this->quizzes, function () use ($data, $teacher, $userId, $quizId, $plan, $idempotencyKey, $payloadHash): string {
                 $now = $this->stamp($this->periods->now());
                 $publish = ($data['intent'] ?? 'draft') === 'publish';
@@ -129,15 +129,15 @@ class QuizService
             $this->assertTeacherClassAllowed($quiz, $allowedClassIds);
             abort_unless($this->isEditable($quiz), 409, 'Kuis tidak dapat diubah setelah aktif atau setelah percobaan dimulai.');
             $this->assertQuestionPayload($data['questions'] ?? []);
-            $existingQuestions = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->values();
-            $plan = $this->media?->prepare($quizId, $data['questions'], $existingQuestions, $userId);
-            if ($plan !== null) {
-                $data['questions'] = $plan['questions'];
-            }
-            $this->assertPublishableQuestions($data);
-            $now = $this->stamp($this->periods->now());
-
+            $plan = null;
             try {
+                $existingQuestions = collect($this->questions->fetchAllFresh())->where('Quiz_ID', $quizId)->values();
+                $plan = $this->media?->prepare($quizId, $data['questions'], $existingQuestions, $userId);
+                if ($plan !== null) {
+                    $data['questions'] = $plan['questions'];
+                }
+                $this->assertPublishableQuestions($data);
+                $now = $this->stamp($this->periods->now());
                 $this->runtimeTransaction($this->quizzes, function () use ($quizId, $data, $userId, $now, $existingQuestions, $plan, $idempotencyKey, $payloadHash): void {
                     $this->questions->hardDeleteMany($existingQuestions->pluck('Question_ID')->all());
                     $this->writeQuestions($quizId, $data['questions'], $now);

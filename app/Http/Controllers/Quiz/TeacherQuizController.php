@@ -8,6 +8,7 @@ use App\Services\Quiz\QuizService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class TeacherQuizController extends Controller
 {
@@ -79,7 +80,11 @@ class TeacherQuizController extends Controller
         foreach ($data['Class_IDs'] as $classId) {
             $this->scope->assertTeacherClass($teacher['Teacher_ID'], $classId);
         }
-        $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
+        try {
+            $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
+        } catch (HttpExceptionInterface $exception) {
+            return $this->retryableLockResponse($exception);
+        }
 
         return redirect()->route('teacher.quizzes.show', $id)->with('success', 'Kuis berhasil disimpan.');
     }
@@ -94,7 +99,11 @@ class TeacherQuizController extends Controller
         abort_unless($selectedClass, 403, 'Kelas berada di luar penugasan kelas Anda.');
         $request->merge(['Class_ID' => (string) $selectedClass['Class_ID'], 'Class_IDs' => [(string) $selectedClass['Class_ID']]]);
         $data = $this->validated($request);
-        $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
+        try {
+            $id = $this->quizzes->create($data, $teacher, (string) $request->user()->User_ID);
+        } catch (HttpExceptionInterface $exception) {
+            return $this->retryableLockResponse($exception);
+        }
 
         return redirect()->route('teacher.quizzes.show', $id)->with('success', 'Kuis berhasil disimpan.');
     }
@@ -130,7 +139,11 @@ class TeacherQuizController extends Controller
         $classIds = $this->scope->classesForTeacher($teacher['Teacher_ID'])->pluck('Class_ID')->all();
         $data = $this->validated($request);
         abort_unless(collect($data['Class_IDs'])->every(fn ($classId) => in_array($classId, $classIds, true)), 403, 'Satu atau lebih kelas berada di luar penugasan kelas Anda.');
-        $this->quizzes->update($quiz, $data, $teacher, (string) $request->user()->User_ID, $classIds);
+        try {
+            $this->quizzes->update($quiz, $data, $teacher, (string) $request->user()->User_ID, $classIds);
+        } catch (HttpExceptionInterface $exception) {
+            return $this->retryableLockResponse($exception);
+        }
 
         return redirect()->route('teacher.quizzes.show', $quiz)->with('success', 'Kuis berhasil diperbarui.');
     }
@@ -323,5 +336,16 @@ class TeacherQuizController extends Controller
         ])->all();
 
         return $data;
+    }
+
+    private function retryableLockResponse(HttpExceptionInterface $exception)
+    {
+        if ($exception->getStatusCode() !== 423) {
+            throw $exception;
+        }
+
+        return back()->withInput()->withErrors([
+            'quiz' => 'Kuis sedang diproses oleh permintaan lain. Data form tetap tersimpan; tunggu sebentar lalu coba kembali.',
+        ]);
     }
 }

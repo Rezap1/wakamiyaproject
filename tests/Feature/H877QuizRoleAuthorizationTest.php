@@ -163,6 +163,38 @@ class H877QuizRoleAuthorizationTest extends TestCase
             ->assertSessionHas('error', 'Kuis bersejarah tidak dapat dihapus.');
     }
 
+    public function test_retryable_publish_lock_returns_to_form_with_input_and_tokens_preserved(): void
+    {
+        $this->actingAsRole('TEACHER');
+        $scope = Mockery::mock(QuizScopeService::class);
+        $scope->shouldReceive('teacherForUser')->once()->andReturn(['Teacher_ID' => 'T1']);
+        $scope->shouldReceive('assertTeacherClass')->once()->with('T1', 'C1');
+        $quizzes = Mockery::mock(QuizService::class);
+        $quizzes->shouldReceive('create')->once()->andThrow(new HttpException(423, 'Internal lock detail'));
+        $this->app->instance(QuizScopeService::class, $scope);
+        $this->app->instance(QuizService::class, $quizzes);
+        $token = '30000000-0000-4000-8000-000000000877';
+
+        $this->from(route('teacher.quizzes.create'))->post(route('teacher.quizzes.store'), [
+            'Idempotency_Key' => '40000000-0000-4000-8000-000000000877',
+            'Title' => 'Kuis tetap tersimpan',
+            'Class_IDs' => ['C1'],
+            'Start_At' => '2026-12-01 08:00:00',
+            'End_At' => '2026-12-01 09:00:00',
+            'Duration_Minutes' => 30,
+            'intent' => 'publish',
+            'question_count' => 1,
+            'questions' => [[
+                'Question_Text' => 'Dengarkan audio',
+                'Option_A' => 'A', 'Option_B' => 'B', 'Option_C' => 'C', 'Option_D' => 'D',
+                'Correct_Option' => 'A', 'Point' => 10, 'Audio_Token' => $token,
+            ]],
+        ])->assertRedirect(route('teacher.quizzes.create'))
+            ->assertSessionHasErrors('quiz')
+            ->assertSessionHasInput('Title', 'Kuis tetap tersimpan')
+            ->assertSessionHasInput('questions.0.Audio_Token', $token);
+    }
+
     public static function nonTeacherRoles(): array
     {
         return [['STUDENT'], ['HR'], ['FINANCE'], ['MARKETING'], ['ACADEMIC'], ['DIRECTOR']];

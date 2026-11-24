@@ -45,7 +45,11 @@ class QuizMultimediaUiContractTest extends TestCase
         $this->assertStringContainsString('q.Audio_Warning = browserWarning', $source);
         $this->assertStringContainsString('q[`${prefix}_Token`] = data.token', $source);
         $this->assertStringContainsString('q[`${prefix}_URL`] = data.preview_url', $source);
-        $this->assertStringContainsString('q[`${prefix}_Error`] = error.message || \'Upload media gagal.\'', $source);
+        $this->assertStringContainsString('q[`${prefix}_Error`] = error?.message || \'Upload media gagal.\'', $source);
+        $this->assertStringContainsString('validateStagingResponse(payload, type, requestId)', $source);
+        $this->assertStringContainsString('q[`${prefix}_Token`] = data.token', $source);
+        $this->assertStringContainsString('q[`${prefix}_URL`] = data.preview_url', $source);
+        $this->assertStringContainsString("x-on:error=\"previewFailed(q, 'audio')\"", $source);
         $this->assertStringContainsString('@click="removeMedia(q, \'audio\')"', $source);
         $this->assertSame(2, substr_count($source, 'class="min-h-11 px-2 font-bold text-rose-700"'));
     }
@@ -74,6 +78,12 @@ class QuizMultimediaUiContractTest extends TestCase
         }
         $this->assertStringContainsString('payload?.errors?.file', $view);
         $this->assertStringContainsString('Koneksi terputus. Silakan coba kembali.', $view);
+        foreach (['QMU-NETWORK', 'QMU-JSON', 'QMU-SCHEMA', 'QMU-TIMEOUT', 'QMU-ABORTED', 'QMU-PREVIEW', 'QMU-UI'] as $code) {
+            $this->assertStringContainsString($code, $view);
+        }
+        $this->assertStringContainsString('X-Request-ID', $view);
+        $this->assertStringContainsString('preview.origin !== window.location.origin', $view);
+        $this->assertStringContainsString('Upload berhasil, tetapi preview media belum dapat dimuat', $view);
         $this->assertStringNotContainsString('Upload media gagal. Periksa koneksi.', $view);
     }
 }
