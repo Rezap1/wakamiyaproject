@@ -68,6 +68,9 @@ use App\Http\Controllers\Hr\LeaveController;
 use App\Http\Controllers\Hr\OvertimeController;
 use App\Http\Controllers\Hr\PayrollController;
 use App\Http\Controllers\Hr\QRAttendanceController;
+use App\Http\Controllers\PracticeQuiz\PracticeQuizMediaController;
+use App\Http\Controllers\PracticeQuiz\StudentPracticeQuizController;
+use App\Http\Controllers\PracticeQuiz\TeacherPracticeQuizController;
 use App\Http\Controllers\Quiz\QuizMediaController;
 use App\Http\Controllers\Quiz\StudentQuizController;
 use App\Http\Controllers\Quiz\TeacherQuizController;
@@ -846,6 +849,34 @@ Route::middleware('auth')->group(function () {
         Route::post('/attempts/{attempt}/submit', [StudentQuizController::class, 'submit'])->middleware('throttle:10,1,quiz-submit')->name('submit');
         Route::get('/results/{result}', [StudentQuizController::class, 'result'])->name('result');
         Route::get('/results/{result}/questions/{question}/media/{type}', [QuizMediaController::class, 'result'])->where('type', 'image|audio')->middleware('throttle:600,1,quiz-result-media')->name('result-media');
+    });
+
+    Route::prefix('teacher/practice-quizzes')->name('teacher.practice-quizzes.')->middleware('role:TEACHER')->group(function () {
+        Route::get('/', [TeacherPracticeQuizController::class, 'index'])->name('index');
+        Route::post('/media/staging', [PracticeQuizMediaController::class, 'upload'])->middleware('throttle:30,1,practice-media-upload')->name('media.upload');
+        Route::get('/media/staging/{token}', [PracticeQuizMediaController::class, 'staging'])->middleware('throttle:120,1,practice-media-staging')->name('media.staging');
+        Route::get('/create', [TeacherPracticeQuizController::class, 'create'])->name('create');
+        Route::post('/', [TeacherPracticeQuizController::class, 'store'])->name('store');
+        Route::get('/{practice}/questions/{question}/media/{type}', [PracticeQuizMediaController::class, 'teacher'])->where('type', 'image|audio')->middleware('throttle:240,1,practice-teacher-media')->name('media');
+        Route::get('/{practice}', [TeacherPracticeQuizController::class, 'show'])->name('show');
+        Route::get('/{practice}/edit', [TeacherPracticeQuizController::class, 'edit'])->name('edit');
+        Route::put('/{practice}', [TeacherPracticeQuizController::class, 'update'])->name('update');
+        Route::delete('/{practice}', [TeacherPracticeQuizController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::prefix('student/practice-quizzes')->name('student.practice-quizzes.')->middleware('role:STUDENT')->group(function () {
+        Route::get('/', [StudentPracticeQuizController::class, 'index'])->name('index');
+        Route::get('/history', [StudentPracticeQuizController::class, 'history'])->name('history');
+        Route::get('/history/pdf', [StudentPracticeQuizController::class, 'pdf'])->name('history.pdf');
+        Route::get('/{practice}/history', [StudentPracticeQuizController::class, 'history'])->name('practice.history');
+        Route::get('/{practice}/history/pdf', [StudentPracticeQuizController::class, 'pdf'])->name('practice.history.pdf');
+        Route::post('/{practice}/start', [StudentPracticeQuizController::class, 'start'])->middleware('throttle:20,1,practice-start')->name('start');
+        Route::get('/attempts/{attempt}', [StudentPracticeQuizController::class, 'play'])->name('play');
+        Route::get('/attempts/{attempt}/questions/{question}/media/{type}', [PracticeQuizMediaController::class, 'attempt'])->where('type', 'image|audio')->middleware('throttle:600,1,practice-attempt-media')->name('attempt-media');
+        Route::post('/attempts/{attempt}/answers', [StudentPracticeQuizController::class, 'autosave'])->middleware('throttle:120,1,practice-autosave')->name('autosave');
+        Route::post('/attempts/{attempt}/submit', [StudentPracticeQuizController::class, 'submit'])->middleware('throttle:10,1,practice-submit')->name('submit');
+        Route::get('/results/{result}', [StudentPracticeQuizController::class, 'result'])->name('result');
+        Route::get('/results/{result}/questions/{question}/media/{type}', [PracticeQuizMediaController::class, 'result'])->where('type', 'image|audio')->middleware('throttle:600,1,practice-result-media')->name('result-media');
     });
 
 });

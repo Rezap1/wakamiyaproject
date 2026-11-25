@@ -50,6 +50,8 @@ use App\Interfaces\GoogleSheets\TeacherRepositoryInterface;
 use App\Interfaces\GoogleSheets\TransactionRepositoryInterface;
 use App\Interfaces\GoogleSheets\UserRepositoryInterface;
 use App\Interfaces\GoogleSheets\WorkflowRepositoryInterface;
+use App\Models\Practice\PracticeQuiz;
+use App\Policies\PracticeQuizPolicy;
 use App\Repositories\GoogleSheets\AcademicYearRepository;
 use App\Repositories\GoogleSheets\AccountRepository;
 use App\Repositories\GoogleSheets\ActivityLogRepository;
@@ -113,6 +115,7 @@ use App\Support\LoginRateLimiter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -201,6 +204,7 @@ class AppServiceProvider extends ServiceProvider
     {
         app()->setLocale('id');
         Carbon::setLocale('id');
+        Gate::policy(PracticeQuiz::class, PracticeQuizPolicy::class);
 
         RateLimiter::for('login', function (Request $request) {
             return LoginRateLimiter::limits($request);

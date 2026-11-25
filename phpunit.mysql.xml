@@ -9,6 +9,7 @@
             <file>tests/Feature/AlumniWorkFieldMySqlTest.php</file>
             <file>tests/Feature/QuizMultimediaMySqlIntegrationTest.php</file>
             <file>tests/Feature/QuizMultimediaMySqlConcurrencyTest.php</file>
+            <file>tests/Feature/PracticeQuizMySqlIntegrationTest.php</file>
         </testsuite>
     </testsuites>
     <php>

@@ -8,7 +8,7 @@
             <h2 class="mt-1 break-words text-2xl font-black text-slate-900">Pilih Kelas</h2>
             <p class="mt-1 text-sm text-slate-600">Buka satu kelas untuk mengelola kuis dan melihat peringkat tanpa mencampur kelas lain.</p>
         </div>
-        <a href="{{ route('teacher.quizzes.create') }}" class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-black text-slate-800 shadow-sm">Buat Kuis Umum</a>
+        <div class="flex flex-wrap gap-2"><a href="{{ route('teacher.practice-quizzes.index') }}" class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-sky-700 px-4 text-sm font-black text-white shadow-sm">Kuis Latihan</a><a href="{{ route('teacher.quizzes.create') }}" class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-black text-slate-800 shadow-sm">Buat Kuis Umum</a></div>
     </header>
 
     <div class="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
