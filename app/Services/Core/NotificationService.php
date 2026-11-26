@@ -8,6 +8,7 @@ use App\Interfaces\GoogleSheets\NotificationRepositoryInterface;
 use App\Interfaces\GoogleSheets\StudentRepositoryInterface;
 use App\Support\ActorIdentity;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 class NotificationService
@@ -315,6 +316,23 @@ class NotificationService
                            strtolower(trim($n['Status'] ?? '')) !== 'archived';
                 })->count();
         });
+    }
+
+    /**
+     * The same authorized unread snapshot used by the notification bell.
+     * Sidebar categories may filter this collection, but never mutate it.
+     */
+    public function unreadForCurrentUser(): Collection
+    {
+        $user = auth()->user();
+
+        return $this->getAll()
+            ->filter(function ($notification) use ($user) {
+                return $this->isForUser($notification, $user)
+                    && strtoupper(trim((string) ($notification['Is_Read'] ?? ''))) !== 'TRUE'
+                    && strtolower(trim((string) ($notification['Status'] ?? ''))) !== 'archived';
+            })
+            ->values();
     }
 
     public function RecentNotification($userId = null, $role = null, $limit = 10)

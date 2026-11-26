@@ -40,7 +40,7 @@
             ['label' => 'Master Akun', 'route' => 'accounts.index', 'active_route' => 'accounts.*', 'icon' => 'collection'],
             ['label' => 'Transaksi', 'route' => 'transactions.index', 'active_route' => 'transactions.*', 'icon' => 'switch-horizontal'],
             ['label' => 'Tagihan', 'route' => 'invoices.index', 'active_route' => 'invoices.*', 'icon' => 'document-duplicate'],
-            ['label' => 'Pembayaran', 'route' => 'payments.index', 'active_route' => 'payments.*', 'icon' => 'credit-card'],
+            ['label' => 'Pembayaran', 'route' => 'payments.index', 'active_route' => 'payments.*', 'icon' => 'credit-card', 'badge' => 'payments', 'badge_label' => 'pembayaran menunggu verifikasi'],
             ['label' => 'Penggajian & Gaji', 'route' => 'payrolls.index', 'active_route' => 'payrolls.*', 'icon' => 'cash'],
             ['label' => 'Laporan Keuangan', 'route' => 'reports.finance.index', 'active_route' => 'reports.finance.*', 'icon' => 'chart-bar'],
         ]],
@@ -64,6 +64,7 @@
             ['label' => 'Pindai QR Pegawai', 'route' => 'hr.attendance.qr.scanner', 'active_route' => 'hr.attendance.qr.*', 'icon' => 'camera'],
         ]],
     ];
+    $sidebarBadges = $sidebarBadges ?? [];
 
     // Determine current active group to auto-expand it
     $activeGroup = '';
@@ -85,7 +86,7 @@
     x-bind:aria-hidden="(!mobileOpen && window.innerWidth < 1024).toString()"
     role="navigation"
     aria-label="Navigasi lengkap {{ $userRole }}"
-    class="shadow-xl flex-shrink-0 z-50 flex flex-col transition-all duration-300 ease-in-out fixed inset-y-0 left-0 lg:relative lg:translate-x-0 border-r border-slate-800 w-64 -translate-x-full"
+    class="shadow-xl flex-shrink-0 z-[60] flex flex-col transition-all duration-300 ease-in-out fixed inset-y-0 left-0 lg:relative lg:translate-x-0 border-r border-slate-800 w-64 -translate-x-full"
     style="background-color: var(--color-sidebar-bg, #111827); color: var(--color-sidebar-text, #94A3B8);">
     
     <!-- Mobile Close Overlay & Button (Hidden on Desktop) -->
@@ -133,9 +134,10 @@
                             @php
                                 $checkRoute = $item['active_route'] ?? $item['route'];
                                 $isActive = request()->routeIs($checkRoute);
+                                $itemBadge = (int) ($sidebarBadges[$item['badge'] ?? ''] ?? 0);
                             @endphp
                             <a href="{{ route($item['route']) }}" title="{{ $item['label'] }}" @click="if(window.innerWidth < 1024) mobileOpen = false"
-                               class="{{ $isActive ? 'bg-sky-500/10 text-white shadow-sm ring-1 ring-sky-500/50' : 'text-slate-400 hover:bg-white/5 hover:text-white' }} flex items-center py-2.5 px-3 rounded-lg transition-all relative group">
+                               class="{{ $isActive ? 'bg-sky-500/10 text-white shadow-sm ring-1 ring-sky-500/50' : 'text-slate-400 hover:bg-white/5 hover:text-white' }} relative flex min-w-0 items-center overflow-hidden py-2.5 px-3 rounded-lg transition-all group">
                                 
                                 @if($isActive)
                                     <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sky-400 rounded-r-md shadow-[0_0_8px_rgba(56,189,248,0.6)]"></div>
@@ -145,7 +147,15 @@
                                     <x-sidebar.icon name="{{ $item['icon'] }}" class="w-5 h-5 {{ $isActive ? 'text-sky-400 drop-shadow-[0_0_3px_rgba(56,189,248,0.5)]' : 'group-hover:text-slate-300' }}" />
                                 </div>
                                 
-                                <span x-show="expanded" class="text-[13px] font-semibold truncate leading-tight transition-opacity duration-200">{{ $item['label'] }}</span>
+                                <span x-show="expanded" class="min-w-0 flex-1 text-[13px] font-semibold truncate leading-tight transition-opacity duration-200">{{ $item['label'] }}</span>
+                                @if($itemBadge > 0)
+                                    <x-sidebar.badge
+                                        x-show="expanded"
+                                        :count="$itemBadge"
+                                        :label="$item['badge_label'] ?? 'notifikasi'"
+                                        class="ml-2"
+                                    />
+                                @endif
                             </a>
                         @endforeach
                     </div>
@@ -154,14 +164,14 @@
         @else
             <!-- NON-MASTER ROLES (Original Structure with Alpine visibility wrappers) -->
             <div class="space-y-1">
-                <x-sidebar.nav-link href="{{ route('announcement-feed.index') }}" active="{{ request()->routeIs('announcement-feed.*') }}" icon="inbox">Kotak Pengumuman</x-sidebar.nav-link>
+                <x-sidebar.nav-link href="{{ route('announcement-feed.index') }}" active="{{ request()->routeIs('announcement-feed.*') }}" icon="inbox" :badge="$sidebarBadges['announcement_activity'] ?? 0" badge-label="aktivitas pengumuman belum dibaca">Kotak Pengumuman</x-sidebar.nav-link>
                 @if($userRole !== 'STUDENT')
                     <x-sidebar.nav-link href="{{ route('agendas.index') }}" active="{{ request()->routeIs('agendas.*') }}" icon="calendar">Agenda Management</x-sidebar.nav-link>
                 @endif
                 @if($userRole === 'ADMINISTRATOR')
                     <x-sidebar.nav-link href="{{ route('dashboard.administrator') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('finance.education-payments.index') }}" active="{{ request()->routeIs('finance.education-payments.*') }}" icon="cash">Pembayaran Pendidikan</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox">Kotak Persetujuan</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('approvals.index') }}" active="{{ request()->routeIs('approvals.*') }}" icon="inbox" :badge="$sidebarBadges['approvals'] ?? 0" badge-label="persetujuan menunggu tindakan">Kotak Persetujuan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('alumni.index') }}" active="{{ request()->routeIs('alumni.*') }}" icon="academic-cap">Alumni</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('audit.index') }}" active="{{ request()->routeIs('audit.*') }}" icon="clipboard-list">Jejak Audit</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.monitoring') }}" active="{{ request()->routeIs('hr.attendance.*') }}" icon="clock">Monitoring Pegawai</x-sidebar.nav-link>
@@ -207,7 +217,7 @@
                     <x-sidebar.nav-link href="{{ route('dashboard.marketing') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('companies.index') }}" active="{{ request()->routeIs('companies.*') }}" icon="office-building">Perusahaan</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox" :badge="$sidebarBadges['notifications'] ?? 0" badge-label="notifikasi belum dibaca">Notifikasi</x-sidebar.nav-link>
                 @elseif($userRole === 'FINANCE')
                     <x-sidebar.nav-link href="{{ route('dashboard.finance') }}" active="{{ request()->routeIs('dashboard.*') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
@@ -215,7 +225,7 @@
                     <x-sidebar.nav-link href="{{ route('transactions.index') }}" active="{{ request()->routeIs('transactions.*') }}" icon="switch-horizontal">Transaksi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('invoices.index') }}" active="{{ request()->routeIs('invoices.*') }}" icon="document-duplicate">Tagihan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('finance.smart_generator.index') }}" active="{{ request()->routeIs('finance.smart_generator.*') }}" icon="sparkles">Pembuat Dokumen</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('payments.index') }}" active="{{ request()->routeIs('payments.*') }}" icon="credit-card">Pembayaran</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('payments.index') }}" active="{{ request()->routeIs('payments.*') }}" icon="credit-card" :badge="$sidebarBadges['payments'] ?? 0" badge-label="pembayaran menunggu verifikasi">Pembayaran</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('reports.finance.index') }}" active="{{ request()->routeIs('reports.finance.*') }}" icon="chart-bar">Laporan Keuangan</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('finance.settings.index') }}" active="{{ request()->routeIs('finance.settings.*') }}" icon="cog">Pengaturan Keuangan</x-sidebar.nav-link>
                 @elseif($userRole === 'DIRECTOR')
@@ -237,7 +247,7 @@
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Kehadiran</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.attendances') }}" active="{{ request()->routeIs('teacher.workspace.attendances') }}" icon="clock">Kehadiran Siswa</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('attendance.reports.index') }}" active="{{ request()->routeIs('attendance.reports.*') }}" icon="chart-bar">Laporan Absensi</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('teacher.workspace.attendance-requests') }}" active="{{ request()->routeIs('teacher.workspace.attendance-requests*') }}" icon="document-text" :badge="$sidebarBadges['attendance_requests'] ?? 0" badge-label="pengajuan izin atau sakit menunggu tindakan">Pengajuan Izin/Sakit</x-sidebar.nav-link>
                     <div class="px-4 mt-6 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Akademik</div>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.scores') }}" active="{{ request()->routeIs('teacher.workspace.scores*') }}" icon="chart-bar">Penilaian</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('teacher.workspace.assignments') }}" active="{{ request()->routeIs('teacher.workspace.assignments*') }}" icon="clipboard-list">Tugas Harian</x-sidebar.nav-link>
@@ -253,17 +263,17 @@
                     <x-sidebar.nav-link href="{{ route('student.calendar') }}" active="{{ request()->routeIs('student.calendar') }}" icon="calendar">Kalender</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.subjects') }}" active="{{ request()->routeIs('student.subjects') }}" icon="book-open">Materi Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.assignments') }}" active="{{ request()->routeIs('student.portal.assignments*') }}" icon="document-text">Tugas</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('student.quizzes.index') }}" active="{{ request()->routeIs('student.quizzes.*') }}" icon="academic-cap">Kuis</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('student.quizzes.index') }}" active="{{ request()->routeIs('student.quizzes.*') }}" icon="academic-cap" :badge="$sidebarBadges['regular_quizzes'] ?? 0" badge-label="kuis reguler aktif belum diselesaikan">Kuis</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.progress') }}" active="{{ request()->routeIs('student.progress') }}" icon="clipboard-check">Nilai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.portal.materials') }}" active="{{ request()->routeIs('student.portal.materials*') }}" icon="book-open">Materi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.billing.index') }}" active="{{ request()->routeIs('student.billing.*') }}" icon="cash">Tagihan Saya</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('student.attendance.requests.index') }}" active="{{ request()->routeIs('student.attendance.requests.*') }}" icon="document-text">Pengajuan Izin/Sakit</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox" :badge="$sidebarBadges['notifications'] ?? 0" badge-label="notifikasi belum dibaca">Notifikasi</x-sidebar.nav-link>
                 @elseif($userRole === 'EMPLOYEE')
                     <x-sidebar.nav-link href="{{ route('dashboard') }}" active="{{ request()->routeIs('dashboard') }}" icon="dashboard">Dasbor</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('hr.attendance.qr.scanner') }}" active="{{ request()->routeIs('hr.attendance.qr.*') }}" icon="camera">Pindai QR Pegawai</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('dashboard.personal-payroll') }}" active="{{ request()->routeIs('dashboard.personal-payroll*') }}" icon="cash">Slip Gaji Saya</x-sidebar.nav-link>
-                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox">Notifikasi</x-sidebar.nav-link>
+                    <x-sidebar.nav-link href="{{ route('notifications.index') }}" active="{{ request()->routeIs('notifications.*') }}" icon="inbox" :badge="$sidebarBadges['notifications'] ?? 0" badge-label="notifikasi belum dibaca">Notifikasi</x-sidebar.nav-link>
                     <x-sidebar.nav-link href="{{ route('profile.index') }}" active="{{ request()->routeIs('profile.*') }}" icon="users">Profil</x-sidebar.nav-link>
                 @endif
             </div>

@@ -103,6 +103,7 @@ use App\Repositories\MySql\AgendaRepository;
 use App\Services\Academic\DisabledExternalGifProvider;
 use App\Services\Core\ActivityLogService;
 use App\Services\Core\EnterpriseAutomationService;
+use App\Services\Core\SidebarBadgeService;
 use App\Services\Core\SystemSettingService;
 use App\Services\Core\UserService;
 use App\Services\Dashboard\DashboardContextService;
@@ -266,6 +267,17 @@ class AppServiceProvider extends ServiceProvider
                     'role' => auth()->user()->Role ?? 'USER',
                     'timestamp' => time(),
                 ]);
+            }
+        });
+
+        // One role-aware badge payload per request. The sidebar never runs
+        // independent queries from each menu partial.
+        view()->composer('components.dashboard.sidebar', function ($view) {
+            try {
+                $role = strtoupper(trim((string) ($view->getData()['userRole'] ?? '')));
+                $view->with('sidebarBadges', app(SidebarBadgeService::class)->forUser(auth()->user(), $role));
+            } catch (\Throwable) {
+                $view->with('sidebarBadges', []);
             }
         });
 
