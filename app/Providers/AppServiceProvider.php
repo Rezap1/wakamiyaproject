@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\AcademicMonitoringRepository as AcademicMonitoringRepositoryContract;
 use App\Contracts\ExternalGifProvider;
 use App\Interfaces\AgendaRepositoryInterface;
 use App\Interfaces\GoogleSheets\AcademicYearRepositoryInterface;
@@ -99,6 +100,7 @@ use App\Repositories\GoogleSheets\TeacherRepository;
 use App\Repositories\GoogleSheets\TransactionRepository;
 use App\Repositories\GoogleSheets\UserRepository;
 use App\Repositories\GoogleSheets\WorkflowRepository;
+use App\Repositories\MySql\AcademicMonitoringRepository;
 use App\Repositories\MySql\AgendaRepository;
 use App\Services\Academic\DisabledExternalGifProvider;
 use App\Services\Core\ActivityLogService;
@@ -129,6 +131,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(AgendaRepositoryInterface::class, AgendaRepository::class);
+        $this->app->bind(AcademicMonitoringRepositoryContract::class, AcademicMonitoringRepository::class);
         $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
         $this->app->bind(RoleRepositoryInterface::class, RoleRepository::class);
         $this->app->bind(ActivityLogRepositoryInterface::class, ActivityLogRepository::class);

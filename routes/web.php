@@ -53,6 +53,7 @@ use App\Http\Controllers\Core\TeacherController;
 use App\Http\Controllers\Core\TeacherDashboardController;
 use App\Http\Controllers\Core\UserController;
 use App\Http\Controllers\Dashboard\PersonalPayrollController;
+use App\Http\Controllers\DirectorAcademicMonitoringController;
 use App\Http\Controllers\Finance\AccountController;
 use App\Http\Controllers\Finance\EducationPaymentMonitoringController;
 use App\Http\Controllers\Finance\FinanceSettingsController;
@@ -147,6 +148,23 @@ Route::middleware('auth')->group(function () {
         Route::get('/director/reports', [DirectorDashboardController::class, 'reports'])->name('director.reports');
         Route::get('/director/reports/export-csv', [DirectorDashboardController::class, 'exportCsv'])->name('director.reports.export-csv');
     });
+    Route::prefix('director/academic-monitoring')
+        ->name('director.academic-monitoring.')
+        ->middleware('director.academic-monitoring')
+        ->group(function () {
+            Route::get('/', [DirectorAcademicMonitoringController::class, 'index'])->name('index');
+            Route::get('/data', [DirectorAcademicMonitoringController::class, 'indexData'])->name('data');
+            Route::get('/pdf', [DirectorAcademicMonitoringController::class, 'indexPdf'])->name('pdf');
+            Route::get('/batches/{batch}', [DirectorAcademicMonitoringController::class, 'batch'])->name('batch');
+            Route::get('/batches/{batch}/data', [DirectorAcademicMonitoringController::class, 'batchData'])->name('batch.data');
+            Route::get('/batches/{batch}/pdf', [DirectorAcademicMonitoringController::class, 'batchPdf'])->name('batch.pdf');
+            Route::get('/batches/{batch}/classes/{class}', [DirectorAcademicMonitoringController::class, 'classDetail'])->name('class');
+            Route::get('/batches/{batch}/classes/{class}/data', [DirectorAcademicMonitoringController::class, 'classData'])->name('class.data');
+            Route::get('/batches/{batch}/classes/{class}/pdf', [DirectorAcademicMonitoringController::class, 'classPdf'])->name('class.pdf');
+            Route::get('/batches/{batch}/classes/{class}/students/{student}', [DirectorAcademicMonitoringController::class, 'student'])->name('student');
+            Route::get('/batches/{batch}/classes/{class}/students/{student}/data', [DirectorAcademicMonitoringController::class, 'studentData'])->name('student.data');
+            Route::get('/batches/{batch}/classes/{class}/students/{student}/pdf', [DirectorAcademicMonitoringController::class, 'studentPdf'])->name('student.pdf');
+        });
     Route::middleware('role:TEACHER')->get('/dashboard/teacher', [TeacherDashboardController::class, 'index'])->name('dashboard.teacher');
     Route::middleware('role:STUDENT')->get('/dashboard/student', [StudentDashboardController::class, 'index'])->name('dashboard.student');
     Route::middleware('role:ADMINISTRATOR')->get('/dashboard/administrator', [DashboardController::class, 'index'])->name('dashboard.administrator');
